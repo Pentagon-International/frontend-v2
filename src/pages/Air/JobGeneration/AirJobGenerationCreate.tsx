@@ -28,10 +28,13 @@ import {
   DateTimeInput,
 } from "../../../components";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
 import FormTextInput from "../../../components/FormTextInput";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import {
+  formatLocalDateTime,
+  parseLocalDateTime,
+} from "../../../utils/localDateTime";
 
-dayjs.extend(utc);
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { apiCallProtected } from "../../../api/axios";
@@ -736,15 +739,23 @@ function AirJobGenerationCreate() {
 
   return (
     <Box px="md" py="md" w="100%">
-      <Text size="xl" fw={600} c="#105476" mb="lg">
-        {mode === "view"
-          ? "View Air Export Job Generation"
-          : mode === "edit"
-            ? "Edit Air Export Job Generation"
-            : "Create Air Export Job Generation"}
-      </Text>
+      <EditPageHeadingRow
+        visible={(mode === "edit" || mode === "view") && !!jobData}
+        auditSource={jobData}
+        animateKey={jobData?.id}
+        ariaLabel="Air export job generation audit info"
+        justify="flex-start"
+      >
+        <Text size="xl" fw={600} c="#105476">
+          {mode === "view"
+            ? "View Air Export Job Generation"
+            : mode === "edit"
+              ? "Edit Air Export Job Generation"
+              : "Create Air Export Job Generation"}
+        </Text>
+      </EditPageHeadingRow>
 
-      <Tabs value={String(active)} onChange={(v) => v !== null && setActive(Number(v))} color="#105476">
+      <Tabs value={String(active)} mt="lg" onChange={(v) => v !== null && setActive(Number(v))} color="#105476">
         <Tabs.List mb="md" style={{ display: "flex", gap: "8px", flexWrap: "wrap", borderBottom: "none" }}>
           <Tabs.Tab value="0" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 0 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 0 ? 600 : 400 }}>Job Details</Tabs.Tab>
           <Tabs.Tab value="1" style={{ textAlign: "center", padding: "12px", backgroundColor: "transparent", borderBottom: active === 1 ? "3px solid #105476" : "none", color: "#105476", fontSize: 16, fontWeight: active === 1 ? 600 : 400 }}>Routing Details</Tabs.Tab>
@@ -948,13 +959,12 @@ function AirJobGenerationCreate() {
                   label="ETD"
                   withAsterisk
                   placeholder="YYYY-MM-DD HH:mm"
-                  value={
-                    jobDetailsForm.values.etd && dayjs.utc(jobDetailsForm.values.etd).isValid()
-                      ? dayjs.utc(jobDetailsForm.values.etd).local().toDate()
-                      : null
-                  }
+                  value={parseLocalDateTime(jobDetailsForm.values.etd)}
                   onChange={(value: Date | null) => {
-                    jobDetailsForm.setFieldValue("etd", value ? dayjs(value).utc().toISOString() : "");
+                    jobDetailsForm.setFieldValue(
+                      "etd",
+                      formatLocalDateTime(value) ?? "",
+                    );
                   }}
                   error={jobDetailsForm.errors.etd as string}
                   size="sm"
@@ -966,13 +976,12 @@ function AirJobGenerationCreate() {
                   label="ETA"
                   withAsterisk
                   placeholder="YYYY-MM-DD HH:mm"
-                  value={
-                    jobDetailsForm.values.eta && dayjs.utc(jobDetailsForm.values.eta).isValid()
-                      ? dayjs.utc(jobDetailsForm.values.eta).local().toDate()
-                      : null
-                  }
+                  value={parseLocalDateTime(jobDetailsForm.values.eta)}
                   onChange={(value: Date | null) => {
-                    jobDetailsForm.setFieldValue("eta", value ? dayjs(value).utc().toISOString() : "");
+                    jobDetailsForm.setFieldValue(
+                      "eta",
+                      formatLocalDateTime(value) ?? "",
+                    );
                   }}
                   error={jobDetailsForm.errors.eta as string}
                   size="sm"
@@ -983,13 +992,12 @@ function AirJobGenerationCreate() {
                 <DateTimeInput
                   label="ATD"
                   placeholder="YYYY-MM-DD HH:mm"
-                  value={
-                    jobDetailsForm.values.atd && dayjs.utc(jobDetailsForm.values.atd).isValid()
-                      ? dayjs.utc(jobDetailsForm.values.atd).local().toDate()
-                      : null
-                  }
+                  value={parseLocalDateTime(jobDetailsForm.values.atd)}
                   onChange={(value: Date | null) => {
-                    jobDetailsForm.setFieldValue("atd", value ? dayjs(value).utc().toISOString() : "");
+                    jobDetailsForm.setFieldValue(
+                      "atd",
+                      formatLocalDateTime(value) ?? "",
+                    );
                   }}
                   size="sm"
                   disabled={isReadOnly}
@@ -999,13 +1007,12 @@ function AirJobGenerationCreate() {
                 <DateTimeInput
                   label="ATA"
                   placeholder="YYYY-MM-DD HH:mm"
-                  value={
-                    jobDetailsForm.values.ata && dayjs.utc(jobDetailsForm.values.ata).isValid()
-                      ? dayjs.utc(jobDetailsForm.values.ata).local().toDate()
-                      : null
-                  }
+                  value={parseLocalDateTime(jobDetailsForm.values.ata)}
                   onChange={(value: Date | null) => {
-                    jobDetailsForm.setFieldValue("ata", value ? dayjs(value).utc().toISOString() : "");
+                    jobDetailsForm.setFieldValue(
+                      "ata",
+                      formatLocalDateTime(value) ?? "",
+                    );
                   }}
                   size="sm"
                   disabled={isReadOnly}

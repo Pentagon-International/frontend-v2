@@ -76,6 +76,12 @@ import {
   getServerErrorMessage,
   isApiFailureResponse,
 } from "../../utils/apiErrorMessage";
+import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
+import {
+  EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
+  normalizeEditPageAuditInfo,
+  type EditPageAuditInfo,
+} from "../../utils/editPageAuditInfo";
 
 // Removed fetchCustomerNames - using SearchableSelect for dynamic loading
 
@@ -366,6 +372,9 @@ function CallEntryNew() {
   const [nearbyCustomer, { open: openCustomer, close: closeCustomer }] =
     useDisclosure(false);
   const [isLoadingCallEntryData, setIsLoadingCallEntryData] = useState(false);
+  const [callEntryAuditInfo, setCallEntryAuditInfo] =
+    useState<EditPageAuditInfo | null>(null);
+  const [auditInfoHovered, setAuditInfoHovered] = useState(false);
   const [
     openedParticipant,
     { open: openParticipant, close: closeParticipant },
@@ -980,6 +989,7 @@ function CallEntryNew() {
           // Set form values
           callEntryForm.setValues(mappedCallEntryForm);
           setSelectedCustomerName(response.customer_name || "");
+          setCallEntryAuditInfo(normalizeEditPageAuditInfo(response));
 
           console.log("Mapped call entry form:", mappedCallEntryForm);
         } catch (error) {
@@ -2149,6 +2159,10 @@ function CallEntryNew() {
               backgroundColor: "#FFFFFF",
               position: "sticky",
               top: 0,
+              zIndex: auditInfoHovered
+                ? EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.hovered
+                : EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.default,
+              overflow: "visible",
             }}
           >
             <Box
@@ -2157,22 +2171,32 @@ function CallEntryNew() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                overflow: "visible",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
-              >
-                {callEntryId ? "Edit Call Entry" : "Create Call Entry"}
-              </Text>
+              <Group gap={6} justify="center" wrap="nowrap">
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {callEntryId ? "Edit Call Entry" : "Create Call Entry"}
+                </Text>
+                <EditPageAuditInfoIcon
+                  visible={Boolean(callEntryId)}
+                  auditInfo={callEntryAuditInfo}
+                  animateKey={callEntryId}
+                  ariaLabel="Call entry audit info"
+                  onHoverChange={setAuditInfoHovered}
+                />
+              </Group>
             </Box>
           </Box>
 

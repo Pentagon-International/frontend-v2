@@ -78,6 +78,11 @@ import {
   type CustomerSelectionState,
   type CustomerSelectionType,
 } from "../../utils/customerSelection";
+import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
+import {
+  EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
+  normalizeEditPageAuditInfo,
+} from "../../utils/editPageAuditInfo";
 
 // Type definitions
 
@@ -331,8 +336,21 @@ function EnquiryCreate() {
   const [showQuotation, setShowQuotation] = useState(
     enq?.actionType === "editQuotation" || enq?.actionType === "createQuote"
   );
+  const showEditAuditInfo = useMemo(() => {
+    if (!enq) return false;
+    if (enq.actionType === "createQuote") return false;
+    if (enq.actionType === "edit" || enq.actionType === "editQuotation") {
+      return true;
+    }
+    return Boolean(enq.id || enq.enquiry_id);
+  }, [enq]);
+  const enquiryAuditInfo = useMemo(
+    () => normalizeEditPageAuditInfo(enq),
+    [enq],
+  );
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [auditInfoHovered, setAuditInfoHovered] = useState(false);
   const [
     documentsModalOpened,
     { open: openDocumentsModal, close: closeDocumentsModal },
@@ -3409,6 +3427,10 @@ function EnquiryCreate() {
                   backgroundColor: "#FFFFFF",
                   position: "sticky",
                   top: 0,
+                  zIndex: auditInfoHovered
+                    ? EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.hovered
+                    : EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.default,
+                  overflow: "visible",
                 }}
               >
                 <Box
@@ -3417,36 +3439,46 @@ function EnquiryCreate() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    overflow: "visible",
                   }}
                 >
-                  <Text
-                    size="md"
-                    fw={600}
-                    c="#105476"
-                    style={{
-                      fontFamily: "Inter",
-                      fontStyle: "medium",
-                      fontSize: "16px",
-                      color: "#105476",
-                      textAlign: "center",
-                    }}
-                  >
-                    {(() => {
-                      // Determine title based on actionType and whether quotation step is shown
-                      if (enq?.actionType === "editQuotation") {
-                        return "Edit Quotation";
-                      } else if (enq?.actionType === "createQuote") {
-                        return "Create Quotation";
-                      } else if (enq?.actionType === "edit") {
-                        return "Edit Enquiry";
-                      } else if (enq?.id || enq?.enquiry_id) {
-                        // Only check for actual enquiry ID, not form values (which could be from create mode)
-                        return "Edit Enquiry";
-                      } else {
-                        return "Create New Enquiry";
-                      }
-                    })()}
-                  </Text>
+                  <Group gap={6} justify="center" wrap="nowrap">
+                    <Text
+                      size="md"
+                      fw={600}
+                      c="#105476"
+                      style={{
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                        fontSize: "16px",
+                        color: "#105476",
+                        textAlign: "center",
+                      }}
+                    >
+                      {(() => {
+                        // Determine title based on actionType and whether quotation step is shown
+                        if (enq?.actionType === "editQuotation") {
+                          return "Edit Quotation";
+                        } else if (enq?.actionType === "createQuote") {
+                          return "Create Quotation";
+                        } else if (enq?.actionType === "edit") {
+                          return "Edit Enquiry";
+                        } else if (enq?.id || enq?.enquiry_id) {
+                          // Only check for actual enquiry ID, not form values (which could be from create mode)
+                          return "Edit Enquiry";
+                        } else {
+                          return "Create New Enquiry";
+                        }
+                      })()}
+                    </Text>
+                    <EditPageAuditInfoIcon
+                      visible={showEditAuditInfo}
+                      auditInfo={enquiryAuditInfo}
+                      animateKey={enq?.id || enq?.enquiry_id}
+                      ariaLabel="Enquiry audit info"
+                      onHoverChange={setAuditInfoHovered}
+                    />
+                  </Group>
                 </Box>
                 <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
                   <Box

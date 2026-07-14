@@ -26,6 +26,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -121,6 +123,15 @@ export default function PortCreate() {
   const isCreateMode = !isViewMode && !isEditMode;
 
   const record = (location.state as PortRecord | undefined) ?? undefined;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode || isViewMode ? (record as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode || isViewMode ? URL.portMaster : undefined,
+        recordId: record?.id,
+        enabled: isEditMode || isViewMode,
+      },
+    );
 
   const { data: countries = [] } = useQuery({
     queryKey: ["countries-port-create"],
@@ -196,7 +207,9 @@ export default function PortCreate() {
     try {
       const payload = buildApiPayload(values, record?.id);
       if (isEditMode) {
-        await putAPICall(URL.portMaster, payload, API_HEADER);
+        const res = await putAPICall(URL.portMaster, payload, API_HEADER);
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(record?.id);
         ToastNotification({
           type: "success",
           message: "Port updated successfully",
@@ -208,7 +221,7 @@ export default function PortCreate() {
           message: "Port created successfully",
         });
       }
-      navigate(BASE_PATH);
+      navigate(BASE_PATH, { state: { refreshData: true } });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -316,18 +329,24 @@ export default function PortCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontSize: "16px",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode || isViewMode}
+                justify="center"
               >
-                {pageTitle}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontSize: "16px",
+                    textAlign: "center",
+                  }}
+                >
+                  {pageTitle}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

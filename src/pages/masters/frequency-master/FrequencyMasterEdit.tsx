@@ -15,6 +15,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -35,6 +37,11 @@ function FrequencyMasterEdit() {
   const location = useLocation();
   const editFormData = location.state as FrequencyData | undefined;
 
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editFormData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.frequency,
+    });
+
   const editForm = useForm<FrequencyData>({
     initialValues: {
       id: editFormData?.id || 0,
@@ -46,12 +53,14 @@ function FrequencyMasterEdit() {
 
   const handleEditForm = async (values: FrequencyData): Promise<void> => {
     try {
-      await putAPICall(URL.frequency, values, API_HEADER);
+      const res = await putAPICall(URL.frequency, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: "Frequency updated successfully",
       });
-      navigate("/master/frequency");
+      navigate("/master/frequency", { state: { refreshData: true } });
     } catch (err: any) {
       ToastNotification({
         type: "error",
@@ -71,9 +80,11 @@ function FrequencyMasterEdit() {
       onSubmit={editForm.onSubmit(handleEditForm)}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          Edit Frequency
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            Edit Frequency
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           data={[
             { label: "Active", value: "ACTIVE" },

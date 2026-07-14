@@ -14,6 +14,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -41,6 +43,11 @@ function BranchMasterView() {
   const [opened, { open, close }] = useDisclosure(false);
   const viewData = location.state as BranchData | undefined;
 
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.branchMaster },
+  );
+
   if (!viewData) {
     return <p>No data to display.</p>;
   }
@@ -64,9 +71,11 @@ function BranchMasterView() {
   return (
     <Box style={{ width: "90%", padding: "0 10%" }}>
       <Group justify="space-between">
-        <Text fw={500} my={"md"}>
-          View Branch
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my={"md"}>
+            View Branch
+          </Text>
+        </MasterAuditHeadingRow>
         <Group gap={40}>
           <SegmentedControl
             size="xs"

@@ -31,6 +31,8 @@ import {
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import {
   Dropdown,
   SearchableSelect,
@@ -70,9 +72,10 @@ import {
 } from "../../../utils/invoiceDocumentNumber";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-
-dayjs.extend(utc);
+import {
+  formatLocalDateTime,
+  parseLocalDateTime,
+} from "../../../utils/localDateTime";
 
 const JOB_DETAILS_TAB = 0;
 const CHARGES_TAB = 1;
@@ -242,15 +245,7 @@ function getHousingChargesPayloadKey(
 }
 
 function parseJobDateField(value: unknown): Date | null {
-  if (!value) return null;
-  if (value instanceof Date && dayjs(value).isValid()) return value;
-  if (dayjs.utc(value as string).isValid()) {
-    return dayjs.utc(value as string).local().toDate();
-  }
-  if (dayjs(value as string).isValid()) {
-    return dayjs(value as string).toDate();
-  }
-  return null;
+  return parseLocalDateTime(value as string | Date | null | undefined);
 }
 
 function formatJobDateForPayload(
@@ -261,7 +256,7 @@ function formatJobDateForPayload(
   if (!isAirTransportMode(transportMode)) {
     return dayjs(value).format("YYYY-MM-DD");
   }
-  return `${dayjs(value).utc().format("YYYY-MM-DDTHH:mm:ss")}+00:00`;
+  return formatLocalDateTime(value);
 }
 
 function mapChargesForPayload(
@@ -1198,20 +1193,31 @@ export default function ServiceJobCreate() {
   const { id: routeId } = useParams<{ id: string }>();
   const isEditMode = Boolean(routeId);
   const user = useAuthStore((state) => state.user);
-  const jobData =
+  const stateJobFromNav =
     (location.state as { job?: Record<string, unknown> } | null)?.job ?? null;
+  const [resolvedJob, setResolvedJob] = useState<Record<string, unknown> | null>(
+    null,
+  );
+  const jobData = resolvedJob ?? stateJobFromNav;
 
   const { getBranchCurrencyDefaults } = useExchangeRateRoe();
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
 
   const [activeTab, setActiveTab] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingJob, setIsLoadingJob] = useState(isEditMode && !jobData);
-  const jobPopulatedRef = useRef(false);
+  const [isLoadingJob, setIsLoadingJob] = useState(
+    isEditMode && !stateJobFromNav,
+  );
+  const lastHydrationKeyRef = useRef<string | null>(null);
+  const forceApiFetchRef = useRef(false);
 
   useEffect(() => {
-    jobPopulatedRef.current = false;
-  }, [routeId]);
+    if (lastHydrationKeyRef.current !== null) {
+      forceApiFetchRef.current = true;
+    }
+    lastHydrationKeyRef.current = null;
+    setResolvedJob(null);
+  }, [routeId, location.key]);
   const [houseMeta, setHouseMeta] = useState<{
     id?: number;
     shipment_id?: string;
@@ -1396,21 +1402,28 @@ export default function ServiceJobCreate() {
   );
 
   useEffect(() => {
-    if (!isEditMode || serviceMasterList.length === 0 || jobPopulatedRef.current) {
+    if (!isEditMode || serviceMasterList.length === 0 || !routeId) {
       return;
     }
 
-    const stateJob = (
-      location.state as { job?: Record<string, unknown> } | null
-    )?.job;
-    if (stateJob?.id != null) {
+    const hydrationKey = `${routeId}:${location.key}`;
+    if (lastHydrationKeyRef.current === hydrationKey) {
+      return;
+    }
+
+    const stateJob = stateJobFromNav;
+    const hasMatchingStateJob =
+      stateJob?.id != null && String(stateJob.id) === String(routeId);
+
+    if (!forceApiFetchRef.current && hasMatchingStateJob) {
       populateFromJob(stateJob);
-      jobPopulatedRef.current = true;
+      setResolvedJob(stateJob);
+      lastHydrationKeyRef.current = hydrationKey;
       setIsLoadingJob(false);
       return;
     }
 
-    if (!routeId) return;
+    forceApiFetchRef.current = false;
     let cancelled = false;
 
     const load = async () => {
@@ -1427,8 +1440,8 @@ export default function ServiceJobCreate() {
         if (!job) throw new Error("Job not found");
         if (!cancelled) {
           populateFromJob(job);
-          jobPopulatedRef.current = true;
-          navigate(location.pathname, { replace: true, state: { job } });
+          setResolvedJob(job);
+          lastHydrationKeyRef.current = hydrationKey;
         }
       } catch (err) {
         ToastNotification({
@@ -1448,12 +1461,16 @@ export default function ServiceJobCreate() {
   }, [
     isEditMode,
     routeId,
-    location.pathname,
-    location.state,
-    navigate,
+    location.key,
+    stateJobFromNav?.id,
     populateFromJob,
     serviceMasterList.length,
   ]);
+
+  const serviceJobAuditSource = useMemo(
+    () => mergeEditPageAuditSources(jobData),
+    [jobData],
+  );
 
   useEffect(() => {
     if (
@@ -1620,9 +1637,15 @@ export default function ServiceJobCreate() {
   return (
     <Box p="md" mx="auto" style={{display: "flex", flexDirection: "column", height: "100%"}}>
       <Group justify="space-between" mb="md">
-        <Text size="xl" fw={600} c="#105476">
-          {isEditMode ? "Edit Service Job" : "Create Service Job"}
-        </Text>
+        <EditPageHeadingRow
+          visible={isEditMode && Boolean(jobData)}
+          auditSource={serviceJobAuditSource}
+          animateKey={(jobData as { id?: number })?.id}
+        >
+          <Text size="xl" fw={600} c="#105476">
+            {isEditMode ? "Edit Service Job" : "Create Service Job"}
+          </Text>
+        </EditPageHeadingRow>
         <Button
           color="#105476"
           leftSection={<IconCheck size={18} />}

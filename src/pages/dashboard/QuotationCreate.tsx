@@ -71,6 +71,11 @@ import {
   SearchableSelect,
   SingleDateInput,
 } from "../../components";
+import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
+import {
+  EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
+  normalizeEditPageAuditInfo,
+} from "../../utils/editPageAuditInfo";
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
@@ -643,6 +648,11 @@ function QuotationCreate({
     enquiryData && enquiryData.actionType === "editQuotation",
   );
   const isEditMode = (isStandaloneEdit || isEmbeddedEditMode) && !isViewMode;
+  const [auditInfoHovered, setAuditInfoHovered] = useState(false);
+  const quotationAuditInfo = useMemo(
+    () => normalizeEditPageAuditInfo(fetchedQuotationData || quotationData),
+    [fetchedQuotationData, quotationData],
+  );
   const quotationIdForEdit =
     actualEnquiryData?.actionType === "edit"
       ? actualEnquiryData?.id
@@ -4831,6 +4841,10 @@ function QuotationCreate({
                   backgroundColor: "#FFFFFF",
                   position: "sticky",
                   top: 0,
+                  zIndex: auditInfoHovered
+                    ? EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.hovered
+                    : EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.default,
+                  overflow: "visible",
                 }}
               >
                 <Box
@@ -4839,22 +4853,34 @@ function QuotationCreate({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    overflow: "visible",
                   }}
                 >
-                  <Text
-                    size="md"
-                    fw={600}
-                    c="#105476"
-                    style={{
-                      fontFamily: "Inter",
-                      fontStyle: "medium",
-                      fontSize: "16px",
-                      color: "#105476",
-                      textAlign: "center",
-                    }}
-                  >
-                    {isEditMode ? "Edit Quotation" : "Create Quotation"}
-                  </Text>
+                  <Group gap={6} justify="center" wrap="nowrap">
+                    <Text
+                      size="md"
+                      fw={600}
+                      c="#105476"
+                      style={{
+                        fontFamily: "Inter",
+                        fontStyle: "medium",
+                        fontSize: "16px",
+                        color: "#105476",
+                        textAlign: "center",
+                      }}
+                    >
+                      {isEditMode ? "Edit Quotation" : "Create Quotation"}
+                    </Text>
+                    <EditPageAuditInfoIcon
+                      visible={isEditMode || isViewMode}
+                      auditInfo={quotationAuditInfo}
+                      animateKey={
+                        quotationIdForEdit || quotationId || quotationData?.id
+                      }
+                      ariaLabel="Quotation audit info"
+                      onHoverChange={setAuditInfoHovered}
+                    />
+                  </Group>
                 </Box>
                 <Stack gap="sm" style={{ height: "100%", padding: "10px" }}>
                   {/* Step 1: Customer Details - Completed */}

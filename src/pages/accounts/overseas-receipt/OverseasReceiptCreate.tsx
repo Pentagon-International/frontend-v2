@@ -34,6 +34,8 @@ import {
   import { useDisclosure } from "@mantine/hooks";
   import { Dropzone } from "@mantine/dropzone";
   import { useNavigate, useLocation } from "react-router-dom";
+  import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+  import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
   import { useQuery, useQueryClient } from "@tanstack/react-query";
   import { URL } from "../../../api/serverUrls";
   import {
@@ -545,6 +547,9 @@ import {
       document_no?: string;
       status?: string;
     } | null>(null);
+    const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+      null,
+    );
   
     const [reverseReceiptSaveResponse, setReverseReceiptSaveResponse] = useState<{
       id: number;
@@ -692,6 +697,11 @@ import {
     const receiptFromState = location.state as ReceiptListItem | null | undefined;
     const loadedFromListState = receiptFromState?.id != null;
     const pathname = location.pathname;
+
+    useEffect(() => {
+      setAuditPatch(null);
+    }, [location.key]);
+
     const isReversalEditOrView =
       _isReversal &&
       (pathname.includes("/reversal/edit") ||
@@ -855,6 +865,7 @@ import {
       _isReversal,
       isReversalEditOrView,
       isReversalCreate,
+      location.key,
     ]);
   
     // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
@@ -1501,6 +1512,7 @@ import {
                 ),
                 status: res.status != null ? String(res.status) : "UNPOSTED",
               }));
+              setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
               if (Array.isArray(res.documents) && res.documents.length > 0) {
                 form.setFieldValue(
@@ -1637,6 +1649,7 @@ import {
               status:
                 res.status != null ? String(res.status) : ("UNPOSTED" as string),
             });
+            setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
             if (Array.isArray(res.documents) && res.documents.length > 0) {
               form.setFieldValue(
@@ -1844,6 +1857,7 @@ import {
             document_no: prev?.document_no ?? "",
             status: res.status != null ? String(res.status) : "POSTED",
           }));
+          setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
           if (Array.isArray(res.documents) && res.documents.length > 0) {
             form.setFieldValue(
@@ -1923,6 +1937,14 @@ import {
         ? reversalNonEditableStyles
         : inputStyles;
   
+    const showAuditInfo =
+      pathname.includes("/edit") || pathname.includes("/view");
+    const receiptAuditSource = mergeEditPageAuditSources(
+      receiptFromState,
+      _isReversal ? reverseReceiptSaveResponse : saveResponse,
+      auditPatch,
+    );
+
     const pageTitle = pathname.includes("/reversal/view")
       ? "View Receipt Reversal"
       : pathname.includes("/reversal/edit")
@@ -1973,9 +1995,15 @@ import {
         <Stack gap="md">
           {/* Header: Title | Receipt No & Status (left of Back) | Back */}
           <Group justify="space-between" mb="xs" wrap="nowrap">
-            <Text size="xl" fw={600} c="#105476">
-              {pageTitle}
-            </Text>
+            <EditPageHeadingRow
+              visible={showAuditInfo && Boolean(receiptAuditSource)}
+              auditSource={receiptAuditSource}
+              animateKey={(receiptAuditSource as { id?: number })?.id}
+            >
+              <Text size="xl" fw={600} c="#105476">
+                {pageTitle}
+              </Text>
+            </EditPageHeadingRow>
             <Group gap="md" wrap="nowrap">
               {saveResponse && !_isReversal && (
                 <Group gap="sm" wrap="nowrap">

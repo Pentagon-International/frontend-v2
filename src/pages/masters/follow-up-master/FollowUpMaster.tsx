@@ -29,7 +29,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -49,10 +49,17 @@ export default function FollowUpMaster() {
   const isAdmin = useIsAdminUser();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void fetchData();
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData]);
 
   async function fetchData() {
     try {
@@ -68,7 +75,7 @@ export default function FollowUpMaster() {
 
   const handleDelete = async (row) => {
     try {
-      await deleteApiCall(URL.followUp, API_HEADER, row.id);
+      await deleteApiCall(URL.followUpAction, API_HEADER, { id: row.id });
       fetchData();
       ToastNotification({
         type: "success",

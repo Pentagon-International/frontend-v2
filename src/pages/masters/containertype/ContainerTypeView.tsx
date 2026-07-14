@@ -14,6 +14,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -38,6 +40,11 @@ function ContainerTypeView() {
   const [opened, { open, close }] = useDisclosure(false);
   const viewData = location.state as ContainerData | undefined;
 
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.containerType },
+  );
+
   if (!viewData) {
     return <Text>No data to display.</Text>;
   }
@@ -61,9 +68,11 @@ function ContainerTypeView() {
   return (
     <Box style={{ width: "90%", padding: "0 10%" }}>
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          View Container Type
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            View Container Type
+          </Text>
+        </MasterAuditHeadingRow>
         <Group gap={50}>
           <SegmentedControl
             size="xs"

@@ -20,7 +20,7 @@ import { IconCheck, IconPlus, IconUser } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { getAPICall } from "../../service/getApiCall";
 import { URL } from "../../api/serverUrls";
@@ -30,6 +30,11 @@ import { putAPICall } from "../../service/putApiCall";
 import { ToastNotification } from "../../components";
 import useAuthStore from "../../store/authStore";
 import { useQuery } from "@tanstack/react-query";
+import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
+import {
+  EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
+  normalizeEditPageAuditInfo,
+} from "../../utils/editPageAuditInfo";
 
 type LeadFormData = {
   name: string; // Company Name
@@ -102,8 +107,14 @@ function CreateLead() {
   const location = useLocation();
   const { user } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [auditInfoHovered, setAuditInfoHovered] = useState(false);
   const leadData = (location.state as any)?.leadData;
   const isEditMode = !!leadData;
+
+  const leadAuditInfo = useMemo(
+    () => normalizeEditPageAuditInfo(leadData),
+    [leadData],
+  );
 
   // Fetch user master data for Assigned To dropdown
   const { data: usersData = [], isLoading: usersLoading } = useQuery({
@@ -330,6 +341,10 @@ function CreateLead() {
               backgroundColor: "#FFFFFF",
               position: "sticky",
               top: 0,
+              zIndex: auditInfoHovered
+                ? EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.hovered
+                : EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.default,
+              overflow: "visible",
             }}
           >
             <Box
@@ -340,22 +355,32 @@ function CreateLead() {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 5,
+                overflow: "visible",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
-              >
-                {isEditMode ? "Edit Lead Entry" : "Create Lead Entry"}
-              </Text>
+              <Group gap={6} justify="center" wrap="nowrap">
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit Lead Entry" : "Create Lead Entry"}
+                </Text>
+                <EditPageAuditInfoIcon
+                  visible={isEditMode}
+                  auditInfo={leadAuditInfo}
+                  animateKey={leadData?.id}
+                  ariaLabel="Lead audit info"
+                  onHoverChange={setAuditInfoHovered}
+                />
+              </Group>
               <Text
                 size="sm"
                 fw={500}

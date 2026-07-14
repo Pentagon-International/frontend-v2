@@ -29,7 +29,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -58,10 +58,24 @@ export default function CallModeMaster() {
   const isAdmin = useIsAdminUser();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
-    fetchData().then((response)=>setData(response));
+    const loadData = async () => {
+      const response = await fetchData();
+      setData(response);
+    };
+    void loadData();
   }, []);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void (async () => {
+      const response = await fetchData();
+      setData(response);
+    })();
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData]);
 
   const handleDelete = async (value) => {
     try {

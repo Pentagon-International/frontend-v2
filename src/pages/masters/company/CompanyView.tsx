@@ -16,6 +16,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -59,6 +61,12 @@ function CompanyView() {
   const [groupCompanyOptions, setGroupCompanyOptions] = useState([]);
   const [viewSelectData, setviewSelectData] = useState();
   const viewData = location.state as ViewFormData | undefined;
+
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.company },
+  );
+
   // console.log("data check=", viewData);
 
   useEffect(() => {
@@ -114,9 +122,11 @@ function CompanyView() {
         //   onSubmit={groupForm.onSubmit(handleForm)}
       >
         <Group justify="space-between">
-          <Text fw={500} my={"md"}>
-            View Company
-          </Text>
+          <MasterAuditHeadingRow auditSource={auditSource}>
+            <Text fw={500} my={"md"}>
+              View Company
+            </Text>
+          </MasterAuditHeadingRow>
           <Group
             // w={"50%"}
             gap={50}

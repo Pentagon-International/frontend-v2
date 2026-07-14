@@ -29,7 +29,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -47,10 +47,17 @@ export default function GroupCompany() {
   const isAdmin = useIsAdminUser();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void fetchData();
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData]);
 
   async function fetchData() {
     try {

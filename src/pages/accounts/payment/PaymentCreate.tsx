@@ -30,6 +30,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -51,6 +52,7 @@ import {
   ROE_MAX_VALUE,
 } from "../../../utils/exchangeRateRoe";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
+import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -569,6 +571,9 @@ export default function PaymentCreate({
     document_no?: string;
     status?: string;
   } | null>(null);
+  const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+    null,
+  );
 
   const branchCode =
     (defaultBranch as { branch_code?: string } | undefined)?.branch_code ?? "";
@@ -706,6 +711,11 @@ export default function PaymentCreate({
   const paymentFromState = location.state as PaymentListItem | null | undefined;
   const loadedFromListState = paymentFromState?.id != null;
   const pathname = location.pathname;
+
+  useEffect(() => {
+    setAuditPatch(null);
+  }, [location.key]);
+
   const isReversalEditOrView =
     _isReversal &&
     (pathname.includes("/reversal/edit") ||
@@ -921,6 +931,7 @@ export default function PaymentCreate({
     _isReversal,
     isReversalEditOrView,
     isReversalCreate,
+    location.key,
   ]);
 
   const partyAccountCodeBackfillKey = (form.values.details ?? [])
@@ -1735,6 +1746,7 @@ export default function PaymentCreate({
               ),
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
+            setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
             await queryClient.invalidateQueries({ queryKey: ["payment"] });
             await queryClient.invalidateQueries({
               queryKey: ["payment-reversal"],
@@ -1823,6 +1835,7 @@ export default function PaymentCreate({
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
           });
+          setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
           // Refresh documents from response
           if (Array.isArray(res.documents) && res.documents.length > 0) {
             form.setFieldValue(
@@ -2007,6 +2020,7 @@ export default function PaymentCreate({
           document_no: prev?.document_no ?? "",
           status: res.status != null ? String(res.status) : "POSTED",
         }));
+        setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
         await queryClient.invalidateQueries({ queryKey: ["payment"] });
         ToastNotification({
           type: "success",
@@ -2070,6 +2084,14 @@ export default function PaymentCreate({
       ? reversalNonEditableStyles
       : inputStyles;
 
+  const showAuditInfo =
+    pathname.includes("/edit") || pathname.includes("/view");
+  const paymentAuditSource = mergeEditPageAuditSources(
+    paymentFromState,
+    _isReversal ? reversePaymentSaveResponse : saveResponse,
+    auditPatch,
+  );
+
   const pageTitle = pathname.includes("/payment/reversal/view")
     ? "View Payment Reversal"
     : pathname.includes("/payment/reversal/edit")
@@ -2118,9 +2140,15 @@ export default function PaymentCreate({
       )}
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
-            {pageTitle}
-          </Text>
+          <EditPageHeadingRow
+            visible={showAuditInfo && Boolean(paymentAuditSource)}
+            auditSource={paymentAuditSource}
+            animateKey={(paymentAuditSource as { id?: number })?.id}
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {pageTitle}
+            </Text>
+          </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
             {saveResponse && !_isReversal && (
               <Group gap="sm" wrap="nowrap">

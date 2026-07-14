@@ -123,6 +123,12 @@ export default function PortMasterList() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void queryClient.invalidateQueries({ queryKey: ["port-master"] });
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData, queryClient]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteModalOpened, setDeleteModalOpened] = useState(false);
   const [portToDelete, setPortToDelete] = useState<PortMasterRow | null>(null);

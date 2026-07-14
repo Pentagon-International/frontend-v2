@@ -13,6 +13,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -30,6 +32,11 @@ function TermsOfShipmentView() {
   const location = useLocation();
   const [opened, { open, close }] = useDisclosure(false);
   const viewData = location.state as TermsOfShipmentData | undefined;
+
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.termsOfShipment },
+  );
 
   if (!viewData) {
     return (
@@ -63,9 +70,11 @@ function TermsOfShipmentView() {
   return (
     <Box style={{ width: "90%", padding: "0 10%" }}>
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          View Terms of Shipment
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            View Terms of Shipment
+          </Text>
+        </MasterAuditHeadingRow>
         <Button
           size="xs"
           w={100}

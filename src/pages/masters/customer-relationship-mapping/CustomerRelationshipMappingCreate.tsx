@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -117,6 +119,11 @@ function CustomerRelationshipMappingCreate() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [isLoadingEditData, setIsLoadingEditData] = useState(false);
+  const [crmAuditSource, setCrmAuditSource] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const { auditSource } = useMasterEditAuditRefresh(crmAuditSource);
 
   // Display name states for customer
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
@@ -289,6 +296,7 @@ function CustomerRelationshipMappingCreate() {
           if (Array.isArray(response) && response.length > 0) {
             // Get customer info from first item
             const firstItem = response[0];
+            setCrmAuditSource(firstItem as Record<string, unknown>);
 
             // Map response to form structure - include id for existing entries
             const relationshipDetails: RelationshipDetail[] = response.map(
@@ -555,6 +563,13 @@ function CustomerRelationshipMappingCreate() {
           payload,
           API_HEADER,
         );
+        const refetchResponse = (await getAPICall(
+          `${URL.customerRelationshipMappingByCustomer}?customer_id=${customerIdFromState}`,
+          API_HEADER,
+        )) as EditResponseItem[];
+        if (Array.isArray(refetchResponse) && refetchResponse.length > 0) {
+          setCrmAuditSource(refetchResponse[0] as Record<string, unknown>);
+        }
         ToastNotification({
           type: "success",
           message: "Customer Relationship Mapping updated successfully!",
@@ -597,11 +612,16 @@ function CustomerRelationshipMappingCreate() {
   return (
     <Box component="form" onSubmit={form.onSubmit(handleSubmit)}>
       <Group justify="space-between" mb="md">
-        <Text size="lg" fw={600} c="#105476">
-          {isEditMode
-            ? "Edit Customer Relationship Mapping"
-            : "Create Customer Relationship Mapping"}
-        </Text>
+        <MasterAuditHeadingRow
+          auditSource={auditSource}
+          visible={isEditMode}
+        >
+          <Text size="lg" fw={600} c="#105476">
+            {isEditMode
+              ? "Edit Customer Relationship Mapping"
+              : "Create Customer Relationship Mapping"}
+          </Text>
+        </MasterAuditHeadingRow>
         <Button
           variant="outline"
           color="#105476"

@@ -15,6 +15,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -36,6 +38,12 @@ function CallModeEdit() {
   const location = useLocation();
 
   const editFormData = location.state as CallModeData | undefined;
+
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editFormData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.callMode,
+    });
+
   console.log("editFormData=",editFormData);
   
 
@@ -54,15 +62,16 @@ function CallModeEdit() {
     
     try {
       const response = await putAPICall(URL.callMode, values, API_HEADER);
+      applyAuditFromResponse(response);
+      await refreshAuditFromDetail(values.id);
 
       ToastNotification({
         type: "success",
         message: `Call Mode updated successfully`,
       });
 
-      // ✅ Wait until toast, then navigate back
       setTimeout(() => {
-        navigate("/master/call-mode");
+        navigate("/master/call-mode", { state: { refreshData: true } });
       }, 500); // slight delay so user sees toast
     } catch (err: any) {
       ToastNotification({
@@ -79,9 +88,11 @@ function CallModeEdit() {
       onSubmit={editForm.onSubmit(handleEditForm)}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          Edit Call Mode
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            Edit Call Mode
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           size="xs"
           radius="sm"

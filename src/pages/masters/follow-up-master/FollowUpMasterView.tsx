@@ -16,6 +16,8 @@ import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -39,6 +41,11 @@ function FollowUpMasterView() {
   const location = useLocation();
   const [opened, { open, close }] = useDisclosure(false);
   const viewData = location.state as FollowUpData | undefined;
+
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.followUpAction },
+  );
 
   const [callModeName, setCallModeName] = useState<string>("");
 
@@ -70,7 +77,7 @@ function FollowUpMasterView() {
 
   const handleDelete = async (value: FollowUpData) => {
     try {
-      await deleteApiCall(URL.followUp, API_HEADER, value);
+      await deleteApiCall(URL.followUpAction, API_HEADER, value);
       ToastNotification({
         type: "success",
         message: "Follow-up entry deleted successfully",
@@ -87,9 +94,11 @@ function FollowUpMasterView() {
   return (
     <Box component="form" style={{ width: "90%", padding: "0 10%" }}>
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          View Follow-up
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            View Follow-up
+          </Text>
+        </MasterAuditHeadingRow>
 
         <Group gap={50}>
           <SegmentedControl

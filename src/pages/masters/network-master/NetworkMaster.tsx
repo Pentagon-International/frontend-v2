@@ -23,7 +23,7 @@ import {
 import { IconDotsVertical, IconEdit, IconPlus, IconSearch, IconX } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -58,6 +58,7 @@ export default function NetworkMasterList() {
   const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 500);
   const [isRestoring, setIsRestoring] = useState(true);
@@ -83,6 +84,12 @@ export default function NetworkMasterList() {
     clearAllExcept(LIST_KEY);
     setIsRestoring(false);
   }, [location.key]);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void queryClient.invalidateQueries({ queryKey: ["network-master"] });
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData, queryClient]);
 
   useEffect(() => {
     setPagination((p) => ({ ...p, pageIndex: 0 }));

@@ -17,6 +17,8 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { useEffect, useState } from "react";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -45,6 +47,11 @@ function FollowUpMasterEdit() {
   const navigate = useNavigate();
   const location = useLocation();
   const editData = location.state as FollowUpData;
+
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.followUpAction,
+    });
 
   const [callModeOptions, setCallModeOptions] = useState<
     { label: string; value: string }[]
@@ -85,12 +92,14 @@ function FollowUpMasterEdit() {
 
   const handleEditForm = async (values: FollowUpData) => {
     try {
-      await putAPICall(URL.followUp, values, API_HEADER);
+      const res = await putAPICall(URL.followUpAction, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: "Follow-Up updated successfully",
       });
-      navigate("/master/follow-up");
+      navigate("/master/follow-up", { state: { refreshData: true } });
     } catch (err: any) {
       ToastNotification({
         type: "error",
@@ -106,9 +115,11 @@ function FollowUpMasterEdit() {
       onSubmit={followUpForm.onSubmit(handleEditForm)}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          Edit Follow-Up
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            Edit Follow-Up
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           {...followUpForm.getInputProps("status")}
           data={[

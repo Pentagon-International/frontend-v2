@@ -46,6 +46,8 @@ import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import useAuthStore from "../../../store/authStore";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { submitCustomerMultipart, submitCustomerVerification } from "../../../service/customerPanApproval.service";
 import {
   EMPTY_SUPPORTING_DOCUMENT,
@@ -1734,6 +1736,16 @@ function CustomerCreate() {
 
   // Customer ID from route parameters
   const customerId = params.id;
+
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      customerData as Record<string, unknown> | undefined,
+      {
+        detailBaseUrl: isEditMode || isViewMode ? URL.customer : undefined,
+        recordId: customerId,
+        enabled: isEditMode || isViewMode,
+      },
+    );
   // Edit/view: full salesperson list (empty payload). Create: unscoped list as well.
   const salespersonsQueryKey = isEditMode || isViewMode ? "all" : "create";
 
@@ -2953,6 +2965,8 @@ function CustomerCreate() {
         "put",
       );
       if (res) {
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(customerId);
         ToastNotification({
           type: "success",
           message: isVendorMasterRoute
@@ -3207,21 +3221,26 @@ function CustomerCreate() {
         >
           {/* Header */}
           <Group justify="space-between" align="center" mb="lg">
-            <Text size="xl" fw={600} c="#105476">
-              {isCreateMode
-                ? isVerificationCreateRoute
-                  ? "Customer for Approval"
-                  : isVendorMasterRoute
-                    ? "Create Vendor"
-                    : "Create Customer"
-                : isEditMode
-                  ? isVendorMasterRoute
-                    ? "Edit Vendor"
-                    : "Edit Customer"
-                  : isVendorMasterRoute
-                    ? "View Vendor"
-                    : "View Customer"}
-            </Text>
+            <MasterAuditHeadingRow
+              auditSource={auditSource}
+              visible={isEditMode || isViewMode}
+            >
+              <Text size="xl" fw={600} c="#105476">
+                {isCreateMode
+                  ? isVerificationCreateRoute
+                    ? "Customer for Approval"
+                    : isVendorMasterRoute
+                      ? "Create Vendor"
+                      : "Create Customer"
+                  : isEditMode
+                    ? isVendorMasterRoute
+                      ? "Edit Vendor"
+                      : "Edit Customer"
+                    : isVendorMasterRoute
+                      ? "View Vendor"
+                      : "View Customer"}
+              </Text>
+            </MasterAuditHeadingRow>
           </Group>
 
           <Tabs

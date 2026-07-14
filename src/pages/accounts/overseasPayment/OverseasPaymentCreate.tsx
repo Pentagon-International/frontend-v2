@@ -30,6 +30,8 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -578,6 +580,9 @@ export default function OverseasPaymentCreate({
     document_no?: string;
     status?: string;
   } | null>(null);
+  const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+    null,
+  );
 
   const branchCode =
     (defaultBranch as { branch_code?: string } | undefined)?.branch_code ?? "";
@@ -719,6 +724,11 @@ export default function OverseasPaymentCreate({
     suppressAutoCalculationsRef.current = false;
   };
   const pathname = location.pathname;
+
+  useEffect(() => {
+    setAuditPatch(null);
+  }, [location.key]);
+
   const isReversalEditOrView =
     _isReversal &&
     (pathname.includes("/reversal/edit") ||
@@ -934,6 +944,7 @@ export default function OverseasPaymentCreate({
     _isReversal,
     isReversalEditOrView,
     isReversalCreate,
+    location.key,
   ]);
 
   const partyAccountCodeBackfillKey = (form.values.details ?? [])
@@ -1717,6 +1728,7 @@ export default function OverseasPaymentCreate({
               ),
               status: res.status != null ? String(res.status) : "UNPOSTED",
             }));
+            setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
             if (Array.isArray(res.documents) && res.documents.length > 0) {
               form.setFieldValue(
@@ -1834,6 +1846,7 @@ export default function OverseasPaymentCreate({
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
           });
+          setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
           if (Array.isArray(res.documents) && res.documents.length > 0) {
             form.setFieldValue(
               "supporting_documents",
@@ -2034,6 +2047,7 @@ export default function OverseasPaymentCreate({
           document_no: prev?.document_no ?? "",
           status: res.status != null ? String(res.status) : "POSTED",
         }));
+        setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
         if (Array.isArray(res.documents) && res.documents.length > 0) {
           form.setFieldValue(
@@ -2120,6 +2134,14 @@ export default function OverseasPaymentCreate({
   //               ? "Create Payment"
   //               : titleOverride;
 
+  const showAuditInfo =
+    pathname.includes("/edit") || pathname.includes("/view");
+  const paymentAuditSource = mergeEditPageAuditSources(
+    paymentFromState,
+    _isReversal ? reversePaymentSaveResponse : saveResponse,
+    auditPatch,
+  );
+
   const pageTitle = pathname.includes("/payment/reversal/view")
     ? "View Payment Reversal"
     : pathname.includes("/payment/reversal/edit")
@@ -2168,9 +2190,15 @@ export default function OverseasPaymentCreate({
       )}
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
-            {pageTitle}
-          </Text>
+          <EditPageHeadingRow
+            visible={showAuditInfo && Boolean(paymentAuditSource)}
+            auditSource={paymentAuditSource}
+            animateKey={(paymentAuditSource as { id?: number })?.id}
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {pageTitle}
+            </Text>
+          </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
             {saveResponse && !_isReversal && (
               <Group gap="sm" wrap="nowrap">

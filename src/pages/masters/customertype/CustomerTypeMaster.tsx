@@ -28,7 +28,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -45,11 +45,8 @@ type CustomerType = {
 export default function CustomerTypeMaster() {
   const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<CustomerType[]>([]);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const fetchData = async () => {
     try {
@@ -62,6 +59,16 @@ export default function CustomerTypeMaster() {
       });
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void fetchData();
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData]);
 
   const handleDelete = async (item: CustomerType) => {
     try {
