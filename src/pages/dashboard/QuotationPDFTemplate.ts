@@ -6,6 +6,8 @@ import pentagonPrimeChina from "../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../assets/images/CCIPL.png";
 import {
   computePdfPreviewChargeTotalInQuoteCurrency,
+  formatPdfChargeTotalAmount,
+  formatPdfChargeUnitAmount,
 } from "../../components/PdfEditor/quotationTermsHelpers";
 import {
   CCT_BRANCH_INFO,
@@ -494,6 +496,12 @@ export const generateNewQuotationPDF = async (
     const logoCountry = defaultBranch?.country || country;
     const branchInfo = getBranchInfo(branchName, logoCountry);
     const isUsPdf = isUnitedStatesBranch(branchName, logoCountry);
+    const amountCountryCode = String(
+      logoCountry?.country_code ?? country?.country_code ?? "",
+    ).trim();
+    const amountCurrencyCode = String(
+      baseCurrency ?? defaultBranch?.currency?.currency_code ?? "",
+    ).trim();
 
     // Approval URL - get from environment variable
     const baseApprovalUrl = window.location.origin;
@@ -1188,10 +1196,33 @@ export const generateNewQuotationPDF = async (
             doc.setFont("helvetica", "bold");
             doc.setFontSize(8);
 
-            let headerX = margin + 2;
+            const getChargeColLeftX = (colIndex: number) => {
+              let x = margin + 2;
+              for (let i = 0; i < colIndex; i++) {
+                x += chargeColWidths[i];
+              }
+              return x;
+            };
+            const getChargeColCenterX = (colIndex: number) => {
+              let x = margin;
+              for (let i = 0; i < colIndex; i++) {
+                x += chargeColWidths[i];
+              }
+              return x + chargeColWidths[colIndex] / 2;
+            };
+            const isChargeCenterCol = (colIndex: number) => {
+              const totalColIndex = allMinAmountsZero ? 3 : 4;
+              return colIndex === 1 || colIndex === 2 || colIndex === totalColIndex;
+            };
+
             chargeHeaders.forEach((header, index) => {
-              doc.text(header, headerX, yPos + 4);
-              headerX += chargeColWidths[index];
+              if (isChargeCenterCol(index)) {
+                doc.text(header, getChargeColCenterX(index), yPos + 4, {
+                  align: "center",
+                });
+              } else {
+                doc.text(header, getChargeColLeftX(index), yPos + 4);
+              }
             });
             yPos += 6;
 
@@ -1205,14 +1236,33 @@ export const generateNewQuotationPDF = async (
             validCharges.forEach((charge: any) => {
               const description = String(charge.charge_name || "N/A");
               const currency = String(charge.currency || "N/A");
-              const unit = `${String(charge.sell_per_unit || "N/A")} Per ${String(charge.unit || "N/A")}`;
-              const minAmount = String(charge.min_sell || "N/A");
+              const unitAmount = formatPdfChargeUnitAmount(
+                charge.sell_per_unit,
+                amountCountryCode,
+                amountCurrencyCode,
+              );
+              const minSellRaw = charge.min_sell;
+              const minAmount =
+                minSellRaw === null ||
+                minSellRaw === undefined ||
+                minSellRaw === ""
+                  ? "N/A"
+                  : formatPdfChargeTotalAmount(
+                      minSellRaw,
+                      amountCountryCode,
+                      amountCurrencyCode,
+                    );
               const finalAmount = computePdfPreviewChargeTotalInQuoteCurrency(
                 charge,
                 quoteCurrency,
                 branchBaseCurrency,
               );
               totalAmount += finalAmount;
+              const formattedFinalAmount = formatPdfChargeTotalAmount(
+                finalAmount,
+                amountCountryCode,
+                amountCurrencyCode,
+              );
 
               // Handle text wrapping for description
               const descLines = doc.splitTextToSize(
@@ -1225,37 +1275,29 @@ export const generateNewQuotationPDF = async (
               doc.setDrawColor(200, 200, 200);
               doc.rect(margin, yPos, pageWidth - 2 * margin, rowHeight);
 
-              // Draw cells: Description, Currency, Unit, (Min. Amount if not all zero), Total Amount
-              doc.text(descLines, margin + 2, yPos + 3.5);
-              doc.text(currency, margin + 2 + chargeColWidths[0], yPos + 3.5);
-              doc.text(
-                unit,
-                margin + 2 + chargeColWidths[0] + chargeColWidths[1],
-                yPos + 3.5
-              );
-
-              // Calculate X position for Total Amount column (last column)
               const totalAmountColIndex = allMinAmountsZero ? 3 : 4;
-              let totalAmountX = margin + 2;
-              for (let i = 0; i < totalAmountColIndex; i++) {
-                totalAmountX += chargeColWidths[i];
-              }
+
+              // Draw cells: Description (left), Currency / Amount/Unit / Total (center)
+              doc.text(descLines, margin + 2, yPos + 3.5);
+              doc.text(currency, getChargeColCenterX(1), yPos + 3.5, {
+                align: "center",
+              });
+              doc.text(unitAmount, getChargeColCenterX(2), yPos + 3.5, {
+                align: "center",
+              });
 
               // Only render Min. Amount if not all are zero
               if (!allMinAmountsZero) {
-                doc.text(
-                  minAmount,
-                  margin +
-                    2 +
-                    chargeColWidths[0] +
-                    chargeColWidths[1] +
-                    chargeColWidths[2],
-                  yPos + 3.5
-                );
+                doc.text(minAmount, getChargeColLeftX(3), yPos + 3.5);
               }
 
               // Render Total Amount in the last column (without currency - currency is in header)
-              doc.text(finalAmount.toFixed(2), totalAmountX, yPos + 3.5);
+              doc.text(
+                formattedFinalAmount,
+                getChargeColCenterX(totalAmountColIndex),
+                yPos + 3.5,
+                { align: "center" },
+              );
 
               yPos += rowHeight;
             });
@@ -1265,16 +1307,21 @@ export const generateNewQuotationPDF = async (
             doc.setFillColor(230, 230, 230);
             doc.rect(margin, yPos, pageWidth - 2 * margin, 6, "F");
 
-            // Calculate X position for Total Amount column (last column) - same as data rows
             const totalAmountColIndex = allMinAmountsZero ? 3 : 4;
-            let totalAmountX = margin + 2;
-            for (let i = 0; i < totalAmountColIndex; i++) {
-              totalAmountX += chargeColWidths[i];
-            }
             const finalTotal = totalAmount;
+            const formattedOverallTotal = formatPdfChargeTotalAmount(
+              finalTotal,
+              amountCountryCode,
+              amountCurrencyCode,
+            );
 
             doc.text("Total Amount:", margin + 2, yPos + 4);
-            doc.text(finalTotal.toFixed(2), totalAmountX, yPos + 4);
+            doc.text(
+              formattedOverallTotal,
+              getChargeColCenterX(totalAmountColIndex),
+              yPos + 4,
+              { align: "center" },
+            );
             yPos += 6;
           }
         }

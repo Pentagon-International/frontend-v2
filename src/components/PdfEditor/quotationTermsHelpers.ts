@@ -1,3 +1,5 @@
+import { formatUserDecimal } from "../../utils/userNumberFormat";
+
 /** Mirrors default instruction lines rendered in QuotationPDFTemplate (not imported from PDF file). */
 export const DEFAULT_QUOTATION_INSTRUCTIONS = [
   "Rates are valid until further notice.",
@@ -160,18 +162,51 @@ export function computePdfPreviewChargeTotalInQuoteCurrency(
   return amount / effectiveRoe / noOfUnits;
 }
 
+/** Amount/Unit column: numeric value only, India en-IN / foreign en-US grouping. */
+export function formatPdfChargeUnitAmount(
+  value: unknown,
+  branchCountryCode?: string | null,
+  branchCurrencyCode?: string | null,
+): string {
+  if (value === null || value === undefined || value === "") return "N/A";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return formatUserDecimal(n, branchCountryCode, branchCurrencyCode, {
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Total / overall total: 2 decimal places with India vs foreign comma grouping. */
+export function formatPdfChargeTotalAmount(
+  value: string | number | null | undefined,
+  branchCountryCode?: string | null,
+  branchCurrencyCode?: string | null,
+): string {
+  const n = Number(value ?? 0);
+  const safe = Number.isFinite(n) ? n : 0;
+  return formatUserDecimal(safe, branchCountryCode, branchCurrencyCode, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 /** Display value for the charge Total Amount column in the PDF. */
 export function getChargeTotalDisplayAmount(
   charge: Record<string, unknown>,
   quoteCurrency: string,
   baseCurrency: string,
   _roeForQuote?: number,
+  branchCountryCode?: string | null,
 ): string {
-  return computePdfPreviewChargeTotalInQuoteCurrency(
-    charge,
-    quoteCurrency,
+  return formatPdfChargeTotalAmount(
+    computePdfPreviewChargeTotalInQuoteCurrency(
+      charge,
+      quoteCurrency,
+      baseCurrency,
+    ),
+    branchCountryCode,
     baseCurrency,
-  ).toFixed(2);
+  );
 }
 
 /** Convert edited Total Amount display back to stored total_sell. */

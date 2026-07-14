@@ -3829,7 +3829,13 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                     onQuotationChange={setCurrentQuotation}
                     onPdfRegenerated={handlePreviewPdfRegenerated}
                     onUnsavedChangesChange={setPreviewHasUnsavedChanges}
-                    editorContext={{ userCurrency: previewUserCurrency }}
+                    editorContext={{
+                      userCurrency: previewUserCurrency,
+                      branchCountryCode:
+                        defaultBranch?.country?.country_code ??
+                        user?.country?.country_code ??
+                        undefined,
+                    }}
                     editable
                   />
                 </Suspense>

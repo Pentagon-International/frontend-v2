@@ -143,6 +143,7 @@ function collectSellPerUnitCandidates(
   itemKey: (entry: PdfTextItemWithRect) => string,
 ): { score: number; items: PdfTextItemWithRect[] } {
   const amountMatch = target.match(/^(.+?)\s+Per\s+(.+)$/i);
+  // Amount-only targets (e.g. "150,000") use the general matcher.
   if (!amountMatch) return { score: 0, items: [] };
 
   const amountPart = amountMatch[1].trim();

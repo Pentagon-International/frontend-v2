@@ -5,6 +5,8 @@ import {
 import { getByPath, setByPath } from "./utils/setByPath";
 import {
   buildNumberedNoteDisplayLines,
+  formatPdfChargeTotalAmount,
+  formatPdfChargeUnitAmount,
   getChargeTotalDisplayAmount,
   getEffectiveConditions,
   getEffectiveNotes,
@@ -17,6 +19,7 @@ import {
 
 export type PdfEditorContext = {
   userCurrency?: string;
+  branchCountryCode?: string;
 };
 
 export type EditableFieldDef = {
@@ -97,7 +100,11 @@ function ensureConditionsInitialized(
   return setByPath(rowData, path, getEffectiveConditions(quotation));
 }
 
-function getChargeMinDisplayValue(charge: Record<string, unknown>): string | null {
+function getChargeMinDisplayValue(
+  charge: Record<string, unknown>,
+  branchCountryCode?: string | null,
+  branchCurrencyCode?: string | null,
+): string | null {
   const minSell = charge.min_sell;
   if (
     minSell === null ||
@@ -107,7 +114,11 @@ function getChargeMinDisplayValue(charge: Record<string, unknown>): string | nul
   ) {
     return null;
   }
-  return String(minSell);
+  return formatPdfChargeTotalAmount(
+    minSell as string | number,
+    branchCountryCode,
+    branchCurrencyCode,
+  );
 }
 
 function parseChargeMinInput(raw: string): number {
@@ -396,7 +407,13 @@ export function buildQuotationFieldRegistry(
             const quoteCurrency = String(q.quote_currency ?? "");
             const userCurrency = String(ctx.userCurrency ?? quoteCurrency);
             const roeForQuote = getRoeForQuoteCurrency(chargeList, quoteCurrency);
-            return getChargeTotalDisplayAmount(c, quoteCurrency, userCurrency, roeForQuote);
+            return getChargeTotalDisplayAmount(
+              c,
+              quoteCurrency,
+              userCurrency,
+              roeForQuote,
+              ctx.branchCountryCode,
+            );
           },
         });
       };
@@ -412,11 +429,17 @@ export function buildQuotationFieldRegistry(
           editable: true,
           type: "number",
           layoutZone: "charge_min",
-          getDisplayValue: (data) => {
+          getDisplayValue: (data, ctx) => {
             const q = getQuotationAt(data, serviceIndex);
             const chargeList = Array.isArray(q.charges) ? q.charges : [];
             const c = chargeList[chargeIndex] as Record<string, unknown> | undefined;
-            return getChargeMinDisplayValue(c ?? {}) ?? "";
+            return (
+              getChargeMinDisplayValue(
+                c ?? {},
+                ctx.branchCountryCode,
+                ctx.userCurrency,
+              ) ?? ""
+            );
           },
           parseInput: (raw) => parseChargeMinInput(raw),
         });
@@ -465,18 +488,26 @@ export function buildQuotationFieldRegistry(
         path: `${chargeBase}.sell_per_unit`,
         editable: true,
         layoutZone: "content",
-        getDisplayValue: (data) => {
+        getDisplayValue: (data, ctx) => {
           const q = getQuotationAt(data, serviceIndex);
           const chargeList = Array.isArray(q.charges) ? q.charges : [];
           const c = chargeList[chargeIndex] as Record<string, unknown> | undefined;
-          return `${String(c?.sell_per_unit ?? "N/A")} Per ${String(c?.unit ?? "N/A")}`;
+          return formatPdfChargeUnitAmount(
+            c?.sell_per_unit,
+            ctx.branchCountryCode,
+            ctx.userCurrency,
+          );
         },
         parseInput: (raw) => {
-          const match = raw.match(/^(.+?)\s+Per\s+(.+)$/i);
+          const cleaned = raw.replace(/,/g, "").trim();
+          const match = cleaned.match(/^(.+?)\s+Per\s+(.+)$/i);
           if (match) {
-            return { sell_per_unit: match[1].trim(), unit: match[2].trim() };
+            return {
+              sell_per_unit: match[1].trim(),
+              unit: match[2].trim(),
+            };
           }
-          return raw.trim();
+          return cleaned;
         },
       });
 
