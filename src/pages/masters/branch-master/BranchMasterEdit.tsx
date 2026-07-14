@@ -17,6 +17,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { getAPICall } from "../../../service/getApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -27,6 +29,11 @@ function BranchMasterEdit() {
   const navigate = useNavigate();
   const location = useLocation();
   const rowData = location.state;
+
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(rowData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.branchMaster,
+    });
 
   const [companyOptions, setCompanyOptions] = useState<
     { label: string; value: string }[]
@@ -82,12 +89,14 @@ function BranchMasterEdit() {
 
   const branchMasterEditSubmit = async (values: any) => {
     try {
-      await putAPICall(URL.branchMaster, values, API_HEADER);
+      const res = await putAPICall(URL.branchMaster, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: "Branch updated successfully",
       });
-      navigate("/master/branch");
+      navigate("/master/branch", { state: { refreshData: true } });
     } catch (error: any) {
       ToastNotification({
         type: "error",
@@ -103,9 +112,11 @@ function BranchMasterEdit() {
       onSubmit={form.onSubmit(branchMasterEditSubmit)}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          Edit Branch
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            Edit Branch
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           size="xs"
           radius="sm"

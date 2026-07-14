@@ -33,6 +33,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { commonSearchAPI } from "../../../service/searchApi";
@@ -989,14 +990,13 @@ export function DebitCreditNoteCreateBase({
     setIsSubmitting(true);
     setLoadingText("Updating credit/debit note...");
     try {
-      await putAPICall(
+      const raw = await putAPICall(
         URL.debitCreditNote,
         fd as unknown as FormData,
         FORM_DATA_HEADERS,
       );
+      applyCreateResponseToForm(raw);
       ToastNotification({ type: "success", message: "Updated successfully" });
-      // Refresh UI values if backend computed anything
-      // Note: putAPICall returns axios response; we can ignore if not needed.
     } finally {
       setIsSubmitting(false);
       setLoadingText("");
@@ -1324,11 +1324,17 @@ export function DebitCreditNoteCreateBase({
       <Stack gap="md">
         <Group justify="space-between" wrap="nowrap" align="end">
           <Group gap="sm" wrap="nowrap">
-            <Text size="xl" fw={600} c="#105476">
-              {isEditMode
-                ? `Edit Debit / Credit Note (${pageLabel})`
-                : `Create Debit / Credit Note (${pageLabel})`}
-            </Text>
+            <EditPageHeadingRow
+              visible={Boolean(saveResponse) && (isEditMode || isViewMode)}
+              auditSource={saveResponse}
+              animateKey={(saveResponse as { id?: number })?.id}
+            >
+              <Text size="xl" fw={600} c="#105476">
+                {isEditMode
+                  ? `Edit Debit / Credit Note (${pageLabel})`
+                  : `Create Debit / Credit Note (${pageLabel})`}
+              </Text>
+            </EditPageHeadingRow>
           </Group>
           {isEditMode && (
             <Group gap="sm" wrap="nowrap" justify="flex-end">

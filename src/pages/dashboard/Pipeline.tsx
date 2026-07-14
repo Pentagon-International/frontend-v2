@@ -1174,6 +1174,7 @@ function Pipeline() {
         state: {
           customer_code: row.customer_code,
           customer_name: row.customer_name,
+          created_by: row.created_by,
           pipelines: row.raw.pipelines,
           actionType,
           returnTo: "/pipeline",

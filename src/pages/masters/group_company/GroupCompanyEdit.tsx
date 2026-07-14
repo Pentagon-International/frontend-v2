@@ -15,6 +15,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -38,6 +40,11 @@ function GroupCompanyEdit() {
 
   const editFormData = location.state as GroupData | undefined;
 
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editFormData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.groupCompany,
+    });
+
   const editForm = useForm<GroupData>({
     initialValues: {
       id: editFormData?.id || undefined,
@@ -53,7 +60,9 @@ function GroupCompanyEdit() {
 
     try {
       const res = await putAPICall(URL.groupCompany, values, API_HEADER);
-      navigate("/master/group-company");
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
+      navigate("/master/group-company", { state: { refreshData: true } });
       ToastNotification({
         type: "success",
         message: `Group is updated`,
@@ -86,9 +95,11 @@ function GroupCompanyEdit() {
         onSubmit={editForm.onSubmit(handleEditForm)}
       >
         <Group justify="space-between">
-          <Text fw={500} my={"md"}>
-            Edit Group
-          </Text>
+          <MasterAuditHeadingRow auditSource={auditSource}>
+            <Text fw={500} my={"md"}>
+              Edit Group
+            </Text>
+          </MasterAuditHeadingRow>
           <SegmentedControl
             // value={formType}
             // onChange={handleSegmentChange}

@@ -15,6 +15,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -35,6 +37,11 @@ function CustomerTypeEdit() {
   const location = useLocation();
   const editData = location.state as CustomerTypeData;
 
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.customerType,
+    });
+
   const form = useForm<CustomerTypeData>({
     initialValues: {
       id: editData?.id,
@@ -46,12 +53,14 @@ function CustomerTypeEdit() {
 
   const customerTypeSubmit = async (values: CustomerTypeData) => {
     try {
-      await putAPICall(URL.customerType, values, API_HEADER);
+      const res = await putAPICall(URL.customerType, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: "Customer Type updated successfully",
       });
-      navigate("/master/customer-type");
+      navigate("/master/customer-type", { state: { refreshData: true } });
     } catch (err) {
       ToastNotification({
         type: "error",
@@ -67,9 +76,11 @@ function CustomerTypeEdit() {
       onSubmit={form.onSubmit(customerTypeSubmit)}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          Edit Customer Type
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            Edit Customer Type
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           size="xs"
           radius="sm"

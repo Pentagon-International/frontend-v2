@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Box,
   Button,
@@ -15,6 +15,8 @@ import {
 } from "@mantine/core";
 import { IconSearch, IconTrash } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
@@ -341,6 +343,9 @@ export default function DocumentAllocation() {
     useState<AllocationDocumentsHeader | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+    null,
+  );
 
   const selectedGlAccountCode = selectedAccount?.gl_account_code ?? "";
   const selectedSlCode = selectedAccount?.sl_code ?? "";
@@ -349,6 +354,18 @@ export default function DocumentAllocation() {
     String(savedHeader?.status ?? "").toUpperCase() === "POSTED" ||
     isViewMode;
   const hasSavedId = savedHeader?.id != null;
+
+  const allocationAuditSource = useMemo(() => {
+    const row = (
+      location.state as { allocationDocument?: Record<string, unknown> } | null
+    )?.allocationDocument;
+    return mergeEditPageAuditSources(row, savedHeader, auditPatch);
+  }, [location.state, savedHeader, auditPatch]);
+
+  useEffect(() => {
+    hydratedDocumentIdRef.current = null;
+    setAuditPatch(null);
+  }, [location.key]);
 
   useEffect(() => {
     const state = location.state as {
@@ -632,6 +649,7 @@ export default function DocumentAllocation() {
             })
           : await createAllocationDocuments(payloadBase);
       setSavedHeader(res ?? {});
+      setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
       if (Array.isArray(res?.allocation)) {
         // Merge minimal save response rows into the current rows so UI doesn't "clear"
@@ -682,6 +700,7 @@ export default function DocumentAllocation() {
         allocation: buildAllocationPayloadRows(rows),
       });
       setSavedHeader(res ?? { ...savedHeader, status: "POSTED" });
+      setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
       if (Array.isArray(res?.allocation)) {
         setRows((prev) =>
@@ -1011,6 +1030,11 @@ export default function DocumentAllocation() {
               <Grid style={{ padding: "24px" }}>
                 <Grid.Col span={12}>
                   <Group justify="space-between" align="center" wrap="nowrap">
+                  <EditPageHeadingRow
+                    visible={hasSavedId && Boolean(allocationAuditSource)}
+                    auditSource={allocationAuditSource}
+                    animateKey={(allocationAuditSource as { id?: number })?.id}
+                  >
                     <Text
                       fw={600}
                       c="#105476"
@@ -1019,6 +1043,7 @@ export default function DocumentAllocation() {
                     >
                       Document Allocation
                     </Text>
+                  </EditPageHeadingRow>
 
                     {hasSavedId ? (
                       <Group gap="sm" align="center" wrap="nowrap">

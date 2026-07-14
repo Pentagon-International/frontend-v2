@@ -29,7 +29,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -50,6 +50,7 @@ export default function ContainerType() {
   const isAdmin = useIsAdminUser();
   const [data, setData] = useState<ContainerType[]>([]);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const fetchData = async () => {
     try {
@@ -66,6 +67,12 @@ export default function ContainerType() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void fetchData();
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData]);
 
   const handleDelete = async (row: ContainerType) => {
     try {

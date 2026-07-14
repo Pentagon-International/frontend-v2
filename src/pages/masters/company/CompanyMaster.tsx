@@ -33,7 +33,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -62,6 +62,7 @@ function Company() {
   const startItem = pageIndex * pageSize + 1;
   const endItem = Math.min((pageIndex + 1) * pageSize, rowCount);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const fetchData = async (page: number, size: number) => {
     try {
@@ -77,6 +78,12 @@ function Company() {
   useEffect(() => {
     fetchData(pageIndex + 1, pageSize);
   }, [pageIndex, pageSize]);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void fetchData(pageIndex + 1, pageSize);
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData, pageIndex, pageSize]);
 
   const handleDelete = async (value) => {
     try {

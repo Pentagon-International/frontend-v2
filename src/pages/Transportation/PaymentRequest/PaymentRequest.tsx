@@ -48,6 +48,8 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1529,6 +1531,15 @@ function PaymentRequest() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId, isEditOrViewMode, paymentRequestDataFromApi]);
 
+  const paymentRequestAuditSource = useMemo(
+    () =>
+      mergeEditPageAuditSources(
+        paymentRequestDataFromApi as Record<string, unknown> | null,
+        saveResponse as Record<string, unknown> | null,
+      ),
+    [paymentRequestDataFromApi, saveResponse],
+  );
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1560,9 +1571,17 @@ function PaymentRequest() {
       <Stack gap="md">
         {/* ── Page header ── */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
-            Payment Request
-          </Text>
+          <EditPageHeadingRow
+            visible={isEditOrViewMode && Boolean(paymentRequestAuditSource)}
+            auditSource={paymentRequestAuditSource}
+            animateKey={
+              (paymentRequestAuditSource as { id?: number })?.id ?? requestId
+            }
+          >
+            <Text size="xl" fw={600} c="#105476">
+              Payment Request
+            </Text>
+          </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
               <Group gap="sm" wrap="nowrap">

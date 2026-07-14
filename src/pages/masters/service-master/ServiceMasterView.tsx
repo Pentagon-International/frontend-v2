@@ -16,6 +16,8 @@ import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -43,6 +45,11 @@ function ServiceMasterView() {
   const [transportModes, setTransportModes] = useState<{ label: string; value: string }[]>([]);
 
   const viewData = location.state as ServiceData;
+
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.serviceMaster },
+  );
 
   useEffect(() => {
     const fetchTransportModes = async () => {
@@ -81,9 +88,11 @@ function ServiceMasterView() {
   return (
     <Box component="form" style={{ width: "90%", padding: "0 10%" }}>
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          View Service
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            View Service
+          </Text>
+        </MasterAuditHeadingRow>
         <Group gap={50}>
           <SegmentedControl
             size="xs"

@@ -1,4 +1,4 @@
-import { Box, Flex, Text, Center, Loader } from "@mantine/core";
+import { Box, Flex, Group, Text, Center, Loader } from "@mantine/core";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import {
@@ -14,6 +14,8 @@ import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX } from "../../../utils/editPageAuditInfo";
 
 function OceanImportBookingCreate() {
   const navigate = useNavigate();
@@ -36,6 +38,7 @@ function OceanImportBookingCreate() {
 
   const jobData = location.state?.job;
   const isEditMode = mode === "edit" && !!jobData;
+  const [auditInfoHovered, setAuditInfoHovered] = useState(false);
 
   // Get booking data from quotation if available (for create mode)
   const bookingData = location.state?.bookingData;
@@ -444,6 +447,9 @@ function OceanImportBookingCreate() {
               backgroundColor: "#FFFFFF",
               position: "sticky",
               top: 0,
+              zIndex: auditInfoHovered
+                ? EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.hovered
+                : EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.default,
               display: "flex",
               flexDirection: "column",
               padding: "20px",
@@ -456,24 +462,33 @@ function OceanImportBookingCreate() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                overflow: "visible",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <EditPageHeadingRow
+                visible={!!jobData && (isEditMode || mode === "view")}
+                auditSource={jobData}
+                animateKey={jobData?.id}
+                ariaLabel="Ocean import booking audit info"
+                onHoverChange={setAuditInfoHovered}
               >
-                {isEditMode
-                  ? "Edit Ocean Import Booking"
-                  : "Create Ocean Import Booking"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode
+                    ? "Edit Ocean Import Booking"
+                    : "Create Ocean Import Booking"}
+                </Text>
+              </EditPageHeadingRow>
             </Box>
 
             {/* Step 1 */}

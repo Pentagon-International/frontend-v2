@@ -14,6 +14,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -35,6 +37,11 @@ function CallModeView() {
   const [opened, { open, close }] = useDisclosure(false);
 
   const viewData = location.state as CallModeData | undefined;
+
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.callMode },
+  );
 
   if (!viewData) {
     return <p>No data to display.</p>;
@@ -59,9 +66,11 @@ function CallModeView() {
   return (
     <Box component="form" style={{ width: "90%", padding: "0 10%" }}>
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          View Call Mode
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            View Call Mode
+          </Text>
+        </MasterAuditHeadingRow>
         <Group gap={50}>
           <SegmentedControl
             size="xs"

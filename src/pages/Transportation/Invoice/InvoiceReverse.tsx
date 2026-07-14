@@ -32,6 +32,8 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { getAPICall } from "../../../service/getApiCall";
 import FormTextInput from "../../../components/FormTextInput";
@@ -599,6 +601,10 @@ function InvoiceReverse() {
     reverse_document_no?: string;
     status?: string;
   } | null>(null);
+  const [reversalRecordData, setReversalRecordData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -741,6 +747,19 @@ function InvoiceReverse() {
   const reversalPageTitle = saveResponse?.id
     ? "Edit Invoice Reversal"
     : "Create Invoice Reversal";
+
+  const reversalAuditSource = useMemo(
+    () =>
+      mergeEditPageAuditSources(
+        reversalRecordData,
+        (location.state as { financeReverseRecord?: Record<string, unknown> })
+          ?.financeReverseRecord,
+        saveResponse as Record<string, unknown> | null,
+      ),
+    [reversalRecordData, location.state, saveResponse],
+  );
+
+  const showReversalAuditInfo = Boolean(saveResponse?.id);
 
   const form = useForm<InvoiceFormData>({
     initialValues: {
@@ -1151,6 +1170,11 @@ function InvoiceReverse() {
       invoice_document_no?: string;
     } | null;
     const st = location.state as NavState;
+    if (st?.financeReverseRecord) {
+      setReversalRecordData(
+        st.financeReverseRecord as Record<string, unknown>,
+      );
+    }
     const reverseInvoiceId =
       st?.reverse_invoice_id != null && Number(st.reverse_invoice_id) > 0
         ? Number(st.reverse_invoice_id)
@@ -1184,6 +1208,7 @@ function InvoiceReverse() {
               preserveChargeIds: true,
             },
           );
+          setReversalRecordData(data as Record<string, unknown>);
           setDocumentNo(
             String(
               data.document_no ??
@@ -1645,6 +1670,9 @@ function InvoiceReverse() {
       }
       const response = parsed.data;
       if (response.is_agent === true) setIsAgentInvoice(true);
+      setReversalRecordData((prev) =>
+        mergeEditPageAuditSources(prev, response as Record<string, unknown>),
+      );
       setSaveResponse((prev) => ({
         ...prev,
         id: response.id,
@@ -2075,6 +2103,9 @@ function InvoiceReverse() {
         }
         const res = parsed.data;
         if (res.is_agent === true) setIsAgentInvoice(true);
+        setReversalRecordData((prev) =>
+          mergeEditPageAuditSources(prev, res as Record<string, unknown>),
+        );
         setSaveResponse((prev) => ({
           ...prev,
           id: res.id ?? prev?.id,
@@ -2121,6 +2152,9 @@ function InvoiceReverse() {
         }
         const res = parsed.data;
         if (res.is_agent === true) setIsAgentInvoice(true);
+        setReversalRecordData((prev) =>
+          mergeEditPageAuditSources(prev, res as Record<string, unknown>),
+        );
         setSaveResponse({
           id: res.id,
           customer_id: res.customer_id,
@@ -2241,9 +2275,15 @@ function InvoiceReverse() {
       )}
       <Stack gap="md">
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
-            {reversalPageTitle}
-          </Text>
+          <EditPageHeadingRow
+            visible={showReversalAuditInfo && Boolean(reversalAuditSource)}
+            auditSource={reversalAuditSource}
+            animateKey={(reversalAuditSource as { id?: number })?.id}
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {reversalPageTitle}
+            </Text>
+          </EditPageHeadingRow>
           <Group gap="md" wrap="wrap" justify="flex-end">
             {saveResponse?.reverse_document_no?.trim() && (
               <Group gap="xs" wrap="nowrap">

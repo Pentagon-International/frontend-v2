@@ -28,7 +28,7 @@ import {
   IconTrash,
   IconUpload,
 } from "@tabler/icons-react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
@@ -46,7 +46,7 @@ export default function FrequencyMaster() {
   const isAdmin = useIsAdminUser();
   const [data, setData] = useState<FrequencyMasterType[]>([]);
   const navigate = useNavigate();
-  const location = useLocation(); // ✅ to detect refresh state
+  const location = useLocation();
 
   const fetchData = async () => {
     try {
@@ -62,7 +62,13 @@ export default function FrequencyMaster() {
 
   useEffect(() => {
     fetchData();
-  }, [location.state?.refresh]); // ✅ refresh on form submit
+  }, []);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void fetchData();
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData]);
 
   const handleDelete = async (value: FrequencyMasterType) => {
     try {

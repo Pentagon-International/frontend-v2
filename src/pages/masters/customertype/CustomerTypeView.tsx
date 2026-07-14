@@ -17,6 +17,8 @@ import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 
 type CustomerTypeData = {
   id: number;
@@ -35,6 +37,11 @@ function CustomerTypeView() {
   const [opened, { open, close }] = useDisclosure(false);
 
   const viewData = location.state as CustomerTypeData;
+
+  const { auditSource } = useMasterEditAuditRefresh(
+    viewData as Record<string, unknown> | undefined,
+    { detailBaseUrl: URL.customerType },
+  );
 
   const handleDelete = async () => {
     try {
@@ -58,9 +65,11 @@ function CustomerTypeView() {
       style={{ width: "90%", padding: "0 10%" }}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          View Customer Type
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            View Customer Type
+          </Text>
+        </MasterAuditHeadingRow>
         <Group gap={40}>
           <SegmentedControl
             value={viewData.status}

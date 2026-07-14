@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { SingleDateInput, ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -75,6 +77,15 @@ function CoordinatorReassignationCreate() {
     assigned_coordinator_name?: string;
     assigned_coordinator_user_id?: number;
   };
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.coordinatorAssigned : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
@@ -156,7 +167,9 @@ function CoordinatorReassignationCreate() {
 
       if (isEditMode && editData?.id) {
         payload.id = editData.id;
-        await putAPICall(URL.coordinatorAssigned, payload, API_HEADER);
+        const res = await putAPICall(URL.coordinatorAssigned, payload, API_HEADER);
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editData.id);
         ToastNotification({
           type: "success",
           message: "Coordinator reassignation updated successfully!",
@@ -191,11 +204,16 @@ function CoordinatorReassignationCreate() {
   return (
     <Box component="form" onSubmit={form.onSubmit(handleSubmit)} px="lg" py="md">
       <Group justify="space-between" mb="md">
-        <Text size="lg" fw={600} c="#105476">
-          {isEditMode
-            ? "Edit Sales Co-ordinator Reassignation"
-            : "Create Sales Co-ordinator Reassignation"}
-        </Text>
+        <MasterAuditHeadingRow
+          auditSource={auditSource}
+          visible={isEditMode}
+        >
+          <Text size="lg" fw={600} c="#105476">
+            {isEditMode
+              ? "Edit Sales Co-ordinator Reassignation"
+              : "Create Sales Co-ordinator Reassignation"}
+          </Text>
+        </MasterAuditHeadingRow>
         <Button
           variant="outline"
           color="#105476"

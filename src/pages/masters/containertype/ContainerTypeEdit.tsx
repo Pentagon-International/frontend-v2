@@ -15,6 +15,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -44,6 +46,11 @@ function ContainerTypeEdit() {
 
   const editFormData = location.state as ContainerTypeFormData;
 
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editFormData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.containerType,
+    });
+
   const editForm = useForm<ContainerTypeFormData>({
     initialValues: {
       id: editFormData?.id || 0,
@@ -59,12 +66,14 @@ function ContainerTypeEdit() {
 
   const handleEditForm = async (values: ContainerTypeFormData): Promise<void> => {
     try {
-      await putAPICall(URL.containerType, values, API_HEADER);
+      const res = await putAPICall(URL.containerType, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: `Container Type updated successfully`,
       });
-      navigate("/master/container-type");
+      navigate("/master/container-type", { state: { refreshData: true } });
     } catch (err: any) {
       ToastNotification({
         type: "error",
@@ -80,9 +89,11 @@ function ContainerTypeEdit() {
       onSubmit={editForm.onSubmit(handleEditForm)}
     >
       <Group justify="space-between">
-        <Text fw={500} my={"md"}>
-          Edit Container Type
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my={"md"}>
+            Edit Container Type
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           {...editForm.getInputProps("status")}
           data={[

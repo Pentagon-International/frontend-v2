@@ -32,7 +32,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
@@ -79,6 +79,7 @@ export default function CFSMasterList() {
   const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -139,6 +140,12 @@ export default function CFSMasterList() {
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
   }, [location.key]);
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void queryClient.invalidateQueries({ queryKey: ["cfs-master"] });
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData, queryClient]);
 
   const currentPage = pagination.pageIndex + 1;
   const statusOptions = ["ACTIVE", "INACTIVE"];

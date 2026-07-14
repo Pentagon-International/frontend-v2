@@ -17,6 +17,8 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { postAPICall } from "../../../service/postApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 
@@ -45,6 +47,15 @@ export default function NetworkCreate() {
 
   const editData = (location.state as EditState) || null;
   const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.networkMaster : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<NetworkFormData>({
     initialValues: {
@@ -77,7 +88,7 @@ export default function NetworkCreate() {
         formData.append("network_logo", values.network_logo as File);
 
         if (isEditMode && editData?.id) {
-          await apiCallProtected.put(
+          const res = await apiCallProtected.put(
             `${URL.networkMaster}${editData.id}/`,
             formData,
             {
@@ -87,6 +98,8 @@ export default function NetworkCreate() {
               },
             }
           );
+          applyAuditFromResponse(res);
+          await refreshAuditFromDetail(editData.id);
           ToastNotification({ type: "success", message: "Network updated successfully" });
         } else {
           await apiCallProtected.post(URL.networkMaster, formData, {
@@ -103,11 +116,13 @@ export default function NetworkCreate() {
           website: values.website,
         };
         if (isEditMode && editData?.id) {
-          await apiCallProtected.put(
+          const res = await apiCallProtected.put(
             `${URL.networkMaster}${editData.id}/`,
             payload,
             { headers: API_HEADER.headers }
           );
+          applyAuditFromResponse(res);
+          await refreshAuditFromDetail(editData.id);
           ToastNotification({ type: "success", message: "Network updated successfully" });
         } else {
           await postAPICall(URL.networkMaster, payload, API_HEADER);
@@ -169,20 +184,26 @@ export default function NetworkCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode ? "Edit Network" : "Create Network"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit Network" : "Create Network"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

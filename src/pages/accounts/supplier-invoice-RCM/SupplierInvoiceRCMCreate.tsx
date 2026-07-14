@@ -26,6 +26,8 @@ import {
   import { useDisclosure } from "@mantine/hooks";
   import { Dropzone } from "@mantine/dropzone";
   import { useNavigate, useLocation } from "react-router-dom";
+  import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+  import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
   import { useQuery } from "@tanstack/react-query";
   import { URL } from "../../../api/serverUrls";
   import { apiCallProtected } from "../../../api/axios";
@@ -408,6 +410,10 @@ import {
     // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
     const invoiceFromState =
       location.state as SupplierInvoiceListItem | null | undefined;
+
+    useEffect(() => {
+      setAuditPatch(null);
+    }, [location.key]);
   
     // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
     useEffect(() => {
@@ -428,6 +434,9 @@ import {
       Inv_Crn_no?: string;
       status?: string;
     } | null>(null);
+    const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+      null,
+    );
     const saveResponseRef = useRef<typeof saveResponse>(null);
     useEffect(() => {
       saveResponseRef.current = saveResponse;
@@ -1063,7 +1072,7 @@ import {
         mapApiDocumentsToSupportingDocuments(rawDocs),
       );
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [invoiceFromState?.id, isViewMode, isEditMode, isReversalCreate, isReversal]);
+    }, [invoiceFromState?.id, isViewMode, isEditMode, isReversalCreate, isReversal, location.key]);
   
     // Auto-select "LOCAL CRJ" daybook when coming from Payment Request → Create Supplier Invoice
     useEffect(() => {
@@ -1465,6 +1474,7 @@ import {
                   ? String(data.status)
                   : (saveResponse?.status ?? "UNPOSTED"),
             });
+            setAuditPatch((prev) => appendEditPageAuditPatch(prev, data));
             if (isReversal) {
               applyReverseInvoiceResponseToForm(
                 data as Record<string, unknown> & {
@@ -1605,6 +1615,7 @@ import {
           setSaveResponse((prev) =>
             prev ? { ...prev, status: statusStr } : null,
           );
+          setAuditPatch((prev) => appendEditPageAuditPatch(prev, data));
           form.setFieldValue("status", "POSTED");
           if (Array.isArray((data as { charges?: ApiCharge[] }).charges)) {
             form.setFieldValue(
@@ -1648,6 +1659,17 @@ import {
     // Daybook and date: editable in reversal create/edit when !isReadOnly; read-only when posted or view
     const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
     const daybookDateDisabled = isReadOnly;
+
+    const showAuditInfo =
+      isViewMode ||
+      isEditMode ||
+      pathname.includes("/reversal/edit") ||
+      pathname.includes("/reversal/view");
+    const invoiceAuditSource = mergeEditPageAuditSources(
+      invoiceFromState,
+      saveResponse,
+      auditPatch,
+    );
   
     const addChargeRow = () => {
       const currencyIdStr =
@@ -1711,22 +1733,28 @@ import {
         )}
         <Stack gap="md">
           <Group justify="space-between" wrap="nowrap">
-            <Text size="xl" fw={600} c="#105476">
-              {pathname.includes("/reversal/create") && saveResponse?.id == null
-                ? "Create Supplier Invoice Reverse"
-                : pathname.includes("/reversal/create") && saveResponse?.id != null
-                  ? "Edit Supplier Invoice Reverse"
-                  : pathname.includes("/reversal/edit")
+            <EditPageHeadingRow
+              visible={showAuditInfo && Boolean(invoiceAuditSource)}
+              auditSource={invoiceAuditSource}
+              animateKey={(invoiceAuditSource as { id?: number })?.id}
+            >
+              <Text size="xl" fw={600} c="#105476">
+                {pathname.includes("/reversal/create") && saveResponse?.id == null
+                  ? "Create Supplier Invoice Reverse"
+                  : pathname.includes("/reversal/create") && saveResponse?.id != null
                     ? "Edit Supplier Invoice Reverse"
-                    : pathname.includes("/reversal/view")
-                    ? "View Supplier Invoice Reverse"
-                    : titleOverride ??
-                        (isEditMode
-                          ? "Edit Supplier Invoice/RCM"
-                          : isViewMode
-                            ? "View Supplier Invoice/RCM"
-                            : "Create Supplier Invoice/RCM")}
-            </Text>
+                    : pathname.includes("/reversal/edit")
+                      ? "Edit Supplier Invoice Reverse"
+                      : pathname.includes("/reversal/view")
+                      ? "View Supplier Invoice Reverse"
+                      : titleOverride ??
+                          (isEditMode
+                            ? "Edit Supplier Invoice/RCM"
+                            : isViewMode
+                              ? "View Supplier Invoice/RCM"
+                              : "Create Supplier Invoice/RCM")}
+              </Text>
+            </EditPageHeadingRow>
             <Group gap="md" wrap="nowrap">
               {saveResponse && (
                 <Group gap="sm" wrap="nowrap">

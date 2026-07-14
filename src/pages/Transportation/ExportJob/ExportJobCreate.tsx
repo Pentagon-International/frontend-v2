@@ -112,6 +112,7 @@ import {
   extractHouseDocumentFields,
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -3048,13 +3049,21 @@ function ExportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#105476">
-            {mode === "view"
-              ? "View Export Job"
-              : mode === "edit"
-                ? "Edit Export Job"
-                : "Create Export Job"}
-          </Text>
+          <EditPageHeadingRow
+            visible={(mode === "edit" || mode === "view") && !!jobData}
+            auditSource={jobData}
+            animateKey={jobData?.id}
+            ariaLabel="Export job audit info"
+            justify="flex-start"
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {mode === "view"
+                ? "View Export Job"
+                : mode === "edit"
+                  ? "Edit Export Job"
+                  : "Create Export Job"}
+            </Text>
+          </EditPageHeadingRow>
           {jobData?.job_id && (
             <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}

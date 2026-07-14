@@ -15,6 +15,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -43,6 +45,11 @@ function TermsOfShipmentEdit() {
   const location = useLocation();
   const editFormData = location.state as TOSData | undefined;
 
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editFormData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.termsOfShipment,
+    });
+
   if (!editFormData) {
     return (
       <Box p="md">
@@ -69,12 +76,14 @@ function TermsOfShipmentEdit() {
 
   const handleEditForm = async (values: TOSData): Promise<void> => {
     try {
-      await putAPICall(URL.termsOfShipment, values, API_HEADER);
+      const res = await putAPICall(URL.termsOfShipment, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: `Terms of Shipment updated successfully`,
       });
-      navigate("/master/terms-of-shipment");
+      navigate("/master/terms-of-shipment", { state: { refreshData: true } });
     } catch (err) {
       ToastNotification({
         type: "error",
@@ -90,9 +99,11 @@ function TermsOfShipmentEdit() {
       onSubmit={editForm.onSubmit(handleEditForm)}
     >
       <Group justify="space-between">
-        <Text fw={500} my="md">
-          Edit Terms of Shipment
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my="md">
+            Edit Terms of Shipment
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           size="xs"
           radius="sm"

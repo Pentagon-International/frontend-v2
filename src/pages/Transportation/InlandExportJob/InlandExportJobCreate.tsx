@@ -58,9 +58,10 @@ import {
   useEstimatesForm,
 } from "../../../components";
 import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-
-dayjs.extend(utc);
+import {
+  formatLocalDateTime,
+  parseLocalDateTime,
+} from "../../../utils/localDateTime";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -117,6 +118,7 @@ import {
   resolveInlandExportJobServiceFields,
   withInlandExportJobServiceFields,
 } from "./inlandExportJobService";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 
 type ServiceMasterItem = {
   service_code: string;
@@ -668,21 +670,17 @@ function InlandExportJobCreate() {
         location.state?.mawbDetails?.destination_name ||
         "",
       etd:
-        jobData?.etd && dayjs.utc(jobData.etd).isValid()
-          ? dayjs.utc(jobData.etd).local().toDate()
-          : location.state?.mawbDetails?.etd || null,
+        parseLocalDateTime(jobData?.etd) ??
+        (location.state?.mawbDetails?.etd || null),
       eta:
-        jobData?.eta && dayjs.utc(jobData.eta).isValid()
-          ? dayjs.utc(jobData.eta).local().toDate()
-          : location.state?.mawbDetails?.eta || null,
+        parseLocalDateTime(jobData?.eta) ??
+        (location.state?.mawbDetails?.eta || null),
       atd:
-        jobData?.atd && dayjs.utc(jobData.atd).isValid()
-          ? dayjs.utc(jobData.atd).local().toDate()
-          : location.state?.mawbDetails?.atd || null,
+        parseLocalDateTime(jobData?.atd) ??
+        (location.state?.mawbDetails?.atd || null),
       ata:
-        jobData?.ata && dayjs.utc(jobData.ata).isValid()
-          ? dayjs.utc(jobData.ata).local().toDate()
-          : location.state?.mawbDetails?.ata || null,
+        parseLocalDateTime(jobData?.ata) ??
+        (location.state?.mawbDetails?.ata || null),
       shipper_id: location.state?.mawbDetails?.shipper_id || "",
       shipper_name:
         String(
@@ -927,22 +925,10 @@ function InlandExportJobCreate() {
           origin_name: jobData.origin_name || "",
           destination_code: jobData.destination_code || "",
           destination_name: jobData.destination_name || "",
-          etd:
-            jobData.etd && dayjs.utc(jobData.etd).isValid()
-              ? dayjs.utc(jobData.etd).local().toDate()
-              : null,
-          eta:
-            jobData.eta && dayjs.utc(jobData.eta).isValid()
-              ? dayjs.utc(jobData.eta).local().toDate()
-              : null,
-          atd:
-            jobData.atd && dayjs.utc(jobData.atd).isValid()
-              ? dayjs.utc(jobData.atd).local().toDate()
-              : null,
-          ata:
-            jobData.ata && dayjs.utc(jobData.ata).isValid()
-              ? dayjs.utc(jobData.ata).local().toDate()
-              : null,
+          etd: parseLocalDateTime(jobData.etd),
+          eta: parseLocalDateTime(jobData.eta),
+          atd: parseLocalDateTime(jobData.atd),
+          ata: parseLocalDateTime(jobData.ata),
           shipper_id: "",
           shipper_name: String(jobData.shipper_name || ""),
           shipper_email: String(jobData.shipper_email || ""),
@@ -2477,34 +2463,10 @@ function InlandExportJobCreate() {
         agent: mawbDetailsForm.values.agent_code?.trim() || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
-        etd: mawbDetailsForm.values.etd
-          ? dayjs(mawbDetailsForm.values.etd).isValid()
-            ? dayjs(mawbDetailsForm.values.etd)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : ""
-          : "",
-        eta: mawbDetailsForm.values.eta
-          ? dayjs(mawbDetailsForm.values.eta).isValid()
-            ? dayjs(mawbDetailsForm.values.eta)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : ""
-          : "",
-        atd: mawbDetailsForm.values.atd
-          ? dayjs(mawbDetailsForm.values.atd).isValid()
-            ? dayjs(mawbDetailsForm.values.atd)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : null
-          : null,
-        ata: mawbDetailsForm.values.ata
-          ? dayjs(mawbDetailsForm.values.ata).isValid()
-            ? dayjs(mawbDetailsForm.values.ata)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : null
-          : null,
+        etd: formatLocalDateTime(mawbDetailsForm.values.etd) ?? "",
+        eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
+        atd: formatLocalDateTime(mawbDetailsForm.values.atd),
+        ata: formatLocalDateTime(mawbDetailsForm.values.ata),
         carrier_code: carrierDetailsForm.values.carrier_code,
         voyage_number: carrierDetailsForm.values.flight_number || null,
         mbl_date: carrierDetailsForm.values.mawb_date
@@ -2781,13 +2743,21 @@ function InlandExportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#105476">
-            {mode === "view"
-              ? "View Export Job"
-              : mode === "edit"
-                ? "Edit Export Job"
-                : "Create Export Job"}
-          </Text>
+          <EditPageHeadingRow
+            visible={(mode === "edit" || mode === "view") && !!jobData}
+            auditSource={jobData}
+            animateKey={jobData?.id}
+            ariaLabel="Inland export job audit info"
+            justify="flex-start"
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {mode === "view"
+                ? "View Export Job"
+                : mode === "edit"
+                  ? "Edit Export Job"
+                  : "Create Export Job"}
+            </Text>
+          </EditPageHeadingRow>
           {jobData?.job_id && (
             <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}

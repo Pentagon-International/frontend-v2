@@ -16,12 +16,17 @@ import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getAPICall } from "../../service/getApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import { postAPICall } from "../../service/postApiCall";
 import { ToastNotification, SearchableSelect, SingleDateInput } from "../../components";
+import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
+import {
+  EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
+  normalizeEditPageAuditInfo,
+} from "../../utils/editPageAuditInfo";
 
 type PipelineFormData = {
   customer: string;
@@ -113,6 +118,11 @@ function PipelineCreate() {
   // States for edit mode and view mode
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState(false);
+  const [auditInfoHovered, setAuditInfoHovered] = useState(false);
+  const pipelineAuditInfo = useMemo(
+    () => normalizeEditPageAuditInfo(routerLocation.state),
+    [routerLocation.state],
+  );
   const [customerOption, setCustomerOption] = useState<{
     value: string;
     label: string;
@@ -745,6 +755,10 @@ function PipelineCreate() {
               backgroundColor: "#FFFFFF",
               position: "sticky",
               top: 0,
+              zIndex: auditInfoHovered
+                ? EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.hovered
+                : EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX.default,
+              overflow: "visible",
             }}
           >
             <Box
@@ -753,26 +767,36 @@ function PipelineCreate() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                overflow: "visible",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
-              >
-                {viewMode
-                  ? "Pipeline Entry Details (View Only)"
-                  : editMode
-                    ? "Edit Pipeline Entry"
-                    : "Create Pipeline Entry"}
-              </Text>
+              <Group gap={6} justify="center" wrap="nowrap">
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {viewMode
+                    ? "Pipeline Entry Details (View Only)"
+                    : editMode
+                      ? "Edit Pipeline Entry"
+                      : "Create Pipeline Entry"}
+                </Text>
+                <EditPageAuditInfoIcon
+                  visible={editMode || viewMode}
+                  auditInfo={pipelineAuditInfo}
+                  animateKey={routerLocation.state?.customer_code}
+                  ariaLabel="Pipeline audit info"
+                  onHoverChange={setAuditInfoHovered}
+                />
+              </Group>
             </Box>
           </Box>
 

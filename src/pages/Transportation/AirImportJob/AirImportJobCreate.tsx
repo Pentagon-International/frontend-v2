@@ -57,6 +57,10 @@ import {
 } from "../../../components";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import {
+  formatLocalDateTime,
+  parseLocalDateTime,
+} from "../../../utils/localDateTime";
 
 dayjs.extend(utc);
 import { postAPICall } from "../../../service/postApiCall";
@@ -114,6 +118,7 @@ import {
   extractJobDataFromPatchAxiosResponse,
   housingEventsFromJobPatchData,
 } from "../../../utils/jobHousingEventsFromPatch";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -570,21 +575,17 @@ function AirImportJobCreate() {
         location.state?.mawbDetails?.destination_name ||
         "",
       etd:
-        jobData?.etd && dayjs.utc(jobData.etd).isValid()
-          ? dayjs.utc(jobData.etd).local().toDate()
-          : location.state?.mawbDetails?.etd || null,
+        parseLocalDateTime(jobData?.etd) ??
+        (location.state?.mawbDetails?.etd || null),
       eta:
-        jobData?.eta && dayjs.utc(jobData.eta).isValid()
-          ? dayjs.utc(jobData.eta).local().toDate()
-          : location.state?.mawbDetails?.eta || null,
+        parseLocalDateTime(jobData?.eta) ??
+        (location.state?.mawbDetails?.eta || null),
       atd:
-        jobData?.atd && dayjs.utc(jobData.atd).isValid()
-          ? dayjs.utc(jobData.atd).local().toDate()
-          : location.state?.mawbDetails?.atd || null,
+        parseLocalDateTime(jobData?.atd) ??
+        (location.state?.mawbDetails?.atd || null),
       ata:
-        jobData?.ata && dayjs.utc(jobData.ata).isValid()
-          ? dayjs.utc(jobData.ata).local().toDate()
-          : location.state?.mawbDetails?.ata || null,
+        parseLocalDateTime(jobData?.ata) ??
+        (location.state?.mawbDetails?.ata || null),
       igm_no:
         (jobData as { igm_no?: string } | undefined)?.igm_no ||
         location.state?.mawbDetails?.igm_no ||
@@ -814,22 +815,10 @@ function AirImportJobCreate() {
           origin_name: jobData.origin_name || "",
           destination_code: jobData.destination_code || "",
           destination_name: jobData.destination_name || "",
-          etd:
-            jobData.etd && dayjs.utc(jobData.etd).isValid()
-              ? dayjs.utc(jobData.etd).local().toDate()
-              : null,
-          eta:
-            jobData.eta && dayjs.utc(jobData.eta).isValid()
-              ? dayjs.utc(jobData.eta).local().toDate()
-              : null,
-          atd:
-            jobData.atd && dayjs.utc(jobData.atd).isValid()
-              ? dayjs.utc(jobData.atd).local().toDate()
-              : null,
-          ata:
-            jobData.ata && dayjs.utc(jobData.ata).isValid()
-              ? dayjs.utc(jobData.ata).local().toDate()
-              : null,
+          etd: parseLocalDateTime(jobData.etd),
+          eta: parseLocalDateTime(jobData.eta),
+          atd: parseLocalDateTime(jobData.atd),
+          ata: parseLocalDateTime(jobData.ata),
           igm_no: (jobData as { igm_no?: string } | undefined)?.igm_no || "",
           igm_date:
             (jobData as { igm_date?: string } | undefined)?.igm_date &&
@@ -2818,34 +2807,10 @@ function AirImportJobCreate() {
         agent: mawbDetailsForm.values.origin_agent || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
-        etd: mawbDetailsForm.values.etd
-          ? dayjs(mawbDetailsForm.values.etd).isValid()
-            ? dayjs(mawbDetailsForm.values.etd)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : ""
-          : "",
-        eta: mawbDetailsForm.values.eta
-          ? dayjs(mawbDetailsForm.values.eta).isValid()
-            ? dayjs(mawbDetailsForm.values.eta)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : ""
-          : "",
-        atd: mawbDetailsForm.values.atd
-          ? dayjs(mawbDetailsForm.values.atd).isValid()
-            ? dayjs(mawbDetailsForm.values.atd)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : null
-          : null,
-        ata: mawbDetailsForm.values.ata
-          ? dayjs(mawbDetailsForm.values.ata).isValid()
-            ? dayjs(mawbDetailsForm.values.ata)
-                .utc()
-                .format("YYYY-MM-DDTHH:mm:ss") + "+00:00"
-            : null
-          : null,
+        etd: formatLocalDateTime(mawbDetailsForm.values.etd) ?? "",
+        eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
+        atd: formatLocalDateTime(mawbDetailsForm.values.atd),
+        ata: formatLocalDateTime(mawbDetailsForm.values.ata),
         igm_no: mawbDetailsForm.values.igm_no
           ? mawbDetailsForm.values.igm_no.trim()
           : null,
@@ -3175,13 +3140,21 @@ function AirImportJobCreate() {
     <Box p="md" mx="auto">
       <Group justify="space-between" align="center" mb="lg">
         <Group gap="md">
-          <Text size="xl" fw={600} c="#105476">
-            {mode === "view"
-              ? "View Import Job"
-              : mode === "edit"
-                ? "Edit Import Job"
-                : "Create Import Job"}
-          </Text>
+          <EditPageHeadingRow
+            visible={(mode === "edit" || mode === "view") && !!jobData}
+            auditSource={jobData}
+            animateKey={jobData?.id}
+            ariaLabel="Air import job audit info"
+            justify="flex-start"
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {mode === "view"
+                ? "View Import Job"
+                : mode === "edit"
+                  ? "Edit Import Job"
+                  : "Create Import Job"}
+            </Text>
+          </EditPageHeadingRow>
           {jobData?.job_id && (
             <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}

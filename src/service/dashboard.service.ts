@@ -3269,7 +3269,14 @@ export interface CallEntryDetailResponse {
   longitude: string;
   salesman: string | null;
   expected_profit: number;
-  created_by_name: string;
+  created_by?: string;
+  created_by_name?: string;
+  created_at?: string;
+  created_date?: string;
+  updated_by?: string;
+  updated_by_name?: string;
+  updated_at?: string;
+  updated_date?: string;
   branch_code: string;
   company_code: string;
   status?: string;

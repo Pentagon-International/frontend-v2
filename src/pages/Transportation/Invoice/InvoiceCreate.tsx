@@ -51,6 +51,8 @@ import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNa
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
@@ -1026,6 +1028,18 @@ function InvoiceCreate({
     : isEditMode
       ? `Edit ${resolvedDocumentLabel}`
       : `Create ${resolvedDocumentLabel}`;
+
+  const invoiceAuditSource = useMemo(
+    () =>
+      mergeEditPageAuditSources(
+        invoiceDataFromApi as Record<string, unknown> | null,
+        getInvoiceDataFromLocationState(location.state) as
+          | Record<string, unknown>
+          | null,
+        saveResponse as Record<string, unknown> | null,
+      ),
+    [invoiceDataFromApi, location.state, saveResponse],
+  );
 
   // Ref for validate (state required only for India GST invoice) — kept in sync
   const isAgentInvoiceRef = useRef(false);
@@ -4184,9 +4198,17 @@ function InvoiceCreate({
       <Stack gap="md">
         {/* Header: Title | document_no & status (after save) | Back */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={600} c="#105476">
-            {pageTitle}
-          </Text>
+          <EditPageHeadingRow
+            visible={isEditOrViewMode && Boolean(invoiceAuditSource)}
+            auditSource={invoiceAuditSource}
+            animateKey={
+              (invoiceAuditSource as { id?: number })?.id ?? invoiceId
+            }
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {pageTitle}
+            </Text>
+          </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
               <Group gap="sm" wrap="nowrap">

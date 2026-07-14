@@ -29,6 +29,7 @@ import {
   SingleDateInput,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import dayjs from "dayjs";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -1109,18 +1110,27 @@ function OceanJobGenerationCreate() {
 
   return (
     <Box px="md" py="md" w="100%">
-      <Text size="xl" fw={600} c="#105476" mb="lg">
-        {mode === "view"
-          ? "View Ocean Job Generation"
-          : mode === "edit"
-            ? "Edit Ocean Job Generation"
-            : "Create Ocean Job Generation"}
-      </Text>
+      <EditPageHeadingRow
+        visible={(mode === "edit" || mode === "view") && !!jobData}
+        auditSource={jobData}
+        animateKey={jobData?.id}
+        ariaLabel="Ocean job generation audit info"
+        justify="flex-start"
+      >
+        <Text size="xl" fw={600} c="#105476">
+          {mode === "view"
+            ? "View Ocean Job Generation"
+            : mode === "edit"
+              ? "Edit Ocean Job Generation"
+              : "Create Ocean Job Generation"}
+        </Text>
+      </EditPageHeadingRow>
 
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        mt="lg"
       >
         <Tabs.List
           mb="md"

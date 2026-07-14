@@ -38,7 +38,9 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
   Dropdown,
@@ -258,6 +260,7 @@ const inputCell = {
 function JournalVoucher() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { id: recordId } = useParams<{ id: string }>();
   const user = useAuthStore((s) => s.user);
   const canPostDocuments = useCanPostDocuments();
@@ -281,6 +284,10 @@ function JournalVoucher() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [jvAuditPatch, setJvAuditPatch] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const MAX_FILE_SIZE = 5 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
   const [
@@ -318,6 +325,10 @@ function JournalVoucher() {
     recordId ??
     (reversalSourceId != null ? String(reversalSourceId) : undefined);
 
+  useEffect(() => {
+    setJvAuditPatch(null);
+  }, [fetchId, location.key]);
+
   // ─── Queries ─────────────────────────────────────────────────────────────
 
   const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
@@ -341,13 +352,28 @@ function JournalVoucher() {
   // ─── Fetch full JV record by ID (Edit / View / JV Reversal) ──────────────
 
   const { data: jvFetchRes, isLoading: isJVFetching } = useQuery({
-    queryKey: ["journalVoucher-detail", fetchId],
+    queryKey: ["journalVoucher-detail", fetchId, location.key],
     enabled: Boolean(fetchId),
     queryFn: () =>
       getAPICall(`${(URL as any).journalVoucher}${fetchId}/`, API_HEADER),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
+
+  const jvAuditSource = useMemo(() => {
+    const fromFetch = (() => {
+      if (!jvFetchRes) return null;
+      const d =
+        (jvFetchRes as { data?: { data?: unknown } })?.data?.data ??
+        (jvFetchRes as { data?: unknown })?.data ??
+        jvFetchRes;
+      return d && typeof d === "object" && !Array.isArray(d)
+        ? (d as Record<string, unknown>)
+        : null;
+    })();
+    return mergeEditPageAuditSources(fromFetch, jvAuditPatch);
+  }, [jvFetchRes, jvAuditPatch]);
 
   // ─── Derived options ─────────────────────────────────────────────────────
 
@@ -708,6 +734,12 @@ function JournalVoucher() {
             journal_no: d?.journal_no ?? prev?.journal_no,
             status: d?.status ?? prev?.status,
           }));
+          if (d && typeof d === "object" && !Array.isArray(d)) {
+            setJvAuditPatch(d as Record<string, unknown>);
+          }
+          void queryClient.invalidateQueries({
+            queryKey: ["journalVoucher-detail", String(recordIdNum)],
+          });
           ToastNotification({
             message: "Journal voucher updated successfully",
             type: "success",
@@ -894,9 +926,15 @@ function JournalVoucher() {
       <Stack gap="md">
         {/* ── Page header ── */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
-          <Text size="xl" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
-            Journal Voucher
-          </Text>
+          <EditPageHeadingRow
+            visible={Boolean(recordId) && Boolean(jvAuditSource)}
+            auditSource={jvAuditSource}
+            animateKey={(jvAuditSource as { id?: number })?.id ?? recordId}
+          >
+            <Text size="xl" fw={700} c="#105476" style={{ fontFamily: "Inter" }}>
+              Journal Voucher
+            </Text>
+          </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
               <Group gap="sm" wrap="nowrap">

@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -30,7 +30,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
@@ -66,6 +66,7 @@ type BranchApiResponse = {
 export default function BranchMaster() {
   const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
 
   // Pagination state
@@ -115,6 +116,12 @@ export default function BranchMaster() {
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!location.state?.refreshData) return;
+    void queryClient.invalidateQueries({ queryKey: ["branches"] });
+    window.history.replaceState({}, document.title);
+  }, [location.state?.refreshData, queryClient]);
 
   const handleDelete = useCallback(
     async (branch: Branch) => {

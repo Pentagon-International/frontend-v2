@@ -17,6 +17,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -57,6 +59,11 @@ function CompanyEdit() {
   const location = useLocation();
   const [groupCompanyOptions, setGroupCompanyOptions] = useState([]);
   const editFormData = location.state as EditFormData;
+
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(editFormData as Record<string, unknown> | undefined, {
+      detailBaseUrl: URL.company,
+    });
 
   const editForm = useForm<CompanyEditFormData>({
     initialValues: {
@@ -99,12 +106,14 @@ function CompanyEdit() {
     console.log("check check check-----", values);
 
     try {
-      await putAPICall(URL.company, values, API_HEADER);
+      const res = await putAPICall(URL.company, values, API_HEADER);
+      applyAuditFromResponse(res);
+      await refreshAuditFromDetail(values.id);
       ToastNotification({
         type: "success",
         message: `Company updated successfully`,
       });
-      navigate("/master/company");
+      navigate("/master/company", { state: { refreshData: true } });
     } catch (err: any) {
       ToastNotification({
         type: "error",
@@ -132,9 +141,11 @@ function CompanyEdit() {
       onSubmit={editForm.onSubmit(handleEditForm)}
     >
       <Group justify="space-between">
-        <Text fw={500} my={"md"}>
-          Edit Company
-        </Text>
+        <MasterAuditHeadingRow auditSource={auditSource}>
+          <Text fw={500} my={"md"}>
+            Edit Company
+          </Text>
+        </MasterAuditHeadingRow>
         <SegmentedControl
           {...editForm.getInputProps("status")}
           data={[
