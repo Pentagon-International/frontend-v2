@@ -37,6 +37,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dropdown,
   ERPListColumnToggleMenu,
@@ -57,6 +58,7 @@ import {
 import type { ErpListTheme, ErpListBodyCellTone } from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
+import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
@@ -83,13 +85,14 @@ type SubledgerEntryRow = {
   day_book_code?: string | null;
   day_book_type?: string | null;
   document_no?: string | null;
+  party_name?: string | null;
   date_document?: string | null;
   due_date?: string | null;
   shipment_no?: string | null;
   service?: string | null;
   job_id?: string | null;
-  debit_local_amount?: number | null;
-  credit_local_amount?: number | null;
+  debit_amount?: number | null;
+  credit_amount?: number | null;
   narration?: string | null;
   note?: string | null;
   amount?: number | null;
@@ -118,13 +121,14 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "sno", label: "S.No.", span: 0.4 },
   { key: "location", label: "Location", span: 0.65 },
   { key: "document_no", label: "Document No", span: 2.75 },
+  { key: "party_name", label: "Party Name", span: 1.5 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
   { key: "service", label: "Service", span: 0.55 },
   { key: "job_id", label: "Job Id", span: 0.95 },
   { key: "shipment_no", label: "Shipment No", span: 1.0 },
-  { key: "debit_local_amount", label: "Debit", span: 0.95 },
-  { key: "credit_local_amount", label: "Credit", span: 0.95 },
+  { key: "debit_amount", label: "Debit", span: 0.95 },
+  { key: "credit_amount", label: "Credit", span: 0.95 },
   { key: "closing_balance", label: "Closing Bal", span: 0.8 },
   { key: "note", label: "Note", span: 1 },
   { key: "amount", label: "Amount", span: 0.95 },
@@ -188,6 +192,8 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
       return 60;
     case "document_no":
       return 250;
+    case "party_name":
+      return 180;
     case "date_document":
     case "due_date":
       return 100;
@@ -197,8 +203,8 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
       return 130;
     case "shipment_no":
       return 130;
-    case "debit_local_amount":
-    case "credit_local_amount":
+    case "debit_amount":
+    case "credit_amount":
     case "amount":
     case "closing_balance":
     case "outstanding_amount":
@@ -218,8 +224,8 @@ function subledgerCellAlign(
 ): "left" | "center" | "right" {
   // User request: align debit/credit/amount values properly (center align).
   if (
-    key === "debit_local_amount" ||
-    key === "credit_local_amount" ||
+    key === "debit_amount" ||
+    key === "credit_amount" ||
     key === "amount" ||
     key === "closing_balance" ||
     key === "outstanding_amount" ||
@@ -269,8 +275,8 @@ function formatSubledgerCell(
     return String(value);
   }
   if (
-    key === "debit_local_amount" ||
-    key === "credit_local_amount" ||
+    key === "debit_amount" ||
+    key === "credit_amount" ||
     key === "amount" ||
     key === "closing_balance" ||
     key === "outstanding_amount"
@@ -379,6 +385,7 @@ type FilterFormValues = {
   accountId: string | null;
   accountCode: string | null;
   location: string | null | undefined;
+  currency_code: string | null;
 };
 
 type AppliedFilterSummary = {
@@ -388,6 +395,7 @@ type AppliedFilterSummary = {
   account_id?: string;
   subledger_code?: string;
   location?: string;
+  currency_code?: string;
   account_name?: string;
 };
 
@@ -405,6 +413,7 @@ const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
   accountId: yup.string().nullable().required("Account is required"),
   accountCode: yup.string().nullable().required("Account is required"),
   location: yup.string().nullable().optional(),
+  currency_code: yup.string().nullable().optional(),
 });
 
 function subledgerColumnTone(
@@ -412,8 +421,8 @@ function subledgerColumnTone(
 ): ErpListBodyCellTone {
   if (key === "date_document" || key === "due_date") return "muted";
   if (
-    key === "debit_local_amount" ||
-    key === "credit_local_amount" ||
+    key === "debit_amount" ||
+    key === "credit_amount" ||
     key === "amount" ||
     key === "closing_balance" ||
     key === "outstanding_amount" ||
@@ -460,6 +469,37 @@ export default function SubledgerEnquiry() {
   >([]);
 
   const dateFormat = useDateFormat();
+  const { user } = useAuthStore();
+
+  const { data: currencyData = [] } = useQuery({
+    queryKey: ["currencyMaster", "subledger-enquiry"],
+    queryFn: async () => {
+      try {
+        return await getAPICall(`${URL.currencyMaster}`, API_HEADER);
+      } catch {
+        return [];
+      }
+    },
+    staleTime: Infinity,
+  });
+
+  const currencyOptions = useMemo(() => {
+    const data = currencyData as {
+      currency_code?: string;
+      code?: string;
+    }[];
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item) => {
+        const code = (item.currency_code ?? item.code ?? "")
+          .toString()
+          .trim()
+          .toUpperCase();
+        return { value: code, label: code };
+      })
+      .filter((o) => o.value !== "");
+  }, [currencyData]);
+
   const form = useForm<FilterFormValues>({
     initialValues: {
       fromDate: null,
@@ -467,6 +507,7 @@ export default function SubledgerEnquiry() {
       accountId: null,
       accountCode: null,
       location: null,
+      currency_code: null,
     },
     validate: yupResolver(filterSchema),
     validateInputOnBlur: true,
@@ -474,8 +515,6 @@ export default function SubledgerEnquiry() {
 
   const selectedSlCode = selectedAccount?.sl_code ?? "";
   const selectedAccountName = selectedAccount?.account_name ?? "";
-
-  const { user } = useAuthStore();
 
   const asStringError = (v: unknown): string | undefined =>
     typeof v === "string" ? v : undefined;
@@ -640,6 +679,9 @@ export default function SubledgerEnquiry() {
             ...(filters.subledger_code
               ? { subledger_code: filters.subledger_code }
               : {}),
+            ...(filters.currency_code
+              ? { currency_code: filters.currency_code }
+              : {}),
             ...(filters.location ? { location: filters.location } : {}),
           },
         };
@@ -676,12 +718,14 @@ export default function SubledgerEnquiry() {
         const date_from = formatDateYYYYMMDD(values.fromDate);
         const date_to = formatDateYYYYMMDD(values.toDate);
         const account_code = String(values.accountCode);
+        const currency_code = String(values.currency_code ?? "").trim();
         const payload = {
           filters: {
             date_from,
             date_to,
             account_code,
             ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
+            ...(currency_code ? { currency_code } : {}),
             ...(trimmedLocation ? { location: trimmedLocation } : {}),
           },
         };
@@ -699,6 +743,7 @@ export default function SubledgerEnquiry() {
           account_code,
           ...(values.accountId ? { account_id: values.accountId } : {}),
           ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
+          ...(currency_code ? { currency_code } : {}),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
           ...(selectedAccountName ? { account_name: selectedAccountName } : {}),
         });
@@ -736,6 +781,7 @@ export default function SubledgerEnquiry() {
       accountId: filters.account_id ?? null,
       accountCode: filters.account_code ?? null,
       location: filters.location ?? null,
+      currency_code: filters.currency_code ?? null,
     });
 
     if (state.selectedAccount) {
@@ -782,6 +828,9 @@ export default function SubledgerEnquiry() {
           account_code: appliedFilters.account_code,
           ...(appliedFilters.subledger_code
             ? { subledger_code: appliedFilters.subledger_code }
+            : {}),
+          ...(appliedFilters.currency_code
+            ? { currency_code: appliedFilters.currency_code }
             : {}),
           ...(appliedFilters.location
             ? { location: appliedFilters.location }
@@ -984,6 +1033,8 @@ export default function SubledgerEnquiry() {
       items.push({ key: "Account Code", value: appliedFilters.account_code });
     if (appliedFilters.subledger_code)
       items.push({ key: "SL Code", value: appliedFilters.subledger_code });
+    if (appliedFilters.currency_code)
+      items.push({ key: "Currency", value: appliedFilters.currency_code });
     if (appliedFilters.location)
       items.push({ key: "Location", value: appliedFilters.location });
     if (appliedFilters.date_from)
@@ -1240,7 +1291,7 @@ export default function SubledgerEnquiry() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine by date range, account, or location",
+            subtitle: "Refine by date range, account, currency, or location",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1429,6 +1480,38 @@ export default function SubledgerEnquiry() {
                       />
                     </Box>
                   </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <Dropdown
+                        label="Currency"
+                        placeholder={
+                          currencyOptions.length > 0
+                            ? "Select currency"
+                            : "No currencies"
+                        }
+                        data={currencyOptions}
+                        value={form.values.currency_code}
+                        dropdownZIndex={1100}
+                        searchable
+                        clearable
+                        onChange={(value) =>
+                          form.setFieldValue("currency_code", value)
+                        }
+                        error={asStringError(form.errors.currency_code)}
+                        size="xs"
+                        classNames={erpListGeistSelectClassNames}
+                        styles={SUBLEDGER_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
                 </Grid>
               </form>
             ),
@@ -1544,7 +1627,10 @@ function SubledgerTable(props: {
         header: c.label,
         size: subledgerMrtColumnSize(c.key),
         minSize: Math.min(subledgerMrtColumnSize(c.key), 120),
-        maxSize: c.key === "narration" || c.key === "note" ? 520 : undefined,
+        maxSize:
+          c.key === "narration" || c.key === "note" || c.key === "party_name"
+            ? 520
+            : undefined,
         grow: false,
         Cell: ({ cell, row }) => {
           const value = cell.getValue<unknown>();
@@ -1566,7 +1652,11 @@ function SubledgerTable(props: {
               </Anchor>
             );
           }
-          if (c.key === "narration" || c.key === "note") {
+          if (
+            c.key === "narration" ||
+            c.key === "note" ||
+            c.key === "party_name"
+          ) {
             const text = formatSubledgerCell(c.key, value, dateFormat);
             if (!text) return "—";
             return renderClampedTextWithTooltip(text, theme.fontSans);
