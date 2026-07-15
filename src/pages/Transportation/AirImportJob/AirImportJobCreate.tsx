@@ -2947,8 +2947,8 @@ function AirImportJobCreate() {
           return routingPayload;
         }),
         housing_details: hawbDetails.map((hawb) => ({
-          ...(hawb.id != null &&
-            hawb.id !== undefined && { id: Number(hawb.id) }),
+          // Only send positive ids (avoid id: 0 which backend may mishandle)
+          ...(Number(hawb.id) > 0 && { id: Number(hawb.id) }),
           hawb_no: hawb.hawb_number,
           origin_code: hawb.origin_code,
           destination_code: hawb.destination_code,

@@ -2531,7 +2531,12 @@ function AirExportJobCreate() {
 
           return routingPayload;
         }),
-        housing_details: hawbDetails.map((hawb) => ({
+        housing_details: hawbDetails.map((hawb) => {
+          const housingId = resolveHousingDetailsPrimaryKey(hawb);
+          return {
+          // Include housing id on update so backend updates instead of delete+recreate
+          ...(housingId > 0 && { id: housingId }),
+          ...(hawb.shipment_id && { shipment_id: hawb.shipment_id }),
           hawb_no: hawb.hawb_number,
           routed: hawb.routed,
           routed_by: hawb.routed_by || null,
@@ -2637,7 +2642,8 @@ function AirExportJobCreate() {
                 roundToDecimals(charge.cost_local_amount) ?? null,
             }));
           })(),
-        })),
+        };
+        }),
         estimates: (() => {
           const raw = estimatesForm.values.estimates ?? [];
           const nonEmpty = raw.filter((e) => {
