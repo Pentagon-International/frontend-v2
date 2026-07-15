@@ -50,6 +50,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
+import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
@@ -1033,9 +1034,10 @@ function InvoiceCreate({
     () =>
       mergeEditPageAuditSources(
         invoiceDataFromApi as Record<string, unknown> | null,
-        getInvoiceDataFromLocationState(location.state) as
-          | Record<string, unknown>
-          | null,
+        getInvoiceDataFromLocationState(location.state) as Record<
+          string,
+          unknown
+        > | null,
         saveResponse as Record<string, unknown> | null,
       ),
     [invoiceDataFromApi, location.state, saveResponse],
@@ -1205,20 +1207,18 @@ function InvoiceCreate({
     invoiceIsPosted ||
     String(saveResponse?.status ?? "").toUpperCase() === "POSTED";
 
-  // China: fapiao_no remains editable after POSTED; Update saves without unposting
+  // China: fapiao_no remains editable after POSTED (view/edit); Update saves via PATCH
   const canEditChinaFapiaoAfterPost = useMemo(
     () =>
       isChinaUser &&
       isInvoicePosted &&
-      !isViewMode &&
       saveResponse?.id != null &&
       saveResponse.id > 0,
-    [isChinaUser, isInvoicePosted, isViewMode, saveResponse?.id],
+    [isChinaUser, isInvoicePosted, saveResponse?.id],
   );
   const fapiaoFieldEditable =
-    isChinaUser &&
-    !isViewMode &&
-    (!isInvoicePosted || canEditChinaFapiaoAfterPost);
+    canEditChinaFapiaoAfterPost ||
+    (isChinaUser && !isViewMode && !isInvoicePosted);
   const fapiaoReadOnly = !fapiaoFieldEditable;
   const canSubmitInvoiceForm = !isReadOnly;
   const isFormVisuallyLocked = isReadOnly && !canEditChinaFapiaoAfterPost;
@@ -2998,12 +2998,12 @@ function InvoiceCreate({
     }
     setIsSubmitting(true);
     try {
-      const rawResponse = await putAPICall(
-        URL.invoice,
+      const invoiceId = saveResponse.id;
+      const rawResponse = await apiCallProtected.patch(
+        `${URL.invoice}${invoiceId}/`,
         {
-          id: saveResponse.id,
+          id: invoiceId,
           fapiao_no: form.values.fapiao_no?.trim() || null,
-          status: "POSTED",
         },
         API_HEADER,
       );

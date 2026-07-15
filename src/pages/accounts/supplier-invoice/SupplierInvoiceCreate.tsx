@@ -2143,16 +2143,72 @@ export default function SupplierInvoiceCreate({
     }
   };
 
+  const handleChinaPostedFapiaoUpdate = async () => {
+    if (!saveResponse?.id) {
+      ToastNotification({
+        message: "Save the supplier invoice first before updating fapiao number.",
+        type: "error",
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const supplierInvoiceId = saveResponse.id;
+      const fd = new FormData();
+      fd.append(
+        "supplier_invoice",
+        JSON.stringify({
+          id: supplierInvoiceId,
+          fapiao_no: form.values.fapiao_no?.trim() || null,
+        }),
+      );
+      await apiCallProtected.patch(
+        `${URL.supplierInvoice}${supplierInvoiceId}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      );
+      ToastNotification({
+        message: "Fapiao number updated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      console.error("Error updating fapiao number:", error);
+      ToastNotification({
+        message:
+          (error as { message?: string })?.message ||
+          "Failed to update fapiao number",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
-  const isReadOnly =
-    isViewMode || (saveResponse != null && statusUpper === "POSTED");
+  const isInvoicePosted = saveResponse != null && statusUpper === "POSTED";
+  const isReadOnly = isViewMode || isInvoicePosted;
   // Reversal create/edit: only daybook and date editable; rest non-editable. Once posted, full read-only.
   const reversalFormDisabled = isReversal;
+  // China: fapiao_no remains editable after POSTED (view/edit); Update saves via PATCH
+  const canEditChinaFapiaoAfterPost =
+    isChinaUser &&
+    isInvoicePosted &&
+    !isReversal &&
+    saveResponse?.id != null &&
+    saveResponse.id > 0;
+  const fapiaoFieldDisabled = canEditChinaFapiaoAfterPost
+    ? false
+    : isReadOnly ||
+      reversalFormDisabled ||
+      !isVendorSelected;
   const effectiveInputStyles = isReadOnly
     ? readOnlyFieldStyles
     : isReversal
       ? reversalNonEditableStyles
       : inputStyles;
+  const fapiaoFieldStyles = canEditChinaFapiaoAfterPost
+    ? inputStyles
+    : effectiveInputStyles;
   // Daybook and date: editable in reversal create/edit when !isReadOnly; read-only when posted or view
   const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
   const daybookDateDisabled = isReadOnly;
@@ -2543,8 +2599,8 @@ export default function SupplierInvoiceCreate({
                   onChange={(e) =>
                     form.setFieldValue("fapiao_no", e.target.value)
                   }
-                  styles={effectiveInputStyles}
-                  disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                  styles={fapiaoFieldStyles}
+                  disabled={fapiaoFieldDisabled}
                 />
               </Grid.Col>
             )}
@@ -4093,6 +4149,17 @@ export default function SupplierInvoiceCreate({
                   </Button>
                 )}
               </>
+            )}
+            {canEditChinaFapiaoAfterPost && (
+              <Button
+                type="button"
+                color="#105476"
+                rightSection={<IconChevronRight size={16} />}
+                loading={isSubmitting}
+                onClick={handleChinaPostedFapiaoUpdate}
+              >
+                Update Supplier Invoice
+              </Button>
             )}
           </Group>
         </Box>

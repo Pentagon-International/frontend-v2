@@ -63,11 +63,13 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { getDefaultBranchCountryCode } from "../../../utils/userNumberFormat";
 
 type SupplierInvoiceRow = Record<string, unknown> & {
   id?: number | string;
@@ -196,6 +198,22 @@ function SupplierInvoiceMaster() {
   const defaultDateFrom = dayjs().startOf("month").toDate();
   const defaultDateTo = dayjs().toDate();
   const dateFormat = useDateFormat();
+  const user = useAuthStore((s) => s.user);
+  const isChinaUser = useMemo(() => {
+    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+    if (branchCountryCode) {
+      const bc = branchCountryCode.toUpperCase();
+      if (bc === "CN" || bc.includes("CHINA")) return true;
+    }
+    const defaultBranch =
+      user?.branches?.find((b) => b.is_default) ?? user?.branches?.[0];
+    const branchCode = String(defaultBranch?.branch_code ?? "").toUpperCase();
+    const branchName = String(defaultBranch?.branch_name ?? "").toUpperCase();
+    if (branchCode === "CHN" || branchName.includes("CHINA")) return true;
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "CN" || countryName === "CHINA";
+  }, [user?.branches, user?.country?.country_code, user?.country?.country_name]);
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -741,6 +759,7 @@ function SupplierInvoiceMaster() {
           const status = String(row.original?.status ?? "").toUpperCase();
           const isPosted = status === "POSTED";
           const isUnposted = status === "UNPOSTED";
+          const canEdit = isUnposted || (isPosted && isChinaUser);
           return (
             <Menu
               withinPortal
@@ -778,7 +797,7 @@ function SupplierInvoiceMaster() {
                     </Group>
                   </UnstyledButton>
                 </Box>
-                {isUnposted && (
+                {canEdit && (
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
@@ -851,6 +870,7 @@ function SupplierInvoiceMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      isChinaUser,
     ],
   );
 
