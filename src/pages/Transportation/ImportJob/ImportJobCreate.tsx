@@ -128,6 +128,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 // Type definitions
 type MBLDetailsForm = {
   service: string;
+  pp_cc: string;
   origin_agent: string; // Stores customer_code (code) for API payload
   agent_name: string;
   agent_address: string;
@@ -409,6 +410,9 @@ type HousingDetail = HouseDocumentFields & {
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
+  pp_cc?: string;
+  /** @deprecated Prefer `pp_cc`; kept for API backward compatibility */
+  freight?: string;
   cargo_details?: Array<{
     id?: number | string;
     container_no?: number | string;
@@ -467,6 +471,16 @@ const getTransportMode = (
     return "SEA";
   if (type === "ROAD") return "LAND";
   return undefined;
+};
+
+/** Normalize job/house Freight (pp_cc): PP/PREPAID→Prepaid, CC/COLLECT→Collect, else Collect. */
+const normalizeFreightPpCc = (value: unknown): string => {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return "Collect";
 };
 
 const getAddressOptions = (
@@ -678,6 +692,11 @@ function ImportJobCreate() {
   const mblDetailsForm = useForm<MBLDetailsForm>({
     initialValues: {
       service: "",
+      pp_cc: normalizeFreightPpCc(
+        (location.state?.mblDetails as { pp_cc?: unknown } | undefined)?.pp_cc ??
+          (jobData as { pp_cc?: unknown } | undefined)?.pp_cc ??
+          (jobData as { freight?: unknown } | undefined)?.freight,
+      ),
       origin_agent: "", // Stores customer_code
       agent_name: "",
       agent_address: "",
@@ -850,6 +869,12 @@ function ImportJobCreate() {
 
         mblDetailsForm.setValues({
           service: mblData.service || "",
+          pp_cc: normalizeFreightPpCc(
+            (mblData as { pp_cc?: unknown }).pp_cc ??
+              (mblData as { freight?: unknown }).freight ??
+              stateMbl.pp_cc ??
+              stateMbl.freight,
+          ),
           origin_agent:
             mblData.agent_code ||
             mblData.origin_agent_code ||
@@ -1127,6 +1152,10 @@ function ImportJobCreate() {
                 : house.shipment_terms_name
                   ? String(house.shipment_terms_name)
                   : "",
+              pp_cc: normalizeFreightPpCc(
+                (house as { pp_cc?: unknown }).pp_cc ??
+                  (house as { freight?: unknown }).freight,
+              ),
               events: Array.isArray(
                 (
                   house as {
@@ -1776,6 +1805,10 @@ function ImportJobCreate() {
         const mblDetails = location.state.mblDetails;
         mblDetailsForm.setValues({
           service: mblDetails.service || "",
+          pp_cc: normalizeFreightPpCc(
+            (mblDetails as { pp_cc?: unknown })?.pp_cc ??
+              (mblDetails as { freight?: unknown })?.freight,
+          ),
           origin_agent: mblDetails.origin_agent || "",
           agent_name:
             (mblDetails as { agent_name?: string } | undefined)?.agent_name ||
@@ -2324,6 +2357,7 @@ function ImportJobCreate() {
           }),
           mblDetails: {
             service: mblDetailsForm.values.service || "",
+            pp_cc: mblDetailsForm.values.pp_cc || "Collect",
             origin_agent: mblDetailsForm.values.origin_agent || "",
             agent_name: mblDetailsForm.values.agent_name || "",
             agent_address: mblDetailsForm.values.agent_address || "",
@@ -2898,6 +2932,8 @@ function ImportJobCreate() {
 
       const payload = {
         service: mblDetailsForm.values.service,
+        pp_cc:
+          normalizeFreightPpCc(mblDetailsForm.values.pp_cc) || "Collect",
         service_type: "Import", // Based on the example payload
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
@@ -3063,6 +3099,11 @@ function ImportJobCreate() {
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
             }),
+          pp_cc:
+            normalizeFreightPpCc(
+              (house as { pp_cc?: unknown }).pp_cc ??
+                (house as { freight?: unknown }).freight,
+            ) || "Collect",
           ...buildDocumentIdsPayloadField(house.document_ids),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
@@ -3823,7 +3864,7 @@ function ImportJobCreate() {
             </Grid>
 
             {/* Second row for ETD, ETA, ATD, ATA */}
-            <Grid mb="xl">
+            <Grid mb="md">
               <Grid.Col span={3}>
                 <SingleDateInput
                   label="ETD"
@@ -3901,6 +3942,20 @@ function ImportJobCreate() {
 
             {/* IGM details row */}
             <Grid mb="xl">
+              <Grid.Col span={3}>
+                <Dropdown
+                  size="sm"
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...mblDetailsForm.getInputProps("pp_cc")}
+                />
+              </Grid.Col>
+
               <Grid.Col span={3}>
                 <FormTextInput
                   label="IGM Number"

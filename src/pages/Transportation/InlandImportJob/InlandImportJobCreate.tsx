@@ -151,6 +151,7 @@ const fetchServiceMasterByCode = async (
 type MAWBDetailsForm = {
   service_code: string;
   service_name: string;
+  pp_cc: string;
   is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
@@ -242,6 +243,7 @@ type HAWBDetail = HouseDocumentFields & {
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
+  pp_cc?: string;
   cargo_details?: Array<{
     no_of_packages: number | null;
     gross_weight: HouseCargoWeightValue;
@@ -393,6 +395,19 @@ const getTransportMode = (
     return "SEA";
   if (type === "ROAD") return "LAND";
   return undefined;
+};
+
+/** Normalize job/house Freight (pp_cc); defaults to Collect. */
+const resolveFreightPpCc = (...candidates: unknown[]): string => {
+  for (const value of candidates) {
+    const raw = String(value ?? "").trim();
+    if (!raw) continue;
+    const upper = raw.toUpperCase();
+    if (upper === "PP" || upper === "PREPAID") return "Prepaid";
+    if (upper === "CC" || upper === "COLLECT") return "Collect";
+    if (raw === "Prepaid" || raw === "Collect") return raw;
+  }
+  return "Collect";
 };
 
 const parseBoolean = (value: unknown): boolean => {
@@ -641,6 +656,11 @@ function InlandImportJobCreate() {
         jobServiceFields.service_name ||
         location.state?.mawbDetails?.service_name ||
         "",
+      pp_cc: resolveFreightPpCc(
+        (jobData as Record<string, unknown> | undefined)?.pp_cc,
+        (jobData as Record<string, unknown> | undefined)?.freight,
+        location.state?.mawbDetails?.pp_cc,
+      ),
       is_direct:
         parseBoolean(
           jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
@@ -772,6 +792,7 @@ function InlandImportJobCreate() {
     () => ({
       service_code: mawbDetailsForm.values.service_code || "",
       service_name: mawbDetailsForm.values.service_name || "",
+      pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
       is_direct: mawbDetailsForm.values.is_direct,
       agent_code: mawbDetailsForm.values.agent_code || "",
       agent_name: mawbDetailsForm.values.agent_name || "",
@@ -909,6 +930,10 @@ function InlandImportJobCreate() {
         const mawbInitialValues = {
           service_code: jobServiceFields.service_code,
           service_name: jobServiceFields.service_name,
+          pp_cc: resolveFreightPpCc(
+            (jobData as Record<string, unknown>).pp_cc,
+            (jobData as Record<string, unknown>).freight,
+          ),
           is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
@@ -950,6 +975,7 @@ function InlandImportJobCreate() {
           mawbDetailsForm.setValues({
             service_code: savedMawbDetailsFromState.service_code || "",
             service_name: savedMawbDetailsFromState.service_name || "",
+            pp_cc: resolveFreightPpCc(savedMawbDetailsFromState.pp_cc),
             is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
             agent_code: savedMawbDetailsFromState.agent_code || "",
             agent_name: savedMawbDetailsFromState.agent_name || "",
@@ -1184,6 +1210,7 @@ function InlandImportJobCreate() {
                 : house.shipment_terms_name
                   ? String(house.shipment_terms_name)
                   : "",
+              pp_cc: resolveFreightPpCc(house.pp_cc, house.freight),
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -1917,6 +1944,9 @@ function InlandImportJobCreate() {
           mawbDetailsForm.setValues({
             service_code: savedMawbDetails.service_code || "",
             service_name: savedMawbDetails.service_name || "",
+            pp_cc: resolveFreightPpCc(
+              (savedMawbDetails as { pp_cc?: string }).pp_cc,
+            ),
             is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
@@ -2502,6 +2532,7 @@ function InlandImportJobCreate() {
         ...buildInlandImportJobServicePayload(
           mawbDetailsForm.values.service_code,
         ),
+        pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
         is_direct: mawbDetailsForm.values.is_direct,
         agent: mawbDetailsForm.values.agent_code?.trim() || null,
         origin_code: mawbDetailsForm.values.origin_code,
@@ -2599,6 +2630,10 @@ function InlandImportJobCreate() {
           // Only send positive ids (avoid id: 0 which backend may mishandle)
           ...(Number(hawb.id) > 0 && { id: Number(hawb.id) }),
           hawb_no: hawb.hawb_number,
+          pp_cc: resolveFreightPpCc(
+            hawb.pp_cc,
+            (hawb as { freight?: string }).freight,
+          ),
           routed: hawb.routed,
           routed_by: hawb.routed_by || null,
           origin_code: hawb.origin_code,
@@ -3389,6 +3424,26 @@ function InlandImportJobCreate() {
                   }}
                   error={mawbDetailsForm.errors.ata as string}
                   size="sm"
+                />
+              </Grid.Col>
+              
+              <Grid.Col span={3}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  value={mawbDetailsForm.values.pp_cc || null}
+                  disabled={isReadOnly}
+                  onChange={(value) => {
+                    mawbDetailsForm.setFieldValue(
+                      "pp_cc",
+                      value || "Collect",
+                    );
+                  }}
                 />
               </Grid.Col>
 

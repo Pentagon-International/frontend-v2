@@ -138,6 +138,7 @@ type HouseDetailsForm = {
   house_date: Date | null;
   shipment_terms_code: string;
   shipment_terms_name: string;
+  pp_cc: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -340,6 +341,12 @@ const normalizePpCc = (value: unknown): string => {
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
+};
+
+/** House Freight field: same mapping as charges, default Collect. */
+const normalizeFreightPpCc = (value: unknown): string => {
+  const normalized = normalizePpCc(value);
+  return normalized || "Collect";
 };
 
 function HouseCreate() {
@@ -870,6 +877,10 @@ function HouseCreate() {
         : null,
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
+      pp_cc: normalizeFreightPpCc(
+        (editData as { pp_cc?: unknown } | undefined)?.pp_cc ??
+          (editData as { freight?: unknown } | undefined)?.freight,
+      ),
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -960,6 +971,14 @@ function HouseCreate() {
     if (!isEditMode || !editData || partyUiInitializedFromEditRef.current)
       return;
     partyUiInitializedFromEditRef.current = true;
+
+    form.setFieldValue(
+      "pp_cc",
+      normalizeFreightPpCc(
+        (editData as { pp_cc?: unknown }).pp_cc ??
+          (editData as { freight?: unknown }).freight,
+      ),
+    );
 
     const shipperName = String(editData.shipper_name || "");
     if (shipperName) {
@@ -2389,6 +2408,7 @@ function HouseCreate() {
         : null,
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
+      pp_cc: form.values.pp_cc || "Collect",
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2555,6 +2575,7 @@ function HouseCreate() {
         : null,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
+      pp_cc: v.pp_cc || "Collect",
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -3622,6 +3643,19 @@ function HouseCreate() {
                   data={shipmentOptions}
                   {...form.getInputProps("shipment_terms_code")}
                   error={form.errors.shipment_terms_code}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...form.getInputProps("pp_cc")}
                 />
               </Grid.Col>
 

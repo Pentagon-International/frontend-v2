@@ -122,6 +122,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 // Type definitions
 type MBLDetailsForm = {
   service: string;
+  pp_cc: string;
   origin_agent: string; // Stores customer_code (code) for API payload
   agent_name: string;
   agent_address: string;
@@ -418,6 +419,8 @@ type HousingDetail = HouseDocumentFields & {
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
+  pp_cc?: string;
+  /** @deprecated Prefer `pp_cc`; kept for API/PDF backward compatibility */
   freight?: string;
   summary?: {
     total_no_of_packages?: number | string;
@@ -470,6 +473,16 @@ const getTransportMode = (
   if (type === "SEA" || type === "FCL" || type === "LCL") return "SEA";
   if (type === "ROAD") return "LAND";
   return undefined;
+};
+
+/** Normalize job/house Freight (pp_cc): PP/PREPAID→Prepaid, CC/COLLECT→Collect, else Collect. */
+const normalizeFreightPpCc = (value: unknown): string => {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return "Collect";
 };
 
 const parseBoolean = (value: unknown): boolean => {
@@ -750,6 +763,11 @@ function ExportJobCreate() {
   const mblDetailsForm = useForm<MBLDetailsForm>({
     initialValues: {
       service: "",
+      pp_cc: normalizeFreightPpCc(
+        (location.state?.mblDetails as { pp_cc?: unknown } | undefined)?.pp_cc ??
+          (jobData as { pp_cc?: unknown } | undefined)?.pp_cc ??
+          (jobData as { freight?: unknown } | undefined)?.freight,
+      ),
       origin_agent: "", // Stores customer_code
       agent_name: "",
       agent_address: "",
@@ -917,6 +935,12 @@ function ExportJobCreate() {
 
         mblDetailsForm.setValues({
           service: mblData.service || "",
+          pp_cc: normalizeFreightPpCc(
+            (mblData as { pp_cc?: unknown }).pp_cc ??
+              (mblData as { freight?: unknown }).freight ??
+              stateMbl.pp_cc ??
+              stateMbl.freight,
+          ),
           is_direct: parseBoolean(
             (mblData as { is_direct?: unknown })?.is_direct,
           ),
@@ -1194,6 +1218,9 @@ function ExportJobCreate() {
                 house.freight != null && String(house.freight).trim() !== ""
                   ? String(house.freight).trim()
                   : "",
+              pp_cc: normalizeFreightPpCc(
+                (house as { pp_cc?: unknown }).pp_cc ?? house.freight,
+              ),
               summary:
                 house.summary &&
                 typeof house.summary === "object" &&
@@ -1627,6 +1654,10 @@ function ExportJobCreate() {
         const mblDetails = location.state.mblDetails;
         mblDetailsForm.setValues({
           service: mblDetails.service || "",
+          pp_cc: normalizeFreightPpCc(
+            (mblDetails as { pp_cc?: unknown })?.pp_cc ??
+              (mblDetails as { freight?: unknown })?.freight,
+          ),
           is_direct: parseBoolean(
             (mblDetails as { is_direct?: unknown })?.is_direct,
           ),
@@ -2268,6 +2299,7 @@ function ExportJobCreate() {
         ...housing,
         mblDetails: {
           service: mblDetailsForm.values.service,
+          pp_cc: mblDetailsForm.values.pp_cc,
           origin_agent: mblDetailsForm.values.origin_agent,
           origin_code: mblDetailsForm.values.origin_code,
           origin_name: mblDetailsForm.values.origin_name,
@@ -2294,14 +2326,23 @@ function ExportJobCreate() {
       )?.housing_details?.find(
         (house) =>
           house.id === housing.id || Number(house.id) === Number(housing.id),
-      ) as { freight?: string; summary?: HousingDetail["summary"] } | undefined;
+      ) as {
+        pp_cc?: string;
+        freight?: string;
+        summary?: HousingDetail["summary"];
+      } | undefined;
 
       const housingForPdf = {
         ...housingFromJob,
         ...housing,
         freight:
-          String(housing.freight || housingFromJob?.freight || "").trim() ||
-          "",
+          String(
+            housing.pp_cc ||
+              housing.freight ||
+              housingFromJob?.pp_cc ||
+              housingFromJob?.freight ||
+              "",
+          ).trim() || "",
         summary: housing.summary ?? housingFromJob?.summary,
       };
 
@@ -2514,6 +2555,7 @@ function ExportJobCreate() {
           }),
           mblDetails: {
             service: mblDetailsForm.values.service || "",
+            pp_cc: mblDetailsForm.values.pp_cc || "Collect",
             is_direct: mblDetailsForm.values.is_direct,
             origin_agent: mblDetailsForm.values.origin_agent || "",
             agent_name: mblDetailsForm.values.agent_name || "",
@@ -2678,6 +2720,8 @@ function ExportJobCreate() {
     try {
       const payload = {
         service: mblDetailsForm.values.service,
+        pp_cc:
+          normalizeFreightPpCc(mblDetailsForm.values.pp_cc) || "Collect",
         service_type: "Export", // Export job creation
         shipper_name: partyDetailsForm.values.shipper_name || "",
         shipper_email: partyDetailsForm.values.shipper_email || "",
@@ -2836,10 +2880,11 @@ function ExportJobCreate() {
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
             }),
-          ...(house.freight != null &&
-            String(house.freight).trim() !== "" && {
-              freight: String(house.freight),
-            }),
+          pp_cc:
+            normalizeFreightPpCc(
+              (house as { pp_cc?: unknown }).pp_cc ??
+                (house as { freight?: unknown }).freight,
+            ) || "Collect",
           ...buildDocumentIdsPayloadField(house.document_ids),
           events: Array.isArray((house as { events?: unknown }).events)
             ? (
@@ -3524,6 +3569,8 @@ function ExportJobCreate() {
                 />
               </Grid.Col>
 
+              
+
               <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination Agent"
@@ -3736,6 +3783,19 @@ function ExportJobCreate() {
             {/* Direct */}
             <Grid mb="sm">
               <Grid.Col span={3}>
+                <Dropdown
+                  size="sm"
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...mblDetailsForm.getInputProps("pp_cc")}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
                 <Radio.Group
                   label="Direct"
                   value={mblDetailsForm.values.is_direct ? "true" : "false"}
@@ -3760,6 +3820,7 @@ function ExportJobCreate() {
                   </Group>
                 </Radio.Group>
               </Grid.Col>
+              
             </Grid>
 
             <Divider my="md" />

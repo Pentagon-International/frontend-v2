@@ -120,6 +120,7 @@ type SalespersonsResponse = { data?: SalespersonData[] };
 
 type ServiceJobFormValues = {
   service_id: string;
+  pp_cc: string;
   customer_code: string;
   customer_name: string;
   customer_email: string;
@@ -181,6 +182,19 @@ function getPortTransportParams(
 
 function getInvoiceServiceType(transportMode: string): string {
   return isAirTransportMode(transportMode) ? "AIR" : "SEA";
+}
+
+/** Normalize job Freight (pp_cc); defaults to Collect. */
+function resolveFreightPpCc(...candidates: unknown[]): string {
+  for (const value of candidates) {
+    const raw = String(value ?? "").trim();
+    if (!raw) continue;
+    const upper = raw.toUpperCase();
+    if (upper === "PP" || upper === "PREPAID") return "Prepaid";
+    if (upper === "CC" || upper === "COLLECT") return "Collect";
+    if (raw === "Prepaid" || raw === "Collect") return raw;
+  }
+  return "Collect";
 }
 
 /** Export services → Prepaid; Import services → Collect. */
@@ -1229,6 +1243,7 @@ export default function ServiceJobCreate() {
   const form = useForm<ServiceJobFormValues>({
     initialValues: {
       service_id: "",
+      pp_cc: "Collect",
       customer_code: "",
       customer_name: "",
       customer_email: "",
@@ -1363,6 +1378,12 @@ export default function ServiceJobCreate() {
 
       form.setValues({
         service_id: serviceId,
+        pp_cc: resolveFreightPpCc(
+          job.pp_cc,
+          job.freight,
+          house?.pp_cc,
+          house?.freight,
+        ),
         customer_code: String(
           job.shipper_code ?? job.shipper_id ?? house?.shipper_code ?? "",
         ),
@@ -1502,6 +1523,7 @@ export default function ServiceJobCreate() {
     const housingDetail: Record<string, unknown> = {
       ...(houseMeta.id != null && { id: houseMeta.id }),
       ...(houseMeta.shipment_id && { shipment_id: houseMeta.shipment_id }),
+      pp_cc: form.values.pp_cc || "Collect",
       routed: form.values.routed || null,
       routed_by: form.values.routed_by || null,
       origin_code: form.values.origin_code || null,
@@ -1519,6 +1541,7 @@ export default function ServiceJobCreate() {
       service_id: form.values.service_id
         ? Number(form.values.service_id)
         : null,
+      pp_cc: form.values.pp_cc || "Collect",
       origin_code: form.values.origin_code || null,
       destination_code: form.values.destination_code || null,
       etd: formatJobDateForPayload(form.values.etd, mode),
@@ -1867,6 +1890,22 @@ export default function ServiceJobCreate() {
                   type="email"
                   placeholder="Enter customer email"
                   {...form.getInputProps("customer_email")}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  value={form.values.pp_cc || null}
+                  onChange={(value) => {
+                    form.setFieldValue("pp_cc", value || "Collect");
+                  }}
                 />
               </Grid.Col>
 

@@ -142,6 +142,7 @@ type HouseDetailsForm = {
   house_date: Date | null;
   shipment_terms_code: string;
   shipment_terms_name: string;
+  pp_cc: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -338,6 +339,12 @@ const normalizePpCc = (value: unknown): string => {
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
+};
+
+/** House Freight field: same mapping as charges, default Collect. */
+const normalizeFreightPpCc = (value: unknown): string => {
+  const normalized = normalizePpCc(value);
+  return normalized || "Collect";
 };
 
 function HouseCreate() {
@@ -757,33 +764,6 @@ function HouseCreate() {
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
 
-  const resolveHouseFreight = (): string => {
-    const fromEdit = (editData as { freight?: string } | undefined)?.freight;
-    if (fromEdit != null && String(fromEdit).trim()) {
-      return String(fromEdit).trim();
-    }
-    const fromExisting =
-      editIndex != null && existingHousingDetails[editIndex]
-        ? (existingHousingDetails[editIndex] as { freight?: string }).freight
-        : undefined;
-    if (fromExisting != null && String(fromExisting).trim()) {
-      return String(fromExisting).trim();
-    }
-    const fromJob = (
-      location.state?.job as
-        | { housing_details?: Array<{ id?: unknown; freight?: string }> }
-        | undefined
-    )?.housing_details?.find((house, index) =>
-      (editData as { id?: unknown } | undefined)?.id != null
-        ? house.id === (editData as { id?: unknown }).id ||
-          Number(house.id) === Number((editData as { id?: unknown }).id)
-        : index === editIndex,
-    )?.freight;
-    if (fromJob != null && String(fromJob).trim()) {
-      return String(fromJob).trim();
-    }
-    return "";
-  };
   const isLclShipment = useMemo(
     () =>
       String(location.state?.mblDetails?.service ?? "").toUpperCase() === "LCL",
@@ -1074,6 +1054,14 @@ function HouseCreate() {
         );
       }
 
+      form.setFieldValue(
+        "pp_cc",
+        normalizeFreightPpCc(
+          (editData as { pp_cc?: unknown }).pp_cc ??
+            (editData as { freight?: unknown }).freight,
+        ),
+      );
+
       // Ensure address fields show on edit even when address option lists are empty/disabled
       if (editData.shipper_address) {
         const addr = toTitleCase(String(editData.shipper_address));
@@ -1183,6 +1171,10 @@ function HouseCreate() {
         : null,
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
+      pp_cc: normalizeFreightPpCc(
+        (editData as { pp_cc?: unknown } | undefined)?.pp_cc ??
+          (editData as { freight?: unknown } | undefined)?.freight,
+      ),
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -2226,7 +2218,7 @@ function HouseCreate() {
         : null,
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
-      freight: resolveHouseFreight(),
+      pp_cc: form.values.pp_cc || "Collect",
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2280,11 +2272,11 @@ function HouseCreate() {
         JSON.stringify(existingHousingDetails),
       );
 
-      // Safely replace the updated house (preserve fields not on the form, e.g. freight)
+      // Safely replace the updated house
       updatedHousingDetails[editIndex] = {
         ...updatedHousingDetails[editIndex],
         ...housingDetail,
-        freight: resolveHouseFreight(),
+        pp_cc: form.values.pp_cc || "Collect",
         cargo_details: [...housingDetail.cargo_details], // ensure fresh arrays
         charges: [...housingDetail.charges],
       };
@@ -2360,7 +2352,7 @@ function HouseCreate() {
         : null,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
-      freight: resolveHouseFreight(),
+      pp_cc: v.pp_cc || "Collect",
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2520,7 +2512,7 @@ function HouseCreate() {
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
-        freight: resolveHouseFreight(),
+        pp_cc: form.values.pp_cc || "Collect",
         cargo_details: cargoDetails.map((c) => ({
           no_of_packages: c.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),
@@ -3225,6 +3217,19 @@ function HouseCreate() {
                   data={shipmentOptions}
                   {...form.getInputProps("shipment_terms_code")}
                   error={form.errors.shipment_terms_code}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...form.getInputProps("pp_cc")}
                 />
               </Grid.Col>
 

@@ -126,6 +126,7 @@ type HAWBDetailsForm = {
   hawb_number: string;
   shipment_terms_code: string;
   shipment_terms_name: string;
+  pp_cc: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -320,6 +321,14 @@ const normalizePpCc = (value: unknown): string => {
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
+};
+
+const resolveHouseFreightPpCc = (...candidates: unknown[]): string => {
+  for (const candidate of candidates) {
+    const normalized = normalizePpCc(candidate);
+    if (normalized) return normalized;
+  }
+  return "Collect";
 };
 
 function HouseCreate() {
@@ -528,6 +537,10 @@ function HouseCreate() {
       hawb_number: editData?.hawb_number || editData?.hbl_number || "",
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
+      pp_cc: resolveHouseFreightPpCc(
+        editData?.pp_cc,
+        (editData as { freight?: string } | undefined)?.freight,
+      ),
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -880,6 +893,12 @@ function HouseCreate() {
       form.setValues({
         hawb_number:
           editData.hawb_number || editData.hbl_number || editData.hawb_no || "",
+        shipment_terms_code: editData.shipment_terms_code || "",
+        shipment_terms_name: editData.shipment_terms_name || "",
+        pp_cc: resolveHouseFreightPpCc(
+          editData.pp_cc,
+          (editData as { freight?: string }).freight,
+        ),
         routed: normalizeRoutedValue(editData.routed),
         routed_by: editData.routed_by || "",
         origin_code: editData.origin_code || "",
@@ -2142,6 +2161,7 @@ function HouseCreate() {
       hawb_number: v.hawb_number,
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
+      pp_cc: v.pp_cc || "Collect",
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2245,6 +2265,7 @@ function HouseCreate() {
       hawb_number: currentFormValues.hawb_number,
       shipment_terms_code: currentFormValues.shipment_terms_code,
       shipment_terms_name: currentFormValues.shipment_terms_name,
+      pp_cc: currentFormValues.pp_cc || "Collect",
       routed: currentFormValues.routed,
       routed_by: currentFormValues.routed_by,
       origin_code: currentFormValues.origin_code,
@@ -3088,6 +3109,19 @@ function HouseCreate() {
                   data={shipmentOptions}
                   {...form.getInputProps("shipment_terms_code")}
                   error={form.errors.shipment_terms_code}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...form.getInputProps("pp_cc")}
                 />
               </Grid.Col>
 

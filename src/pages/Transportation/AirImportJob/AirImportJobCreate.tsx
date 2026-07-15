@@ -123,6 +123,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
+  pp_cc: string;
   origin_agent: string; // Stores agent_code (code) for API payload
   origin_agent_name: string; // Stores agent_name (name) for display
   origin_code: string;
@@ -190,6 +191,7 @@ type HAWBDetail = HouseDocumentFields & {
   booking_id?: number | null;
   routed: string;
   routed_by?: string;
+  pp_cc?: string;
   origin_code: string;
   origin_name?: string;
   destination_code: string;
@@ -323,6 +325,23 @@ type InvoiceListItem = {
   }>;
   reverse_invoice_id?: number;
   reverse_invoices?: ReverseInvoiceItem[];
+};
+
+const normalizeJobPpCc = (value: unknown): string => {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return "";
+};
+
+const resolveJobFreightPpCc = (...candidates: unknown[]): string => {
+  for (const candidate of candidates) {
+    const normalized = normalizeJobPpCc(candidate);
+    if (normalized) return normalized;
+  }
+  return "Collect";
 };
 
 // Validation schemas
@@ -552,6 +571,11 @@ function AirImportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
+      pp_cc: resolveJobFreightPpCc(
+        jobData?.pp_cc,
+        (jobData as { freight?: string } | undefined)?.freight,
+        location.state?.mawbDetails?.pp_cc,
+      ),
       origin_agent:
         jobData?.agent_code ||
         jobData?.origin_agent ||
@@ -672,6 +696,43 @@ function AirImportJobCreate() {
     },
     validate: yupResolver(mawbDetailsSchema),
   });
+
+  const getMawbDetailsSnapshot = useCallback(
+    () => ({
+      service: mawbDetailsForm.values.service || "Air",
+      pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+      origin_agent: mawbDetailsForm.values.origin_agent || "",
+      origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
+      origin_code: mawbDetailsForm.values.origin_code || "",
+      origin_name: mawbDetailsForm.values.origin_name || "",
+      destination_code: mawbDetailsForm.values.destination_code || "",
+      destination_name: mawbDetailsForm.values.destination_name || "",
+      etd: mawbDetailsForm.values.etd || null,
+      eta: mawbDetailsForm.values.eta || null,
+      atd: mawbDetailsForm.values.atd || null,
+      ata: mawbDetailsForm.values.ata || null,
+      igm_no: mawbDetailsForm.values.igm_no || "",
+      igm_date: mawbDetailsForm.values.igm_date || null,
+      shipper_id: mawbDetailsForm.values.shipper_id || "",
+      shipper_name: mawbDetailsForm.values.shipper_name || "",
+      shipper_email: mawbDetailsForm.values.shipper_email || "",
+      shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
+      shipper_address: mawbDetailsForm.values.shipper_address || "",
+      consignee_id: mawbDetailsForm.values.consignee_id || "",
+      consignee_name: mawbDetailsForm.values.consignee_name || "",
+      consignee_email: mawbDetailsForm.values.consignee_email || "",
+      consignee_address_id: mawbDetailsForm.values.consignee_address_id || "",
+      consignee_address: mawbDetailsForm.values.consignee_address || "",
+      carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
+      carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
+      carrier_agent_email: mawbDetailsForm.values.carrier_agent_email || "",
+      carrier_agent_address_id:
+        mawbDetailsForm.values.carrier_agent_address_id || "",
+      carrier_agent_address: mawbDetailsForm.values.carrier_agent_address || "",
+      origin_agent_data: originAgentDataRef.current || null,
+    }),
+    [mawbDetailsForm.values],
+  );
 
   // Auto-set service to "Air" on mount
   // useEffect(() => {
@@ -807,6 +868,10 @@ function AirImportJobCreate() {
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
           service: jobData.service || "AIR",
+          pp_cc: resolveJobFreightPpCc(
+            jobData.pp_cc,
+            (jobData as { freight?: string }).freight,
+          ),
           // Use origin_agent_name from API response, fallback to origin_agent for backward compatibility
           origin_agent: jobData.agent_code || jobData.origin_agent || "",
           origin_agent_name:
@@ -1076,6 +1141,7 @@ function AirImportJobCreate() {
                       : String(house.routed).toLowerCase()
                   : "",
                 routed_by: house.routed_by ? String(house.routed_by) : "",
+                pp_cc: resolveJobFreightPpCc(house.pp_cc, house.freight),
                 origin_code: house.origin_code ? String(house.origin_code) : "",
                 origin_name: house.origin_name ? String(house.origin_name) : "",
                 destination_code: house.destination_code
@@ -1724,41 +1790,7 @@ function AirImportJobCreate() {
           state: {
             ...location.state,
             // Save current MAWB form values
-            mawbDetails: {
-              service: mawbDetailsForm.values.service || "Air",
-              origin_agent: mawbDetailsForm.values.origin_agent || "",
-              origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
-              origin_code: mawbDetailsForm.values.origin_code || "",
-              origin_name: mawbDetailsForm.values.origin_name || "",
-              destination_code: mawbDetailsForm.values.destination_code || "",
-              destination_name: mawbDetailsForm.values.destination_name || "",
-              etd: mawbDetailsForm.values.etd || null,
-              eta: mawbDetailsForm.values.eta || null,
-              atd: mawbDetailsForm.values.atd || null,
-              ata: mawbDetailsForm.values.ata || null,
-              shipper_id: mawbDetailsForm.values.shipper_id || "",
-              shipper_name: mawbDetailsForm.values.shipper_name || "",
-              shipper_email: mawbDetailsForm.values.shipper_email || "",
-              shipper_address_id:
-                mawbDetailsForm.values.shipper_address_id || "",
-              shipper_address: mawbDetailsForm.values.shipper_address || "",
-              consignee_id: mawbDetailsForm.values.consignee_id || "",
-              consignee_name: mawbDetailsForm.values.consignee_name || "",
-              consignee_email: mawbDetailsForm.values.consignee_email || "",
-              consignee_address_id:
-                mawbDetailsForm.values.consignee_address_id || "",
-              consignee_address: mawbDetailsForm.values.consignee_address || "",
-              carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
-              carrier_agent_name:
-                mawbDetailsForm.values.carrier_agent_name || "",
-              carrier_agent_email:
-                mawbDetailsForm.values.carrier_agent_email || "",
-              carrier_agent_address_id:
-                mawbDetailsForm.values.carrier_agent_address_id || "",
-              carrier_agent_address:
-                mawbDetailsForm.values.carrier_agent_address || "",
-              origin_agent_data: originAgentDataRef.current || null,
-            },
+            mawbDetails: getMawbDetailsSnapshot(),
             // Save current Carrier form values
             carrierDetails: carrierDetailsForm.values,
             // Save current Routings form values
@@ -1787,41 +1819,7 @@ function AirImportJobCreate() {
           state: {
             ...location.state,
             // Save current MAWB form values
-            mawbDetails: {
-              service: mawbDetailsForm.values.service || "Air",
-              origin_agent: mawbDetailsForm.values.origin_agent || "",
-              origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
-              origin_code: mawbDetailsForm.values.origin_code || "",
-              origin_name: mawbDetailsForm.values.origin_name || "",
-              destination_code: mawbDetailsForm.values.destination_code || "",
-              destination_name: mawbDetailsForm.values.destination_name || "",
-              etd: mawbDetailsForm.values.etd || null,
-              eta: mawbDetailsForm.values.eta || null,
-              atd: mawbDetailsForm.values.atd || null,
-              ata: mawbDetailsForm.values.ata || null,
-              shipper_id: mawbDetailsForm.values.shipper_id || "",
-              shipper_name: mawbDetailsForm.values.shipper_name || "",
-              shipper_email: mawbDetailsForm.values.shipper_email || "",
-              shipper_address_id:
-                mawbDetailsForm.values.shipper_address_id || "",
-              shipper_address: mawbDetailsForm.values.shipper_address || "",
-              consignee_id: mawbDetailsForm.values.consignee_id || "",
-              consignee_name: mawbDetailsForm.values.consignee_name || "",
-              consignee_email: mawbDetailsForm.values.consignee_email || "",
-              consignee_address_id:
-                mawbDetailsForm.values.consignee_address_id || "",
-              consignee_address: mawbDetailsForm.values.consignee_address || "",
-              carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
-              carrier_agent_name:
-                mawbDetailsForm.values.carrier_agent_name || "",
-              carrier_agent_email:
-                mawbDetailsForm.values.carrier_agent_email || "",
-              carrier_agent_address_id:
-                mawbDetailsForm.values.carrier_agent_address_id || "",
-              carrier_agent_address:
-                mawbDetailsForm.values.carrier_agent_address || "",
-              origin_agent_data: originAgentDataRef.current || null,
-            },
+            mawbDetails: getMawbDetailsSnapshot(),
             // Save current Carrier form values
             carrierDetails: carrierDetailsForm.values,
             // Save current Routings form values
@@ -1846,39 +1844,7 @@ function AirImportJobCreate() {
         replace: true,
         state: {
           ...location.state,
-          mawbDetails: {
-            service: mawbDetailsForm.values.service || "Air",
-            origin_agent: mawbDetailsForm.values.origin_agent || "",
-            origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
-            origin_code: mawbDetailsForm.values.origin_code || "",
-            origin_name: mawbDetailsForm.values.origin_name || "",
-            destination_code: mawbDetailsForm.values.destination_code || "",
-            destination_name: mawbDetailsForm.values.destination_name || "",
-            etd: mawbDetailsForm.values.etd || null,
-            eta: mawbDetailsForm.values.eta || null,
-            atd: mawbDetailsForm.values.atd || null,
-            ata: mawbDetailsForm.values.ata || null,
-            shipper_id: mawbDetailsForm.values.shipper_id || "",
-            shipper_name: mawbDetailsForm.values.shipper_name || "",
-            shipper_email: mawbDetailsForm.values.shipper_email || "",
-            shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
-            shipper_address: mawbDetailsForm.values.shipper_address || "",
-            consignee_id: mawbDetailsForm.values.consignee_id || "",
-            consignee_name: mawbDetailsForm.values.consignee_name || "",
-            consignee_email: mawbDetailsForm.values.consignee_email || "",
-            consignee_address_id:
-              mawbDetailsForm.values.consignee_address_id || "",
-            consignee_address: mawbDetailsForm.values.consignee_address || "",
-            carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
-            carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
-            carrier_agent_email:
-              mawbDetailsForm.values.carrier_agent_email || "",
-            carrier_agent_address_id:
-              mawbDetailsForm.values.carrier_agent_address_id || "",
-            carrier_agent_address:
-              mawbDetailsForm.values.carrier_agent_address || "",
-            origin_agent_data: originAgentDataRef.current || null,
-          },
+          mawbDetails: getMawbDetailsSnapshot(),
           carrierDetails: carrierDetailsForm.values,
           routings: routingsForm.values.routings,
           estimates: estimatesForm.values.estimates,
@@ -1904,39 +1870,7 @@ function AirImportJobCreate() {
         state: {
           ...location.state,
           // Save current MAWB form values
-          mawbDetails: {
-            service: mawbDetailsForm.values.service || "Air",
-            origin_agent: mawbDetailsForm.values.origin_agent || "",
-            origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
-            origin_code: mawbDetailsForm.values.origin_code || "",
-            origin_name: mawbDetailsForm.values.origin_name || "",
-            destination_code: mawbDetailsForm.values.destination_code || "",
-            destination_name: mawbDetailsForm.values.destination_name || "",
-            etd: mawbDetailsForm.values.etd || null,
-            eta: mawbDetailsForm.values.eta || null,
-            atd: mawbDetailsForm.values.atd || null,
-            ata: mawbDetailsForm.values.ata || null,
-            shipper_id: mawbDetailsForm.values.shipper_id || "",
-            shipper_name: mawbDetailsForm.values.shipper_name || "",
-            shipper_email: mawbDetailsForm.values.shipper_email || "",
-            shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
-            shipper_address: mawbDetailsForm.values.shipper_address || "",
-            consignee_id: mawbDetailsForm.values.consignee_id || "",
-            consignee_name: mawbDetailsForm.values.consignee_name || "",
-            consignee_email: mawbDetailsForm.values.consignee_email || "",
-            consignee_address_id:
-              mawbDetailsForm.values.consignee_address_id || "",
-            consignee_address: mawbDetailsForm.values.consignee_address || "",
-            carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
-            carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
-            carrier_agent_email:
-              mawbDetailsForm.values.carrier_agent_email || "",
-            carrier_agent_address_id:
-              mawbDetailsForm.values.carrier_agent_address_id || "",
-            carrier_agent_address:
-              mawbDetailsForm.values.carrier_agent_address || "",
-            origin_agent_data: originAgentDataRef.current || null,
-          },
+          mawbDetails: getMawbDetailsSnapshot(),
           // Save current Carrier form values
           carrierDetails: carrierDetailsForm.values,
           // Save current Routings form values
@@ -2044,6 +1978,7 @@ function AirImportJobCreate() {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "Air",
+            pp_cc: resolveJobFreightPpCc(savedMawbDetails.pp_cc),
             origin_agent: savedMawbDetails.origin_agent || "",
             origin_agent_name: savedMawbDetails.origin_agent_name || "",
             origin_code: savedMawbDetails.origin_code || "",
@@ -2288,7 +2223,7 @@ function AirImportJobCreate() {
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
       // origin_agent = code (for API payload); origin_agent_name = customer name (for display and house payload)
       const mawbDetailsToPass = {
-        service: mawbDetailsForm.values.service || "Air",
+        ...getMawbDetailsSnapshot(),
         origin_agent:
           mawbDetailsForm.values.origin_agent ||
           location.state?.mawbDetails?.origin_agent ||
@@ -2297,34 +2232,6 @@ function AirImportJobCreate() {
           mawbDetailsForm.values.origin_agent_name ||
           location.state?.mawbDetails?.origin_agent_name ||
           "",
-        origin_code: mawbDetailsForm.values.origin_code || "",
-        origin_name: mawbDetailsForm.values.origin_name || "",
-        destination_code: mawbDetailsForm.values.destination_code || "",
-        destination_name: mawbDetailsForm.values.destination_name || "",
-        etd: mawbDetailsForm.values.etd || null,
-        eta: mawbDetailsForm.values.eta || null,
-        atd: mawbDetailsForm.values.atd || null,
-        ata: mawbDetailsForm.values.ata || null,
-        igm_no: mawbDetailsForm.values.igm_no || "",
-        igm_date: mawbDetailsForm.values.igm_date || null,
-        shipper_id: mawbDetailsForm.values.shipper_id || "",
-        shipper_name: mawbDetailsForm.values.shipper_name || "",
-        shipper_email: mawbDetailsForm.values.shipper_email || "",
-        shipper_address_id: mawbDetailsForm.values.shipper_address_id || "",
-        shipper_address: mawbDetailsForm.values.shipper_address || "",
-        consignee_id: mawbDetailsForm.values.consignee_id || "",
-        consignee_name: mawbDetailsForm.values.consignee_name || "",
-        consignee_email: mawbDetailsForm.values.consignee_email || "",
-        consignee_address_id: mawbDetailsForm.values.consignee_address_id || "",
-        consignee_address: mawbDetailsForm.values.consignee_address || "",
-        carrier_agent_id: mawbDetailsForm.values.carrier_agent_id || "",
-        carrier_agent_name: mawbDetailsForm.values.carrier_agent_name || "",
-        carrier_agent_email: mawbDetailsForm.values.carrier_agent_email || "",
-        carrier_agent_address_id:
-          mawbDetailsForm.values.carrier_agent_address_id || "",
-        carrier_agent_address:
-          mawbDetailsForm.values.carrier_agent_address || "",
-        // Use ref first (most recent), then fallback to location.state
         origin_agent_data:
           originAgentDataRef.current ||
           location.state?.mawbDetails?.origin_agent_data ||
@@ -2375,6 +2282,7 @@ function AirImportJobCreate() {
       location.state,
       navigate,
       jobDocuments,
+      getMawbDetailsSnapshot,
     ],
   );
 
@@ -2863,6 +2771,7 @@ function AirImportJobCreate() {
 
       const payload = {
         service: mawbDetailsForm.values.service,
+        pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
         service_type: "Import",
         agent: mawbDetailsForm.values.origin_agent || null,
         origin_code: mawbDetailsForm.values.origin_code,
@@ -2955,6 +2864,10 @@ function AirImportJobCreate() {
           trade: hawb.trade,
           routed: hawb.routed,
           routed_by: hawb.routed_by || null,
+          pp_cc: resolveJobFreightPpCc(
+            hawb.pp_cc,
+            (hawb as { freight?: string }).freight,
+          ),
           customer_service: hawb.customer_service || "",
           agent_name: hawb.origin_agent_name || "",
           agent_address: hawb.origin_agent_address || "",
@@ -3716,7 +3629,7 @@ function AirImportJobCreate() {
             </Grid>
 
             {/* Second row for ETD, ETA, ATD, ATA */}
-            <Grid mb="xl">
+            <Grid mb="md">
               <Grid.Col span={3}>
                 <DateTimeInput
                   label="ETD"
@@ -3772,8 +3685,22 @@ function AirImportJobCreate() {
               </Grid.Col>
             </Grid>
 
+
             {/* IGM details row */}
             <Grid mb="xl">
+              <Grid.Col span={3}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  disabled={isReadOnly}
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...mawbDetailsForm.getInputProps("pp_cc")}
+                />
+              </Grid.Col>
               <Grid.Col span={3}>
                 <FormTextInput
                   label="IGM Number"

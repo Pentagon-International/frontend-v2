@@ -128,6 +128,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
+  pp_cc: string;
   is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
@@ -199,6 +200,7 @@ type HAWBDetail = HouseDocumentFields & {
   hawb_number: string;
   routed: string;
   routed_by?: string;
+  pp_cc?: string;
   origin_code: string;
   origin_name?: string;
   destination_code: string;
@@ -297,6 +299,23 @@ type InvoiceListItem = {
   }>;
   reverse_invoice_id?: number;
   reverse_invoices?: ReverseInvoiceItem[];
+};
+
+const normalizeJobPpCc = (value: unknown): string => {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (raw === "PP" || raw === "PREPAID") return "Prepaid";
+  if (raw === "CC" || raw === "COLLECT") return "Collect";
+  return "";
+};
+
+const resolveJobFreightPpCc = (...candidates: unknown[]): string => {
+  for (const candidate of candidates) {
+    const normalized = normalizeJobPpCc(candidate);
+    if (normalized) return normalized;
+  }
+  return "Collect";
 };
 
 // Validation schemas
@@ -567,6 +586,11 @@ function AirExportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
+      pp_cc: resolveJobFreightPpCc(
+        jobData?.pp_cc,
+        (jobData as { freight?: string } | undefined)?.freight,
+        location.state?.mawbDetails?.pp_cc,
+      ),
       is_direct:
         parseBoolean(
           jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
@@ -697,6 +721,7 @@ function AirExportJobCreate() {
   const getMawbDetailsSnapshot = useCallback(
     () => ({
       service: mawbDetailsForm.values.service || "AIR",
+      pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
       is_direct: mawbDetailsForm.values.is_direct,
       agent_code: mawbDetailsForm.values.agent_code || "",
       agent_name: mawbDetailsForm.values.agent_name || "",
@@ -844,6 +869,10 @@ function AirExportJobCreate() {
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
           service: jobData.service || "AIR",
+          pp_cc: resolveJobFreightPpCc(
+            jobData.pp_cc,
+            (jobData as { freight?: string }).freight,
+          ),
           is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
@@ -884,6 +913,7 @@ function AirExportJobCreate() {
         if (savedMawbDetailsFromState) {
           mawbDetailsForm.setValues({
             service: savedMawbDetailsFromState.service || "AIR",
+            pp_cc: resolveJobFreightPpCc(savedMawbDetailsFromState.pp_cc),
             is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
             agent_code: savedMawbDetailsFromState.agent_code || "",
             agent_name: savedMawbDetailsFromState.agent_name || "",
@@ -1013,6 +1043,7 @@ function AirExportJobCreate() {
                     : String(house.routed).toLowerCase()
                 : "",
               routed_by: house.routed_by ? String(house.routed_by) : "",
+              pp_cc: resolveJobFreightPpCc(house.pp_cc, house.freight),
               origin_code: house.origin_code ? String(house.origin_code) : "",
               origin_name: house.origin_name ? String(house.origin_name) : "",
               destination_code: house.destination_code
@@ -1793,6 +1824,7 @@ function AirExportJobCreate() {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "AIR",
+            pp_cc: resolveJobFreightPpCc(savedMawbDetails.pp_cc),
             is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
@@ -2429,6 +2461,7 @@ function AirExportJobCreate() {
     try {
       const payload = {
         service: mawbDetailsForm.values.service,
+        pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
         is_direct: mawbDetailsForm.values.is_direct,
         service_type: "Export",
         agent: mawbDetailsForm.values.is_direct
@@ -2540,6 +2573,10 @@ function AirExportJobCreate() {
           hawb_no: hawb.hawb_number,
           routed: hawb.routed,
           routed_by: hawb.routed_by || null,
+          pp_cc: resolveJobFreightPpCc(
+            hawb.pp_cc,
+            (hawb as { freight?: string }).freight,
+          ),
           origin_code: hawb.origin_code,
           destination_code: hawb.destination_code,
           customer_service: hawb.customer_service || "",
@@ -3395,6 +3432,20 @@ function AirExportJobCreate() {
                   }}
                   error={mawbDetailsForm.errors.ata as string}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <Dropdown
+                  label="Freight"
+                  placeholder="Select Freight"
+                  searchable
+                  disabled={isReadOnly}
+                  data={[
+                    { value: "Prepaid", label: "Prepaid" },
+                    { value: "Collect", label: "Collect" },
+                  ]}
+                  {...mawbDetailsForm.getInputProps("pp_cc")}
                 />
               </Grid.Col>
 
