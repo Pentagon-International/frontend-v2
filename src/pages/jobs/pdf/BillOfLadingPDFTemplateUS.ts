@@ -485,7 +485,7 @@ export const generateUsBillOfLadingPDF = (
   const numberOfOriginalBl =
     housingData?.number_of_originals ??
     housingData?.no_of_originals ??
-    "ZERO";
+    "3 / THREE";
 
   const normalizeFreightTerm = (value: unknown): string => {
     const raw = String(value ?? "").trim().toUpperCase();
@@ -513,7 +513,7 @@ export const generateUsBillOfLadingPDF = (
     (housingDetailsArray.length === 1 ? housingDetailsArray[0] : null);
 
   const freightValue = String(
-    housingData?.freight || matchingHousing?.freight || "",
+    housingData?.pp_cc || matchingHousing?.pp_cc || "",
   ).trim();
   const paymentTerms = freightValue
     ? `FREIGHT ${normalizeFreightTerm(freightValue)}`
