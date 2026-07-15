@@ -36,6 +36,7 @@ import {
   import { useNavigate, useLocation } from "react-router-dom";
   import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
   import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+  import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
   import { useQuery, useQueryClient } from "@tanstack/react-query";
   import { URL } from "../../../api/serverUrls";
   import {
@@ -1963,6 +1964,10 @@ import {
       _isReversal && pathname.includes("/reversal/create")
         ? "/overseas-receipt"
         : backPath;
+
+    const handleBack = () => {
+      navigateFinanceReturn(navigate, location.state, effectiveBackPath);
+    };
   
     return (
       <Box p="md" style={{ position: "relative" }}>
@@ -2128,7 +2133,7 @@ import {
                 variant="outline"
                 color="#105476"
                 leftSection={<IconArrowLeft size={16} />}
-                onClick={() => navigate(effectiveBackPath)}
+                onClick={handleBack}
               >
                 Back
               </Button>
@@ -3455,7 +3460,7 @@ import {
               <Button
                 variant="outline"
                 color="#105476"
-                onClick={() => navigate(effectiveBackPath)}
+                onClick={handleBack}
               >
                 Cancel
               </Button>

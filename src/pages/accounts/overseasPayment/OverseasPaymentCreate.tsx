@@ -32,6 +32,7 @@ import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -520,6 +521,9 @@ export default function OverseasPaymentCreate({
 }: PaymentCreateProps = {}) {
   const navigate = useNavigate();
   const location = useLocation();
+  const handleBack = () => {
+    navigateFinanceReturn(navigate, location.state, backPath);
+  };
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const canPostDocuments = useCanPostDocuments();
@@ -2294,7 +2298,7 @@ export default function OverseasPaymentCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={handleBack}
             >
               Back
             </Button>
@@ -3602,7 +3606,7 @@ export default function OverseasPaymentCreate({
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(backPath)}
+              onClick={handleBack}
             >
               Cancel
             </Button>

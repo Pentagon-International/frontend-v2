@@ -120,7 +120,7 @@ type EntryColumn = {
 const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "sno", label: "S.No.", span: 0.4 },
   { key: "location", label: "Location", span: 0.65 },
-  { key: "document_no", label: "Document No", span: 2.75 },
+  { key: "document_no", label: "Document No", span: 1.5 },
   { key: "party_name", label: "Party Name", span: 1.5 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
@@ -129,10 +129,10 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "shipment_no", label: "Shipment No", span: 1.0 },
   { key: "debit_amount", label: "Debit", span: 0.95 },
   { key: "credit_amount", label: "Credit", span: 0.95 },
-  { key: "closing_balance", label: "Closing Bal", span: 0.8 },
+  { key: "outstanding_amount", label: "Outstanding Amt", span: 1.0 },
   { key: "note", label: "Note", span: 1 },
   { key: "amount", label: "Amount", span: 0.95 },
-  { key: "outstanding_amount", label: "Outstanding Amt", span: 1.0 },
+  { key: "closing_balance", label: "Closing Bal", span: 0.8 },
   { key: "outstanding_days", label: "Outstanding Days", span: 0.95 },
   { key: "narration", label: "Narration", span: 1 },
 ];
@@ -191,7 +191,7 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
     case "location":
       return 60;
     case "document_no":
-      return 250;
+      return 160;
     case "party_name":
       return 180;
     case "date_document":
@@ -800,7 +800,8 @@ export default function SubledgerEnquiry() {
 
     setAppliedFilters(filters);
     if (state.showFilters === false) setShowFilters(false);
-    if (typeof state.searchQuery === "string") setSearchQuery(state.searchQuery);
+    if (typeof state.searchQuery === "string")
+      setSearchQuery(state.searchQuery);
     if (state.pagination) setPagination(state.pagination);
 
     void fetchWithAppliedFilters(filters, {
@@ -1158,10 +1159,20 @@ export default function SubledgerEnquiry() {
                           fontFamily: erpTheme.fontSans,
                         }}
                       >
-                        <span style={{ fontWeight: 600, fontFamily: erpTheme.fontSans }}>
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            fontFamily: erpTheme.fontSans,
+                          }}
+                        >
                           {item.key}:
                         </span>{" "}
-                        <span style={{ fontWeight: 400, fontFamily: erpTheme.fontSans }}>
+                        <span
+                          style={{
+                            fontWeight: 400,
+                            fontFamily: erpTheme.fontSans,
+                          }}
+                        >
                           {item.value}
                         </span>
                         {idx < appliedFilterItems.length - 1 ? " | " : ""}
@@ -1635,9 +1646,8 @@ function SubledgerTable(props: {
         Cell: ({ cell, row }) => {
           const value = cell.getValue<unknown>();
           if (c.key === "document_no") {
-            const display = formatCompositeDocumentNo(row.original);
             const docNo = row.original.document_no?.trim() ?? "";
-            if (!display) return "—";
+            if (!docNo) return "—";
             return (
               <Anchor
                 component="button"
@@ -1646,9 +1656,9 @@ function SubledgerTable(props: {
                 c="#105476"
                 td="underline"
                 style={{ fontFamily: theme.fontSans, cursor: "pointer" }}
-                onClick={() => void onDocumentNoClick(docNo || display)}
+                onClick={() => void onDocumentNoClick(docNo)}
               >
-                {display}
+                {docNo}
               </Anchor>
             );
           }
