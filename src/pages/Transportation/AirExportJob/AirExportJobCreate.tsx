@@ -1588,65 +1588,6 @@ function AirExportJobCreate() {
     return true;
   };
 
-  const validateEstimates = () => {
-    const rows = estimatesForm.values.estimates ?? [];
-    estimatesForm.clearErrors();
-
-    const rowHasAnyValue = (e: (typeof rows)[number]) => {
-      return (
-        !!e.supplier_code ||
-        !!e.supplier_name ||
-        e.charge_id != null ||
-        !!e.charge_name ||
-        !!e.pp_cc ||
-        !!e.unit_id ||
-        !!e.currency_id ||
-        e.no_of_unit != null ||
-        e.roe != null ||
-        e.cost_per_unit != null ||
-        e.total_cost != null
-      );
-    };
-
-    for (let i = 0; i < rows.length; i++) {
-      const e = rows[i];
-      if (!rowHasAnyValue(e)) continue;
-
-      const missing: Array<{ key: keyof typeof e; label: string }> = [];
-      if (e.charge_id == null)
-        missing.push({ key: "charge_id", label: "Charge" });
-      if (!String(e.pp_cc ?? "").trim())
-        missing.push({ key: "pp_cc", label: "Prepaid / Collect" });
-      if (!String(e.unit_id ?? "").trim())
-        missing.push({ key: "unit_id", label: "Unit" });
-      if (e.no_of_unit == null)
-        missing.push({ key: "no_of_unit", label: "No of Unit" });
-      if (!String(e.currency_id ?? "").trim())
-        missing.push({ key: "currency_id", label: "Currency" });
-      if (e.roe == null) missing.push({ key: "roe", label: "ROE" });
-      if (e.cost_per_unit == null)
-        missing.push({ key: "cost_per_unit", label: "Cost / Unit" });
-      if (e.total_cost == null)
-        missing.push({ key: "total_cost", label: "Total Cost" });
-
-      if (missing.length > 0) {
-        missing.forEach((m) => {
-          estimatesForm.setFieldError(
-            `estimates.${i}.${String(m.key)}`,
-            `${m.label} is required`,
-          );
-        });
-        ToastNotification({
-          type: "error",
-          message: "Please fill all mandatory fields in Estimates row",
-        });
-        return false;
-      }
-    }
-
-    return true;
-  };
-
   // Handle next step
   const handleNext = () => {
     if (active === 0) {
@@ -2477,11 +2418,6 @@ function AirExportJobCreate() {
 
     // Validate routings if any field has value
     if (!validateStep2()) {
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (!validateEstimates()) {
       setIsSubmitting(false);
       return;
     }
@@ -4415,7 +4351,6 @@ function AirExportJobCreate() {
               readOnly={isReadOnly}
               defaultPpCc="Prepaid"
               roeSubmitValidateRef={estimatesRoeValidateRef}
-              conditionalRequired
               debugTag="AIR_EXPORT_JOB"
               jobUnitDefaults={{ service: "AIR" }}
               summaryEstimatesTotalCost={
