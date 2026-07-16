@@ -9,6 +9,8 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 
 type GSTSACFormData = {
@@ -28,6 +30,15 @@ export default function GSTSACCreate() {
 
   const editData = (location.state as GSTSACFormData & { id?: number }) || null;
   const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.gstSacMaster : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<GSTSACFormData>({
     initialValues: {
@@ -55,7 +66,9 @@ export default function GSTSACCreate() {
           ...values,
           id: editData.id,
         };
-        await putAPICall(URL.gstSacMaster, updateData, API_HEADER);
+        const res = await putAPICall(URL.gstSacMaster, updateData, API_HEADER);
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editData.id);
         ToastNotification({
           type: "success",
           message: "GST SAC updated successfully",
@@ -68,7 +81,7 @@ export default function GSTSACCreate() {
         });
       }
 
-      navigate("/master/gst-sac");
+      navigate("/master/gst-sac", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -123,20 +136,26 @@ export default function GSTSACCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode ? "Edit GST SAC" : "Create GST SAC"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit GST SAC" : "Create GST SAC"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

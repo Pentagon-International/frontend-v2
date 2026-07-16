@@ -19,6 +19,8 @@ import { putAPICall } from "../../../service/putApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { Dropdown, SearchableSelect, ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 
 type TdsSectionFormData = {
@@ -109,6 +111,18 @@ export default function TdsRateSectionCreate() {
       ? Number(editData.id)
       : editIdFromQuery;
   const isEditMode = routeIsEdit || editId !== null;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode
+        ? ((editData as Record<string, unknown> | null) ??
+            (editId != null ? { id: editId } : null))
+        : null,
+      {
+        detailBaseUrl: isEditMode ? URL.tdsRateMaster : undefined,
+        recordId: editId,
+        enabled: isEditMode && editId != null,
+      },
+    );
 
   const form = useForm<TdsSectionFormData>({
     initialValues: {
@@ -254,7 +268,9 @@ export default function TdsRateSectionCreate() {
           ...payload,
           id: editId,
         };
-        await putAPICall(URL.tdsRateMaster, updateData, API_HEADER);
+        const res = await putAPICall(URL.tdsRateMaster, updateData, API_HEADER);
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editId);
         ToastNotification({
           type: "success",
           message: "TDS Rate Master updated successfully",
@@ -267,7 +283,7 @@ export default function TdsRateSectionCreate() {
         });
       }
 
-      navigate("/master/tds-rate-section");
+      navigate("/master/tds-rate-section", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -340,20 +356,26 @@ export default function TdsRateSectionCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode ? "Edit TDS Rate Section" : "Create TDS Rate Section"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit TDS Rate Section" : "Create TDS Rate Section"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

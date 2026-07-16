@@ -79,6 +79,9 @@ type CustomerPipelineData = {
   customer_code: string;
   customer_name: string;
   created_by: string;
+  created_at?: string;
+  updated_by?: string;
+  updated_at?: string;
   pipelines: PipelineData[];
   total_profile_volume: number;
   total_profile_profit: number;
@@ -1149,6 +1152,9 @@ function Pipeline() {
         customer_code: r.customer_code,
         customer_name: r.customer_name,
         created_by: r.created_by,
+        created_at: r.created_at,
+        updated_by: r.updated_by,
+        updated_at: r.updated_at,
         total_profit: r.total_profit,
         total_volume: r.total_volume,
         pipelines: r.pipelines,
@@ -1159,6 +1165,9 @@ function Pipeline() {
           customer_code: r.customer_code,
           customer_name: r.customer_name,
           created_by: r.created_by,
+          created_at: r.created_at,
+          updated_by: r.updated_by,
+          updated_at: r.updated_at,
           pipelines: r.pipelines,
           total_profit: r.total_profit,
           total_volume: r.total_volume,
@@ -1175,6 +1184,9 @@ function Pipeline() {
           customer_code: row.customer_code,
           customer_name: row.customer_name,
           created_by: row.created_by,
+          created_at: row.created_at ?? row.raw.created_at,
+          updated_by: row.updated_by ?? row.raw.updated_by,
+          updated_at: row.updated_at ?? row.raw.updated_at,
           pipelines: row.raw.pipelines,
           actionType,
           returnTo: "/pipeline",

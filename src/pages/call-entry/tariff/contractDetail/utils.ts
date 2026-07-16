@@ -137,7 +137,14 @@ export function buildAuditHistory(data: ContractDetailResponse): AuditHistoryIte
       key: "updated",
       timestamp: formatApiDateTime(data.updated_at),
       label: data.message || "Contract updated",
-      actor: basics.approved_by || basics.created_by || "—",
+      actor:
+        data.updated_by ||
+        data.updated_by_name ||
+        basics.updated_by ||
+        basics.updated_by_name ||
+        basics.approved_by ||
+        basics.created_by ||
+        "—",
       isRecent: true,
     });
   }

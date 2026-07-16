@@ -69,6 +69,9 @@ export type PipelineListRow = PipelineRowAggregates & {
   customer_code: string;
   customer_name: string;
   created_by: string;
+  created_at?: string;
+  updated_by?: string;
+  updated_at?: string;
   total_profit: number;
   total_volume: number;
   pipelines: unknown[];
@@ -76,6 +79,9 @@ export type PipelineListRow = PipelineRowAggregates & {
     customer_code: string;
     customer_name: string;
     created_by: string;
+    created_at?: string;
+    updated_by?: string;
+    updated_at?: string;
     pipelines: unknown[];
     total_profit: number;
     total_volume: number;

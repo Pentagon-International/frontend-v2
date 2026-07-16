@@ -9,16 +9,26 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader, Select } from "@mantine/core";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import { ToastNotification, SearchableSelect } from "../../../components";
+import EditPageAuditInfoIcon from "../../../components/EditPageAuditInfoIcon";
+import {
+  mergeEditPageAuditSources,
+  normalizeEditPageAuditInfo,
+} from "../../../utils/editPageAuditInfo";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import { useLayoutStore } from "../../../store/useLayoutStore";
 import { useContractEditHydration } from "./contractDetail/useContractEditHydration";
+import {
+  CONTRACT_EDIT_STATE_KEY,
+  peekContractEditPayload,
+} from "./contractDetail/contractEditSession";
+import type { ContractDetailResponse } from "./contractDetail/types";
 import "./createContract.css";
 
 
@@ -212,10 +222,46 @@ async function createContract(payload: CreateContractPayload): Promise<CreateCon
 
 export default function CreateContract() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isSidebarCollapsed = useLayoutStore((state) => state.isSidebarCollapsed);
   const sidebarOffset = isSidebarCollapsed ? 64 : 260;
   const user = useAuthStore((state) => state.user);
   const contractOwner = user?.full_name || user?.username || "";
+
+  const editDetail = useMemo((): ContractDetailResponse | null => {
+    const stateDetail = (location.state as Record<string, unknown> | null)?.[
+      CONTRACT_EDIT_STATE_KEY
+    ];
+    if (
+      stateDetail &&
+      typeof stateDetail === "object" &&
+      (stateDetail as ContractDetailResponse).contract_basics
+    ) {
+      return stateDetail as ContractDetailResponse;
+    }
+    return peekContractEditPayload();
+  }, [location.state, location.key]);
+
+  const isContractEditMode = Boolean(editDetail?.contract_basics);
+  const contractAuditInfo = useMemo(() => {
+    if (!editDetail?.contract_basics) return null;
+    const overrides: Record<string, unknown> = {};
+    if (editDetail.created_at) overrides.created_at = editDetail.created_at;
+    if (editDetail.updated_at) overrides.updated_at = editDetail.updated_at;
+    const updatedBy =
+      editDetail.updated_by ||
+      editDetail.updated_by_name ||
+      editDetail.contract_basics.updated_by ||
+      editDetail.contract_basics.updated_by_name;
+    if (updatedBy) overrides.updated_by = updatedBy;
+
+    return normalizeEditPageAuditInfo(
+      mergeEditPageAuditSources(
+        editDetail.contract_basics as unknown as Record<string, unknown>,
+        overrides,
+      ),
+    );
+  }, [editDetail]);
 
   const [contractId, setContractId] = useState(formatContractDraftId);
   const [carrierCode, setCarrierCode] = useState("");
@@ -550,7 +596,15 @@ export default function CreateContract() {
           Contracts
         </button>
         <div className="create-contract-topbar-title">
-          <h1>New Contract</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h1>{isContractEditMode ? "Edit Contract" : "New Contract"}</h1>
+            <EditPageAuditInfoIcon
+              visible={isContractEditMode}
+              auditInfo={contractAuditInfo}
+              animateKey={editDetail?.vendor_reference || contractId}
+              ariaLabel="Contract audit info"
+            />
+          </div>
           <div className="sub">
             Enter contract basics, rate lines &amp; surcharges · review before activation ·{" "}
             <span className="mono">{contractId}</span>

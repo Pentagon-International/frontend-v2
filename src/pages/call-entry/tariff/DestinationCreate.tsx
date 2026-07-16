@@ -34,6 +34,8 @@ import dayjs from "dayjs";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
+import EditPageAuditInfoIcon from "../../../components/EditPageAuditInfoIcon";
+import { normalizeEditPageAuditInfo } from "../../../utils/editPageAuditInfo";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -111,6 +113,15 @@ function DestinationCreate() {
   const editData = location.state || null;
   const isEditMode = editData?.actionType === "edit";
   const isViewMode = editData?.actionType === "view";
+  const destinationAuditInfo = useMemo(
+    () =>
+      normalizeEditPageAuditInfo(
+        isEditMode || isViewMode
+          ? (editData as Record<string, unknown>)
+          : null,
+      ),
+    [editData, isEditMode, isViewMode],
+  );
 
   // State for number of containers
   const [numberOfContainers, setNumberOfContainers] = useState(1);
@@ -653,24 +664,32 @@ function DestinationCreate() {
                   <Grid.Col span={12} style={{position: "sticky", top:0, zIndex:50, backgroundColor:"white", padding:"10px 0"}}>
                     <Grid style={{borderRadius:"4px", padding:"5px 10px",backgroundColor:"#fafafa"}} align={"center"}>
                       <Grid.Col span={isViewMode || isEditMode ? 6 : 12}>
-                        <Text
-                          size="md"
-                          fw={600}
-                          c="#105476"
-                          style={{
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                            fontSize: "16px",
-                            color: "#105476",
-                            textAlign: "Left" as any,
-                          }}
-                        >
-                          {isViewMode
-                            ? "Destination Entry Details (View Only)"
-                            : isEditMode
-                              ? "Edit Destination Entry"
-                              : "Create Destination Entry"}
-                        </Text>
+                        <Group gap={6} wrap="nowrap">
+                          <Text
+                            size="md"
+                            fw={600}
+                            c="#105476"
+                            style={{
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                              fontSize: "16px",
+                              color: "#105476",
+                              textAlign: "Left" as any,
+                            }}
+                          >
+                            {isViewMode
+                              ? "Destination Entry Details (View Only)"
+                              : isEditMode
+                                ? "Edit Destination Entry"
+                                : "Create Destination Entry"}
+                          </Text>
+                          <EditPageAuditInfoIcon
+                            visible={isEditMode || isViewMode}
+                            auditInfo={destinationAuditInfo}
+                            animateKey={editData?.id}
+                            ariaLabel="Destination audit info"
+                          />
+                        </Group>
                       </Grid.Col>
                       {(isViewMode || isEditMode) && (
                         <Grid.Col span={6}>

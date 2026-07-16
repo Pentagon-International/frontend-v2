@@ -1,4 +1,9 @@
 import type { ContractBasics } from "./types";
+import EditPageAuditInfoIcon from "../../../../components/EditPageAuditInfoIcon";
+import {
+  mergeEditPageAuditSources,
+  normalizeEditPageAuditInfo,
+} from "../../../../utils/editPageAuditInfo";
 import {
   formatApiDate,
   formatDaysLeft,
@@ -11,21 +16,44 @@ import {
 type ContractDetailHeaderProps = {
   contractId: string;
   basics: ContractBasics;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
   onClose: () => void;
 };
 
 export default function ContractDetailHeader({
   contractId,
   basics,
+  createdAt,
+  updatedAt,
+  updatedBy,
   onClose,
 }: ContractDetailHeaderProps) {
   const status = getStatusPresentation(basics.status);
+  const auditOverrides: Record<string, unknown> = {};
+  if (createdAt) auditOverrides.created_at = createdAt;
+  if (updatedAt) auditOverrides.updated_at = updatedAt;
+  if (updatedBy) auditOverrides.updated_by = updatedBy;
+
+  const auditInfo = normalizeEditPageAuditInfo(
+    mergeEditPageAuditSources(
+      basics as unknown as Record<string, unknown>,
+      auditOverrides,
+    ),
+  );
 
   return (
     <div className="contract-detail-header">
       <div className="contract-detail-header-main">
         <div className="contract-detail-title-row">
           <h2>{contractId}</h2>
+          <EditPageAuditInfoIcon
+            visible
+            auditInfo={auditInfo}
+            animateKey={contractId}
+            ariaLabel="Contract audit info"
+          />
           <span className={`contract-detail-status ${status.className}`}>
             <span className="dot" />
             {status.label}

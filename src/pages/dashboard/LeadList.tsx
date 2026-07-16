@@ -101,6 +101,7 @@ type LeadData = {
     pincode?: string;
   };
   created_by: string;
+  updated_by?: string;
   assigned_to: string;
   status: string;
   remark: {
@@ -1079,42 +1080,66 @@ function LeadList() {
   useEffect(() => {
     if (location.state?.refreshData) {
       const refreshData = async () => {
-        // Check if we have filters or search from store
+        const locationRestore = location.state?.restoreFilters as
+          | {
+              filters?: Partial<FilterState>;
+              filtersApplied?: boolean;
+              searchQuery?: string;
+            }
+          | undefined;
         const restoredState = getState(LIST_KEY);
-        const hasActiveFilters = restoredState?.filters && hasRealFilterValues(mergeRestoredLeadFilters(restoredState.filters as Partial<FilterState>));
-        const hasActiveSearch = restoredState?.search && restoredState.search.trim() !== "";
+        const updatedLeadAssignedTo =
+          typeof location.state?.updatedLeadAssignedTo === "string"
+            ? location.state.updatedLeadAssignedTo.trim()
+            : "";
 
-        // If we have filters/search in store, restore them first
-        if (restoredState && (hasActiveFilters || hasActiveSearch)) {
-          // Restore filters from store if they exist
-          if (hasActiveFilters) {
-            const restoredFilters = mergeRestoredLeadFilters(
-              restoredState.filters as Partial<FilterState> | undefined,
-            );
-            setAppliedFilters(restoredFilters);
-            appliedFiltersRef.current = restoredFilters; // Update ref immediately
-            // Restore filter form values (full FilterState shape)
-            filterForm.setValues(restoredFilters);
-          }
+        // Prefer filters from navigation state (captured at edit open); fall back to store
+        let nextFilters = mergeRestoredLeadFilters(
+          (locationRestore?.filters as Partial<FilterState> | undefined) ??
+            (restoredState?.filters as Partial<FilterState> | undefined),
+        );
+        const nextSearch =
+          typeof locationRestore?.searchQuery === "string"
+            ? locationRestore.searchQuery
+            : typeof restoredState?.search === "string"
+              ? restoredState.search
+              : "";
 
-          // Restore search from store if it exists
+        // If Assigned To was changed on edit, drop an assignee filter that would hide the row
+        if (
+          updatedLeadAssignedTo &&
+          nextFilters.assigned_to &&
+          nextFilters.assigned_to !== updatedLeadAssignedTo
+        ) {
+          nextFilters = { ...nextFilters, assigned_to: null };
+        }
+
+        const hasActiveFilters = hasRealFilterValues(nextFilters);
+        const hasActiveSearch = Boolean(nextSearch.trim());
+        const shouldFilter =
+          Boolean(locationRestore?.filtersApplied) ||
+          hasActiveFilters ||
+          hasActiveSearch;
+
+        if (shouldFilter) {
+          setAppliedFilters(nextFilters);
+          appliedFiltersRef.current = nextFilters;
+          filterForm.setValues(nextFilters);
+          setStoreFilters(LIST_KEY, nextFilters);
+
           if (hasActiveSearch) {
-            setSearchQuery(restoredState.search);
+            setSearchQuery(nextSearch);
+            setStoreSearch(LIST_KEY, nextSearch);
           }
 
-          // Set filtersApplied FIRST to ensure query is enabled
           setFiltersApplied(true);
-
-          // Wait for state updates to flush and buildLeadPayload to recalculate
-          // This ensures buildLeadPayload will use the restored values from refs
-          // Increased delay to ensure debounced value is updated and useMemo recalculates
           await new Promise((resolve) => setTimeout(resolve, 1100));
-
-          // Manually refetch filtered leads AFTER restored state + refs are synced + useMemo recalculated
-          // This ensures the payload uses preserved filters/search instead of defaults
           await refetchFilteredLeads();
         } else {
-          // No filters/search - refetch default data
+          setAppliedFilters(EMPTY_LEAD_FILTERS);
+          appliedFiltersRef.current = EMPTY_LEAD_FILTERS;
+          filterForm.setValues(EMPTY_LEAD_FILTERS);
+          setFiltersApplied(false);
           await refetchLeads();
         }
 
@@ -1133,6 +1158,8 @@ function LeadList() {
     }
   }, [
     location.state?.refreshData,
+    location.state?.updatedLeadAssignedTo,
+    location.state?.restoreFilters,
     refetchLeads,
     refetchFilteredLeads,
     navigate,
@@ -1140,6 +1167,8 @@ function LeadList() {
     getState,
     filterForm,
     hasRealFilterValues,
+    setStoreFilters,
+    setStoreSearch,
   ]);
 
   // Track if we're restoring filters to trigger refetch after state updates
@@ -1149,6 +1178,9 @@ function LeadList() {
 
   // Add effect to restore filters when returning from create/edit operations
   useEffect(() => {
+    // refreshData owns post-save reload — avoid racing a second restore/refetch
+    if (location.state?.refreshData) return;
+
     // Check if we're returning from a create/edit operation with filter restoration
     // Only restore if we haven't already restored (prevents re-initialization)
     if (
@@ -1231,12 +1263,12 @@ function LeadList() {
           // 4. buildLeadPayload reads updated values from appliedFiltersRef.current
           await new Promise((resolve) => setTimeout(resolve, 1100));
 
-          // Manually refetch filtered leads AFTER:
-          // - filtersApplied is set (query is enabled)
-          // - restored state + refs are synced
-          // - buildLeadPayload useMemo has recalculated with preserved values
-          // This ensures the payload uses preserved filters/search instead of defaults
-          await refetchFilteredLeads();
+          // Manually refetch AFTER state is stable
+          if (shouldApplyFilters) {
+            await refetchFilteredLeads();
+          } else {
+            await refetchLeads();
+          }
 
           console.log("🔄 State restored - Manually refetched with restored filters/search", {
             filters: restoreFiltersData.filters,
@@ -1869,12 +1901,15 @@ function LeadList() {
                     styles={erpToolbarPrimaryButtonStyles(erpTheme)}
                     onClick={() => {
                       useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                      setStoreFilters(LIST_KEY, appliedFilters);
+                      setStoreSearch(LIST_KEY, searchQuery);
                       navigate("/lead-create", {
                         state: {
                           returnTo: "/lead",
                           restoreFilters: {
                             filters: appliedFilters,
                             filtersApplied,
+                            searchQuery,
                             fromDashboard: fromDashboardRef.current,
                           },
                         },
@@ -2461,6 +2496,8 @@ function LeadList() {
                                     <UnstyledButton
                                       onClick={() => {
                                         useListFilterStore.getState().setShouldRestore(LIST_KEY, true);
+                                        setStoreFilters(LIST_KEY, appliedFilters);
+                                        setStoreSearch(LIST_KEY, searchQuery);
                                         navigate("/lead-create", {
                                           state: {
                                             leadData: row,
@@ -2468,6 +2505,7 @@ function LeadList() {
                                             restoreFilters: {
                                               filters: appliedFilters,
                                               filtersApplied,
+                                              searchQuery,
                                               fromDashboard: fromDashboardRef.current,
                                             },
                                           },

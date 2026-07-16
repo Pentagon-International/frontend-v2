@@ -80,6 +80,14 @@ export default function TariffContractsDetail() {
               <ContractDetailHeader
                 contractId={getContractDisplayId(data)}
                 basics={data.contract_basics}
+                createdAt={data.created_at}
+                updatedAt={data.updated_at}
+                updatedBy={
+                  data.updated_by ||
+                  data.updated_by_name ||
+                  data.contract_basics?.updated_by ||
+                  data.contract_basics?.updated_by_name
+                }
                 onClose={closeDetail}
               />
 

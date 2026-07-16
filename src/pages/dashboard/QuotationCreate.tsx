@@ -1496,6 +1496,12 @@ function QuotationCreate({
               remark_list: quotationData.remark_list,
               valid_upto_list: quotationData.valid_upto_list,
               quotation: quotationData.quotation,
+              created_by: quotationData.created_by,
+              created_by_name: quotationData.created_by_name,
+              created_at: quotationData.created_at,
+              updated_by: quotationData.updated_by,
+              updated_by_name: quotationData.updated_by_name,
+              updated_at: quotationData.updated_at,
             });
 
             // Map quotation data to form fields if quotation array exists

@@ -32,5 +32,15 @@ export async function fetchContractDetail(
     internal_notes: response?.internal_notes ?? null,
     created_at: response?.created_at,
     updated_at: response?.updated_at,
+    updated_by:
+      response?.updated_by ??
+      response?.updated_by_name ??
+      (response?.contract_basics as
+        | { updated_by?: string; updated_by_name?: string }
+        | undefined)?.updated_by ??
+      (response?.contract_basics as
+        | { updated_by?: string; updated_by_name?: string }
+        | undefined)?.updated_by_name,
+    updated_by_name: response?.updated_by_name,
   };
 }

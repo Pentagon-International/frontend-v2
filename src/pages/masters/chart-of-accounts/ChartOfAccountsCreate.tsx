@@ -17,6 +17,8 @@ import { useState } from "react";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -58,6 +60,15 @@ function ChartOfAccountsCreate() {
   const editFormData = location.state as ChartOfAccountsData | undefined;
   const isEditMode = !!editFormData?.id;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editFormData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.chartOfAccounts : undefined,
+        recordId: editFormData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<ChartOfAccountsData>({
     mode: "controlled",
@@ -85,11 +96,13 @@ function ChartOfAccountsCreate() {
           values,
           API_HEADER,
         );
+        applyAuditFromResponse(response);
+        await refreshAuditFromDetail(editFormData?.id);
         ToastNotification({
           type: "success",
           message: "Chart of Accounts updated successfully",
         });
-        navigate("/master/chart-of-accounts");
+        navigate("/master/chart-of-accounts", { state: { refreshData: true } });
       } else {
         // Create mode: Use POST request
         const response = await postAPICall(
@@ -101,7 +114,7 @@ function ChartOfAccountsCreate() {
           type: "success",
           message: "Chart of Accounts created successfully",
         });
-        navigate("/master/chart-of-accounts");
+        navigate("/master/chart-of-accounts", { state: { refreshData: true } });
       }
     } catch (err: any) {
       ToastNotification({
@@ -167,22 +180,28 @@ function ChartOfAccountsCreate() {
                 gap: 5,
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode
-                  ? "Edit Chart of Accounts"
-                  : "Create Chart of Accounts"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode
+                    ? "Edit Chart of Accounts"
+                    : "Create Chart of Accounts"}
+                </Text>
+              </MasterAuditHeadingRow>
               {/* <Text
                 size="sm"
                 fw={500}

@@ -16,6 +16,8 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification, SearchableSelect } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 
 type GLChargeMappingFormData = {
@@ -79,6 +81,15 @@ export default function GLChargeMappingCreate() {
 
   const editData = (location.state as EditState) || null;
   const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.glChargeMapping : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<GLChargeMappingFormData>({
     initialValues: {
@@ -130,11 +141,13 @@ export default function GLChargeMappingCreate() {
       };
 
       if (isEditMode && editData?.id != null) {
-        await putAPICall(
+        const res = await putAPICall(
           URL.glChargeMapping,
           { ...payload, id: editData.id },
           API_HEADER
         );
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editData.id);
         ToastNotification({
           type: "success",
           message: "GL Charge Mapping updated successfully",
@@ -147,7 +160,7 @@ export default function GLChargeMappingCreate() {
         });
       }
 
-      navigate("/master/gl-charge-mapping");
+      navigate("/master/gl-charge-mapping", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -202,20 +215,26 @@ export default function GLChargeMappingCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode ? "Edit GL Charge Mapping" : "Create GL Charge Mapping"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit GL Charge Mapping" : "Create GL Charge Mapping"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

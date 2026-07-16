@@ -13,6 +13,8 @@ import {
   SearchableSelect,
   SingleDateInput,
 } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 
 type GSTChargeMappingFormData = {
@@ -68,6 +70,15 @@ export default function GSTChargeMappingCreate() {
 
   const editData = (location.state as EditState) || null;
   const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.gstChargeMapping : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<GSTChargeMappingFormData>({
     initialValues: {
@@ -114,11 +125,13 @@ export default function GSTChargeMappingCreate() {
       };
 
       if (isEditMode && editData?.id != null) {
-        await putAPICall(
+        const res = await putAPICall(
           URL.gstChargeMapping,
           { ...payload, id: editData.id },
           API_HEADER
         );
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editData.id);
         ToastNotification({
           type: "success",
           message: "GST Charge Mapping updated successfully",
@@ -131,7 +144,7 @@ export default function GSTChargeMappingCreate() {
         });
       }
 
-      navigate("/master/gst-charge-mapping");
+      navigate("/master/gst-charge-mapping", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -188,22 +201,28 @@ export default function GSTChargeMappingCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode
-                  ? "Edit GST Charge Mapping"
-                  : "Create GST Charge Mapping"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode
+                    ? "Edit GST Charge Mapping"
+                    : "Create GST Charge Mapping"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

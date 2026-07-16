@@ -291,6 +291,9 @@ function CreateLead() {
         state: {
           refreshData: true,
           restoreFilters: (location.state as any)?.restoreFilters,
+          ...(isEditMode
+            ? { updatedLeadAssignedTo: values.assigned_to.trim() }
+            : {}),
         },
       });
     } catch (err: unknown) {

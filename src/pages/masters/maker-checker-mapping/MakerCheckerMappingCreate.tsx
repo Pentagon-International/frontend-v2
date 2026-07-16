@@ -22,6 +22,8 @@ import {
   ToastNotification,
   Dropdown,
 } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import SearchableMultiSelect from "../../../components/SearchableMultiSelect";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
@@ -187,6 +189,20 @@ export default function MakerCheckerMappingCreate() {
     staleTime: 0,
   });
 
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode
+        ? ((editRecord as Record<string, unknown> | undefined) ??
+            (editState as Record<string, unknown> | null) ??
+            null)
+        : null,
+      {
+        detailBaseUrl: isEditMode ? URL.makerCheckerMaster : undefined,
+        recordId: editId,
+        enabled: isEditMode,
+      },
+    );
+
   const { data: docTypeOptions = [], isLoading: docTypesLoading } = useQuery({
     queryKey: ["documentTypeMasterIdOptions"],
     queryFn: fetchDocumentTypeMasterIdOptions,
@@ -281,6 +297,11 @@ export default function MakerCheckerMappingCreate() {
         message: result.message,
       });
 
+      if (isEditMode && editId != null) {
+        applyAuditFromResponse(response);
+        await refreshAuditFromDetail(editId);
+      }
+
       await queryClient.invalidateQueries({
         queryKey: ["maker-checker-master"],
       });
@@ -290,7 +311,9 @@ export default function MakerCheckerMappingCreate() {
         });
       }
 
-      navigate("/master/maker-checker-mapping");
+      navigate("/master/maker-checker-mapping", {
+        state: { refreshData: true },
+      });
     } catch (err: unknown) {
       ToastNotification({
         type: "error",
@@ -351,20 +374,26 @@ export default function MakerCheckerMappingCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontSize: "16px",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode
-                  ? "Edit Maker & Checker Mapping"
-                  : "Create Maker & Checker Mapping"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontSize: "16px",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode
+                    ? "Edit Maker & Checker Mapping"
+                    : "Create Maker & Checker Mapping"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

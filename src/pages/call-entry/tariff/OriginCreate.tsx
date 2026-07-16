@@ -38,6 +38,8 @@ import { URL } from "../../../api/serverUrls";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
+import EditPageAuditInfoIcon from "../../../components/EditPageAuditInfoIcon";
+import { normalizeEditPageAuditInfo } from "../../../utils/editPageAuditInfo";
 import { useQuery } from "@tanstack/react-query";
 import { useDisclosure } from "@mantine/hooks";
 import * as yup from "yup";
@@ -110,6 +112,15 @@ function OriginCreate() {
   const editData = location.state || null;
   const isEditMode = editData?.actionType === "edit";
   const isViewMode = editData?.actionType === "view";
+  const originAuditInfo = useMemo(
+    () =>
+      normalizeEditPageAuditInfo(
+        isEditMode || isViewMode
+          ? (editData as Record<string, unknown>)
+          : null,
+      ),
+    [editData, isEditMode, isViewMode],
+  );
 
   // State for number of containers
   const [numberOfContainers, setNumberOfContainers] = useState(1);
@@ -654,24 +665,32 @@ function OriginCreate() {
                   <Grid.Col span={12} style={{ position: "sticky", top: 0, zIndex: 50, backgroundColor: "white", padding: "10px 0" }}>
                     <Grid style={{ borderRadius: "4px", padding: "5px 10px", backgroundColor: "#fafafa" }} align={"center"}>
                       <Grid.Col span={isViewMode || isEditMode ? 6 : 12}>
-                        <Text
-                          size="md"
-                          fw={600}
-                          c="#105476"
-                          style={{
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                            fontSize: "16px",
-                            color: "#105476",
-                            textAlign: "Left" as any,
-                          }}
-                        >
-                          {isViewMode
-                            ? "Origin Entry Details (View Only)"
-                            : isEditMode
-                              ? "Edit Origin Entry"
-                              : "Create Origin Entry"}
-                        </Text>
+                        <Group gap={6} wrap="nowrap">
+                          <Text
+                            size="md"
+                            fw={600}
+                            c="#105476"
+                            style={{
+                              fontFamily: "Inter",
+                              fontStyle: "medium",
+                              fontSize: "16px",
+                              color: "#105476",
+                              textAlign: "Left" as any,
+                            }}
+                          >
+                            {isViewMode
+                              ? "Origin Entry Details (View Only)"
+                              : isEditMode
+                                ? "Edit Origin Entry"
+                                : "Create Origin Entry"}
+                          </Text>
+                          <EditPageAuditInfoIcon
+                            visible={isEditMode || isViewMode}
+                            auditInfo={originAuditInfo}
+                            animateKey={editData?.id}
+                            ariaLabel="Origin audit info"
+                          />
+                        </Group>
                       </Grid.Col>
                       {(isViewMode || isEditMode) && (
                         <Grid.Col span={6}>

@@ -17,6 +17,8 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 
 type TdsSectionFormData = {
@@ -45,6 +47,15 @@ export default function TdsSectionCreate() {
   const editData =
     (location.state as TdsSectionFormData & { id?: number }) || null;
   const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.tdsSectionMaster : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<TdsSectionFormData>({
     initialValues: {
@@ -78,7 +89,13 @@ export default function TdsSectionCreate() {
           ...values,
           id: editData!.id,
         };
-        await putAPICall(URL.tdsSectionMaster, updateData, API_HEADER);
+        const res = await putAPICall(
+          URL.tdsSectionMaster,
+          updateData,
+          API_HEADER,
+        );
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editData!.id);
         ToastNotification({
           type: "success",
           message: "TDS section updated successfully",
@@ -91,7 +108,7 @@ export default function TdsSectionCreate() {
         });
       }
 
-      navigate("/master/tds-section");
+      navigate("/master/tds-section", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -145,20 +162,26 @@ export default function TdsSectionCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode ? "Edit TDS Section" : "Create TDS Section"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit TDS Section" : "Create TDS Section"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 

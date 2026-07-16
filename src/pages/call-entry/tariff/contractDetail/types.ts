@@ -12,6 +12,8 @@ export type ContractBasics = {
   auto_renew: boolean;
   auto_renew_days: number | null;
   created_by: string;
+  updated_by?: string | null;
+  updated_by_name?: string | null;
   approved_by: string | null;
   tariff_codes?: string[];
 };
@@ -82,6 +84,8 @@ export type ContractDetailResponse = {
   internal_notes?: string | null;
   created_at?: string;
   updated_at?: string;
+  updated_by?: string;
+  updated_by_name?: string;
 };
 
 export type AuditHistoryItem = {

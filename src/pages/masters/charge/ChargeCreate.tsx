@@ -18,6 +18,8 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
+import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
+import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 
 type ChargeFormData = {
@@ -56,6 +58,15 @@ export default function ChargeCreate() {
   // Get edit data from location.state
   const editData = (location.state as ChargeFormData & { id?: string }) || null;
   const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.chargeMaster : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
   const form = useForm<ChargeFormData>({
     initialValues: {
@@ -92,6 +103,8 @@ export default function ChargeCreate() {
           id: editData.id,
         };
         response = await putAPICall(URL.chargeMaster, updateData, API_HEADER);
+        applyAuditFromResponse(response);
+        await refreshAuditFromDetail(editData.id);
         ToastNotification({
           type: "success",
           message: "Charge updated successfully",
@@ -106,7 +119,7 @@ export default function ChargeCreate() {
       }
 
       // Navigate back to charge list with refresh flag
-      navigate("/master/charge");
+      navigate("/master/charge", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
@@ -161,20 +174,26 @@ export default function ChargeCreate() {
                 justifyContent: "center",
               }}
             >
-              <Text
-                size="md"
-                fw={600}
-                c="#105476"
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  fontSize: "16px",
-                  color: "#105476",
-                  textAlign: "center",
-                }}
+              <MasterAuditHeadingRow
+                auditSource={auditSource}
+                visible={isEditMode}
+                justify="center"
               >
-                {isEditMode ? "Edit Charge" : "Create Charge"}
-              </Text>
+                <Text
+                  size="md"
+                  fw={600}
+                  c="#105476"
+                  style={{
+                    fontFamily: "Inter",
+                    fontStyle: "medium",
+                    fontSize: "16px",
+                    color: "#105476",
+                    textAlign: "center",
+                  }}
+                >
+                  {isEditMode ? "Edit Charge" : "Create Charge"}
+                </Text>
+              </MasterAuditHeadingRow>
             </Box>
           </Box>
 
