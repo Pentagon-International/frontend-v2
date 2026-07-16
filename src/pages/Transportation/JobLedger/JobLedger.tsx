@@ -23,13 +23,22 @@ import {
   Anchor,
   Modal,
   UnstyledButton,
+  Menu,
+  Center,
 } from "@mantine/core";
 import {
   MantineReactTable,
   MRT_ColumnDef,
   useMantineReactTable,
 } from "mantine-react-table";
-import { IconFilter, IconChevronLeft, IconX } from "@tabler/icons-react";
+import {
+  IconFilter,
+  IconChevronLeft,
+  IconX,
+  IconDotsVertical,
+  IconDownload,
+  IconFileInvoice,
+} from "@tabler/icons-react";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -145,6 +154,7 @@ type JobLedgerRequestFilters = {
   segment_code: string;
   hbl_hawb_no: string;
   charges?: boolean;
+  type?: string;
 };
 
 type ChargeWiseSummary = {
@@ -300,6 +310,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const [chargeLoading, setChargeLoading] = useState<boolean>(false);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const chargeFiltersRef = useRef<string | null>(null);
+  const [costSheetPreviewOpen, setCostSheetPreviewOpen] = useState(false);
+  const [costSheetPdfUrl, setCostSheetPdfUrl] = useState<string | null>(null);
+  const [costSheetLoading, setCostSheetLoading] = useState(false);
 
   const getJobLedgerReturnState = useCallback(
     () => ({
@@ -569,6 +582,124 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     inferredLocationFinal,
     inferredSegmentCodeFinal,
   ]);
+
+  const handleCloseCostSheetPreview = useCallback(() => {
+    setCostSheetPreviewOpen(false);
+    setCostSheetLoading(false);
+    if (costSheetPdfUrl) {
+      window.URL.revokeObjectURL(costSheetPdfUrl);
+    }
+    setCostSheetPdfUrl(null);
+  }, [costSheetPdfUrl]);
+
+  const handleDownloadCostSheetPdf = useCallback(() => {
+    if (!costSheetPdfUrl) return;
+    const jobId =
+      (filters.jobNo ?? inferredJobIdFinal ?? "job").toString().trim() || "job";
+    const hbl = (filters.hbl_hawb_no ?? "").toString().trim();
+    const fileName = hbl
+      ? `job-cost-sheet-${jobId}-${hbl}.pdf`
+      : `job-cost-sheet-${jobId}.pdf`;
+    const link = document.createElement("a");
+    link.href = costSheetPdfUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [costSheetPdfUrl, filters.jobNo, filters.hbl_hawb_no, inferredJobIdFinal]);
+
+  const handleJobCostSheet = useCallback(async () => {
+    const requestFilters = getCurrentRequestFilters();
+    if (!requestFilters.job_id) {
+      ToastNotification({
+        type: "error",
+        message: "Job ID is required to generate Job Cost Sheet.",
+      });
+      return;
+    }
+
+    setCostSheetPreviewOpen(true);
+    setCostSheetLoading(true);
+    if (costSheetPdfUrl) {
+      window.URL.revokeObjectURL(costSheetPdfUrl);
+      setCostSheetPdfUrl(null);
+    }
+
+    try {
+      const pdfFilters: Record<string, string> = {
+        job_id: requestFilters.job_id,
+        type: "pdf",
+      };
+      if (requestFilters.location) {
+        pdfFilters.location = requestFilters.location;
+      }
+      if (requestFilters.segment_code) {
+        pdfFilters.segment_code = requestFilters.segment_code;
+      }
+      // House navigation includes hbl_hawb_no; master-level omits it.
+      if (requestFilters.hbl_hawb_no) {
+        pdfFilters.hbl_hawb_no = requestFilters.hbl_hawb_no;
+      }
+
+      const response = await apiCallProtected.post(
+        `${URL.jobLedger}`,
+        { filters: pdfFilters },
+        { ...API_HEADER, responseType: "blob" },
+      );
+
+      const blob =
+        response instanceof Blob
+          ? response
+          : (response as { data?: Blob })?.data instanceof Blob
+            ? (response as { data: Blob }).data
+            : null;
+
+      if (!blob || blob.size === 0) {
+        throw new Error("Empty PDF response from server");
+      }
+
+      const head = await blob.slice(0, 256).text();
+      const headTrim = head.trimStart();
+      if (headTrim.startsWith("{") || headTrim.startsWith("[")) {
+        let message = "Failed to generate Job Cost Sheet PDF";
+        try {
+          const parsed = JSON.parse(await blob.text()) as {
+            detail?: string;
+            message?: string;
+            error?: string;
+          };
+          message =
+            parsed.detail || parsed.message || parsed.error || message;
+        } catch {
+          /* keep default */
+        }
+        throw new Error(message);
+      }
+
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setCostSheetPdfUrl(pdfUrl);
+    } catch (error: unknown) {
+      console.error("Job Cost Sheet PDF error:", error);
+      ToastNotification({
+        type: "error",
+        message:
+          (error as { message?: string })?.message ||
+          "Failed to generate Job Cost Sheet PDF",
+      });
+      setCostSheetPreviewOpen(false);
+      setCostSheetPdfUrl(null);
+    } finally {
+      setCostSheetLoading(false);
+    }
+  }, [costSheetPdfUrl, getCurrentRequestFilters]);
+
+  useEffect(() => {
+    return () => {
+      if (costSheetPdfUrl) {
+        window.URL.revokeObjectURL(costSheetPdfUrl);
+      }
+    };
+  }, [costSheetPdfUrl]);
 
   const fetchJobLedger = async (requestFilters: JobLedgerRequestFilters) => {
     setJobLedgerLoading(true);
@@ -1670,6 +1801,54 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             >
               {/* Filters */}
             </Button>
+            <Menu
+              withinPortal
+              position="bottom-end"
+              shadow="md"
+              width={220}
+            >
+              <Menu.Target>
+                <ActionIcon
+                  variant="outline"
+                  size="lg"
+                  aria-label="Job ledger actions"
+                  styles={{
+                    root: {
+                      borderRadius: "4px",
+                      color: "#105476",
+                      border: "1px solid #105476",
+                      "&:hover": {
+                        backgroundColor: "#E0F5FF",
+                      },
+                    },
+                  }}
+                >
+                  <IconDotsVertical size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  onClick={() => void handleJobCostSheet()}
+                  disabled={costSheetLoading}
+                >
+                  Job Cost Sheet
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
             <Button
               variant="outline"
               size="sm"
@@ -2396,6 +2575,80 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           </Tabs.Panel>
         </Tabs>
       </Paper>
+
+      <Modal
+        opened={costSheetPreviewOpen}
+        onClose={handleCloseCostSheetPreview}
+        title={
+          <Text size="lg" fw={600} c="#105476">
+            Job Cost Sheet
+          </Text>
+        }
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {costSheetPdfUrl ? (
+            <>
+              <iframe
+                src={costSheetPdfUrl}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Job Cost Sheet PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCloseCostSheetPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadCostSheetPdf}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">
+                  {costSheetLoading
+                    ? "Generating Job Cost Sheet preview..."
+                    : "No PDF available"}
+                </Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 };
