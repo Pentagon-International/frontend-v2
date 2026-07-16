@@ -48,12 +48,11 @@ import {
   EstimatesSection,
   useEstimatesForm,
 } from "../../../components";
-import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
-// US BOL template download — uncomment import + button block below to re-enable:
-// import {
-//   downloadUsBillOfLadingTemplate,
-//   isUsBranchForBillOfLading,
-// } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import {
+  generateBillOfLadingPDF,
+  downloadUsBillOfLadingTemplate,
+  isUsBranchForBillOfLading,
+} from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import useAuthStore from "../../../store/authStore";
 import dayjs from "dayjs";
 import { postAPICall } from "../../../service/postApiCall";
@@ -3121,7 +3120,6 @@ function ExportJobCreate() {
           )}
         </Group>
         <Group gap="xs">
-          {/* US BOL template download — uncomment to enable blank US BOL template download:
           {isUsBranchForBillOfLading(user?.country) && (
             <Button
               variant="outline"
@@ -3135,7 +3133,6 @@ function ExportJobCreate() {
               BOL Template (US) [Temp]
             </Button>
           )}
-          */}
           {!isReadOnly && (
             <>
               <Button
