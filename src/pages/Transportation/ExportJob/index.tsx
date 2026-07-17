@@ -130,6 +130,7 @@ type ExportJobData = {
   eta: string;
   atd: string | null;
   ata: string | null;
+  job_date?: string | null;
   schedule_id: string | null;
   carrier_code: string;
   carrier_name: string;

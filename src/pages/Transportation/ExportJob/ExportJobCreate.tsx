@@ -134,6 +134,7 @@ type MBLDetailsForm = {
   eta: Date | null;
   atd: Date | null;
   ata: Date | null;
+  job_date: Date | null;
   shipper_id: string;
   shipper_name: string;
   shipper_email: string;
@@ -270,6 +271,7 @@ const mblDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
+  job_date: yup.date().nullable(),
 });
 
 const carrierDetailsSchema = yup.object({
@@ -779,6 +781,7 @@ function ExportJobCreate() {
       eta: null,
       atd: null,
       ata: null,
+      job_date: null,
       shipper_id: "",
       shipper_name: "",
       shipper_email: "",
@@ -969,6 +972,10 @@ function ExportJobCreate() {
           ata:
             mblData.ata && dayjs(mblData.ata).isValid()
               ? dayjs(mblData.ata).toDate()
+              : null,
+          job_date:
+            mblData.job_date && dayjs(mblData.job_date).isValid()
+              ? dayjs(mblData.job_date).toDate()
               : null,
           shipper_id: String(
             mblFlat.shipper_id ?? shipperNest?.id ?? stateMbl.shipper_id ?? "",
@@ -1675,6 +1682,10 @@ function ExportJobCreate() {
           eta: mblDetails.eta || null,
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
+          job_date:
+            mblDetails.job_date && dayjs(mblDetails.job_date).isValid()
+              ? dayjs(mblDetails.job_date).toDate()
+              : mblDetails.job_date || null,
           shipper_id:
             (mblDetails as { shipper_id?: string } | undefined)?.shipper_id ||
             "",
@@ -2308,6 +2319,7 @@ function ExportJobCreate() {
           eta: mblDetailsForm.values.eta,
           atd: mblDetailsForm.values.atd,
           ata: mblDetailsForm.values.ata,
+          job_date: mblDetailsForm.values.job_date,
         },
         carrierDetails: {
           carrier_code: carrierDetailsForm.values.carrier_code,
@@ -2567,6 +2579,7 @@ function ExportJobCreate() {
             eta: mblDetailsForm.values.eta || null,
             atd: mblDetailsForm.values.atd || null,
             ata: mblDetailsForm.values.ata || null,
+            job_date: mblDetailsForm.values.job_date || null,
             shipper_id: mblDetailsForm.values.shipper_id || "",
             shipper_name: mblDetailsForm.values.shipper_name || "",
             shipper_email: mblDetailsForm.values.shipper_email || "",
@@ -2753,6 +2766,11 @@ function ExportJobCreate() {
         ata: mblDetailsForm.values.ata
           ? dayjs(mblDetailsForm.values.ata).isValid()
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
+            : null
+          : null,
+        job_date: mblDetailsForm.values.job_date
+          ? dayjs(mblDetailsForm.values.job_date).isValid()
+            ? dayjs(mblDetailsForm.values.job_date).format("YYYY-MM-DD")
             : null
           : null,
         is_direct: mblDetailsForm.values.is_direct,
@@ -3769,6 +3787,24 @@ function ExportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("ata", value);
+                      },
+                    };
+                  })()}
+                  size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="Job Date"
+                  placeholder="YYYY-MM-DD"
+                  {...(() => {
+                    const inputProps = mblDetailsForm.getInputProps("job_date");
+                    return {
+                      value: inputProps.value as Date | null,
+                      error: inputProps.error as string | undefined,
+                      onChange: (value: Date | null) => {
+                        mblDetailsForm.setFieldValue("job_date", value);
                       },
                     };
                   })()}

@@ -125,6 +125,7 @@ type AirImportJobData = {
   eta: string;
   atd: string | null;
   ata: string | null;
+  job_date?: string | null;
   carrier_code: string;
   carrier_name: string;
   vessel_name: string | null;
