@@ -2791,6 +2791,14 @@ function ImportJobCreate() {
       const combinedData = {
         ...(jobWithMergedHousingDetails ?? jobData),
         ...housing,
+        service: mblDetailsForm.values.service || "",
+        igm_no: mblDetailsForm.values.igm_no || "",
+        igm_date: mblDetailsForm.values.igm_date || null,
+        eta: mblDetailsForm.values.eta || null,
+        mbl_number: carrierDetailsForm.values.mbl_number || "",
+        mbl_date: carrierDetailsForm.values.mbl_date || null,
+        vessel_name: carrierDetailsForm.values.vessel_name || "",
+        voyage_number: carrierDetailsForm.values.voyage_number || "",
         mawbDetails: {
           service: mblDetailsForm.values.service,
           origin_agent: mblDetailsForm.values.origin_agent,
@@ -2802,6 +2810,8 @@ function ImportJobCreate() {
           eta: mblDetailsForm.values.eta,
           atd: mblDetailsForm.values.atd,
           ata: mblDetailsForm.values.ata,
+          igm_no: mblDetailsForm.values.igm_no,
+          igm_date: mblDetailsForm.values.igm_date,
         },
         carrierDetails: {
           carrier_code: carrierDetailsForm.values.carrier_code,
@@ -2811,11 +2821,20 @@ function ImportJobCreate() {
           mbl_number: carrierDetailsForm.values.mbl_number,
           mbl_date: carrierDetailsForm.values.mbl_date,
         },
-        containerDetails: jobData?.containerDetails || [],
+        // Prefer live form containers (cfs_name, unloading_date) over stale job payload
+        containerDetails:
+          containerDetailsForm.values.containers?.length > 0
+            ? containerDetailsForm.values.containers
+            : (jobData as { containerDetails?: unknown[] } | undefined)
+                ?.containerDetails ||
+              (jobData as { container_details?: unknown[] } | undefined)
+                ?.container_details ||
+              [],
       };
 
       const housingDataForDo = {
         ...housing,
+        house_date: housing.house_date,
         attention_to: resolveDoAttentionTo(type, housing),
         please_deliver_to: resolveDoDeliverTo(housing, deliverTo),
         do_heading:

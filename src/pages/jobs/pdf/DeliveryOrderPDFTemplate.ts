@@ -6,7 +6,7 @@ import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../../assets/images/CCIPL.png";
 import primeLogo from "../../../assets/images/prime.png";
 import {
-  CCT_BRANCH_INFO,
+  getCctBranchInfoFromLogin,
   getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
@@ -277,7 +277,7 @@ const drawFooterSection = (
 // Helper function to get branch info
 const getBranchInfo = (country?: any) => {
   if (isCctCompany()) {
-    return { ...CCT_BRANCH_INFO, isKenya: false };
+    return { ...getCctBranchInfoFromLogin(), isKenya: false };
   }
 
   if (isKenyaCountry(country)) {
@@ -434,8 +434,6 @@ export const generateDeliveryOrderPDF = (
     const attentionTo = housingData?.attention_to || "";
     const pleaseDeliverTo = housingData?.please_deliver_to || housingData?.consignee_name || "";
     const consigneeName = housingData?.consignee_name || "";
-    const importerCode = housingData?.importer_code || "";
-    const importerType = housingData?.importer_type || "";
     const notifyParty = housingData?.notify_customer1_name || housingData?.notify1_customer_name || "";
     const chaName = housingData?.cha_name || "";
 
@@ -457,16 +455,22 @@ export const generateDeliveryOrderPDF = (
       ? `${obillNumber} / ${obillDate}`
       : obillNumber || obillDate || "";
 
-    // H.Bill of Lading - from housing_details
+    // H.Bill of Lading - house no with HBL date (same pattern as O.Bill)
     const hbillNumber = housingData?.hbl_number || "";
-    const hbillDate = housingData?.created_at
-      ? formatDateForDisplay(housingData.created_at)
+    const hbillDateRaw =
+      housingData?.house_date ||
+      housingData?.hbl_date ||
+      housingData?.created_at ||
+      "";
+    const hbillDate = hbillDateRaw
+      ? formatDateForDisplay(hbillDateRaw)
       : "";
     const hbillInfo = hbillNumber && hbillDate
       ? `${hbillNumber} / ${hbillDate}`
       : hbillNumber || hbillDate || "";
 
-    const loadPortHBL = hbillNumber || "";
+    // Load Port HBL - same "number / date" format as H.Bill of Lading
+    const loadPortHBL = hbillInfo;
     
     // ETA - from consol_details (jobData)
     const eta = jobData?.eta || jobInfo?.eta || mawbDetails?.eta
@@ -475,11 +479,12 @@ export const generateDeliveryOrderPDF = (
     
     const tsaNo = housingData?.tsa_no || "";
     
-    // IGM NO./Date - from consol_details (jobData) - this is the key fix
-    const igmNo = jobData?.igm_no || jobInfo?.igm_no || "";
-    const igmDate = jobData?.igm_date || jobInfo?.igm_date
-      ? formatDateForDisplay(jobData.igm_date || jobInfo.igm_date)
-      : "";
+    // IGM NO./Date - from consol_details (jobData) / mawbDetails
+    const igmNo =
+      jobData?.igm_no || jobInfo?.igm_no || mawbDetails?.igm_no || "";
+    const igmDateRaw =
+      jobData?.igm_date || jobInfo?.igm_date || mawbDetails?.igm_date || "";
+    const igmDate = igmDateRaw ? formatDateForDisplay(igmDateRaw) : "";
     const igmInfo = igmNo && igmDate
       ? `${igmNo} / ${igmDate}`
       : igmNo || igmDate || "";
@@ -492,7 +497,42 @@ export const generateDeliveryOrderPDF = (
       housingData?.sub_item_line_no ||
       housingData?.sub_item_no ||
       "";
-    const unstuffPlace = housingData?.unstuff_place || "";
+
+    // Container details (used for CFS / unloading date / LCL-FCL)
+    const containerDetails =
+      jobData?.containerDetails ||
+      jobData?.container_details ||
+      [];
+
+    const findContainerForCargo = (cargo: any) => {
+      const containerNo = String(
+        cargo?.container_no || cargo?.container_number || "",
+      ).trim();
+      const containerId = String(cargo?.container_id ?? "").trim();
+      if (!containerDetails?.length) return undefined;
+      return containerDetails.find((c: any) => {
+        const cNo = String(c?.container_no ?? "").trim();
+        const cId = String(c?.id ?? "").trim();
+        return (
+          (containerNo && cNo === containerNo) ||
+          (containerId && cId === containerId)
+        );
+      });
+    };
+
+    // Unstuff Place = CFS Name of the house's container(s)
+    const cargoDetailsForCfs = housingData?.cargo_details || [];
+    const matchedCfsContainer =
+      (Array.isArray(cargoDetailsForCfs)
+        ? cargoDetailsForCfs
+            .map((cargo: any) => findContainerForCargo(cargo))
+            .find((c: any) => String(c?.cfs_name || "").trim())
+        : undefined) ||
+      containerDetails.find((c: any) => String(c?.cfs_name || "").trim());
+    const unstuffPlace =
+      housingData?.unstuff_place ||
+      matchedCfsContainer?.cfs_name ||
+      "";
 
     // Service for LCL/FCL - from consol_details (jobData)
     const service = jobData?.service || mawbDetails?.service || jobInfo?.service || "";
@@ -601,14 +641,6 @@ export const generateDeliveryOrderPDF = (
     doc.text(consigneeLines, valueStartX, currentY);
     currentY += Math.max(consigneeLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
-    // Importer Code/Type
-    const importerInfo = [importerCode, importerType].filter(Boolean).join(" / ");
-    doc.setFont("helvetica", "bold");
-    doc.text("Importer Code/Type:", leftColumnX, currentY);
-    doc.setFont("helvetica", "normal");
-    doc.text(importerInfo || "", valueStartX, currentY);
-    currentY += lineHeight;
-
     // Notify party
     doc.setFont("helvetica", "bold");
     doc.text("Notify party:", leftColumnX, currentY);
@@ -693,8 +725,12 @@ export const generateDeliveryOrderPDF = (
     doc.setFont("helvetica", "bold");
     doc.text("Unstuff Place:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(unstuffPlace || "", valueStartX, currentY);
-    currentY += lineHeight;
+    const unstuffPlaceLines = doc.splitTextToSize(
+      unstuffPlace || "",
+      pageWidth - valueStartX - margin - boxPadding
+    );
+    doc.text(unstuffPlaceLines, valueStartX, currentY);
+    currentY += Math.max(unstuffPlaceLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Item / Line No.
     doc.setFont("helvetica", "bold");
@@ -719,7 +755,6 @@ export const generateDeliveryOrderPDF = (
 
     // ===== CONTAINER INFORMATION TABLE =====
     const cargoDetails = housingData?.cargo_details || [];
-    const containerDetails = jobData?.containerDetails || [];
     
     // Check if we need a new page before the table
     const estimatedTableHeight = cargoDetails.length > 0 ? Math.min(cargoDetails.length * DO_INNER_ROW_HEIGHT + 15, 100) : 0;
@@ -737,23 +772,35 @@ export const generateDeliveryOrderPDF = (
     if (cargoDetails.length > 0) {
       const tableBody = cargoDetails.map((cargo: any) => {
         const containerNo = cargo.container_no || cargo.container_number || "";
+        const matched = findContainerForCargo(cargo);
 
         // LCL / FCL logic
         let lclFcl = service || "";
-        if (!lclFcl && containerDetails?.length) {
-          const matched = containerDetails.find(
-            (c: any) => c.container_no === containerNo
-          );
+        if (!lclFcl && matched) {
           const type =
-            matched?.container_type_details?.container_type_name || "";
+            matched?.container_type_details?.container_type_name ||
+            matched?.container_type ||
+            "";
           lclFcl =
-            type.includes("20") || type.includes("40") ? "FCL" : "LCL";
+            String(type).includes("20") || String(type).includes("40")
+              ? "FCL"
+              : "LCL";
         }
+
+        const unloadingDateRaw =
+          matched?.unloading_date ||
+          matched?.uploading_date ||
+          cargo?.unloading_date ||
+          cargo?.uploading_date ||
+          "";
+        const unstuffDt = unloadingDateRaw
+          ? formatDateForDisplay(unloadingDateRaw)
+          : "";
 
         return [
           containerNo,
           lclFcl,
-          "", // Unstuff Date
+          unstuffDt,
           cargo.no_of_packages ?? "",
           cargo.gross_weight ?? "",
           cargo.volume ?? "",

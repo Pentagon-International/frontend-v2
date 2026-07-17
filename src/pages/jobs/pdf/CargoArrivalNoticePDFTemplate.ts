@@ -5,7 +5,7 @@ import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../../assets/images/CCIPL.png";
 import primeLogo from "../../../assets/images/prime.png";
 import {
-  CCT_BRANCH_INFO,
+  getCctBranchInfoFromLogin,
   getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
@@ -496,7 +496,7 @@ const isUSACountry = (country?: any): boolean => {
 // Helper function to get branch info
 const getBranchInfo = (branchName: string, country?: any) => {
   if (isCctCompany()) {
-    return { ...CCT_BRANCH_INFO };
+    return { ...getCctBranchInfoFromLogin() };
   }
 
   if (isUSACountry(country)) {
@@ -1151,7 +1151,7 @@ export const generateCargoArrivalNoticePDF = (
     rightColumnHeight += Math.max(1, igmNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, itemNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, subItemNoLines.length) * lineSpacing;
-    if (isFclOrLcl && cfsNameDisplay) {
+    if (isFclOrLcl) {
       rightColumnHeight += Math.max(1, cfsNameLines.length) * lineSpacing;
     }
     rightColumnHeight += Math.max(1, serviceLines.length) * lineSpacing;
@@ -1454,7 +1454,7 @@ export const generateCargoArrivalNoticePDF = (
       shipmentColumnLayout,
       rightYPos
     );
-    if (isFclOrLcl && cfsNameDisplay) {
+    if (isFclOrLcl) {
       rightYPos += drawCanKeyValueRow(
         doc,
         "CFS Name:",

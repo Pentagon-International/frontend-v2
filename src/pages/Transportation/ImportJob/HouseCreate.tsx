@@ -2881,11 +2881,27 @@ function HouseCreate() {
   const resolveDoAttentionTo = (type: DoTypeOption) => {
     if (type === "carrier_agent") {
       const partyDetails = location.state?.mblDetails as
-        | { carrier_agent_name?: string; carrier_agent_address?: string }
+        | {
+            carrier_agent_name?: string;
+            carrier_agent_address?: string;
+          }
         | undefined;
-      const name = partyDetails?.carrier_agent_name || "";
-      const address = partyDetails?.carrier_agent_address || "";
-      return [name, address].filter(Boolean).join("\n\n");
+      // Prefer party details from job state when available (same as house card)
+      const jobParty = location.state?.job as
+        | {
+            carrier_agent_name?: string;
+            carrier_agent_address?: string;
+          }
+        | undefined;
+      const name =
+        partyDetails?.carrier_agent_name ||
+        jobParty?.carrier_agent_name ||
+        "";
+      const address =
+        partyDetails?.carrier_agent_address ||
+        jobParty?.carrier_agent_address ||
+        "";
+      return [name, address].filter(Boolean).join("\n");
     }
 
     const allContainerSources = [
@@ -2939,7 +2955,7 @@ function HouseCreate() {
       sourceContainer?.cfs_details?.cfs_address ||
       "";
 
-    return [cfsName, cfsAddress].filter(Boolean).join("\n\n");
+    return [cfsName, cfsAddress].filter(Boolean).join("\n");
   };
 
   const resolveDoDeliverTo = (deliverTo: DoDeliverToOption) => {
@@ -2962,17 +2978,53 @@ function HouseCreate() {
     try {
       setDoPreviewOpen(true);
 
-      // Combine job data and current HBL form data for PDF generation
+      // Align payload shape with house-card DO so layout/spacing match
+      const mblDetails = location.state?.mblDetails || {};
+      const carrierDetails = location.state?.carrierDetails || {};
       const combinedData = {
-        ...location.state?.job, // Job-level data
-        ...form.values, // Current HBL form data
-        mawbDetails: location.state?.mblDetails, // MBL details from parent
-        carrierDetails: location.state?.carrierDetails, // Carrier details from parent
+        ...location.state?.job,
+        ...form.values,
+        service: mblDetails.service || location.state?.job?.service || "",
+        igm_no: mblDetails.igm_no || location.state?.job?.igm_no || "",
+        igm_date: mblDetails.igm_date || location.state?.job?.igm_date || null,
+        eta: mblDetails.eta || location.state?.job?.eta || null,
+        mbl_number:
+          carrierDetails.mbl_number || location.state?.job?.mbl_number || "",
+        mbl_date:
+          carrierDetails.mbl_date || location.state?.job?.mbl_date || null,
+        vessel_name:
+          carrierDetails.vessel_name || location.state?.job?.vessel_name || "",
+        voyage_number:
+          carrierDetails.voyage_number ||
+          location.state?.job?.voyage_number ||
+          "",
+        mawbDetails: mblDetails,
+        carrierDetails,
         containerDetails: location.state?.containerDetails || [],
       };
 
+      // cargo_details lives in UI state, not form.values (same source as house-card DO)
       const doHousingData = {
         ...form.values,
+        house_date: form.values.house_date,
+        cargo_details: cargoDetails
+          .filter(
+            (cargo) =>
+              String(cargo.container_number || "").trim() !== "" ||
+              cargo.no_of_packages != null ||
+              cargo.gross_weight != null ||
+              cargo.volume != null,
+          )
+          .map((cargo) => ({
+            container_no: cargo.container_number,
+            container_number: cargo.container_number,
+            container_id: cargo.container_id,
+            no_of_packages: cargo.no_of_packages,
+            gross_weight: cargo.gross_weight,
+            volume: cargo.volume,
+            chargeable_weight: cargo.chargeable_weight,
+            haz: cargo.haz,
+          })),
         attention_to: resolveDoAttentionTo(type),
         please_deliver_to: resolveDoDeliverTo(deliverTo),
         do_heading:
