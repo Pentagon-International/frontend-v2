@@ -295,16 +295,20 @@ function JournalVoucherMaster() {
 
     if (stored?.filters && typeof stored.filters === "object") {
       const raw = stored.filters as Record<string, unknown>;
-      const restored = {
+      const restored: JournalVoucherFilters = {
         ...DEFAULT_FILTERS,
         ...raw,
-        journal_date_from: raw.journal_date_from
-          ? new Date(String(raw.journal_date_from))
+        journal_date_from: Object.prototype.hasOwnProperty.call(raw, "journal_date_from")
+          ? raw.journal_date_from
+            ? new Date(String(raw.journal_date_from))
+            : null
           : raw.journal_date
             ? new Date(String(raw.journal_date))
             : DEFAULT_FILTERS.journal_date_from,
-        journal_date_to: raw.journal_date_to
-          ? new Date(String(raw.journal_date_to))
+        journal_date_to: Object.prototype.hasOwnProperty.call(raw, "journal_date_to")
+          ? raw.journal_date_to
+            ? new Date(String(raw.journal_date_to))
+            : null
           : raw.journal_date
             ? new Date(String(raw.journal_date))
             : DEFAULT_FILTERS.journal_date_to,
