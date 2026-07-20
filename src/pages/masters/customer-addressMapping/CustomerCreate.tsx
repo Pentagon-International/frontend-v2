@@ -200,6 +200,7 @@ type AddressData = {
   trn_no?: string;
   validity_date?: string | null;
   pan_no?: string;
+  iec_code?: string;
   gst_id?: string;
   tan_no?: string;
   arn_no?: string;
@@ -491,6 +492,10 @@ const addressItemSchema = yup.object({
     .max(30, "TRN No must not exceed 30 characters"),
   validity_date: yup.string().nullable().optional(),
   pan_no: yup.string().optional().max(20, "PAN must not exceed 20 characters"),
+  iec_code: yup
+    .string()
+    .optional()
+    .max(20, "IEC Code must not exceed 20 characters"),
   gst_id: yup
     .string()
     .optional()
@@ -718,6 +723,7 @@ const emptyAddressDefaults = (): AddressData => ({
   trn_no: "",
   validity_date: null,
   pan_no: "",
+  iec_code: "",
   gst_id: "",
   tan_no: "",
   arn_no: "",
@@ -796,6 +802,7 @@ function mapAddressFromApi(
     trn_no: addr.trn_no ?? "",
     validity_date: addr.validity_date ?? null,
     pan_no: addr.pan_no ?? "",
+    iec_code: addr.iec_code ?? "",
     pan_aadhaar_link: Boolean(addr.pan_aadhaar_link),
     Itr_filed: addr.Itr_filed ?? "",
     tds_threshold_flag: Boolean(addr.tds_threshold_flag),
@@ -1401,6 +1408,16 @@ const AddressCard = ({
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.pan_no`,
+                  )}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <TextInput
+                  label="IEC Code"
+                  placeholder="Enter IEC Code"
+                  disabled={isViewMode}
+                  {...addressForm.getInputProps(
+                    `addresses_data.${index}.iec_code`,
                   )}
                 />
               </Grid.Col>
@@ -2015,6 +2032,7 @@ function CustomerCreate() {
           trn_no: "",
           validity_date: null,
           pan_no: "",
+          iec_code: "",
           gst_id: "",
           tan_no: "",
           arn_no: "",
@@ -2057,6 +2075,7 @@ function CustomerCreate() {
           trn_no: "",
           validity_date: null,
           pan_no: "",
+          iec_code: "",
           gst_id: "",
           tan_no: "",
           arn_no: "",
@@ -2493,6 +2512,7 @@ function CustomerCreate() {
       trn_no: "",
       validity_date: null,
       pan_no: "",
+      iec_code: "",
       gst_id: "",
       tan_no: "",
       arn_no: "",
@@ -2774,6 +2794,7 @@ function CustomerCreate() {
           trn_no: addr.trn_no ?? "",
           validity_date: addr.validity_date ?? null,
           pan_no: addr.pan_no ?? "",
+          iec_code: addr.iec_code ?? "",
           gst_id: addr.gst_id ?? "",
           tan_no: addr.tan_no ?? "",
           arn_no: addr.arn_no ?? "",
@@ -2916,6 +2937,7 @@ function CustomerCreate() {
             trn_no: addr.trn_no ?? "",
             validity_date: addr.validity_date ?? null,
             pan_no: addr.pan_no ?? "",
+            iec_code: addr.iec_code ?? "",
             gst_id: addr.gst_id ?? "",
             tan_no: addr.tan_no ?? "",
             arn_no: addr.arn_no ?? "",

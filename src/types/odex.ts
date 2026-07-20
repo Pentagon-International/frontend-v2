@@ -100,6 +100,7 @@ export type OdexJobListFilters = {
 export type CreateOdexJobPayload = {
   job_id: number;
   odex_type: string;
+  invoicing_consignee?: string;
   overrides?: Record<string, unknown>;
 };
 

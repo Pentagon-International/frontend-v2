@@ -177,6 +177,8 @@ type HouseDetailsForm = {
   item_no: string;
   sub_item_no: string;
   ref_no: string;
+  hscode: string;
+  item_type: string;
   events: Array<{ id?: number; type: string; date: string }>;
   event_modal_rows: Array<{
     id?: number;
@@ -190,12 +192,70 @@ type CargoDetail = {
   id?: number | string; // ID from backend when editing
   container_number: string; // UI field - used to select container
   container_id?: number | string; // Container ID for edit mode (from container_details)
+  package_type: string;
   no_of_packages: number | null;
   gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
   chargeable_weight: HouseCargoWeightValue;
   haz: boolean | null;
 };
+
+const ITEM_TYPE_OPTIONS = [
+  { value: "GC - Govt. Cargo", label: "GC - Govt. Cargo" },
+  { value: "OT - Other Cargo", label: "OT - Other Cargo" },
+  { value: "UB - Un-accompanied Baggage", label: "UB - Un-accompanied Baggage" },
+];
+
+/** Label and value are the same `{code - name}` string. */
+const PACKAGE_TYPE_OPTIONS = [
+  { value: "BDL - Bundles", label: "BDL - Bundles" },
+  { value: "BGS - Bags", label: "BGS - Bags" },
+  { value: "BLK - Bulk", label: "BLK - Bulk" },
+  { value: "BLO - Blocks", label: "BLO - Blocks" },
+  { value: "BLS - Bales", label: "BLS - Bales" },
+  { value: "BOX - Boxes", label: "BOX - Boxes" },
+  { value: "BRL - Barrel", label: "BRL - Barrel" },
+  { value: "CAN - Cans", label: "CAN - Cans" },
+  { value: "CAS - Cases", label: "CAS - Cases" },
+  { value: "CBY - Carboys", label: "CBY - Carboys" },
+  { value: "CHT - Chest", label: "CHT - Chest" },
+  { value: "CLS - Coils", label: "CLS - Coils" },
+  { value: "COL - Collies", label: "COL - Collies" },
+  { value: "CON - Container", label: "CON - Container" },
+  { value: "CRT - Crates", label: "CRT - Crates" },
+  { value: "CSK - Cask", label: "CSK - Cask" },
+  { value: "CTN - Cartons", label: "CTN - Cartons" },
+  { value: "CYL - Cylinder", label: "CYL - Cylinder" },
+  { value: "DRM - Drums", label: "DRM - Drums" },
+  { value: "ENV - Envelopes", label: "ENV - Envelopes" },
+  { value: "FLK - Flask", label: "FLK - Flask" },
+  { value: "FUT - Futs", label: "FUT - Futs" },
+  { value: "HBK - Habbuck", label: "HBK - Habbuck" },
+  { value: "JAL - Jumble Bale", label: "JAL - Jumble Bale" },
+  { value: "JTA - Jotta", label: "JTA - Jotta" },
+  { value: "KEG - Keggs", label: "KEG - Keggs" },
+  { value: "LFT - Lift", label: "LFT - Lift" },
+  { value: "LOG - Logs", label: "LOG - Logs" },
+  { value: "LOS - Loose", label: "LOS - Loose" },
+  { value: "LTR - Liters", label: "LTR - Liters" },
+  { value: "MTS - Metric Ton", label: "MTS - Metric Ton" },
+  { value: "NGT - Ingot", label: "NGT - Ingot" },
+  { value: "PAL - Pails", label: "PAL - Pails" },
+  { value: "PCS - Piece", label: "PCS - Piece" },
+  { value: "PKG - Packages", label: "PKG - Packages" },
+  { value: "PLT - Pallets", label: "PLT - Pallets" },
+  { value: "QDS - Quads", label: "QDS - Quads" },
+  { value: "REL - Reels", label: "REL - Reels" },
+  { value: "RLS - Rolls", label: "RLS - Rolls" },
+  { value: "SHT - Sheet", label: "SHT - Sheet" },
+  { value: "SKD - Skid & Skidded Pkgs", label: "SKD - Skid & Skidded Pkgs" },
+  { value: "SLB - Slabs", label: "SLB - Slabs" },
+  { value: "TBL - Table", label: "TBL - Table" },
+  { value: "TIN - Tins", label: "TIN - Tins" },
+  { value: "TRK - Trunk", label: "TRK - Trunk" },
+  { value: "TRY - Trays", label: "TRY - Trays" },
+  { value: "UNT - Units", label: "UNT - Units" },
+];
 
 // Type definitions for charges (charge_id, unit_id, currency_id for payload; id for update)
 type ChargeDetail = {
@@ -400,6 +460,7 @@ function HouseCreate() {
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
     {
       container_number: "",
+      package_type: "",
       no_of_packages: null,
       gross_weight: null,
       volume: null,
@@ -679,6 +740,9 @@ function HouseCreate() {
                 : undefined,
               container_number: containerNumber,
               container_id: containerId,
+              package_type: cargo.package_type
+                ? String(cargo.package_type)
+                : "",
               no_of_packages: cargo.no_of_packages as number | null,
               gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
               volume: importHouseCargoWeightFromApi(cargo.volume),
@@ -957,6 +1021,9 @@ function HouseCreate() {
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
       ref_no: (editData as { ref_no?: string } | undefined)?.ref_no || "",
+      hscode: (editData as { hscode?: string } | undefined)?.hscode || "",
+      item_type:
+        (editData as { item_type?: string } | undefined)?.item_type || "",
       events: initialHousingEvents,
       event_modal_rows: eventsToEventModalRows(initialHousingEvents),
     },
@@ -1336,6 +1403,7 @@ function HouseCreate() {
         if (nested.length === 0) return [];
         return nested.map((cn) => ({
           container_number: String(cn.container_no ?? ""),
+          package_type: String(cn.package_type ?? c.package_type ?? ""),
           no_of_packages: toNum(
             cn.no_of_packages ??
               c.no_of_packages ??
@@ -1370,6 +1438,7 @@ function HouseCreate() {
               container_number: String(
                 c.container_no ?? c.container_number ?? "",
               ),
+              package_type: String(c.package_type ?? ""),
               // FCL API uses no_of_containers; map to No of Packages
               no_of_packages: toNum(
                 c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages,
@@ -1399,6 +1468,7 @@ function HouseCreate() {
         if (nested.length === 0) return [];
         return nested.map((cn) => ({
           container_number: String(cn.container_no ?? ""),
+          package_type: String(cn.package_type ?? c.package_type ?? ""),
           no_of_packages: toNum(
             cn.no_of_packages ?? c.no_of_packages ?? rb.no_of_packages,
           ),
@@ -1428,6 +1498,7 @@ function HouseCreate() {
               container_number: String(
                 c.container_no ?? c.container_number ?? "",
               ),
+              package_type: String(c.package_type ?? ""),
               no_of_packages: toNum(
                 c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages,
               ),
@@ -1450,6 +1521,7 @@ function HouseCreate() {
     } else {
       const row = {
         container_number: "",
+        package_type: "",
         no_of_packages: toNum(rb.no_of_packages),
         gross_weight: importHouseCargoWeightFromApi(rb.gross_weight),
         volume: toNum(rb.volume) ?? toNum(rb.volume_weight),
@@ -2283,6 +2355,7 @@ function HouseCreate() {
         container_number, // UI field selected by user
         container_id, // maybe pre-populated in edit mode
         id, // cargo id (only present in editData)
+        package_type,
         no_of_packages,
         gross_weight,
         volume,
@@ -2316,6 +2389,7 @@ function HouseCreate() {
           "ocean",
         ),
         haz: hazValue,
+        package_type: package_type || null,
       };
 
       // Include id only when editing and id exists
@@ -2481,6 +2555,8 @@ function HouseCreate() {
       item_no: form.values.item_no,
       sub_item_no: form.values.sub_item_no,
       ref_no: form.values.ref_no,
+      hscode: form.values.hscode || "",
+      item_type: form.values.item_type || "",
       events: form.values.events ?? [],
       cargo_details: cargoDetailsForPayload,
       charges: chargesForPayload,
@@ -4466,6 +4542,31 @@ function HouseCreate() {
                   {...form.getInputProps("marks_no")}
                 />
               </Grid.Col>
+              <Grid.Col span={6}>
+                <Dropdown
+                  label="Item Type"
+                  placeholder="Select Item Type"
+                  searchable
+                  data={ITEM_TYPE_OPTIONS}
+                  value={form.values.item_type || null}
+                  onChange={(value) =>
+                    form.setFieldValue("item_type", value || "")
+                  }
+                  clearable
+                />
+              </Grid.Col>
+              <Grid.Col span={6}>
+                <FormTextInput
+                  label="HS Code"
+                  placeholder="Enter HS Code"
+                  maxLength={6}
+                  value={form.values.hscode || ""}
+                  onChange={(e) => {
+                    const next = e.currentTarget.value.slice(0, 6);
+                    form.setFieldValue("hscode", next);
+                  }}
+                />
+              </Grid.Col>
             </Grid>
 
             {/* Dynamic Cargo Rows */}
@@ -4478,35 +4579,38 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2}>
+                <Grid.Col span={1.5}>
                   <RequiredLabel label="Container Number" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.6}>
+                  <RequiredLabel label="Package Type" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1.6}>
                   <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1.6}>
                   <RequiredLabel label="Volume (CBM)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1.6}>
                   <RequiredLabel
                     label="Chargeable Weight (CBM)"
                     required={false}
                   />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="Haz" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Actions" required={false} />
                 </Grid.Col>
               </Grid>
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.5}>
                     <Dropdown
                       placeholder={
                         containerNumberOptions.length > 0
@@ -4555,7 +4659,24 @@ function HouseCreate() {
                       error={cargoErrors[index]?.container_number}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1.6}>
+                    <Dropdown
+                      placeholder="Package Type"
+                      searchable
+                      data={PACKAGE_TYPE_OPTIONS}
+                      value={cargo.package_type || null}
+                      onChange={(value) => {
+                        const updated = [...cargoDetails];
+                        updated[index] = {
+                          ...updated[index],
+                          package_type: value || "",
+                        };
+                        setCargoDetails(updated);
+                      }}
+                      clearable
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.2}>
                     <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
@@ -4582,7 +4703,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.no_of_packages}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.6}>
                     <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
@@ -4635,7 +4756,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.gross_weight}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.6}>
                     <FormNumberInput
                       placeholder="Enter Volume"
                       min={0}
@@ -4688,7 +4809,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.volume}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.6}>
                     <FormTextInput
                       placeholder=""
                       format="normal"
@@ -4706,7 +4827,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1.2}>
                     <Dropdown
                       placeholder="Select Haz"
                       searchable
@@ -4731,7 +4852,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1}>
+                  <Grid.Col span={0.7}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
@@ -4760,6 +4881,7 @@ function HouseCreate() {
                               ...cargoDetails,
                               {
                                 container_number: "",
+                                package_type: "",
                                 no_of_packages: null,
                                 gross_weight: null,
                                 volume: null,
