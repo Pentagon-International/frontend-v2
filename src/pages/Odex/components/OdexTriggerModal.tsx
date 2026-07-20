@@ -1,16 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Anchor,
-  Box,
   Button,
   Group,
   Modal,
-  Paper,
-  ScrollArea,
   Select,
   Stack,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { Link } from "react-router-dom";
 import { ToastNotification } from "../../../components";
@@ -21,18 +17,18 @@ import {
   isBranchOdexConfigured,
   ODEX_CREDENTIALS_NOT_CONFIGURED_MESSAGE,
 } from "../../../utils/branchOdexCredentials";
-import {
-  buildOdexOverridesPayload,
-  ODEX_ISO_CODE_OPTIONS,
-  ODEX_SOC_FLAG_OPTIONS,
-  odexOverrideContainerKey,
-  validateOdexOverrideForm,
-  type OdexContainerOverrideFormValue,
-  type OdexOverrideHousingInput,
-  type OdexOverrideMblContainer,
+import type {
+  OdexOverrideHousingInput,
+  OdexOverrideMblContainer,
 } from "../../../utils/odexOverrides";
 import { ODEX_JOB_TYPES } from "../odexConstants";
 import { ODEX_JOBS_PATH } from "../odexUrls";
+
+const INVOICING_CONSIGNEE_OPTIONS = [
+  { value: "MBL", label: "MBL" },
+  { value: "HBL", label: "HBL" },
+] as const;
+const DEFAULT_INVOICING_CONSIGNEE = "HBL";
 
 type Props = {
   opened: boolean;
@@ -40,7 +36,9 @@ type Props = {
   consolJobId: number | null | undefined;
   disabled?: boolean;
   onJobStarted?: (odexJobId: number | string) => void;
+  /** Kept for call-site compatibility; no longer used in the modal. */
   housingDetails?: OdexOverrideHousingInput[];
+  /** Kept for call-site compatibility; no longer used in the modal. */
   mblContainers?: OdexOverrideMblContainer[];
 };
 
@@ -50,53 +48,18 @@ export default function OdexTriggerModal({
   consolJobId,
   disabled,
   onJobStarted,
-  housingDetails = [],
-  mblContainers = [],
 }: Props) {
   const [odexType, setOdexType] = useState<string>(ODEX_JOB_TYPES[0].value);
-  const [mobileNo, setMobileNo] = useState("");
-  const [containerOverrides, setContainerOverrides] = useState<
-    Record<string, OdexContainerOverrideFormValue>
-  >({});
+  const [invoicingConsignee, setInvoicingConsignee] = useState<string>(
+    DEFAULT_INVOICING_CONSIGNEE,
+  );
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!opened) return;
-    setMobileNo("");
-    setContainerOverrides({});
     setOdexType(ODEX_JOB_TYPES[0].value);
+    setInvoicingConsignee(DEFAULT_INVOICING_CONSIGNEE);
   }, [opened]);
-
-  const containerRows = useMemo(
-    () =>
-      mblContainers
-        .map((container) => {
-          const containerNo = String(container.container_no ?? "").trim();
-          if (!containerNo) return null;
-          return {
-            key: odexOverrideContainerKey(containerNo),
-            containerNo,
-            containerType: container.container_type?.trim() || "—",
-          };
-        })
-        .filter((row): row is NonNullable<typeof row> => row != null),
-    [mblContainers],
-  );
-
-  const setContainerField = (
-    key: string,
-    field: keyof OdexContainerOverrideFormValue,
-    value: string,
-  ) => {
-    setContainerOverrides((prev) => ({
-      ...prev,
-      [key]: {
-        soc_flag: prev[key]?.soc_flag ?? "",
-        iso_code: prev[key]?.iso_code ?? "",
-        [field]: value,
-      },
-    }));
-  };
 
   const handleStart = async () => {
     if (!consolJobId) {
@@ -116,39 +79,12 @@ export default function OdexTriggerModal({
       return;
     }
 
-    if (housingDetails.length === 0) {
-      ToastNotification({
-        type: "error",
-        message: "Add at least one house bill before pushing to Odex.",
-      });
-      return;
-    }
-
-    const validationError = validateOdexOverrideForm(
-      mobileNo,
-      containerRows.map((row) => row.key),
-      containerOverrides,
-    );
-    if (validationError) {
-      ToastNotification({
-        type: "error",
-        message: validationError,
-      });
-      return;
-    }
-
-    const overrides = buildOdexOverridesPayload(
-      mobileNo,
-      housingDetails,
-      containerOverrides,
-    );
-
     setSubmitting(true);
     try {
       const res = await odexApi.createJob({
         job_id: Number(consolJobId),
         odex_type: odexType,
-        overrides,
+        invoicing_consignee: invoicingConsignee,
       });
       const newJobId = res.job_id ?? res.id;
       if (newJobId == null) {
@@ -180,7 +116,7 @@ export default function OdexTriggerModal({
       onClose={onClose}
       title="Start ODEX Automation"
       centered
-      size="lg"
+      size="md"
     >
       <Stack gap="md">
         <Select
@@ -194,70 +130,14 @@ export default function OdexTriggerModal({
           disabled={disabled}
         />
 
-        <TextInput
-          placeholder="Requester Mobile No"
-          value={mobileNo}
-          onChange={(event) => setMobileNo(event.currentTarget.value)}
+        <Select
+          label="Invoicing Consignee"
+          data={[...INVOICING_CONSIGNEE_OPTIONS]}
+          value={invoicingConsignee}
+          onChange={(v) => v && setInvoicingConsignee(v)}
           disabled={disabled}
-          autoComplete="off"
+          allowDeselect={false}
         />
-
-        <Box>
-          <Text size="sm" fw={600} c="#105476" mb="xs">
-            Container overrides
-          </Text>
-          <ScrollArea.Autosize mah={320} offsetScrollbars>
-            <Stack gap="sm">
-              {containerRows.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  Add MBL container numbers before pushing to Odex.
-                </Text>
-              ) : (
-                containerRows.map((row) => {
-                  const values = containerOverrides[row.key] ?? {
-                    soc_flag: "",
-                    iso_code: "",
-                  };
-
-                  return (
-                    <Paper
-                      key={row.key}
-                      withBorder
-                      p="sm"
-                      radius="md"
-                      bg="#f8f9fa"
-                    >
-                      <Text size="xs" c="dimmed" mb="sm">
-                        Container: {row.containerNo} · Type: {row.containerType}
-                      </Text>
-                      <Group grow align="flex-start">
-                        <Select
-                          placeholder="Soc Flag"
-                          data={[...ODEX_SOC_FLAG_OPTIONS]}
-                          value={values.soc_flag || null}
-                          onChange={(value) =>
-                            setContainerField(row.key, "soc_flag", value ?? "")
-                          }
-                          disabled={disabled}
-                        />
-                        <Select
-                          placeholder="Iso code"
-                          data={[...ODEX_ISO_CODE_OPTIONS]}
-                          value={values.iso_code || null}
-                          onChange={(value) =>
-                            setContainerField(row.key, "iso_code", value ?? "")
-                          }
-                          disabled={disabled}
-                          searchable
-                        />
-                      </Group>
-                    </Paper>
-                  );
-                })
-              )}
-            </Stack>
-          </ScrollArea.Autosize>
-        </Box>
 
         {!consolJobId && (
           <Text size="sm" c="orange">

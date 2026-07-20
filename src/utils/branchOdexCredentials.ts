@@ -2,6 +2,7 @@ export type BranchOdexFields = {
   odex_username?: string | null;
   odex_password?: string | null;
   has_odex_credentials?: boolean;
+  phone_number?: string | null;
 };
 
 export type BranchWithOdex = {
@@ -47,10 +48,12 @@ export function hasOdexCredentialsChanged(
   stored: BranchOdexFields | undefined,
   username: string,
   password: string,
+  phoneNumber?: string,
 ): boolean {
   return (
     (username ?? "") !== (stored?.odex_username ?? "") ||
-    (password ?? "") !== (stored?.odex_password ?? "")
+    (password ?? "") !== (stored?.odex_password ?? "") ||
+    (phoneNumber ?? "") !== (stored?.phone_number ?? "")
   );
 }
 
@@ -62,10 +65,13 @@ export function extractOdexFieldsFromResponse(
     data.odex_username != null ? String(data.odex_username) : null;
   const password =
     data.odex_password != null ? String(data.odex_password) : null;
+  const phoneNumber =
+    data.phone_number != null ? String(data.phone_number) : null;
 
   return {
     odex_username: username,
     odex_password: password,
+    phone_number: phoneNumber,
     has_odex_credentials:
       hasFlag || Boolean(username?.trim() && password?.trim()),
   };

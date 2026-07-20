@@ -67,6 +67,7 @@ type AddressData = {
   mobile_no: string;
   email: string;
   pan_no?: string;
+  iec_code?: string;
   gst_id?: string;
   tan_no?: string;
   arn_no?: string;

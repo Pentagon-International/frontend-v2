@@ -199,6 +199,8 @@ type ContainerDetail = {
   container_no: string;
   actual_seal_no: string;
   customs_seal_no: string;
+  soc_flag: boolean | null;
+  seal_type: string;
   loading_date: Date | null;
   unloading_date: Date | null;
   cfs_id?: number | string | null;
@@ -411,6 +413,8 @@ type HousingDetail = HouseDocumentFields & {
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
+  hscode?: string;
+  item_type?: string;
   shipment_terms_code?: string;
   pp_cc?: string;
   /** @deprecated Prefer `pp_cc`; kept for API backward compatibility */
@@ -424,6 +428,7 @@ type HousingDetail = HouseDocumentFields & {
     volume: HouseCargoWeightValue;
     chargeable_weight: HouseCargoWeightValue;
     haz: boolean | null;
+    package_type?: string;
   }>;
   charges?: Array<{
     id?: number | string; // ID from backend when editing
@@ -801,6 +806,8 @@ function ImportJobCreate() {
           container_no: "",
           actual_seal_no: "",
           customs_seal_no: "",
+          soc_flag: null,
+          seal_type: "",
           loading_date: null,
           unloading_date: null,
           cfs_id: null,
@@ -1154,6 +1161,8 @@ function ImportJobCreate() {
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
+              hscode: house.hscode ? String(house.hscode) : "",
+              item_type: house.item_type ? String(house.item_type) : "",
               shipment_terms_code: house.shipment_terms_code
                 ? String(house.shipment_terms_code)
                 : house.shipment_terms_name
@@ -1221,6 +1230,9 @@ function ImportJobCreate() {
                                 cargo.haz === true ||
                                 String(cargo.haz).toLowerCase() === "yes"
                             : null,
+                        package_type: cargo.package_type
+                          ? String(cargo.package_type)
+                          : "",
                       }),
                     )
                   : [],
@@ -1647,6 +1659,21 @@ function ImportJobCreate() {
                 customs_seal_no: container.customs_seal_no
                   ? String(container.customs_seal_no)
                   : "",
+                soc_flag:
+                  container.soc_flag === true ||
+                  container.soc_flag === "Yes" ||
+                  String(container.soc_flag).toLowerCase() === "yes" ||
+                  container.soc_flag === "true"
+                    ? true
+                    : container.soc_flag === false ||
+                        container.soc_flag === "No" ||
+                        String(container.soc_flag).toLowerCase() === "no" ||
+                        container.soc_flag === "false"
+                      ? false
+                      : null,
+                seal_type: container.seal_type
+                  ? String(container.seal_type)
+                  : "",
                 loading_date:
                   container.loading_date &&
                   dayjs(container.loading_date as string | Date).isValid()
@@ -1988,6 +2015,8 @@ function ImportJobCreate() {
       container_no: "",
       actual_seal_no: "",
       customs_seal_no: "",
+      soc_flag: null,
+      seal_type: "",
       loading_date: null,
       unloading_date: null,
       cfs_id: null,
@@ -3133,6 +3162,8 @@ function ImportJobCreate() {
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
           ref_no: house.ref_no || "",
+          hscode: house.hscode || "",
+          item_type: house.item_type || "",
           ...(house.shipment_terms_code != null &&
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
@@ -3181,6 +3212,7 @@ function ImportJobCreate() {
                     cargo.haz === true ||
                     String(cargo.haz).toLowerCase() === "yes"
                 : null,
+            package_type: cargo.package_type || null,
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (() => {
@@ -3256,6 +3288,13 @@ function ImportJobCreate() {
               container_no: container.container_no || null,
               actual_seal_no: container.actual_seal_no || null,
               customs_seal_no: container.customs_seal_no || null,
+              soc_flag:
+                container.soc_flag === true
+                  ? true
+                  : container.soc_flag === false
+                    ? false
+                    : null,
+              seal_type: container.seal_type || null,
               loading_date: container.loading_date
                 ? dayjs(container.loading_date).format("YYYY-MM-DD")
                 : null,
@@ -5193,25 +5232,31 @@ function ImportJobCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2}>
+                <Grid.Col span={1.4}>
                   <RequiredLabel label="Container Type" required />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={1.3}>
                   <RequiredLabel label="Container No" required />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1}>
                   <RequiredLabel label="Actual Seal No" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1}>
                   <RequiredLabel label="Customs Seal No" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1}>
+                  <RequiredLabel label="SOC Flag" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.1}>
+                  <RequiredLabel label="Seal Type" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.1}>
                   <RequiredLabel label="Loading Date" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.1}>
                   <RequiredLabel label="Unloading Date" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.2}>
+                <Grid.Col span={1.1}>
                   <RequiredLabel label="CFS Name" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
@@ -5226,7 +5271,7 @@ function ImportJobCreate() {
             {containerDetailsForm.values.containers.map((_container, index) => (
               <Box key={index}>
                 <Grid gutter="sm">
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.4}>
                     <Dropdown
                       required
                       placeholder="Container Type"
@@ -5244,7 +5289,7 @@ function ImportJobCreate() {
                       }
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={1.3}>
                     <FormTextInput
                       required
                       placeholder="Container number"
@@ -5304,7 +5349,7 @@ function ImportJobCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1}>
                     <FormTextInput
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
@@ -5313,7 +5358,7 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1}>
                     <FormTextInput
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
@@ -5322,7 +5367,51 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1}>
+                    <Dropdown
+                      placeholder="SOC Flag"
+                      data={[
+                        { value: "Yes", label: "Yes" },
+                        { value: "No", label: "No" },
+                      ]}
+                      value={
+                        containerDetailsForm.values.containers[index]
+                          ?.soc_flag === true
+                          ? "Yes"
+                          : containerDetailsForm.values.containers[index]
+                                ?.soc_flag === false
+                            ? "No"
+                            : null
+                      }
+                      onChange={(value) => {
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.soc_flag`,
+                          value === "Yes"
+                            ? true
+                            : value === "No"
+                              ? false
+                              : null,
+                        );
+                      }}
+                      disabled={isReadOnly}
+                      clearable
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.1}>
+                    <Dropdown
+                      placeholder="Seal Type"
+                      data={[
+                        { value: "BTSL", label: "BTSL" },
+                        { value: "ESEAL", label: "ESEAL" },
+                      ]}
+                      {...containerDetailsForm.getInputProps(
+                        `containers.${index}.seal_type`,
+                      )}
+                      disabled={isReadOnly}
+                      clearable
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.1}>
                     <SingleDateInput
                       placeholder="YYYY-MM-DD"
                       value={
@@ -5343,7 +5432,7 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1.1}>
                     <SingleDateInput
                       placeholder="YYYY-MM-DD"
                       value={
@@ -5364,7 +5453,7 @@ function ImportJobCreate() {
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.2}>
+                  <Grid.Col span={1.1}>
                     <SearchableSelect
                       placeholder="Type CFS name"
                       apiEndpoint={URL.cfsMaster}

@@ -56,6 +56,7 @@ interface BranchWithCountry {
   odex_username?: string | null;
   odex_password?: string | null;
   has_odex_credentials?: boolean;
+  phone_number?: string | null;
 }
 
 function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
@@ -74,6 +75,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
   );
   const [odexUsername, setOdexUsername] = useState("");
   const [odexPassword, setOdexPassword] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -82,17 +84,24 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
     setSelectedBranch(defaultBranch.user_branch_id);
     setOdexUsername(defaultBranch.odex_username ?? "");
     setOdexPassword(defaultBranch.odex_password ?? "");
+    setPhoneNumber(
+      (defaultBranch as BranchWithCountry).phone_number ?? "",
+    );
   }, [
     opened,
     defaultBranch?.user_branch_id,
     defaultBranch?.odex_username,
     defaultBranch?.odex_password,
+    (defaultBranch as BranchWithCountry | undefined)?.phone_number,
   ]);
 
   const loadOdexFieldsForBranch = (userBranchId: number) => {
     const branch = getBranchByUserBranchId(user?.branches, userBranchId);
     setOdexUsername(branch?.odex_username ?? "");
     setOdexPassword(branch?.odex_password ?? "");
+    setPhoneNumber(
+      (branch as BranchWithCountry | undefined)?.phone_number ?? "",
+    );
   };
 
   const handleLogout = async () => {
@@ -153,6 +162,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
         storedActiveBranch,
         odexUsername,
         odexPassword,
+        phoneNumber,
       );
 
     if (!branchChanged && !odexChanged) {
@@ -225,6 +235,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
         {
           odex_username: odexUsername,
           odex_password: odexPassword,
+          phone_number: phoneNumber,
         },
         API_HEADER,
       );
@@ -234,6 +245,7 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
         ...responseData,
         odex_username: responseData.odex_username ?? odexUsername,
         odex_password: responseData.odex_password ?? odexPassword,
+        phone_number: responseData.phone_number ?? phoneNumber,
       });
 
       updateUserProfile({
@@ -272,7 +284,12 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
   );
   const odexChanged =
     !isNonActiveBranch &&
-    hasOdexCredentialsChanged(storedActiveBranch, odexUsername, odexPassword);
+    hasOdexCredentialsChanged(
+      storedActiveBranch,
+      odexUsername,
+      odexPassword,
+      phoneNumber,
+    );
   const hasPendingChanges = isNonActiveBranch || odexChanged;
   const hasOdexConfigured = storedActiveBranch?.has_odex_credentials === true;
 
@@ -526,6 +543,22 @@ function ProfileDrawer({ opened, onClose }: ProfileDrawerProps) {
                 data-1p-ignore
                 onChange={(event) =>
                   setOdexPassword(event.currentTarget.value)
+                }
+                styles={{
+                  input: {
+                    border: "1px solid #e9ecef",
+                    borderRadius: "8px",
+                    backgroundColor: "#f8f9fa",
+                  },
+                }}
+              />
+              <TextInput
+                name="branch-phone-number"
+                placeholder="Phone Number"
+                value={phoneNumber}
+                autoComplete="off"
+                onChange={(event) =>
+                  setPhoneNumber(event.currentTarget.value)
                 }
                 styles={{
                   input: {

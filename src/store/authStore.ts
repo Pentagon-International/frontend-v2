@@ -135,6 +135,7 @@ interface AuthStore {
       odex_username?: string | null;
       odex_password?: string | null;
       has_odex_credentials?: boolean;
+      phone_number?: string | null;
     };
   }) => void;
 }
@@ -369,6 +370,9 @@ const useAuthStore = create<AuthStore>((set) => ({
                 odex_username: data.odexCredentials.odex_username,
                 odex_password: data.odexCredentials.odex_password,
                 has_odex_credentials: data.odexCredentials.has_odex_credentials,
+                ...(data.odexCredentials.phone_number !== undefined
+                  ? { phone_number: data.odexCredentials.phone_number }
+                  : {}),
               }
             : {}),
         };
