@@ -162,6 +162,7 @@ export const URL = {
   /** Unified unposted / finance document list (POST body: `{ filters: { status, ... } }`). */
   financeDocumentsFilter: "filter/finance-documents/",
   invoiceCalculateGstBreakup: "invoice/calculate-gst-breakup/",
+  checkSezStatus: "check-sez-status/",
   tdsCalculation: "tds_calculation/",
   invoiceReversableData: "invoice/reversable-data/",
   reverseInvoice: "reverse-invoice/",

@@ -48,7 +48,10 @@ import useAuthStore from "../../../store/authStore";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
-import { submitCustomerMultipart, submitCustomerVerification } from "../../../service/customerPanApproval.service";
+import {
+  submitCustomerMultipart,
+  submitCustomerVerification,
+} from "../../../service/customerPanApproval.service";
 import {
   EMPTY_SUPPORTING_DOCUMENT,
   validateSupportingDocumentSizes,
@@ -207,6 +210,7 @@ type AddressData = {
   gst_registration_status?: string;
   composite_regular?: string;
   sez?: boolean | string | number | null;
+  sez_valid_date?: string | null;
   msme?: boolean | string | number | null;
   msme_no?: string;
   pan_aadhaar_link?: boolean;
@@ -504,6 +508,20 @@ const addressItemSchema = yup.object({
     .optional()
     .oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
   sez: yup.boolean().optional(),
+  sez_valid_date: yup.string().when("sez", {
+    is: (value: boolean | string | number | null | undefined) =>
+      parseYesNoBoolean(value),
+    then: (schema) =>
+      schema
+        .nullable()
+        .required("SEZ validity date is required")
+        .test(
+          "sez-valid-date",
+          "SEZ validity date is required",
+          (v) => !!String(v ?? "").trim(),
+        ),
+    otherwise: (schema) => schema.nullable().optional(),
+  }),
   msme: yup.boolean().optional(),
   latitude: yup
     .number()
@@ -725,6 +743,7 @@ const emptyAddressDefaults = (): AddressData => ({
   gst_registration_status: "",
   composite_regular: "",
   sez: false,
+  sez_valid_date: null,
   msme: false,
   msme_no: "",
   pan_aadhaar_link: false,
@@ -806,6 +825,7 @@ function mapAddressFromApi(
     gst_registration_status: addr.gst_registration_status ?? "",
     composite_regular: addr.composite_regular ?? "",
     sez: parseYesNoBoolean(addr.sez),
+    sez_valid_date: addr.sez_valid_date ?? null,
     msme: parseYesNoBoolean(addr.msme ?? addr.msme_flag ?? addr.msme_status),
     msme_no: addr.msme_no ?? "",
     latitude: addr.latitude || 0,
@@ -1490,14 +1510,53 @@ const AddressCard = ({
                   value={
                     addressForm.values.addresses_data[index]?.sez ? "Yes" : "No"
                   }
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    const enabled = value === "Yes";
                     addressForm.setFieldValue(
                       `addresses_data.${index}.sez`,
-                      value === "Yes",
-                    )
-                  }
+                      enabled,
+                    );
+                    if (!enabled) {
+                      addressForm.setFieldValue(
+                        `addresses_data.${index}.sez_valid_date`,
+                        null,
+                      );
+                    }
+                  }}
                 />
               </Grid.Col>
+
+              {!!addressForm.values.addresses_data[index]?.sez && (
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="SEZ Validity Date"
+                    placeholder="Select SEZ validity date"
+                    disabled={isViewMode}
+                    withAsterisk={!isViewMode}
+                    value={parseDateYYYYMMDD(
+                      addressForm.values.addresses_data[index]
+                        ?.sez_valid_date ?? null,
+                    )}
+                    onChange={(value) =>
+                      addressForm.setFieldValue(
+                        `addresses_data.${index}.sez_valid_date`,
+                        formatDateYYYYMMDD(value),
+                      )
+                    }
+                    error={
+                      addressForm.errors[
+                        `addresses_data.${index}.sez_valid_date`
+                      ]
+                        ? String(
+                            addressForm.errors[
+                              `addresses_data.${index}.sez_valid_date`
+                            ],
+                          )
+                        : undefined
+                    }
+                  />
+                </Grid.Col>
+              )}
 
               <Grid.Col span={4}>
                 <Select
@@ -1701,8 +1760,7 @@ function CustomerCreate() {
   const isVerificationCreateRoute =
     location.pathname === "/master/create-customer";
   const customerData = location.state?.customerData as
-    | CustomerDetailRecord
-    | undefined;
+    CustomerDetailRecord | undefined;
   const isVendorMasterRoute = location.pathname.includes("/master/vendor");
   const baseMasterPath = isVerificationCreateRoute
     ? "/master"
@@ -2022,6 +2080,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          sez_valid_date: null,
           msme: false,
           msme_no: "",
           pan_aadhaar_link: false,
@@ -2064,6 +2123,7 @@ function CustomerCreate() {
           gst_registration_status: "",
           composite_regular: "",
           sez: false,
+          sez_valid_date: null,
           msme: false,
           msme_no: "",
           pan_aadhaar_link: false,
@@ -2153,7 +2213,9 @@ function CustomerCreate() {
         bankDetailsForm.setValues({ bank_details: bankRows });
       } else {
         originalBankDetailsRef.current = Array.isArray(record.bank_details_data)
-          ? record.bank_details_data.map((r) => mapBankDetailToPayload(mapBankDetailFromApi(r)))
+          ? record.bank_details_data.map((r) =>
+              mapBankDetailToPayload(mapBankDetailFromApi(r)),
+            )
           : [];
       }
 
@@ -2500,6 +2562,7 @@ function CustomerCreate() {
       gst_registration_status: "",
       composite_regular: "",
       sez: false,
+      sez_valid_date: null,
       msme: false,
       msme_no: "",
       latitude: 0,
@@ -2781,6 +2844,9 @@ function CustomerCreate() {
           gst_registration_status: addr.gst_registration_status ?? "",
           composite_regular: addr.composite_regular ?? "",
           sez: parseYesNoBoolean(addr.sez),
+          sez_valid_date: parseYesNoBoolean(addr.sez)
+            ? (addr.sez_valid_date ?? null)
+            : null,
           msme: parseYesNoBoolean(addr.msme),
           msme_no: addr.msme_no ?? "",
           ...(isVendorMasterRoute
@@ -2810,9 +2876,10 @@ function CustomerCreate() {
         const response = (await submitCustomerVerification(
           payload,
           supportingDocuments,
-        )) as
-          | { message?: string; documents_list?: CustomerDocumentListItem[] }
-          | null;
+        )) as {
+          message?: string;
+          documents_list?: CustomerDocumentListItem[];
+        } | null;
 
         const uploadedDocs = extractDocumentsListFromResponse(response);
         if (uploadedDocs.length > 0) {
@@ -2923,6 +2990,9 @@ function CustomerCreate() {
             gst_registration_status: addr.gst_registration_status ?? "",
             composite_regular: addr.composite_regular ?? "",
             sez: parseYesNoBoolean(addr.sez),
+            sez_valid_date: parseYesNoBoolean(addr.sez)
+              ? (addr.sez_valid_date ?? null)
+              : null,
             msme: parseYesNoBoolean(addr.msme),
             msme_no: addr.msme_no ?? "",
             ...(isVendorMasterRoute
@@ -3137,7 +3207,7 @@ function CustomerCreate() {
         if (
           !customerResult.hasErrors &&
           !addressResult.hasErrors &&
-          !(tdsResult?.hasErrors)
+          !tdsResult?.hasErrors
         ) {
           setActive(3);
         }
@@ -4002,141 +4072,143 @@ function CustomerCreate() {
                   <Box mt="md">
                     <Card shadow="sm" padding="lg" radius="md">
                       <Stack gap="md">
-                        {bankDetailsForm.values.bank_details.map((row, index) => {
-                          const rowTouched = isBankDetailRowTouched(row);
-                          return (
-                          <Card
-                            key={`bank-${bankDetailsForm.values.bank_details[index]?.id ?? index}`}
-                            withBorder
-                            padding="md"
-                            radius="md"
-                            bg="#fafafa"
-                          >
-                            <Group
-                              justify="space-between"
-                              align="center"
-                              mb="sm"
-                            >
-                              <Text size="sm" fw={600} c="#105476">
-                                Bank Detail {index + 1}
-                              </Text>
-                              {!isViewMode &&
-                                bankDetailsForm.values.bank_details.length >
-                                  1 && (
-                                  <ActionIcon
-                                    variant="light"
-                                    color="red"
-                                    onClick={() =>
-                                      bankDetailsForm.removeListItem(
-                                        "bank_details",
-                                        index,
-                                      )
-                                    }
-                                    aria-label="Remove bank detail"
-                                  >
-                                    <IconTrash size={16} />
-                                  </ActionIcon>
-                                )}
-                            </Group>
-                            <Grid gutter="sm">
-                              <Grid.Col span={4}>
-                                <Select
-                                  label="Currency"
-                                  placeholder="Select currency"
-                                  searchable
-                                  disabled={isViewMode}
-                                  data={currencyOptions}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.currency`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={4}>
-                                <TextInput
-                                  label="Account No"
-                                  placeholder="Enter account number"
-                                  withAsterisk={rowTouched}
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.account_no`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={4}>
-                                <TextInput
-                                  label="Account Name"
-                                  placeholder="Enter account name"
-                                  withAsterisk={rowTouched}
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.account_name`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={4}>
-                                <TextInput
-                                  label="Bank Name"
-                                  placeholder="Enter bank name"
-                                  withAsterisk={rowTouched}
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.bank_name`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={4}>
-                                <TextInput
-                                  label="IBAN No"
-                                  placeholder="Enter IBAN number"
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.iban_no`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={4}>
-                                <TextInput
-                                  label="SWIFT No"
-                                  placeholder="Enter SWIFT code"
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.swift_no`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={4}>
-                                <TextInput
-                                  label="IFSC Code"
-                                  placeholder="Enter IFSC code"
-                                  withAsterisk={rowTouched}
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.ifsc_code`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                              <Grid.Col span={8}>
-                                <FormTextArea
-                                  label="Bank Address"
-                                  placeholder="Enter bank address"
-                                  disabled={isViewMode}
-                                  {...bankDetailsForm.getInputProps(
-                                    `bank_details.${index}.bank_address`,
-                                  )}
-                                  styles={bankDetailFieldStyles}
-                                />
-                              </Grid.Col>
-                            </Grid>
-                          </Card>
-                          );
-                        })}
+                        {bankDetailsForm.values.bank_details.map(
+                          (row, index) => {
+                            const rowTouched = isBankDetailRowTouched(row);
+                            return (
+                              <Card
+                                key={`bank-${bankDetailsForm.values.bank_details[index]?.id ?? index}`}
+                                withBorder
+                                padding="md"
+                                radius="md"
+                                bg="#fafafa"
+                              >
+                                <Group
+                                  justify="space-between"
+                                  align="center"
+                                  mb="sm"
+                                >
+                                  <Text size="sm" fw={600} c="#105476">
+                                    Bank Detail {index + 1}
+                                  </Text>
+                                  {!isViewMode &&
+                                    bankDetailsForm.values.bank_details.length >
+                                      1 && (
+                                      <ActionIcon
+                                        variant="light"
+                                        color="red"
+                                        onClick={() =>
+                                          bankDetailsForm.removeListItem(
+                                            "bank_details",
+                                            index,
+                                          )
+                                        }
+                                        aria-label="Remove bank detail"
+                                      >
+                                        <IconTrash size={16} />
+                                      </ActionIcon>
+                                    )}
+                                </Group>
+                                <Grid gutter="sm">
+                                  <Grid.Col span={4}>
+                                    <Select
+                                      label="Currency"
+                                      placeholder="Select currency"
+                                      searchable
+                                      disabled={isViewMode}
+                                      data={currencyOptions}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.currency`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                    <TextInput
+                                      label="Account No"
+                                      placeholder="Enter account number"
+                                      withAsterisk={rowTouched}
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.account_no`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                    <TextInput
+                                      label="Account Name"
+                                      placeholder="Enter account name"
+                                      withAsterisk={rowTouched}
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.account_name`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                    <TextInput
+                                      label="Bank Name"
+                                      placeholder="Enter bank name"
+                                      withAsterisk={rowTouched}
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.bank_name`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                    <TextInput
+                                      label="IBAN No"
+                                      placeholder="Enter IBAN number"
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.iban_no`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                    <TextInput
+                                      label="SWIFT No"
+                                      placeholder="Enter SWIFT code"
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.swift_no`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={4}>
+                                    <TextInput
+                                      label="IFSC Code"
+                                      placeholder="Enter IFSC code"
+                                      withAsterisk={rowTouched}
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.ifsc_code`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={8}>
+                                    <FormTextArea
+                                      label="Bank Address"
+                                      placeholder="Enter bank address"
+                                      disabled={isViewMode}
+                                      {...bankDetailsForm.getInputProps(
+                                        `bank_details.${index}.bank_address`,
+                                      )}
+                                      styles={bankDetailFieldStyles}
+                                    />
+                                  </Grid.Col>
+                                </Grid>
+                              </Card>
+                            );
+                          },
+                        )}
 
                         <Group justify="flex-end">
                           <Button
@@ -4221,23 +4293,23 @@ function CustomerCreate() {
                   {!isViewMode &&
                     (isCreateMode || isEditMode) &&
                     !isVerificationCreateRoute && (
-                    <Button
-                      bg="#105476"
-                      onClick={handleRelationshipMapping}
-                      disabled={isSubmitting}
-                      style={{ border: "1px solid #105476" }}
-                      color="white"
-                      size="sm"
-                    >
-                      {isCreateMode
-                        ? isVendorMasterRoute
-                          ? "Add Vendor Relationships"
-                          : "Add Customer Relationships"
-                        : isVendorMasterRoute
-                          ? "Edit Vendor Relationships"
-                          : "Edit Customer Relationships"}
-                    </Button>
-                  )}
+                      <Button
+                        bg="#105476"
+                        onClick={handleRelationshipMapping}
+                        disabled={isSubmitting}
+                        style={{ border: "1px solid #105476" }}
+                        color="white"
+                        size="sm"
+                      >
+                        {isCreateMode
+                          ? isVendorMasterRoute
+                            ? "Add Vendor Relationships"
+                            : "Add Customer Relationships"
+                          : isVendorMasterRoute
+                            ? "Edit Vendor Relationships"
+                            : "Edit Customer Relationships"}
+                      </Button>
+                    )}
                   <Button
                     variant="outline"
                     color="#105476"

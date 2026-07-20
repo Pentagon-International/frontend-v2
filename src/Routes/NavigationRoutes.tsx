@@ -234,6 +234,7 @@ import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding
 import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
+import DocumentWiseOutstanding from "../pages/reports/documentWiseOutstanding/DocumentWiseOutstanding";
 import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
 import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
 import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
@@ -671,6 +672,10 @@ const NavigationRoutes = () => {
             element={<SubledgerOutstanding />}
           />
           <Route path="purchase-register" element={<PurchaseRegister />} />
+          <Route
+            path="document-wise-outstanding"
+            element={<DocumentWiseOutstanding />}
+          />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />

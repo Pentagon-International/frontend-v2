@@ -367,6 +367,40 @@ const fetchGetEffectiveSac = async (
   }
 };
 
+/** India customer invoice: check if Bill To + address is SEZ as of document date. */
+const fetchCheckSezStatus = async (payload: {
+  customer_code: string;
+  address: string;
+  document_date: string;
+}): Promise<boolean> => {
+  try {
+    const response = await postAPICall(
+      URL.checkSezStatus,
+      payload,
+      API_HEADER,
+    );
+    const root = response as {
+      sez?: unknown;
+      data?: { sez?: unknown };
+    };
+    return Boolean(root?.sez ?? root?.data?.sez);
+  } catch (error) {
+    console.error("Error checking SEZ status:", error);
+    return false;
+  }
+};
+
+/** YYYY-MM-DD for check-sez-status (not invoice DD-MM-YYYY). */
+function formatDateYYYYMMDD(date: Date | null | undefined): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : parseInvoiceDate(date);
+  if (!d) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${year}-${month}-${day}`;
+}
+
 type InvoiceTaxBreakup = {
   vat?: boolean;
   charges?: Array<{
@@ -880,6 +914,7 @@ type InvoiceDataFromApi = {
   daybook_name?: string;
   status?: string;
   is_agent?: boolean;
+  has_sez?: boolean;
   charges?: Array<{
     id?: number;
     charge_id?: number;
@@ -994,6 +1029,16 @@ function InvoiceCreate({
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [addressOptions, setAddressOptions] = useState<
     Array<{ value: string; label: string }>
+  >([]);
+  const [hasSez, setHasSez] = useState(false);
+  const billToAddressesRef = useRef<
+    Array<{
+      id: number;
+      address: string;
+      state_id?: number;
+      address_type?: string | null;
+      gst_id?: string | null;
+    }>
   >([]);
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
@@ -1189,6 +1234,9 @@ function InvoiceCreate({
     [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
+  // SEZ customers: GST not applicable (no SAC fetch, no IGST/CGST/SGST UI/totals/tax tab)
+  const applyGst = isGstInvoiceUser && !hasSez;
+
   useEffect(() => {
     isGstInvoiceRef.current = isGstInvoiceUser;
   }, [isGstInvoiceUser]);
@@ -1201,7 +1249,7 @@ function InvoiceCreate({
     isUsInvoiceRef.current = isUsInvoiceUser;
   }, [isUsInvoiceUser]);
 
-  const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
+  const showTaxTab = applyGst || isVatInvoiceUser;
 
   const isInvoicePosted =
     invoiceIsPosted ||
@@ -1265,6 +1313,62 @@ function InvoiceCreate({
     billingCurrencyRef.current = form.values.currency;
     billingRoeRef.current = form.values.roe;
   }, [form.values.currency, form.values.roe]);
+
+  // India customer invoice only: when Bill To + address + document date are set, check SEZ status
+  useEffect(() => {
+    if (!isIndiaUser || isAgentInvoice) {
+      setHasSez(false);
+      return;
+    }
+
+    const customerCode = String(form.values.bill_to ?? "").trim();
+    const addressRaw = String(form.values.address ?? "").trim();
+    const addressLabel =
+      addressOptions.find((opt) => opt.value === addressRaw)?.label?.trim() ||
+      addressRaw;
+    const documentDate = formatDateYYYYMMDD(form.values.document_date);
+
+    if (!customerCode || !addressLabel || !documentDate) {
+      setHasSez(false);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const sez = await fetchCheckSezStatus({
+        customer_code: customerCode,
+        address: addressLabel,
+        document_date: documentDate,
+      });
+      if (!cancelled) setHasSez(sez);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isIndiaUser,
+    isAgentInvoice,
+    form.values.bill_to,
+    form.values.address,
+    form.values.document_date,
+    addressOptions,
+  ]);
+
+  // Clear SAC codes and GST rates when Bill To becomes SEZ
+  useEffect(() => {
+    if (!hasSez) return;
+    form.values.charges.forEach((charge, idx) => {
+      if (String(charge.tax_code ?? "").trim()) {
+        form.setFieldValue(`charges.${idx}.tax_code`, "");
+      }
+    });
+    setGstRatesByChargeIndex({});
+    setGstRatesLoadingByIndex({});
+    lastGstRatesFetchKeyRef.current = "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSez]);
 
   const isBaseCurrency = useCallback(
     (currency: string | null | undefined): boolean => {
@@ -2152,7 +2256,7 @@ function InvoiceCreate({
               (location.state as { job?: { service_id?: number } })?.job
                 ?.service_id ?? null;
             if (
-              isGstInvoiceUser &&
+              applyGst &&
               jobServiceIdForSac &&
               mappedCharges.some((c: ChargeItem) => c.charge_id != null)
             ) {
@@ -2368,6 +2472,7 @@ function InvoiceCreate({
     });
     const statusUpper = (invoiceData.status ?? "").toUpperCase();
     setInvoiceIsPosted(statusUpper === "POSTED");
+    setHasSez(Boolean(invoiceData.has_sez));
     form.setValues({
       bill_to: invoiceData.bill_to ?? "",
       address: invoiceData.address ?? "",
@@ -2579,7 +2684,7 @@ function InvoiceCreate({
 
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
-    if (!isGstInvoiceUser) {
+    if (!applyGst) {
       setGstRatesLoadingByIndex({});
       return;
     }
@@ -2685,7 +2790,45 @@ function InvoiceCreate({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.state, form.values.charges]);
+  }, [form.values.state, form.values.charges, applyGst]);
+
+  // When SEZ turns off, re-fetch SAC codes for charges that lost them
+  useEffect(() => {
+    if (!applyGst) return;
+    const jobServiceId =
+      (location.state as { job?: { service_id?: number } } | null)?.job
+        ?.service_id ?? null;
+    if (!jobServiceId) return;
+
+    const chargesWithIds = form.values.charges
+      .map((c, originalIdx) => ({ charge: c, originalIdx }))
+      .filter(
+        ({ charge }) =>
+          charge.is_tax_row !== true &&
+          charge.charge_id != null &&
+          !String(charge.tax_code ?? "").trim(),
+      );
+    if (!chargesWithIds.length) return;
+
+    void fetchGetEffectiveSac(
+      chargesWithIds.map(({ charge }) => ({
+        charge_id: charge.charge_id!,
+        service_id: jobServiceId,
+      })),
+    ).then((data) => {
+      data.forEach((item, responseIdx) => {
+        const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
+        if (
+          originalIdx !== undefined &&
+          item.sac_code != null &&
+          item.sac_code !== ""
+        ) {
+          form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyGst]);
 
   // Ensure appended tax rows never carry GST rates (avoid stale cached rates causing display/calculation).
   useEffect(() => {
@@ -2925,7 +3068,9 @@ function InvoiceCreate({
       value == null || (typeof value === "string" && value.trim() === "");
     if (isCleared) {
       setAddressOptions([]);
+      billToAddressesRef.current = [];
       form.setFieldValue("address", "");
+      setHasSez(false);
       if (isGstInvoiceUser || isKenyaUser) {
         if (isGstInvoiceUser) form.setFieldValue("state", "");
         form.setFieldValue("gstn", "");
@@ -2946,12 +3091,13 @@ function InvoiceCreate({
         address_type?: string | null;
         gst_id?: string | null;
       }>;
-      const addressOptions = (addressesData || []).map((addr) => ({
+      billToAddressesRef.current = addressesData || [];
+      const nextAddressOptions = (addressesData || []).map((addr) => ({
         value: String(addr.id),
         label: addr.address,
       }));
 
-      setAddressOptions(addressOptions);
+      setAddressOptions(nextAddressOptions);
       form.setFieldValue("address", "");
 
       // Prefer PRIMARY address for state and GSTN; if none, fall back to first address that has each field
@@ -2983,6 +3129,7 @@ function InvoiceCreate({
       }
     } else {
       setAddressOptions([]);
+      billToAddressesRef.current = [];
       form.setFieldValue("address", "");
       // Do not clear state or GSTN here — they may have been set from house data
     }
@@ -3191,7 +3338,7 @@ function InvoiceCreate({
       const isVatSave = isVatInvoiceUser;
 
       // VAT (China/Kenya): tax_rate + tax_amount. India GST: igst/cgst/sgst.
-      const gstRatesForCharges: (GstRates | null)[] = !isGstInvoiceUser
+      const gstRatesForCharges: (GstRates | null)[] = !applyGst
         ? values.charges.map(() => null)
         : await Promise.all(
             values.charges.map(async (charge, idx) => {
@@ -3283,22 +3430,22 @@ function InvoiceCreate({
           }
 
           const rates = gstRatesForCharges[rateIdx];
-          const igstRate = rates?.igst ?? 0;
-          const cgstRate = rates?.cgst ?? 0;
-          const sgstRate = rates?.sgst ?? 0;
+          const igstRate = hasSez ? 0 : (rates?.igst ?? 0);
+          const cgstRate = hasSez ? 0 : (rates?.cgst ?? 0);
+          const sgstRate = hasSez ? 0 : (rates?.sgst ?? 0);
           const sameState = rates?.same_state ?? false;
           const igstAmt =
-            !sameState && igstRate > 0
-              ? clampAmount(headerAmount * (Number(igstRate) / 100))
-              : 0;
+            hasSez || sameState || igstRate <= 0
+              ? 0
+              : clampAmount(headerAmount * (Number(igstRate) / 100));
           const cgstAmt =
-            sameState && cgstRate > 0
-              ? clampAmount(headerAmount * (Number(cgstRate) / 100))
-              : 0;
+            hasSez || !sameState || cgstRate <= 0
+              ? 0
+              : clampAmount(headerAmount * (Number(cgstRate) / 100));
           const sgstAmt =
-            sameState && sgstRate > 0
-              ? clampAmount(headerAmount * (Number(sgstRate) / 100))
-              : 0;
+            hasSez || !sameState || sgstRate <= 0
+              ? 0
+              : clampAmount(headerAmount * (Number(sgstRate) / 100));
           return {
             ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
             shipment_no:
@@ -3317,7 +3464,7 @@ function InvoiceCreate({
             amount: clampAmount(charge.amount ?? 0) ?? 0,
             amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
-            tax_code: charge.tax_code ?? "",
+            tax_code: hasSez ? null : (charge.tax_code ?? ""),
             Dr_Cr: charge.dr_cr ?? "Cr",
             igst_rate: igstRate,
             cgst_rate: cgstRate,
@@ -3373,6 +3520,7 @@ function InvoiceCreate({
         local_total,
         Dr_Cr: baseDrCr,
         is_agent: isAgent,
+        has_sez: isIndiaUser && !isAgent ? hasSez : false,
         charges: chargesPayload,
       };
       console.log("payload---", payload);
@@ -3543,7 +3691,7 @@ function InvoiceCreate({
           });
         }
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
-      } else if (isGstInvoiceUser) {
+      } else if (applyGst) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
           breakupData = await fetchInvoiceCalculateGstBreakup({
@@ -3578,7 +3726,7 @@ function InvoiceCreate({
         code?: string;
       }[];
 
-      const gstRatesForPostCharges: (GstRates | null)[] = !isGstInvoiceUser
+      const gstRatesForPostCharges: (GstRates | null)[] = !applyGst
         ? values.charges.map(() => null)
         : await Promise.all(
             values.charges.map(async (charge, idx) => {
@@ -3661,22 +3809,22 @@ function InvoiceCreate({
           }
 
           const rates = gstRatesForPostCharges[rateIdx];
-          const igstRate = rates?.igst ?? 0;
-          const cgstRate = rates?.cgst ?? 0;
-          const sgstRate = rates?.sgst ?? 0;
+          const igstRate = hasSez ? 0 : (rates?.igst ?? 0);
+          const cgstRate = hasSez ? 0 : (rates?.cgst ?? 0);
+          const sgstRate = hasSez ? 0 : (rates?.sgst ?? 0);
           const sameState = rates?.same_state ?? false;
           const igstAmt =
-            !sameState && igstRate > 0
-              ? clampAmount(headerAmount * (Number(igstRate) / 100))
-              : 0;
+            hasSez || sameState || igstRate <= 0
+              ? 0
+              : clampAmount(headerAmount * (Number(igstRate) / 100));
           const cgstAmt =
-            sameState && cgstRate > 0
-              ? clampAmount(headerAmount * (Number(cgstRate) / 100))
-              : 0;
+            hasSez || !sameState || cgstRate <= 0
+              ? 0
+              : clampAmount(headerAmount * (Number(cgstRate) / 100));
           const sgstAmt =
-            sameState && sgstRate > 0
-              ? clampAmount(headerAmount * (Number(sgstRate) / 100))
-              : 0;
+            hasSez || !sameState || sgstRate <= 0
+              ? 0
+              : clampAmount(headerAmount * (Number(sgstRate) / 100));
           return {
             ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
             shipment_no:
@@ -3695,7 +3843,7 @@ function InvoiceCreate({
             amount: clampAmount(charge.amount ?? 0) ?? 0,
             amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
-            tax_code: charge.tax_code ?? "",
+            tax_code: hasSez ? null : (charge.tax_code ?? ""),
             Dr_Cr: charge.dr_cr ?? "Cr",
             igst_rate: igstRate,
             cgst_rate: cgstRate,
@@ -3726,7 +3874,7 @@ function InvoiceCreate({
                 Dr_Cr: "Cr",
               };
             })
-        : isAgentPost || isUsPost
+        : isAgentPost || isUsPost || hasSez
           ? []
           : sacWiseTotals
               .filter((row) => {
@@ -3768,7 +3916,7 @@ function InvoiceCreate({
                 };
               });
 
-      const appendTaxRows = isGstInvoiceUser || isVatPost;
+      const appendTaxRows = applyGst || isVatPost;
       const allChargesPayload = appendTaxRows
         ? [...chargesPayload, ...taxCharges]
         : chargesPayload;
@@ -3820,6 +3968,7 @@ function InvoiceCreate({
         local_total,
         Dr_Cr: baseDrCr,
         is_agent: isAgentPost,
+        has_sez: isIndiaUser && !isAgentPost ? hasSez : false,
         charges: allChargesPayload,
         taxes: [],
       };
@@ -4133,13 +4282,13 @@ function InvoiceCreate({
       currencyAmount: 0.95,
       headerAmount: 0.95,
       localAmount: 0.85,
-      sac: isGstInvoiceUser ? 0.75 : 0,
+      sac: applyGst ? 0.75 : 0,
       drCr: isVatInvoiceUser ? 0.7 : 0.55,
       vatRate: isVatInvoiceUser ? 0.9 : 0,
       vatAmount: isVatInvoiceUser ? 0.9 : 0,
-      cgst: isGstInvoiceUser && headerSameState === true ? 0.55 : 0,
-      sgst: isGstInvoiceUser && headerSameState === true ? 0.55 : 0,
-      igst: isGstInvoiceUser && headerSameState === false ? 0.55 : 0,
+      cgst: applyGst && headerSameState === true ? 0.55 : 0,
+      sgst: applyGst && headerSameState === true ? 0.55 : 0,
+      igst: applyGst && headerSameState === false ? 0.55 : 0,
       actions: !isReadOnly ? 0.7 : 0,
     };
     const used = Object.values(cols).reduce((a, b) => a + b, 0);
@@ -4148,7 +4297,7 @@ function InvoiceCreate({
     return { ...cols, charge: cols.charge + remainder };
   }, [
     showShipmentIdInCharges,
-    isGstInvoiceUser,
+    applyGst,
     isVatInvoiceUser,
     headerSameState,
     isReadOnly,
@@ -4642,9 +4791,23 @@ function InvoiceCreate({
                   data={addressOptions}
                   value={form.values.address}
                   dropdownZIndex={1000}
-                  onChange={(value) =>
-                    form.setFieldValue("address", value || "")
-                  }
+                  onChange={(value) => {
+                    form.setFieldValue("address", value || "");
+                    if (!value) return;
+                    const selected = billToAddressesRef.current.find(
+                      (a) => String(a.id) === String(value),
+                    );
+                    if (!selected) return;
+                    if (isGstInvoiceUser && selected.state_id != null) {
+                      form.setFieldValue("state", String(selected.state_id));
+                    }
+                    if (
+                      (isGstInvoiceUser || isKenyaUser) &&
+                      selected.gst_id
+                    ) {
+                      form.setFieldValue("gstn", String(selected.gst_id));
+                    }
+                  }}
                   searchable
                   withAsterisk
                   // disabled={isReadOnly}
@@ -4787,7 +4950,7 @@ function InvoiceCreate({
                   >
                     Local Amount
                   </Grid.Col>
-                  {isGstInvoiceUser && (
+                  {applyGst && (
                     <Grid.Col
                       span={chargeGridCols.sac}
                       style={chargeHeaderCellStyle}
@@ -4817,7 +4980,7 @@ function InvoiceCreate({
                       VAT Amount
                     </Grid.Col>
                   )}
-                  {isGstInvoiceUser && headerSameState === true && (
+                  {applyGst && headerSameState === true && (
                     <Grid.Col
                       span={chargeGridCols.cgst}
                       style={chargeHeaderCellStyle}
@@ -4825,7 +4988,7 @@ function InvoiceCreate({
                       CGST
                     </Grid.Col>
                   )}
-                  {isGstInvoiceUser && headerSameState === true && (
+                  {applyGst && headerSameState === true && (
                     <Grid.Col
                       span={chargeGridCols.sgst}
                       style={chargeHeaderCellStyle}
@@ -4833,7 +4996,7 @@ function InvoiceCreate({
                       SGST
                     </Grid.Col>
                   )}
-                  {isGstInvoiceUser && headerSameState === false && (
+                  {applyGst && headerSameState === false && (
                     <Grid.Col
                       span={chargeGridCols.igst}
                       style={chargeHeaderCellStyle}
@@ -4932,7 +5095,7 @@ function InvoiceCreate({
                           if (
                             chargeId != null &&
                             jobServiceId != null &&
-                            isGstInvoiceUser
+                            applyGst
                           ) {
                             fetchGetEffectiveSac([
                               {
@@ -5550,7 +5713,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    {isGstInvoiceUser && (
+                    {applyGst && (
                       <Grid.Col span={chargeGridCols.sac}>
                         <FormTextInput
                           placeholder="SAC Code"
@@ -5664,7 +5827,7 @@ function InvoiceCreate({
                         />
                       </Grid.Col>
                     )}
-                    {isGstInvoiceUser && headerSameState === true && (
+                    {applyGst && headerSameState === true && (
                       <Grid.Col span={chargeGridCols.cgst}>
                         <FormTextInput
                           placeholder="CGST"
@@ -5716,7 +5879,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {isGstInvoiceUser && headerSameState === true && (
+                    {applyGst && headerSameState === true && (
                       <Grid.Col span={chargeGridCols.sgst}>
                         <FormTextInput
                           placeholder="SGST"
@@ -5769,7 +5932,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {isGstInvoiceUser && headerSameState === false && (
+                    {applyGst && headerSameState === false && (
                       <Grid.Col span={chargeGridCols.igst}>
                         <FormTextInput
                           placeholder="IGST"
@@ -5971,7 +6134,7 @@ function InvoiceCreate({
                 {/* </Box> */}
 
                 {/* Totals — GST customer invoice or VAT (China/Kenya customer + agent) */}
-                {(isGstInvoiceUser || isVatInvoiceUser) && (
+                {(applyGst || isVatInvoiceUser) && (
                   <Box
                     mt="xl"
                     p="md"
@@ -6026,7 +6189,7 @@ function InvoiceCreate({
                           </Box>
                         </Grid.Col>
                       )}
-                      {isGstInvoiceUser && (
+                      {applyGst && (
                         <>
                           <Grid.Col span={3}>
                             <Box>
@@ -6200,7 +6363,7 @@ function InvoiceCreate({
                       </ScrollArea>
                     </>
                   )}
-                  {!gstBreakupLoading && gstBreakup && isGstInvoiceUser && (
+                  {!gstBreakupLoading && gstBreakup && applyGst && (
                     <>
                       <ScrollArea mt="md">
                         <Table
