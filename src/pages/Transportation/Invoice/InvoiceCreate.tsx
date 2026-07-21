@@ -1234,7 +1234,7 @@ function InvoiceCreate({
     [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
-  // SEZ customers: GST not applicable (no SAC fetch, no IGST/CGST/SGST UI/totals/tax tab)
+  // SEZ customers: SAC still applies; GST columns/totals/tax tab are hidden
   const applyGst = isGstInvoiceUser && !hasSez;
 
   useEffect(() => {
@@ -1356,18 +1356,12 @@ function InvoiceCreate({
     addressOptions,
   ]);
 
-  // Clear SAC codes and GST rates when Bill To becomes SEZ
+  // Clear GST rates when Bill To becomes SEZ (SAC codes remain)
   useEffect(() => {
     if (!hasSez) return;
-    form.values.charges.forEach((charge, idx) => {
-      if (String(charge.tax_code ?? "").trim()) {
-        form.setFieldValue(`charges.${idx}.tax_code`, "");
-      }
-    });
     setGstRatesByChargeIndex({});
     setGstRatesLoadingByIndex({});
     lastGstRatesFetchKeyRef.current = "";
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSez]);
 
   const isBaseCurrency = useCallback(
@@ -2256,7 +2250,7 @@ function InvoiceCreate({
               (location.state as { job?: { service_id?: number } })?.job
                 ?.service_id ?? null;
             if (
-              applyGst &&
+              isGstInvoiceUser &&
               jobServiceIdForSac &&
               mappedCharges.some((c: ChargeItem) => c.charge_id != null)
             ) {
@@ -2792,9 +2786,9 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.state, form.values.charges, applyGst]);
 
-  // When SEZ turns off, re-fetch SAC codes for charges that lost them
+  // When charges lack SAC, fetch effective SAC for India GST invoices (incl. SEZ)
   useEffect(() => {
-    if (!applyGst) return;
+    if (!isGstInvoiceUser) return;
     const jobServiceId =
       (location.state as { job?: { service_id?: number } } | null)?.job
         ?.service_id ?? null;
@@ -2828,7 +2822,7 @@ function InvoiceCreate({
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyGst]);
+  }, [isGstInvoiceUser, hasSez]);
 
   // Ensure appended tax rows never carry GST rates (avoid stale cached rates causing display/calculation).
   useEffect(() => {
@@ -3464,7 +3458,7 @@ function InvoiceCreate({
             amount: clampAmount(charge.amount ?? 0) ?? 0,
             amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
-            tax_code: hasSez ? null : (charge.tax_code ?? ""),
+            tax_code: charge.tax_code ?? "",
             Dr_Cr: charge.dr_cr ?? "Cr",
             igst_rate: igstRate,
             cgst_rate: cgstRate,
@@ -3843,7 +3837,7 @@ function InvoiceCreate({
             amount: clampAmount(charge.amount ?? 0) ?? 0,
             amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
-            tax_code: hasSez ? null : (charge.tax_code ?? ""),
+            tax_code: charge.tax_code ?? "",
             Dr_Cr: charge.dr_cr ?? "Cr",
             igst_rate: igstRate,
             cgst_rate: cgstRate,
@@ -4282,7 +4276,7 @@ function InvoiceCreate({
       currencyAmount: 0.95,
       headerAmount: 0.95,
       localAmount: 0.85,
-      sac: applyGst ? 0.75 : 0,
+      sac: isGstInvoiceUser ? 0.75 : 0,
       drCr: isVatInvoiceUser ? 0.7 : 0.55,
       vatRate: isVatInvoiceUser ? 0.9 : 0,
       vatAmount: isVatInvoiceUser ? 0.9 : 0,
@@ -4297,6 +4291,7 @@ function InvoiceCreate({
     return { ...cols, charge: cols.charge + remainder };
   }, [
     showShipmentIdInCharges,
+    isGstInvoiceUser,
     applyGst,
     isVatInvoiceUser,
     headerSameState,
@@ -4950,7 +4945,7 @@ function InvoiceCreate({
                   >
                     Local Amount
                   </Grid.Col>
-                  {applyGst && (
+                  {isGstInvoiceUser && (
                     <Grid.Col
                       span={chargeGridCols.sac}
                       style={chargeHeaderCellStyle}
@@ -5095,7 +5090,7 @@ function InvoiceCreate({
                           if (
                             chargeId != null &&
                             jobServiceId != null &&
-                            applyGst
+                            isGstInvoiceUser
                           ) {
                             fetchGetEffectiveSac([
                               {
@@ -5713,7 +5708,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    {applyGst && (
+                    {isGstInvoiceUser && (
                       <Grid.Col span={chargeGridCols.sac}>
                         <FormTextInput
                           placeholder="SAC Code"
@@ -5721,6 +5716,7 @@ function InvoiceCreate({
                           readOnly={isReadOnly}
                           value={charge.tax_code}
                           rightSection={
+                            applyGst &&
                             gstRatesLoadingByIndex[index] &&
                             (!charge.tax_code ||
                               charge.tax_code.trim() === "") ? (
@@ -6133,8 +6129,8 @@ function InvoiceCreate({
                 ))}
                 {/* </Box> */}
 
-                {/* Totals — GST customer invoice or VAT (China/Kenya customer + agent) */}
-                {(applyGst || isVatInvoiceUser) && (
+                {/* Totals — local amount for India (incl. SEZ) / VAT; GST tax totals only when applyGst */}
+                {(isGstInvoiceUser || isVatInvoiceUser) && (
                   <Box
                     mt="xl"
                     p="md"
@@ -6145,7 +6141,9 @@ function InvoiceCreate({
                     }}
                   >
                     <Grid gutter="md">
-                      <Grid.Col span={isVatInvoiceUser ? 6 : 3}>
+                      <Grid.Col
+                        span={isVatInvoiceUser ? 6 : applyGst ? 3 : 6}
+                      >
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total

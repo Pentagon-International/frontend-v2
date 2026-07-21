@@ -144,6 +144,40 @@ const fetchGetEffectiveSac = async (
   }
 };
 
+/** India customer invoice: check if Bill To + address is SEZ as of document date. */
+const fetchCheckSezStatus = async (payload: {
+  customer_code: string;
+  address: string;
+  document_date: string;
+}): Promise<boolean> => {
+  try {
+    const response = await postAPICall(
+      URL.checkSezStatus,
+      payload,
+      API_HEADER,
+    );
+    const root = response as {
+      sez?: unknown;
+      data?: { sez?: unknown };
+    };
+    return Boolean(root?.sez ?? root?.data?.sez);
+  } catch (error) {
+    console.error("Error checking SEZ status:", error);
+    return false;
+  }
+};
+
+/** YYYY-MM-DD for check-sez-status. */
+function formatDateYYYYMMDD(date: Date | null | undefined): string {
+  if (date == null) return "";
+  const d = date instanceof Date ? date : normalizeDate(date);
+  if (!d) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${year}-${month}-${day}`;
+}
+
 // Same endpoint as InvoiceCreate (invoice/calculate-gst-breakup/), payload: { customer_id, reverse_invoice_id }
 const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
   reverse_invoice_id: number;
@@ -432,6 +466,7 @@ type ReversableDataResponse = {
   header_total?: string | number;
   Dr_Cr?: string;
   is_agent?: boolean;
+  has_sez?: boolean;
   charges?: Array<{
     id?: number;
     charge_id?: number;
@@ -620,6 +655,16 @@ function InvoiceReverse() {
   const [addressOptions, setAddressOptions] = useState<
     { value: string; label: string }[]
   >([]);
+  const [hasSez, setHasSez] = useState(false);
+  const billToAddressesRef = useRef<
+    Array<{
+      id: number;
+      address: string;
+      state_id?: number;
+      address_type?: string | null;
+      gst_id?: string | null;
+    }>
+  >([]);
   const [isAgentInvoice, setIsAgentInvoice] = useState(false);
 
   const isAgentInvoiceRef = useRef(false);
@@ -696,7 +741,10 @@ function InvoiceReverse() {
     [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
-  const showTaxTab = isGstInvoiceUser || isVatInvoiceUser;
+  // SEZ customers: SAC still applies; GST columns/totals/tax tab are hidden
+  const applyGst = isGstInvoiceUser && !hasSez;
+
+  const showTaxTab = applyGst || isVatInvoiceUser;
 
   useEffect(() => {
     isAgentInvoiceRef.current = isAgentInvoice;
@@ -795,6 +843,56 @@ function InvoiceReverse() {
       roe: (value) => (value === null ? "ROE is required" : null),
     },
   });
+
+  // India customer invoice only: when Bill To + address + document date are set, check SEZ status
+  useEffect(() => {
+    if (!isIndiaUser || isAgentInvoice) {
+      setHasSez(false);
+      return;
+    }
+
+    const customerCode = String(form.values.bill_to ?? "").trim();
+    const addressRaw = String(form.values.address ?? "").trim();
+    const addressLabel =
+      addressOptions.find((opt) => opt.value === addressRaw)?.label?.trim() ||
+      addressRaw;
+    const documentDate = formatDateYYYYMMDD(form.values.document_date);
+
+    if (!customerCode || !addressLabel || !documentDate) {
+      setHasSez(false);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const sez = await fetchCheckSezStatus({
+        customer_code: customerCode,
+        address: addressLabel,
+        document_date: documentDate,
+      });
+      if (!cancelled) setHasSez(sez);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isIndiaUser,
+    isAgentInvoice,
+    form.values.bill_to,
+    form.values.address,
+    form.values.document_date,
+    addressOptions,
+  ]);
+
+  // Clear GST rates when Bill To becomes SEZ (SAC codes remain)
+  useEffect(() => {
+    if (!hasSez) return;
+    setGstRatesByChargeIndex({});
+    setGstRatesLoadingByIndex({});
+    lastGstRatesFetchKeyRef.current = "";
+  }, [hasSez]);
 
   const { data: currencyData = [] } = useQuery({
     queryKey: ["currencyMaster"],
@@ -998,9 +1096,9 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeAmounts, chargeRoesForLocal]);
 
-  // Fetch GST rates by State + SAC for each charge (India GST only)
+  // Fetch GST rates by State + SAC for each charge (India GST only, not SEZ)
   useEffect(() => {
-    if (!isGstInvoiceUser) {
+    if (!applyGst) {
       setGstRatesLoadingByIndex({});
       return;
     }
@@ -1098,7 +1196,39 @@ function InvoiceReverse() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.state, form.values.charges, isGstInvoiceUser]);
+  }, [form.values.state, form.values.charges, applyGst]);
+
+  // When charges lack SAC, fetch effective SAC for India GST invoices (incl. SEZ)
+  useEffect(() => {
+    if (!isGstInvoiceUser || !jobServiceId) return;
+
+    const chargesWithIds = form.values.charges
+      .map((c, originalIdx) => ({ charge: c, originalIdx }))
+      .filter(
+        ({ charge }) =>
+          charge.charge_id != null && !String(charge.tax_code ?? "").trim(),
+      );
+    if (!chargesWithIds.length) return;
+
+    void fetchGetEffectiveSac(
+      chargesWithIds.map(({ charge }) => ({
+        charge_id: charge.charge_id!,
+        service_id: jobServiceId,
+      })),
+    ).then((data) => {
+      data.forEach((item, responseIdx) => {
+        const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
+        if (
+          originalIdx !== undefined &&
+          item.sac_code != null &&
+          item.sac_code !== ""
+        ) {
+          form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGstInvoiceUser, hasSez, jobServiceId]);
 
   useEffect(() => {
     if (!isVatInvoiceUser || !gstBreakup) return;
@@ -1208,6 +1338,7 @@ function InvoiceReverse() {
               preserveChargeIds: true,
             },
           );
+          setHasSez(Boolean((data as ReversableDataResponse).has_sez));
           setReversalRecordData(data as Record<string, unknown>);
           setDocumentNo(
             String(
@@ -1270,6 +1401,7 @@ function InvoiceReverse() {
           emptyDaybook: true,
           preserveChargeIds: false,
         });
+        setHasSez(Boolean(data.has_sez));
       })
       .catch((err) => {
         if (!cancelled) {
@@ -1386,7 +1518,7 @@ function InvoiceReverse() {
           });
         }
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
-      } else if (isGstInvoiceUser) {
+      } else if (applyGst) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
           breakupData = await fetchReverseInvoiceCalculateGstBreakup({
@@ -1415,7 +1547,7 @@ function InvoiceReverse() {
         localCurrencyCode,
         currencyId,
       );
-      const taxes = isVatPost
+      const taxes = isVatPost || hasSez
         ? []
         : sacWiseTotals.map((row) => ({
             tax_code: row.sac_code ?? "",
@@ -1423,7 +1555,7 @@ function InvoiceReverse() {
             amount: row.total_amount ?? 0,
           }));
 
-      const gstRatesForPostCharges: (GstRates | null)[] = !isGstInvoiceUser
+      const gstRatesForPostCharges: (GstRates | null)[] = !applyGst
         ? values.charges.map(() => null)
         : await Promise.all(
             values.charges.map(async (charge, idx) => {
@@ -1497,22 +1629,22 @@ function InvoiceReverse() {
         }
 
         const rates = gstRatesForPostCharges[idx];
-        const igstRate = rates?.igst ?? 0;
-        const cgstRate = rates?.cgst ?? 0;
-        const sgstRate = rates?.sgst ?? 0;
+        const igstRate = hasSez ? 0 : (rates?.igst ?? 0);
+        const cgstRate = hasSez ? 0 : (rates?.cgst ?? 0);
+        const sgstRate = hasSez ? 0 : (rates?.sgst ?? 0);
         const sameState = rates?.same_state ?? false;
         const igstAmt =
-          !sameState && igstRate > 0
-            ? clampAmount(headerAmount * (igstRate / 100))
-            : 0;
+          hasSez || sameState || igstRate <= 0
+            ? 0
+            : clampAmount(headerAmount * (igstRate / 100));
         const cgstAmt =
-          sameState && cgstRate > 0
-            ? clampAmount(headerAmount * (cgstRate / 100))
-            : 0;
+          hasSez || !sameState || cgstRate <= 0
+            ? 0
+            : clampAmount(headerAmount * (cgstRate / 100));
         const sgstAmt =
-          sameState && sgstRate > 0
-            ? clampAmount(headerAmount * (sgstRate / 100))
-            : 0;
+          hasSez || !sameState || sgstRate <= 0
+            ? 0
+            : clampAmount(headerAmount * (sgstRate / 100));
         return {
           ...reverseChargeIdPayload(charge, includeChargeIds),
           shipment_no:
@@ -1565,7 +1697,7 @@ function InvoiceReverse() {
                 Dr_Cr: "Dr",
               };
             })
-        : isAgentInvoice || isUsPost
+        : isAgentInvoice || isUsPost || hasSez
           ? []
           : sacWiseTotals
               .filter((row) => {
@@ -1600,7 +1732,7 @@ function InvoiceReverse() {
                   Dr_Cr: "Dr",
                 };
               });
-      const appendTaxRows = isGstInvoiceUser || isVatPost;
+      const appendTaxRows = applyGst || isVatPost;
       const allChargesPayload = appendTaxRows
         ? [...chargesPayload, ...taxCharges]
         : chargesPayload;
@@ -1648,6 +1780,7 @@ function InvoiceReverse() {
         header_total,
         local_total,
         Dr_Cr: "Cr",
+        has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: allChargesPayload,
         taxes: isVatPost ? [] : taxes,
       };
@@ -1781,7 +1914,9 @@ function InvoiceReverse() {
       value == null || (typeof value === "string" && value.trim() === "");
     if (isCleared) {
       setAddressOptions([]);
+      billToAddressesRef.current = [];
       form.setFieldValue("address", "");
+      setHasSez(false);
       if (isGstInvoiceUser || isKenyaUser) {
         if (isGstInvoiceUser) form.setFieldValue("state", "");
         form.setFieldValue("gstn", "");
@@ -1801,6 +1936,7 @@ function InvoiceReverse() {
         address_type?: string | null;
         gst_id?: string | null;
       }>;
+      billToAddressesRef.current = addressesData || [];
       const newAddressOptions = (addressesData || []).map(
         (addr: { id: number; address: string }) => ({
           value: String(addr.id),
@@ -1836,6 +1972,7 @@ function InvoiceReverse() {
       }
     } else {
       setAddressOptions([]);
+      billToAddressesRef.current = [];
       form.setFieldValue("address", "");
     }
   };
@@ -1926,7 +2063,7 @@ function InvoiceReverse() {
       };
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
 
-      const gstRatesForCharges: (GstRates | null)[] = !isGstInvoiceUser
+      const gstRatesForCharges: (GstRates | null)[] = !applyGst
         ? values.charges.map(() => null)
         : await Promise.all(
             values.charges.map(async (charge, idx) => {
@@ -1998,22 +2135,22 @@ function InvoiceReverse() {
         }
 
         const rates = gstRatesForCharges[idx];
-        const igstRate = rates?.igst ?? 0;
-        const cgstRate = rates?.cgst ?? 0;
-        const sgstRate = rates?.sgst ?? 0;
+        const igstRate = hasSez ? 0 : (rates?.igst ?? 0);
+        const cgstRate = hasSez ? 0 : (rates?.cgst ?? 0);
+        const sgstRate = hasSez ? 0 : (rates?.sgst ?? 0);
         const sameState = rates?.same_state ?? false;
         const igstAmt =
-          !sameState && igstRate > 0
-            ? clampAmount(headerAmount * (igstRate / 100))
-            : 0;
+          hasSez || sameState || igstRate <= 0
+            ? 0
+            : clampAmount(headerAmount * (igstRate / 100));
         const cgstAmt =
-          sameState && cgstRate > 0
-            ? clampAmount(headerAmount * (cgstRate / 100))
-            : 0;
+          hasSez || !sameState || cgstRate <= 0
+            ? 0
+            : clampAmount(headerAmount * (cgstRate / 100));
         const sgstAmt =
-          sameState && sgstRate > 0
-            ? clampAmount(headerAmount * (sgstRate / 100))
-            : 0;
+          hasSez || !sameState || sgstRate <= 0
+            ? 0
+            : clampAmount(headerAmount * (sgstRate / 100));
         return {
           ...reverseChargeIdPayload(charge, isUpdate),
           shipment_no:
@@ -2081,6 +2218,7 @@ function InvoiceReverse() {
         header_total,
         local_total,
         Dr_Cr: "Cr",
+        has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
       };
       if (isUpdate) {
@@ -2673,17 +2811,17 @@ function InvoiceReverse() {
                         VAT Amount
                       </Grid.Col>
                     )}
-                    {isGstInvoiceUser && headerSameState === true && (
+                    {applyGst && headerSameState === true && (
                       <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                         CGST
                       </Grid.Col>
                     )}
-                    {isGstInvoiceUser && headerSameState === true && (
+                    {applyGst && headerSameState === true && (
                       <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                         SGST
                       </Grid.Col>
                     )}
-                    {isGstInvoiceUser && headerSameState === false && (
+                    {applyGst && headerSameState === false && (
                       <Grid.Col span={0.55} style={{ fontSize: "13px" }}>
                         IGST
                       </Grid.Col>
@@ -3005,6 +3143,7 @@ function InvoiceReverse() {
                             readOnly={isReadOnly}
                             error={chargeErrors[index]?.tax_code}
                             rightSection={
+                              applyGst &&
                               gstRatesLoadingByIndex[index] &&
                               (!charge.tax_code ||
                                 charge.tax_code.trim() === "") ? (
@@ -3079,7 +3218,7 @@ function InvoiceReverse() {
                           />
                         </Grid.Col>
                       )}
-                      {isGstInvoiceUser && headerSameState === true && (
+                      {applyGst && headerSameState === true && (
                         <Grid.Col span={0.55}>
                           <FormTextInput
                             placeholder="CGST"
@@ -3119,7 +3258,7 @@ function InvoiceReverse() {
                           />
                         </Grid.Col>
                       )}
-                      {isGstInvoiceUser && headerSameState === true && (
+                      {applyGst && headerSameState === true && (
                         <Grid.Col span={0.55}>
                           <FormTextInput
                             placeholder="SGST"
@@ -3159,7 +3298,7 @@ function InvoiceReverse() {
                           />
                         </Grid.Col>
                       )}
-                      {isGstInvoiceUser && headerSameState === false && (
+                      {applyGst && headerSameState === false && (
                         <Grid.Col span={0.55}>
                           <FormTextInput
                             placeholder="IGST"
@@ -3291,7 +3430,7 @@ function InvoiceReverse() {
                     }}
                   >
                     <Grid gutter="md">
-                      <Grid.Col span={isVatInvoiceUser ? 6 : 3}>
+                      <Grid.Col span={isVatInvoiceUser ? 6 : applyGst ? 3 : 6}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total
@@ -3334,7 +3473,7 @@ function InvoiceReverse() {
                           </Box>
                         </Grid.Col>
                       )}
-                      {isGstInvoiceUser && (
+                      {applyGst && (
                         <>
                           <Grid.Col span={3}>
                             <Box>
@@ -3511,7 +3650,7 @@ function InvoiceReverse() {
                       </ScrollArea>
                     </>
                   )}
-                  {!gstBreakupLoading && gstBreakup && isGstInvoiceUser && (
+                  {!gstBreakupLoading && gstBreakup && applyGst && (
                     <>
                       <ScrollArea mt="md">
                         <Table
