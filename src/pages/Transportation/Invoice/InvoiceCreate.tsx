@@ -416,6 +416,7 @@ type InvoiceTaxBreakup = {
     amount_in_local?: number;
     vat_charge_id?: number;
     vat_charge_code?: string;
+    Dr_Cr?: string;
   }>;
   sac_wise_totals?: Array<{
     sac_code?: string;
@@ -426,6 +427,7 @@ type InvoiceTaxBreakup = {
     charge_id?: number;
     rate?: number;
     rate_type?: string;
+    Dr_Cr?: string;
   }>;
   percentage_wise_totals?: Array<{
     charge_id?: number;
@@ -443,12 +445,17 @@ type InvoiceTaxBreakup = {
     amount_in_local?: number;
     source_charge_names?: string[];
     source_charge_count?: number;
+    Dr_Cr?: string;
   }>;
   cgst_total?: string;
   sgst_total?: string;
   igst_total?: string;
   vat_total?: string;
   total?: string;
+  Dr_Cr?: string;
+  cgst_Dr_Cr?: string;
+  sgst_Dr_Cr?: string;
+  igst_Dr_Cr?: string;
 };
 
 // Fetch GST/VAT breakup: POST { invoice_id, vat?: true }
@@ -682,13 +689,177 @@ function pickFirstTrimmedCode(
   return "";
 }
 
-function clampSumAmounts(parts: Array<number | null | undefined>): number {
-  const sum = parts.reduce<number>(
-    (acc, v) =>
-      Number.isFinite(Number(v)) ? acc + (Number(v) as number) : acc,
-    0,
-  );
-  return clampAmount(sum) ?? 0;
+type DrCrChargeLike = {
+  dr_cr?: string | null;
+  Dr_Cr?: string | null;
+  amount?: number | null;
+  header_amount?: number | null;
+  amount_in_header?: number | null;
+  amount_in_local?: number | null;
+  is_tax_row?: boolean;
+};
+
+function resolveChargeDrCr(
+  charge: Pick<DrCrChargeLike, "dr_cr" | "Dr_Cr">,
+): "Cr" | "Dr" {
+  const raw = charge.dr_cr ?? charge.Dr_Cr ?? "Cr";
+  return String(raw).trim().toLowerCase() === "dr" ? "Dr" : "Cr";
+}
+
+function resolveChargeHeaderAmount(charge: DrCrChargeLike): number {
+  const val = charge.header_amount ?? charge.amount_in_header ?? 0;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function resolveChargeCurrencyAmount(charge: DrCrChargeLike): number {
+  const n = Number(charge.amount ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function resolveChargeLocalAmount(charge: DrCrChargeLike): number {
+  const n = Number(charge.amount_in_local ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Net totals: sum(Cr) − sum(Dr) for currency/header/local amounts. */
+function calcChargeTotalsByDrCr(
+  charges: DrCrChargeLike[],
+  options?: { includeTaxRows?: boolean },
+): {
+  crAmountTotal: number;
+  drAmountTotal: number;
+  crHeaderTotal: number;
+  drHeaderTotal: number;
+  crLocalTotal: number;
+  drLocalTotal: number;
+  amount_total: number;
+  header_total: number;
+  local_total: number;
+  total: number;
+} {
+  const includeTaxRows = options?.includeTaxRows ?? false;
+  let crAmount = 0;
+  let drAmount = 0;
+  let crHeader = 0;
+  let drHeader = 0;
+  let crLocal = 0;
+  let drLocal = 0;
+
+  for (const charge of charges) {
+    if (!includeTaxRows && charge.is_tax_row === true) continue;
+
+    const amountAmt = resolveChargeCurrencyAmount(charge);
+    const headerAmt = resolveChargeHeaderAmount(charge);
+    const localAmt = resolveChargeLocalAmount(charge);
+    if (resolveChargeDrCr(charge) === "Dr") {
+      drAmount += amountAmt;
+      drHeader += headerAmt;
+      drLocal += localAmt;
+    } else {
+      crAmount += amountAmt;
+      crHeader += headerAmt;
+      crLocal += localAmt;
+    }
+  }
+
+  const crAmountTotal = clampAmount(crAmount) ?? 0;
+  const drAmountTotal = clampAmount(drAmount) ?? 0;
+  const crHeaderTotal = clampAmount(crHeader) ?? 0;
+  const drHeaderTotal = clampAmount(drHeader) ?? 0;
+  const crLocalTotal = clampAmount(crLocal) ?? 0;
+  const drLocalTotal = clampAmount(drLocal) ?? 0;
+  const amount_total = clampAmount(crAmount - drAmount) ?? 0;
+  const header_total = clampAmount(crHeader - drHeader) ?? 0;
+  const local_total = clampAmount(crLocal - drLocal) ?? 0;
+
+  return {
+    crAmountTotal,
+    drAmountTotal,
+    crHeaderTotal,
+    drHeaderTotal,
+    crLocalTotal,
+    drLocalTotal,
+    amount_total,
+    header_total,
+    local_total,
+    total: amount_total,
+  };
+}
+
+/** Net GST totals: sum(Cr GST) − sum(Dr GST) from local amount × rate. */
+function calcGstTotalsByDrCr(
+  charges: Array<{
+    dr_cr?: string | null;
+    Dr_Cr?: string | null;
+    amount_in_local?: number | null;
+    is_tax_row?: boolean;
+  }>,
+  gstRatesByChargeIndex: Record<
+    number,
+    { igst: number | null; cgst: number | null; sgst: number | null } | null
+  >,
+): { igst_total: number; cgst_total: number; sgst_total: number } {
+  let crIgst = 0;
+  let drIgst = 0;
+  let crCgst = 0;
+  let drCgst = 0;
+  let crSgst = 0;
+  let drSgst = 0;
+
+  charges.forEach((charge, idx) => {
+    if (charge.is_tax_row === true) return;
+    const localAmount = charge.amount_in_local;
+    if (localAmount == null) return;
+    const rates = gstRatesByChargeIndex[idx];
+    if (!rates) return;
+
+    const isDr = resolveChargeDrCr(charge) === "Dr";
+    const applyTax = (
+      rate: number | null | undefined,
+      addCr: (n: number) => void,
+      addDr: (n: number) => void,
+    ) => {
+      if (rate == null) return;
+      const amount = clampAmount((localAmount * rate) / 100) ?? 0;
+      if (isDr) addDr(amount);
+      else addCr(amount);
+    };
+
+    applyTax(
+      rates.igst,
+      (n) => {
+        crIgst += n;
+      },
+      (n) => {
+        drIgst += n;
+      },
+    );
+    applyTax(
+      rates.cgst,
+      (n) => {
+        crCgst += n;
+      },
+      (n) => {
+        drCgst += n;
+      },
+    );
+    applyTax(
+      rates.sgst,
+      (n) => {
+        crSgst += n;
+      },
+      (n) => {
+        drSgst += n;
+      },
+    );
+  });
+
+  return {
+    igst_total: clampAmount(crIgst - drIgst) ?? 0,
+    cgst_total: clampAmount(crCgst - drCgst) ?? 0,
+    sgst_total: clampAmount(crSgst - drSgst) ?? 0,
+  };
 }
 
 /** Amount in billing currency: same charge/billing currency → currency amount; else local ÷ billing ROE. */
@@ -3315,13 +3486,9 @@ function InvoiceCreate({
         return;
       }
 
-      // Total = sum of header amount column; header_total = same (rounded to 2 dp for payload)
-      const total = clampSumAmounts(
-        values.charges.map((c) => c.header_amount ?? 0),
-      );
-      const header_total = total;
-      const local_total = clampSumAmounts(
-        values.charges.map((c) => c.amount_in_local ?? 0),
+      // Net totals are Cr − Dr for currency/header/local amounts.
+      const { total, header_total, local_total } = calcChargeTotalsByDrCr(
+        values.charges.filter((c) => c.is_tax_row !== true),
       );
 
       const isAgentSave =
@@ -3672,6 +3839,7 @@ function InvoiceCreate({
         charge_id?: number;
         total_amount?: number;
         rate?: number;
+        Dr_Cr?: string;
       }> = [];
       let percentageWiseTotals: NonNullable<
         InvoiceTaxBreakup["percentage_wise_totals"]
@@ -3906,6 +4074,7 @@ function InvoiceCreate({
                   igst: null,
                   cgst: null,
                   sgst: null,
+                  // Tax rows always Cr on invoice create/post; charge Dr_Cr stays user-selected
                   Dr_Cr: "Cr",
                 };
               });
@@ -3915,13 +4084,10 @@ function InvoiceCreate({
         ? [...chargesPayload, ...taxCharges]
         : chargesPayload;
 
-      // Recompute totals from final charges payload (base charges + appended tax rows)
-      const total = clampSumAmounts(
-        allChargesPayload.map((c) => Number(c.amount_in_header) || 0),
-      );
-      const header_total = total;
-      const local_total = clampSumAmounts(
-        allChargesPayload.map((c) => Number(c.amount_in_local) || 0),
+      // Recompute net totals from final charges payload (base charges + appended tax rows)
+      const { total, header_total, local_total } = calcChargeTotalsByDrCr(
+        allChargesPayload,
+        { includeTaxRows: true },
       );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
@@ -4256,6 +4422,19 @@ function InvoiceCreate({
     if (nonTax.some((c) => (c.igst_rate ?? 0) > 0)) return false;
     return undefined;
   })();
+
+  const chargeSectionTotals = useMemo(
+    () =>
+      calcChargeTotalsByDrCr(
+        form.values.charges.filter((c) => c.is_tax_row !== true),
+      ),
+    [form.values.charges],
+  );
+
+  const gstSectionTotals = useMemo(
+    () => calcGstTotalsByDrCr(form.values.charges, gstRatesByChargeIndex),
+    [form.values.charges, gstRatesByChargeIndex],
+  );
 
   // Distribute Mantine grid spans (12 cols); VAT rate/amount match no-of-unit width
   const chargeGridCols = useMemo(() => {
@@ -6129,8 +6308,8 @@ function InvoiceCreate({
                 ))}
                 {/* </Box> */}
 
-                {/* Totals — local amount for India (incl. SEZ) / VAT; GST tax totals only when applyGst */}
-                {(isGstInvoiceUser || isVatInvoiceUser) && (
+                {/* Totals — net local total; GST/VAT tax totals when applicable */}
+                {form.values.charges.length > 0 && (
                   <Box
                     mt="xl"
                     p="md"
@@ -6141,20 +6320,13 @@ function InvoiceCreate({
                     }}
                   >
                     <Grid gutter="md">
-                      <Grid.Col
-                        span={isVatInvoiceUser ? 6 : applyGst ? 3 : 6}
-                      >
+                      <Grid.Col span={isVatInvoiceUser ? 6 : applyGst ? 3 : 6}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total
                           </Text>
                           <Text size="lg" fw={600} c="#105476">
-                            {form.values.charges
-                              .reduce(
-                                (sum, c) => sum + (c.amount_in_local ?? 0),
-                                0,
-                              )
-                              .toFixed(2)}
+                            {chargeSectionTotals.local_total.toFixed(2)}
                           </Text>
                         </Box>
                       </Grid.Col>
@@ -6195,19 +6367,7 @@ function InvoiceCreate({
                                 IGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {form.values.charges
-                                  .reduce((sum, c, idx) => {
-                                    const rate =
-                                      gstRatesByChargeIndex[idx]?.igst;
-                                    const localAmount = c.amount_in_local;
-                                    if (rate == null || localAmount == null)
-                                      return sum;
-                                    const amount = clampAmount(
-                                      (localAmount * rate) / 100,
-                                    );
-                                    return sum + (amount ?? 0);
-                                  }, 0)
-                                  .toFixed(2)}
+                                {gstSectionTotals.igst_total.toFixed(2)}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -6217,19 +6377,7 @@ function InvoiceCreate({
                                 CGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {form.values.charges
-                                  .reduce((sum, c, idx) => {
-                                    const rate =
-                                      gstRatesByChargeIndex[idx]?.cgst;
-                                    const localAmount = c.amount_in_local;
-                                    if (rate == null || localAmount == null)
-                                      return sum;
-                                    const amount = clampAmount(
-                                      (localAmount * rate) / 100,
-                                    );
-                                    return sum + (amount ?? 0);
-                                  }, 0)
-                                  .toFixed(2)}
+                                {gstSectionTotals.cgst_total.toFixed(2)}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -6239,19 +6387,7 @@ function InvoiceCreate({
                                 SGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {form.values.charges
-                                  .reduce((sum, c, idx) => {
-                                    const rate =
-                                      gstRatesByChargeIndex[idx]?.sgst;
-                                    const localAmount = c.amount_in_local;
-                                    if (rate == null || localAmount == null)
-                                      return sum;
-                                    const amount = clampAmount(
-                                      (localAmount * rate) / 100,
-                                    );
-                                    return sum + (amount ?? 0);
-                                  }, 0)
-                                  .toFixed(2)}
+                                {gstSectionTotals.sgst_total.toFixed(2)}
                               </Text>
                             </Box>
                           </Grid.Col>
