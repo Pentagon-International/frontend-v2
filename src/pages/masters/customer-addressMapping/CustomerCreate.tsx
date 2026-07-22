@@ -62,7 +62,10 @@ import {
   mapDocumentsListToSupportingDocuments,
   type CustomerDocumentListItem,
 } from "../../../utils/customerDocuments";
-import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
+import {
+  isIndianUserFromProfile,
+  isVietnameseBranch,
+} from "../../../utils/userNumberFormat";
 import FormTextArea from "../../../components/FormTextArea";
 
 function parseYesNoBoolean(value: unknown): boolean {
@@ -513,20 +516,8 @@ const addressItemSchema = yup.object({
     .optional()
     .oneOf(["composite", "Regular", ""], "Select Composite or Regular"),
   sez: yup.boolean().optional(),
-  sez_valid_date: yup.string().when("sez", {
-    is: (value: boolean | string | number | null | undefined) =>
-      parseYesNoBoolean(value),
-    then: (schema) =>
-      schema
-        .nullable()
-        .required("SEZ validity date is required")
-        .test(
-          "sez-valid-date",
-          "SEZ validity date is required",
-          (v) => !!String(v ?? "").trim(),
-        ),
-    otherwise: (schema) => schema.nullable().optional(),
-  }),
+  // Required only for India (see buildAddressValidationSchema); optional for Vietnam / others
+  sez_valid_date: yup.string().nullable().optional(),
   msme: yup.boolean().optional(),
   latitude: yup
     .number()
@@ -602,6 +593,20 @@ function buildAddressValidationSchema(
           .max(20, "GST No must not exceed 20 characters"),
       otherwise: (schema) =>
         schema.optional().max(20, "GST No must not exceed 20 characters"),
+    }),
+    sez_valid_date: yup.string().when("sez", {
+      is: (value: boolean | string | number | null | undefined) =>
+        parseYesNoBoolean(value),
+      then: (schema) =>
+        schema
+          .nullable()
+          .required("SEZ validity date is required")
+          .test(
+            "sez-valid-date",
+            "SEZ validity date is required",
+            (v) => !!String(v ?? "").trim(),
+          ),
+      otherwise: (schema) => schema.nullable().optional(),
     }),
     msme_no: yup.string().when("msme", {
       is: (value: boolean | string | number | null | undefined) =>
@@ -1054,6 +1059,7 @@ const AddressCard = ({
   isVendorMasterRoute,
   isDubaiUser,
   isIndiaUser,
+  isVietnamUser,
   isKenyaUser,
   isChinaUser,
   addressForm,
@@ -1079,6 +1085,7 @@ const AddressCard = ({
   isVendorMasterRoute: boolean;
   isDubaiUser: boolean;
   isIndiaUser: boolean;
+  isVietnamUser: boolean;
   isKenyaUser: boolean;
   isChinaUser: boolean;
   addressForm: UseFormReturnType<{ addresses_data: AddressData[] }>;
@@ -1386,8 +1393,33 @@ const AddressCard = ({
                 />
               </Grid.Col>
             )}
+            {isVietnamUser && (
+              <Grid.Col span={4}>
+                <Select
+                  label="Tax Exemption"
+                  placeholder="Select"
+                  disabled={isViewMode}
+                  data={[
+                    { value: "Yes", label: "Yes" },
+                    { value: "No", label: "No" },
+                  ]}
+                  value={
+                    addressForm.values.addresses_data[index]?.sez
+                      ? "Yes"
+                      : "No"
+                  }
+                  onChange={(value) => {
+                    addressForm.setFieldValue(
+                      `addresses_data.${index}.sez`,
+                      value === "Yes",
+                    );
+                  }}
+                />
+              </Grid.Col>
+            )}
           </Grid>
         </Box>
+
 
         {isIndiaUser && (
           <Box>
@@ -1717,6 +1749,8 @@ function CustomerCreate() {
   const userCountry = useAuthStore((s) => s.user?.country);
   const userBranches = useAuthStore((s) => s.user?.branches);
   const isIndiaUser = isIndianUserFromProfile(userCountry);
+  // Vietnam SEZ UI: gate on default branch from login (localStorage user)
+  const isVietnamUser = isVietnameseBranch(userBranches);
   const isKenyaUser = useMemo(() => {
     const defaultBranch = userBranches?.find((b) => b.is_default);
     const byBranch =
@@ -3623,6 +3657,7 @@ function CustomerCreate() {
                         isVendorMasterRoute={isVendorMasterRoute}
                         isDubaiUser={isDubaiUser}
                         isIndiaUser={isIndiaUser}
+                        isVietnamUser={isVietnamUser}
                         isKenyaUser={isKenyaUser}
                         isChinaUser={isChinaUser}
                         addressForm={addressForm}
