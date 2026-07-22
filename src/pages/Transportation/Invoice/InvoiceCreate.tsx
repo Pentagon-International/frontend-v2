@@ -72,6 +72,7 @@ import {
 import {
   isIndianOutstandingBranch,
   isIndianUserCountry,
+  isVietnameseUserCountry,
 } from "../../../utils/userNumberFormat";
 
 // Fetch functions
@@ -367,16 +368,29 @@ const fetchGetEffectiveSac = async (
   }
 };
 
-/** India customer invoice: check if Bill To + address is SEZ as of document date. */
+/** India/Vietnam customer invoice: check if Bill To + address is SEZ.
+ * India requires document_date; Vietnam omits it.
+ */
 const fetchCheckSezStatus = async (payload: {
   customer_code: string;
   address: string;
-  document_date: string;
+  document_date?: string;
 }): Promise<boolean> => {
   try {
+    const body: {
+      customer_code: string;
+      address: string;
+      document_date?: string;
+    } = {
+      customer_code: payload.customer_code,
+      address: payload.address,
+    };
+    if (payload.document_date) {
+      body.document_date = payload.document_date;
+    }
     const response = await postAPICall(
       URL.checkSezStatus,
-      payload,
+      body,
       API_HEADER,
     );
     const root = response as {
@@ -1219,6 +1233,24 @@ function InvoiceCreate({
     user?.country?.country_name,
   ]);
 
+  // Vietnam SEZ/VAT: gate on default branch country from login (localStorage user)
+  const isVietnamUser = useMemo(() => {
+    const branchCountryCode = (activeBranchCountryCode ?? "").toUpperCase();
+    if (branchCountryCode) {
+      return isVietnameseUserCountry(branchCountryCode);
+    }
+    return (
+      isVietnameseUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("vietnam")
+    );
+  }, [
+    activeBranchCountryCode,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
+
   // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
   const isUsInvoiceUser = useMemo(() => isUnitedStatesBranchUser(user), [user]);
 
@@ -1236,6 +1268,8 @@ function InvoiceCreate({
 
   // SEZ customers: SAC still applies; GST columns/totals/tax tab are hidden
   const applyGst = isGstInvoiceUser && !hasSez;
+  // Vietnam SEZ: hide VAT columns / tax tab / tax calc (other VAT countries unchanged)
+  const applyVat = isVatInvoiceUser && !(isVietnamUser && hasSez);
 
   useEffect(() => {
     isGstInvoiceRef.current = isGstInvoiceUser;
@@ -1249,7 +1283,7 @@ function InvoiceCreate({
     isUsInvoiceRef.current = isUsInvoiceUser;
   }, [isUsInvoiceUser]);
 
-  const showTaxTab = applyGst || isVatInvoiceUser;
+  const showTaxTab = applyGst || applyVat;
 
   const isInvoicePosted =
     invoiceIsPosted ||
@@ -1314,9 +1348,10 @@ function InvoiceCreate({
     billingRoeRef.current = form.values.roe;
   }, [form.values.currency, form.values.roe]);
 
-  // India customer invoice only: when Bill To + address + document date are set, check SEZ status
+  // India: Bill To + address + document date → check SEZ.
+  // Vietnam: Bill To + address only (no document_date).
   useEffect(() => {
-    if (!isIndiaUser || isAgentInvoice) {
+    if (isAgentInvoice || (!isIndiaUser && !isVietnamUser)) {
       setHasSez(false);
       return;
     }
@@ -1326,11 +1361,30 @@ function InvoiceCreate({
     const addressLabel =
       addressOptions.find((opt) => opt.value === addressRaw)?.label?.trim() ||
       addressRaw;
-    const documentDate = formatDateYYYYMMDD(form.values.document_date);
 
-    if (!customerCode || !addressLabel || !documentDate) {
+    if (!customerCode || !addressLabel) {
       setHasSez(false);
       return;
+    }
+
+    if (isIndiaUser) {
+      const documentDate = formatDateYYYYMMDD(form.values.document_date);
+      if (!documentDate) {
+        setHasSez(false);
+        return;
+      }
+      let cancelled = false;
+      void (async () => {
+        const sez = await fetchCheckSezStatus({
+          customer_code: customerCode,
+          address: addressLabel,
+          document_date: documentDate,
+        });
+        if (!cancelled) setHasSez(sez);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
 
     let cancelled = false;
@@ -1338,7 +1392,6 @@ function InvoiceCreate({
       const sez = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
-        document_date: documentDate,
       });
       if (!cancelled) setHasSez(sez);
     })();
@@ -1349,6 +1402,7 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isIndiaUser,
+    isVietnamUser,
     isAgentInvoice,
     form.values.bill_to,
     form.values.address,
@@ -1363,6 +1417,18 @@ function InvoiceCreate({
     setGstRatesLoadingByIndex({});
     lastGstRatesFetchKeyRef.current = "";
   }, [hasSez]);
+
+  // Vietnam SEZ: zero VAT rates on charge rows (tax not applicable)
+  useEffect(() => {
+    if (!(isVietnamUser && hasSez)) return;
+    form.values.charges.forEach((charge, idx) => {
+      if (charge.is_tax_row === true) return;
+      if (charge.tax_rate != null && Number(charge.tax_rate) !== 0) {
+        form.setFieldValue(`charges.${idx}.tax_rate`, 0);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVietnamUser, hasSez, form.values.charges.length]);
 
   const isBaseCurrency = useCallback(
     (currency: string | null | undefined): boolean => {
@@ -2281,7 +2347,7 @@ function InvoiceCreate({
             }
 
             if (
-              isVatInvoiceUser &&
+              applyVat &&
               jobServiceIdForSac &&
               mappedCharges.some((c: ChargeItem) => c.charge_id != null)
             ) {
@@ -2663,7 +2729,7 @@ function InvoiceCreate({
 
   // Sync VAT % on charge rows from calculate-gst-breakup (no gst-rates-by-state-sac for VAT)
   useEffect(() => {
-    if (!isVatInvoiceUser || !gstBreakup) return;
+    if (!applyVat || !gstBreakup) return;
     const rows = getVatBreakupRows(gstBreakup);
     if (rows.length === 0) return;
     form.values.charges.forEach((charge, idx) => {
@@ -2674,7 +2740,7 @@ function InvoiceCreate({
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gstBreakup, isVatInvoiceUser]);
+  }, [gstBreakup, applyVat]);
 
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
@@ -3032,7 +3098,7 @@ function InvoiceCreate({
     setGstBreakup(null);
     fetchInvoiceCalculateGstBreakup({
       invoice_id: saveResponse.id,
-      ...(isVatInvoiceUser ? { vat: true } : {}),
+      ...(applyVat ? { vat: true } : {}),
     })
       .then((data) => {
         if (!cancelled) setGstBreakup(data);
@@ -3046,7 +3112,7 @@ function InvoiceCreate({
     return () => {
       cancelled = true;
     };
-  }, [chargesTabActive, saveResponse?.id, showTaxTab, isVatInvoiceUser]);
+  }, [chargesTabActive, saveResponse?.id, showTaxTab, applyVat]);
 
   // Bill To change: (1) When cleared → clear state and address. (2) When customer selected from search → set Bill To + State from customer response (addresses_data.state_id). (3) When from house page → shipper/state set on load (mount effect).
   const handleBillToChange = (
@@ -3393,13 +3459,17 @@ function InvoiceCreate({
           const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
 
           if (isVatSave) {
-            const taxRate = resolveVatTaxRate(
-              gstBreakup,
-              charge.charge_id,
-              charge.tax_rate,
-            );
+            const taxRate = applyVat
+              ? resolveVatTaxRate(
+                  gstBreakup,
+                  charge.charge_id,
+                  charge.tax_rate,
+                )
+              : 0;
             const taxBase = charge.amount_in_local ?? headerAmount;
-            const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
+            const taxAmount = applyVat
+              ? calcTaxAmountFromRate(taxBase, taxRate)
+              : 0;
             return {
               ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
               shipment_no:
@@ -3514,7 +3584,7 @@ function InvoiceCreate({
         local_total,
         Dr_Cr: baseDrCr,
         is_agent: isAgent,
-        has_sez: isIndiaUser && !isAgent ? hasSez : false,
+        has_sez: (isIndiaUser || isVietnamUser) && !isAgent ? hasSez : false,
         charges: chargesPayload,
       };
       console.log("payload---", payload);
@@ -3677,7 +3747,7 @@ function InvoiceCreate({
         InvoiceTaxBreakup["percentage_wise_totals"]
       > = [];
       let vatBreakupData: InvoiceTaxBreakup | null = gstBreakup;
-      if (isVatPost) {
+      if (applyVat) {
         if (!vatBreakupData?.percentage_wise_totals?.length) {
           vatBreakupData = await fetchInvoiceCalculateGstBreakup({
             invoice_id: saveResponse.id as number,
@@ -3685,6 +3755,8 @@ function InvoiceCreate({
           });
         }
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
+      } else if (isVatPost) {
+        percentageWiseTotals = [];
       } else if (applyGst) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
@@ -3772,13 +3844,17 @@ function InvoiceCreate({
           const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
 
           if (isVatPost) {
-            const taxRate = resolveVatTaxRate(
-              vatBreakupData,
-              charge.charge_id,
-              charge.tax_rate,
-            );
+            const taxRate = applyVat
+              ? resolveVatTaxRate(
+                  vatBreakupData,
+                  charge.charge_id,
+                  charge.tax_rate,
+                )
+              : 0;
             const taxBase = charge.amount_in_local ?? headerAmount;
-            const taxAmount = calcTaxAmountFromRate(taxBase, taxRate);
+            const taxAmount = applyVat
+              ? calcTaxAmountFromRate(taxBase, taxRate)
+              : 0;
             return {
               ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
               shipment_no:
@@ -3847,7 +3923,7 @@ function InvoiceCreate({
             sgst: sgstAmt,
           };
         });
-      const taxCharges = isVatPost
+      const taxCharges = applyVat
         ? percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
@@ -3868,7 +3944,7 @@ function InvoiceCreate({
                 Dr_Cr: "Cr",
               };
             })
-        : isAgentPost || isUsPost || hasSez
+        : isAgentPost || isUsPost || hasSez || isVatPost
           ? []
           : sacWiseTotals
               .filter((row) => {
@@ -3910,7 +3986,7 @@ function InvoiceCreate({
                 };
               });
 
-      const appendTaxRows = applyGst || isVatPost;
+      const appendTaxRows = applyGst || applyVat;
       const allChargesPayload = appendTaxRows
         ? [...chargesPayload, ...taxCharges]
         : chargesPayload;
@@ -3962,7 +4038,7 @@ function InvoiceCreate({
         local_total,
         Dr_Cr: baseDrCr,
         is_agent: isAgentPost,
-        has_sez: isIndiaUser && !isAgentPost ? hasSez : false,
+        has_sez: (isIndiaUser || isVietnamUser) && !isAgentPost ? hasSez : false,
         charges: allChargesPayload,
         taxes: [],
       };
@@ -4262,10 +4338,10 @@ function InvoiceCreate({
     const cols = {
       shipment: showShipmentIdInCharges ? 1 : 0,
       charge: showShipmentIdInCharges
-        ? isVatInvoiceUser
+        ? applyVat
           ? 0.85
           : 1.35
-        : isVatInvoiceUser
+        : applyVat
           ? 0.7
           : 1.65,
       unit: 0.85,
@@ -4277,9 +4353,9 @@ function InvoiceCreate({
       headerAmount: 0.95,
       localAmount: 0.85,
       sac: isGstInvoiceUser ? 0.75 : 0,
-      drCr: isVatInvoiceUser ? 0.7 : 0.55,
-      vatRate: isVatInvoiceUser ? 0.9 : 0,
-      vatAmount: isVatInvoiceUser ? 0.9 : 0,
+      drCr: applyVat ? 0.7 : 0.55,
+      vatRate: applyVat ? 0.9 : 0,
+      vatAmount: applyVat ? 0.9 : 0,
       cgst: applyGst && headerSameState === true ? 0.55 : 0,
       sgst: applyGst && headerSameState === true ? 0.55 : 0,
       igst: applyGst && headerSameState === false ? 0.55 : 0,
@@ -4293,7 +4369,7 @@ function InvoiceCreate({
     showShipmentIdInCharges,
     isGstInvoiceUser,
     applyGst,
-    isVatInvoiceUser,
+    applyVat,
     headerSameState,
     isReadOnly,
   ]);
@@ -4959,7 +5035,7 @@ function InvoiceCreate({
                   >
                     Dr/Cr
                   </Grid.Col>
-                  {isVatInvoiceUser && (
+                  {applyVat && (
                     <Grid.Col
                       span={chargeGridCols.vatRate}
                       style={chargeHeaderCellStyle}
@@ -4967,7 +5043,7 @@ function InvoiceCreate({
                       VAT Rate %
                     </Grid.Col>
                   )}
-                  {isVatInvoiceUser && (
+                  {applyVat && (
                     <Grid.Col
                       span={chargeGridCols.vatAmount}
                       style={chargeHeaderCellStyle}
@@ -5071,7 +5147,7 @@ function InvoiceCreate({
                             chargeName,
                           );
                           form.setFieldValue(`charges.${index}.tax_code`, "");
-                          if (isVatInvoiceUser) {
+                          if (applyVat) {
                             form.setFieldValue(
                               `charges.${index}.tax_rate`,
                               null,
@@ -5113,7 +5189,7 @@ function InvoiceCreate({
                           if (
                             chargeId != null &&
                             jobServiceId != null &&
-                            isVatInvoiceUser
+                            applyVat
                           ) {
                             fetchGstRatesByStateSac({
                               vat: true,
@@ -5759,7 +5835,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    {isVatInvoiceUser && (
+                    {applyVat && (
                       <Grid.Col span={chargeGridCols.vatRate}>
                         <FormNumberInput
                           placeholder="VAT %"
@@ -5793,7 +5869,7 @@ function InvoiceCreate({
                         />
                       </Grid.Col>
                     )}
-                    {isVatInvoiceUser && (
+                    {applyVat && (
                       <Grid.Col span={chargeGridCols.vatAmount}>
                         <FormNumberInput
                           placeholder="VAT Amount"
@@ -6142,7 +6218,7 @@ function InvoiceCreate({
                   >
                     <Grid gutter="md">
                       <Grid.Col
-                        span={isVatInvoiceUser ? 6 : applyGst ? 3 : 6}
+                        span={applyVat ? 6 : applyGst ? 3 : 6}
                       >
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
@@ -6158,7 +6234,7 @@ function InvoiceCreate({
                           </Text>
                         </Box>
                       </Grid.Col>
-                      {isVatInvoiceUser && (
+                      {applyVat && (
                         <Grid.Col span={6}>
                           <Box>
                             <Text size="sm" fw={500} c="dimmed" mb={4}>
@@ -6284,7 +6360,7 @@ function InvoiceCreate({
                           : "No GST breakup data."}
                       </Text>
                     )}
-                  {!gstBreakupLoading && gstBreakup && isVatInvoiceUser && (
+                  {!gstBreakupLoading && gstBreakup && applyVat && (
                     <>
                       <ScrollArea mt="md">
                         <Table

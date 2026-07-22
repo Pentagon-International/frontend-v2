@@ -1,6 +1,6 @@
 export type BranchCurrencyContext = {
   is_default?: boolean;
-  country?: { country_code?: string };
+  country?: { country_code?: string; country_name?: string };
   currency?: { currency_code?: string };
 };
 
@@ -25,6 +25,38 @@ export function isIndianUserFromProfile(
     String(country?.country_name ?? "")
       .toLowerCase()
       .includes("india")
+  );
+}
+
+/** True when country code is Vietnam (VN). */
+export function isVietnameseUserCountry(
+  countryCode?: string | null,
+): boolean {
+  return String(countryCode ?? "").trim().toUpperCase() === "VN";
+}
+
+/** True when the logged-in user's profile country is Vietnam. */
+export function isVietnameseUserFromProfile(
+  country?: UserCountryProfile,
+): boolean {
+  return (
+    isVietnameseUserCountry(country?.country_code) ||
+    String(country?.country_name ?? "")
+      .toLowerCase()
+      .includes("vietnam")
+  );
+}
+
+/** True when the active (default) branch country is Vietnam. */
+export function isVietnameseBranch(
+  branches?: BranchCurrencyContext[] | null,
+): boolean {
+  const branch = getDefaultUserBranch(branches);
+  return (
+    isVietnameseUserCountry(branch?.country?.country_code) ||
+    String(branch?.country?.country_name ?? "")
+      .toLowerCase()
+      .includes("vietnam")
   );
 }
 
