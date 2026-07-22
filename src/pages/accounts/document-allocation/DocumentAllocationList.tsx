@@ -74,6 +74,7 @@ type DocumentAllocationListItem = {
   allocation_no?: string;
   allocation_date?: string;
   document_status?: string;
+  allocation?: Array<Record<string, unknown>>;
 };
 
 /** `summary` on `outstandingAllocationDocumentsFilter` — totals are filter-scoped. */

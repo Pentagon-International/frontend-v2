@@ -21,7 +21,6 @@ import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
-import { commonSearchAPI } from "../../../service/searchApi";
 import {
   SearchableSelect,
   SingleDateInput,
@@ -165,33 +164,6 @@ const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRo
     amount: r.amount ?? outAmt,
     amount_in_local: r.amount_in_local ?? outLocal,
   };
-};
-
-const fetchCoaAccount = async (
-  accountCode: string,
-): Promise<CoaItem | null> => {
-  try {
-    const results = await commonSearchAPI({
-      endpoint: URL.chartOfAccounts,
-      query: accountCode,
-    });
-    if (!Array.isArray(results) || results.length === 0) return null;
-    const match =
-      (results as Record<string, unknown>[]).find(
-        (item) => String(item.gl_account_code ?? "") === accountCode,
-      ) ?? results[0];
-    if (!match) return null;
-    return {
-      id: match.id != null ? Number(match.id) : undefined,
-      gl_account_code:
-        match.gl_account_code != null ? String(match.gl_account_code) : undefined,
-      sl_code: match.sl_code != null ? String(match.sl_code) : undefined,
-      account_name:
-        match.account_name != null ? String(match.account_name) : undefined,
-    };
-  } catch {
-    return null;
-  }
 };
 
 const fetchAllocationDocumentFromApi = async (
@@ -411,20 +383,18 @@ export default function DocumentAllocation() {
           return;
         }
 
+        // Prefer list/nav row values so view/edit shows what was listed
+        // (account_name / subledger_code / allocation_date). Do not hit
+        // chart-of-accounts here — COA is only used when the user clears
+        // and re-searches the Account Name field.
         const resolvedAccountCode =
-          doc.account_code ?? row.account_code ?? "";
-        const resolvedSlCode = doc.subledger_code ?? row.subledger_code;
-
-        // Prefer account_name from navigation row (most reliable), then API doc
-        const rawAccountName =
-          (row.account_name?.trim() ||
-            doc.account_name?.trim()) ?? "";
-
-        // Fetch full account details from COA to get the proper id and canonical name
-        let coaAccount: CoaItem | null = null;
-        if (resolvedAccountCode) {
-          coaAccount = await fetchCoaAccount(resolvedAccountCode);
-        }
+          (row.account_code ?? doc.account_code ?? "").trim();
+        const resolvedSlCode =
+          (row.subledger_code ?? doc.subledger_code ?? "").trim() || undefined;
+        const resolvedAccountName =
+          (row.account_name?.trim() || doc.account_name?.trim()) ?? "";
+        const resolvedAllocationDate =
+          row.allocation_date ?? doc.allocation_date;
 
         setIsViewMode(mode === "view");
 
@@ -433,24 +403,17 @@ export default function DocumentAllocation() {
           status: doc.document_status,
           account_code: resolvedAccountCode || undefined,
           subledger_code: resolvedSlCode,
-          allocation_date: doc.allocation_date ?? row.allocation_date,
+          allocation_date: resolvedAllocationDate,
           allocation_no: doc.allocation_no ?? row.allocation_no,
         });
 
         setSelectedAccount({
-          id: coaAccount?.id,
-          gl_account_code: coaAccount?.gl_account_code ?? resolvedAccountCode,
-          sl_code: coaAccount?.sl_code ?? resolvedSlCode,
-          account_name: coaAccount?.account_name?.trim()
-            ? coaAccount.account_name
-            : rawAccountName,
+          gl_account_code: resolvedAccountCode || undefined,
+          sl_code: resolvedSlCode,
+          account_name: resolvedAccountName || undefined,
         });
 
-        setSelectedDate(
-          parseAllocationDateString(
-            (doc.allocation_date ?? row.allocation_date) ?? null,
-          ),
-        );
+        setSelectedDate(parseAllocationDateString(resolvedAllocationDate ?? null));
 
         const lines = Array.isArray(doc.allocation) ? doc.allocation : [];
         setRows(lines.map(normalizeAllocationLine));

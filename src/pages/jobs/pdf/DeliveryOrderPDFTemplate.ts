@@ -160,6 +160,28 @@ const isKenyaCountry = (country: any): boolean => {
   return countryName.includes("KENYA") || countryCode === "KE";
 };
 
+const isIndiaCountry = (country: any): boolean => {
+  let countryName = "";
+  let countryCode = "";
+
+  if (country) {
+    countryName = (country.country_name || "").toUpperCase();
+    countryCode = (country.country_code || "").toUpperCase();
+  } else {
+    const resolved = getUserCountry();
+    if (resolved) {
+      countryName = (resolved.country_name || "").toUpperCase();
+      countryCode = (resolved.country_code || "").toUpperCase();
+    }
+  }
+
+  return (
+    countryName.includes("INDIA") ||
+    countryCode === "IN" ||
+    countryName === "INDIA"
+  );
+};
+
 // Helper function to draw header section
 const drawHeaderSection = (
   doc: jsPDF,
@@ -1005,11 +1027,18 @@ export const generateDeliveryOrderPDF = (
           "The Original Master B/L is already surrendered at the Port of Loading. Enclosed please find the copy of HBL duly endorsed by us for your reference.",
           `For ${branchInfo.name || ""}`,
         ]
-      : [
-          "Dear Sir,",
-          "Please note this Delivery Order is valid for 30 days from the vessel arrival date. Thereafter reissue due to loss of original DO or exceeding the validity of aforesaid 30 days will incur additional charges of INR 1000 for every additional 10 days.",
-          `For ${branchInfo.name || ""}`,
-        ];
+      : isIndiaCountry(country)
+        ? [
+            "Dear Sir,",
+            `With reference to the above shipment, we request you to issue the Delivery Order to CHA/CNEE: ${deliverToName} against collection of your necessary charges.`,
+            "The Original Master B/L is already surrendered at the Port of Loading. Enclosed please find the copy of HBL duly endorsed by us for your reference.",
+            `For ${branchInfo.name || ""}`,
+          ]
+        : [
+            "Dear Sir,",
+            "Please note this Delivery Order is valid for 30 days from the vessel arrival date. Thereafter reissue due to loss of original DO or exceeding the validity of aforesaid 30 days will incur additional charges of INR 1000 for every additional 10 days.",
+            `For ${branchInfo.name || ""}`,
+          ];
     notes.forEach((note) => {
       if (note) {
         const noteLines = doc.splitTextToSize(
