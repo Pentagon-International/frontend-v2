@@ -2699,6 +2699,13 @@ export default function SupplierInvoiceCreate({
                       code,
                       (roe) => form.setFieldValue("roe", roe),
                       v ?? "",
+                      (_roe, fieldError) => {
+                        if (fieldError) {
+                          form.setFieldError("roe", fieldError);
+                        } else {
+                          form.clearFieldError("roe");
+                        }
+                      },
                     );
                   }
                 }}
@@ -2734,6 +2741,9 @@ export default function SupplierInvoiceCreate({
                   min={0}
                   decimalScale={ROE_DECIMAL_PLACES}
                   hideControls
+                  error={
+                    form.errors.roe ? String(form.errors.roe) : undefined
+                  }
                   disabled={
                     isReadOnly ||
                     reversalFormDisabled ||
@@ -3577,6 +3587,18 @@ export default function SupplierInvoiceCreate({
                                 );
                               },
                               v ?? "",
+                              (_roe, fieldError) => {
+                                if (fieldError) {
+                                  form.setFieldError(
+                                    `charges_data.${index}.roe`,
+                                    fieldError,
+                                  );
+                                } else {
+                                  form.clearFieldError(
+                                    `charges_data.${index}.roe`,
+                                  );
+                                }
+                              },
                             );
                           }
                         }}
@@ -3621,6 +3643,11 @@ export default function SupplierInvoiceCreate({
                           min={0}
                           decimalScale={ROE_DECIMAL_PLACES}
                           hideControls
+                          error={
+                            form.errors[`charges_data.${index}.roe`]
+                              ? String(form.errors[`charges_data.${index}.roe`])
+                              : undefined
+                          }
                           disabled={
                             isReadOnly ||
                             reversalFormDisabled ||

@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useExchangeRateRoe } from "./useExchangeRateRoe";
 import { clampRoeForAccounts } from "../utils/exchangeRateRoe";
+import ToastNotification from "../components/ToastNotification";
 
 /**
  * Accounts documents: active branch currency defaults + exchange-rate-master ROE.
@@ -39,20 +40,37 @@ export function useAccountsDocumentCurrencyRoe() {
       currencyCode: string | null | undefined,
       setRoe: (roe: number | null) => void,
       currencyId?: string | null,
+      onValidated?: (roe: number | null, fieldError: string | null) => void,
     ) => {
       const code = String(currencyCode ?? "").trim().toUpperCase();
       if (!code && !currencyId) return;
       if (isBaseCurrency(code, currencyId)) {
         setRoe(1);
+        onValidated?.(1, null);
         return;
       }
       if (!code) return;
       setRoe(null);
       void ensureRoeForCurrency(code).then((roe) => {
-        setRoe(roe != null ? clampRoeForAccounts(roe) : null);
+        const normalized = roe != null ? clampRoeForAccounts(roe) : null;
+        setRoe(normalized);
+        const err = validateRoeField(code, normalized, currencyId);
+        onValidated?.(normalized, err);
+        if (err === ROE_CANNOT_BE_ONE_FIELD) {
+          ToastNotification({
+            type: "error",
+            message: ROE_CANNOT_BE_ONE_TOAST,
+          });
+        }
       });
     },
-    [ensureRoeForCurrency, isBaseCurrency],
+    [
+      ensureRoeForCurrency,
+      isBaseCurrency,
+      validateRoeField,
+      ROE_CANNOT_BE_ONE_FIELD,
+      ROE_CANNOT_BE_ONE_TOAST,
+    ],
   );
 
   const onRoeValueChange = useCallback(
@@ -73,10 +91,24 @@ export function useAccountsDocumentCurrencyRoe() {
       const normalizedRoe = clampRoeForAccounts(rawRoe ?? null);
       setRoe(normalizedRoe);
       const err = validateRoeField(currencyCode, normalizedRoe, currencyId);
-      if (err) setFieldError(fieldKey, err);
-      else clearFieldError(fieldKey);
+      if (err) {
+        setFieldError(fieldKey, err);
+        if (err === ROE_CANNOT_BE_ONE_FIELD) {
+          ToastNotification({
+            type: "error",
+            message: ROE_CANNOT_BE_ONE_TOAST,
+          });
+        }
+      } else {
+        clearFieldError(fieldKey);
+      }
     },
-    [isBaseCurrency, validateRoeField],
+    [
+      isBaseCurrency,
+      validateRoeField,
+      ROE_CANNOT_BE_ONE_FIELD,
+      ROE_CANNOT_BE_ONE_TOAST,
+    ],
   );
 
   return {

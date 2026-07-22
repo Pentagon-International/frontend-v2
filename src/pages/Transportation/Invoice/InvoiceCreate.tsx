@@ -73,6 +73,14 @@ import {
   isIndianOutstandingBranch,
   isIndianUserCountry,
 } from "../../../utils/userNumberFormat";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmount,
+  clampMoneyAmountBound,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 // Fetch functions
 
@@ -663,13 +671,9 @@ function InvoiceDateInput({
   );
 }
 
-// Round monetary amounts to exactly 2 decimal places (payload / display math). No upper bound.
+// Round monetary amounts (2 dp, or whole numbers for Vietnam — see nonDecimalMoneyAmount).
 function clampAmount(value: number | null | undefined): number | null {
-  if (value === null || value === undefined)
-    return value === undefined ? null : null;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  return parseFloat(n.toFixed(2));
+  return clampMoneyAmountBound(value);
 }
 
 /** Prefer first non-empty string from nested party/job records (ocean housings vary by field names). */
@@ -1364,6 +1368,13 @@ function InvoiceCreate({
     user?.country?.country_code,
     user?.country?.country_name,
   ]);
+
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const isKenyaUser = useMemo(() => {
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
@@ -4870,6 +4881,7 @@ function InvoiceCreate({
                 placeholder="Enter rate of exchange"
                 value={form.values.roe ?? undefined}
                 decimalScale={ROE_DECIMAL_PLACES}
+                hideControls
                 onChange={(value) => {
                   if (isBillingBaseCurrency) {
                     form.setFieldValue("roe", 1);
@@ -5715,6 +5727,7 @@ function InvoiceCreate({
                         placeholder="Per Unit"
                         min={0}
                         hideControls
+                        decimalScale={amountDecimalScale}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount_per_unit || undefined}
@@ -5778,6 +5791,7 @@ function InvoiceCreate({
                         placeholder="Currency Amount"
                         min={0}
                         hideControls
+                        decimalScale={amountDecimalScale}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
@@ -5842,6 +5856,7 @@ function InvoiceCreate({
                         placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
                         min={0}
                         hideControls
+                        decimalScale={amountDecimalScale}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.header_amount || undefined}
@@ -5858,6 +5873,7 @@ function InvoiceCreate({
                         placeholder="Local Amount"
                         min={0}
                         hideControls
+                        decimalScale={amountDecimalScale}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
@@ -5956,7 +5972,10 @@ function InvoiceCreate({
                             return rate > 0 ? rate : undefined;
                           })()}
                           onChange={(value) => {
-                            const parsed = clampAmount(value as number | null);
+                            const parsed = clampMoneyAmount(
+                              value as number | null,
+                              false,
+                            );
                             form.setFieldValue(
                               `charges.${index}.tax_rate`,
                               parsed,
@@ -5978,6 +5997,7 @@ function InvoiceCreate({
                           placeholder="VAT Amount"
                           min={0}
                           hideControls
+                          decimalScale={amountDecimalScale}
                           readOnly
                           value={(() => {
                             if (charge.is_tax_row === true) return undefined;
@@ -6326,7 +6346,9 @@ function InvoiceCreate({
                             Local Amount Total
                           </Text>
                           <Text size="lg" fw={600} c="#105476">
-                            {chargeSectionTotals.local_total.toFixed(2)}
+                            {formatMoneyAmountBound(
+                              chargeSectionTotals.local_total,
+                            )}
                           </Text>
                         </Box>
                       </Grid.Col>
@@ -6337,10 +6359,10 @@ function InvoiceCreate({
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {gstBreakup?.vat_total != null
-                                ? Number(gstBreakup.vat_total).toFixed(2)
-                                : form.values.charges
-                                    .reduce((sum, c) => {
+                              {formatMoneyAmountBound(
+                                gstBreakup?.vat_total != null
+                                  ? Number(gstBreakup.vat_total)
+                                  : form.values.charges.reduce((sum, c) => {
                                       if (c.is_tax_row === true) return sum;
                                       const rate = resolveVatTaxRate(
                                         gstBreakup,
@@ -6353,8 +6375,8 @@ function InvoiceCreate({
                                         sum +
                                         calcTaxAmountFromRate(taxBase, rate)
                                       );
-                                    }, 0)
-                                    .toFixed(2)}
+                                    }, 0),
+                              )}
                             </Text>
                           </Box>
                         </Grid.Col>
@@ -6367,7 +6389,9 @@ function InvoiceCreate({
                                 IGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {gstSectionTotals.igst_total.toFixed(2)}
+                                {formatMoneyAmountBound(
+                                  gstSectionTotals.igst_total,
+                                )}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -6377,7 +6401,9 @@ function InvoiceCreate({
                                 CGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {gstSectionTotals.cgst_total.toFixed(2)}
+                                {formatMoneyAmountBound(
+                                  gstSectionTotals.cgst_total,
+                                )}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -6387,7 +6413,9 @@ function InvoiceCreate({
                                 SGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {gstSectionTotals.sgst_total.toFixed(2)}
+                                {formatMoneyAmountBound(
+                                  gstSectionTotals.sgst_total,
+                                )}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -6472,7 +6500,9 @@ function InvoiceCreate({
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {row.taxable_total != null
-                                      ? Number(row.taxable_total).toFixed(2)
+                                      ? formatMoneyAmountBound(
+                                          Number(row.taxable_total),
+                                        )
                                       : "—"}
                                   </Table.Td>
                                 </Table.Tr>

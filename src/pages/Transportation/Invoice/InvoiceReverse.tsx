@@ -49,6 +49,14 @@ import {
   isIndianOutstandingBranch,
   isIndianUserCountry,
 } from "../../../utils/userNumberFormat";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmount,
+  clampMoneyAmountBound,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -204,11 +212,7 @@ const fetchReverseInvoiceCalculateGstBreakup = async (payload: {
 };
 
 function clampAmount(value: number | null | undefined): number | null {
-  if (value === null || value === undefined)
-    return value === undefined ? null : null;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  return parseFloat(n.toFixed(2));
+  return clampMoneyAmountBound(value);
 }
 
 type DrCrChargeLike = {
@@ -914,6 +918,13 @@ function InvoiceReverse() {
     user?.country?.country_code,
     user?.country?.country_name,
   ]);
+
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const isKenyaUser = useMemo(() => {
     const branchCountry = (activeBranchCountryCode ?? "").toUpperCase();
@@ -2921,6 +2932,7 @@ function InvoiceReverse() {
                 withAsterisk
                 min={0}
                 decimalScale={4}
+                hideControls
                 error={form.errors.roe}
               />
             </Grid.Col>
@@ -3306,15 +3318,17 @@ function InvoiceReverse() {
                           onChange={(v) =>
                             form.setFieldValue(
                               `charges.${index}.amount_per_unit`,
-                              typeof v === "number"
-                                ? v
-                                : v === ""
-                                  ? null
-                                  : parseFloat(String(v)) || null,
+                              clampAmount(
+                                typeof v === "number"
+                                  ? v
+                                  : v === ""
+                                    ? null
+                                    : parseFloat(String(v)) || null,
+                              ),
                             )
                           }
                           min={0}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
@@ -3327,11 +3341,13 @@ function InvoiceReverse() {
                           onChange={(v) => {
                             form.setFieldValue(
                               `charges.${index}.amount`,
-                              typeof v === "number"
-                                ? v
-                                : v === ""
-                                  ? null
-                                  : parseFloat(String(v)) || null,
+                              clampAmount(
+                                typeof v === "number"
+                                  ? v
+                                  : v === ""
+                                    ? null
+                                    : parseFloat(String(v)) || null,
+                              ),
                             );
                             if (chargeErrors[index]?.amount) {
                               const newErrors = { ...chargeErrors };
@@ -3344,7 +3360,7 @@ function InvoiceReverse() {
                             }
                           }}
                           min={0}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           hideControls
                           withAsterisk
                           //disabled={isReadOnly}
@@ -3358,15 +3374,17 @@ function InvoiceReverse() {
                           onChange={(v) =>
                             form.setFieldValue(
                               `charges.${index}.header_amount`,
-                              typeof v === "number"
-                                ? v
-                                : v === ""
-                                  ? null
-                                  : parseFloat(String(v)) || null,
+                              clampAmount(
+                                typeof v === "number"
+                                  ? v
+                                  : v === ""
+                                    ? null
+                                    : parseFloat(String(v)) || null,
+                              ),
                             )
                           }
                           min={0}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           hideControls
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
@@ -3379,11 +3397,13 @@ function InvoiceReverse() {
                           onChange={(v) => {
                             form.setFieldValue(
                               `charges.${index}.amount_in_local`,
-                              typeof v === "number"
-                                ? v
-                                : v === ""
-                                  ? null
-                                  : parseFloat(String(v)) || null,
+                              clampAmount(
+                                typeof v === "number"
+                                  ? v
+                                  : v === ""
+                                    ? null
+                                    : parseFloat(String(v)) || null,
+                              ),
                             );
                             if (chargeErrors[index]?.amount_in_local) {
                               const newErrors = { ...chargeErrors };
@@ -3396,7 +3416,7 @@ function InvoiceReverse() {
                             }
                           }}
                           min={0}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           hideControls
                           withAsterisk
                           //disabled={isReadOnly}
@@ -3457,7 +3477,10 @@ function InvoiceReverse() {
                               return rate > 0 ? rate : undefined;
                             })()}
                             onChange={(value) => {
-                              const parsed = clampAmount(value as number | null);
+                              const parsed = clampMoneyAmount(
+                                value as number | null,
+                                false,
+                              );
                               form.setFieldValue(
                                 `charges.${index}.tax_rate`,
                                 parsed,
@@ -3472,6 +3495,7 @@ function InvoiceReverse() {
                             placeholder="VAT Amount"
                             min={0}
                             hideControls
+                            decimalScale={amountDecimalScale}
                             readOnly
                             value={(() => {
                               const rate = resolveVatTaxRate(
@@ -3712,7 +3736,9 @@ function InvoiceReverse() {
                             Local Amount Total
                           </Text>
                           <Text size="lg" fw={600} c="#105476">
-                            {chargeSectionTotals.local_total.toFixed(2)}
+                            {formatMoneyAmountBound(
+                              chargeSectionTotals.local_total,
+                            )}
                           </Text>
                         </Box>
                       </Grid.Col>
@@ -3723,10 +3749,10 @@ function InvoiceReverse() {
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {gstBreakup?.vat_total != null
-                                ? Number(gstBreakup.vat_total).toFixed(2)
-                                : form.values.charges
-                                    .reduce((sum, c) => {
+                              {formatMoneyAmountBound(
+                                gstBreakup?.vat_total != null
+                                  ? Number(gstBreakup.vat_total)
+                                  : form.values.charges.reduce((sum, c) => {
                                       const rate = resolveVatTaxRate(
                                         gstBreakup,
                                         c.charge_id,
@@ -3738,8 +3764,8 @@ function InvoiceReverse() {
                                         sum +
                                         calcTaxAmountFromRate(taxBase, rate)
                                       );
-                                    }, 0)
-                                    .toFixed(2)}
+                                    }, 0),
+                              )}
                             </Text>
                           </Box>
                         </Grid.Col>
@@ -3752,7 +3778,9 @@ function InvoiceReverse() {
                                 IGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {gstSectionTotals.igst_total.toFixed(2)}
+                                {formatMoneyAmountBound(
+                                  gstSectionTotals.igst_total,
+                                )}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -3762,7 +3790,9 @@ function InvoiceReverse() {
                                 CGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {gstSectionTotals.cgst_total.toFixed(2)}
+                                {formatMoneyAmountBound(
+                                  gstSectionTotals.cgst_total,
+                                )}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -3772,7 +3802,9 @@ function InvoiceReverse() {
                                 SGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {gstSectionTotals.sgst_total.toFixed(2)}
+                                {formatMoneyAmountBound(
+                                  gstSectionTotals.sgst_total,
+                                )}
                               </Text>
                             </Box>
                           </Grid.Col>
@@ -3860,7 +3892,9 @@ function InvoiceReverse() {
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {row.taxable_total != null
-                                      ? Number(row.taxable_total).toFixed(2)
+                                      ? formatMoneyAmountBound(
+                                          Number(row.taxable_total),
+                                        )
                                       : "—"}
                                   </Table.Td>
                                 </Table.Tr>
