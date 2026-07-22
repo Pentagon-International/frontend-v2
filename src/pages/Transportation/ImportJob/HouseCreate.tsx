@@ -56,7 +56,13 @@ import {
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
-import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  bindMoneyWholeNumberMode,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+  roundMoneyAmountBound,
+  roundMoneyToDecimals,
+} from "../../../utils/nonDecimalMoneyAmount";
 import {
   ROE_DECIMAL_PLACES,
   roundRoeForPayload,
@@ -414,6 +420,9 @@ function HouseCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const {
     isBaseCurrency,
     isChargeBaseCurrencyFor,
@@ -1705,8 +1714,8 @@ function HouseCreate() {
           charge.no_of_unit !== null && charge.no_of_unit !== undefined
             ? charge.no_of_unit
             : 0;
-        const calculatedAmount = parseFloat(
-          (noOfUnit * charge.amount_per_unit).toFixed(2),
+        const calculatedAmount = roundMoneyAmountBound(
+          noOfUnit * charge.amount_per_unit,
         );
         if (calculatedAmount !== next.amount) {
           next.amount = calculatedAmount > 0 ? calculatedAmount : null;
@@ -2454,14 +2463,14 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
-            amount: roundToDecimals(charge.amount) ?? null,
+            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
-              roundToDecimals(charge.sell_local_amount) ?? null,
-            unit_cost: roundToDecimals(charge.unit_cost) ?? null,
-            total_cost: roundToDecimals(charge.total_cost) ?? null,
+              roundMoneyToDecimals(charge.sell_local_amount) ?? null,
+            unit_cost: roundMoneyToDecimals(charge.unit_cost) ?? null,
+            total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
             cost_local_amount:
-              roundToDecimals(charge.cost_local_amount) ?? null,
+              roundMoneyToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name ?? null,
           }));
@@ -2883,14 +2892,14 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
-            amount: roundToDecimals(charge.amount) ?? null,
+            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
-              roundToDecimals(charge.sell_local_amount) ?? null,
-            unit_cost: roundToDecimals(charge.unit_cost) ?? null,
-            total_cost: roundToDecimals(charge.total_cost) ?? null,
+              roundMoneyToDecimals(charge.sell_local_amount) ?? null,
+            unit_cost: roundMoneyToDecimals(charge.unit_cost) ?? null,
+            total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
             cost_local_amount:
-              roundToDecimals(charge.cost_local_amount) ?? null,
+              roundMoneyToDecimals(charge.cost_local_amount) ?? null,
             supplier_code: charge.supplier_code || null,
             supplier_name: charge.supplier_name || null,
           }));
@@ -5435,10 +5444,8 @@ function HouseCreate() {
                         ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.amount`,
-                            parseFloat(
-                              (
-                                noOfUnit * currentCharge.amount_per_unit
-                              ).toFixed(2),
+                            roundMoneyAmountBound(
+                              noOfUnit * currentCharge.amount_per_unit,
                             ),
                           );
                         }
@@ -5450,8 +5457,8 @@ function HouseCreate() {
                         ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.total_cost`,
-                            parseFloat(
-                              (noOfUnit * currentCharge.unit_cost).toFixed(2),
+                            roundMoneyAmountBound(
+                              noOfUnit * currentCharge.unit_cost,
                             ),
                           );
                         }
@@ -5463,7 +5470,7 @@ function HouseCreate() {
                       placeholder="Amount/Unit"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       value={charge.amount_per_unit || undefined}
                       onChange={(value) => {
                         const amountPerUnit = value as number | null;
@@ -5480,10 +5487,8 @@ function HouseCreate() {
                         ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.amount`,
-                            parseFloat(
-                              (
-                                currentCharge.no_of_unit * amountPerUnit
-                              ).toFixed(2),
+                            roundMoneyAmountBound(
+                              currentCharge.no_of_unit * amountPerUnit,
                             ),
                           );
                         }
@@ -5505,7 +5510,7 @@ function HouseCreate() {
                       placeholder="Amount"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       value={charge.amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
@@ -5530,7 +5535,7 @@ function HouseCreate() {
                       placeholder="Sell Local Amt"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       value={charge.sell_local_amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
@@ -5545,7 +5550,7 @@ function HouseCreate() {
                       placeholder="Cost/Unit"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       value={charge.unit_cost || undefined}
                       onChange={(value) => {
                         const unitCost = value as number | null;
@@ -5562,8 +5567,8 @@ function HouseCreate() {
                         ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.total_cost`,
-                            parseFloat(
-                              (currentCharge.no_of_unit * unitCost).toFixed(2),
+                            roundMoneyAmountBound(
+                              currentCharge.no_of_unit * unitCost,
                             ),
                           );
                         } else {
@@ -5580,7 +5585,7 @@ function HouseCreate() {
                       placeholder="Total Cost"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       value={charge.total_cost || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
@@ -5595,7 +5600,7 @@ function HouseCreate() {
                       placeholder="Cost Local Amt"
                       min={0}
                       hideControls
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       value={charge.cost_local_amount || undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(

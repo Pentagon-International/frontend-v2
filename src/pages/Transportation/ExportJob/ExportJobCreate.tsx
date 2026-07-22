@@ -71,6 +71,11 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  bindMoneyWholeNumberMode,
+  isVietnamBranchFromUser,
+  roundMoneyToDecimals,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
   hasMeaningfulHouseChargeData,
@@ -679,6 +684,8 @@ function ExportJobCreate() {
 
   // Get user from auth store
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -2983,34 +2990,36 @@ function ExportJobCreate() {
               roe: charge.roe != null ? roundRoeForPayload(charge.roe) : null,
               amount_per_unit:
                 charge.amount_per_unit != null
-                  ? roundToDecimals(charge.amount_per_unit)
+                  ? roundMoneyToDecimals(charge.amount_per_unit)
                   : null,
               amount:
-                charge.amount != null ? roundToDecimals(charge.amount) : null,
+                charge.amount != null
+                  ? roundMoneyToDecimals(charge.amount)
+                  : null,
               sell_local_amount:
                 charge.sell_local_amount != null
-                  ? roundToDecimals(charge.sell_local_amount)
+                  ? roundMoneyToDecimals(charge.sell_local_amount)
                   : (charge as { local_amount?: unknown }).local_amount != null
-                    ? roundToDecimals(
+                    ? roundMoneyToDecimals(
                         (charge as { local_amount?: unknown }).local_amount,
                       )
                     : null,
               unit_cost:
                 charge.unit_cost != null
-                  ? roundToDecimals(charge.unit_cost)
+                  ? roundMoneyToDecimals(charge.unit_cost)
                   : (charge as { cost_per_unit?: unknown }).cost_per_unit !=
                       null
-                    ? roundToDecimals(
+                    ? roundMoneyToDecimals(
                         (charge as { cost_per_unit?: unknown }).cost_per_unit,
                       )
                     : null,
               total_cost:
                 charge.total_cost != null
-                  ? roundToDecimals(charge.total_cost)
+                  ? roundMoneyToDecimals(charge.total_cost)
                   : null,
               cost_local_amount:
                 charge.cost_local_amount != null
-                  ? roundToDecimals(charge.cost_local_amount)
+                  ? roundMoneyToDecimals(charge.cost_local_amount)
                   : null,
             }));
           })(),
@@ -3062,7 +3071,7 @@ function ExportJobCreate() {
             currency_id: e.currency_id ? Number(e.currency_id) : null,
             roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
-            total_cost: roundToDecimals(e.total_cost) ?? null,
+            total_cost: roundMoneyToDecimals(e.total_cost) ?? null,
           }));
         })(),
         document_ids: jobDocuments.document_ids,

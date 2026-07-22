@@ -79,6 +79,11 @@ import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  bindMoneyWholeNumberMode,
+  isVietnamBranchFromUser,
+  roundMoneyToDecimals,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
@@ -487,6 +492,8 @@ function AirImportJobCreate() {
   const [currentHawbForPreview, setCurrentHawbForPreview] =
     useState<HAWBDetail | null>(null);
   const { user } = useAuthStore();
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -3013,52 +3020,52 @@ function AirImportJobCreate() {
                   : null,
               amount_per_unit:
                 charge.amount_per_unit != null
-                  ? roundToDecimals(
+                  ? roundMoneyToDecimals(
                       charge.amount_per_unit as unknown as
                         string | number | null | undefined,
                     )
                   : null,
               amount:
                 charge.amount != null
-                  ? roundToDecimals(
+                  ? roundMoneyToDecimals(
                       charge.amount as unknown as
                         string | number | null | undefined,
                     )
                   : null,
               sell_local_amount:
                 charge.sell_local_amount != null
-                  ? roundToDecimals(
+                  ? roundMoneyToDecimals(
                       charge.sell_local_amount as unknown as
                         string | number | null | undefined,
                     )
                   : charge.local_amount != null
-                    ? roundToDecimals(
+                    ? roundMoneyToDecimals(
                         charge.local_amount as unknown as
                           string | number | null | undefined,
                       )
                     : null,
               unit_cost:
                 charge.unit_cost != null
-                  ? roundToDecimals(
+                  ? roundMoneyToDecimals(
                       charge.unit_cost as unknown as
                         string | number | null | undefined,
                     )
                   : charge.cost_per_unit != null
-                    ? roundToDecimals(
+                    ? roundMoneyToDecimals(
                         charge.cost_per_unit as unknown as
                           string | number | null | undefined,
                       )
                     : null,
               total_cost:
                 charge.total_cost != null
-                  ? roundToDecimals(
+                  ? roundMoneyToDecimals(
                       charge.total_cost as unknown as
                         string | number | null | undefined,
                     )
                   : null,
               cost_local_amount:
                 charge.cost_local_amount != null
-                  ? roundToDecimals(
+                  ? roundMoneyToDecimals(
                       charge.cost_local_amount as unknown as
                         string | number | null | undefined,
                     )
@@ -3098,7 +3105,7 @@ function AirImportJobCreate() {
             currency_id: e.currency_id ? Number(e.currency_id) : null,
             roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
-            total_cost: roundToDecimals(e.total_cost) ?? null,
+            total_cost: roundMoneyToDecimals(e.total_cost) ?? null,
           }));
         })(),
         document_ids: jobDocuments.document_ids,

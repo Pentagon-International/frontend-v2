@@ -43,6 +43,13 @@ import {
   import useAuthStore from "../../../store/authStore";
   import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
   import { isIndianUserCountry } from "../../../utils/userNumberFormat";
+  import {
+    bindMoneyWholeNumberMode,
+    clampMoneyAmountBound,
+    formatMoneyAmountBound,
+    getAmountDecimalScale,
+    isVietnamBranchFromUser,
+  } from "../../../utils/nonDecimalMoneyAmount";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
   import {
     formatRoeForAccountsPayload,
@@ -232,16 +239,19 @@ import {
   function clampAmount(value: number | null | undefined): number | null {
     if (value == null || !Number.isFinite(value))
       return value === undefined ? null : value;
-    const rounded = Math.round(value * 100) / 100;
+    const rounded = clampMoneyAmountBound(value);
+    if (rounded == null) return null;
     if (Math.abs(rounded) > AMOUNT_MAX)
       return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
     return rounded;
   }
-  
+
   function formatAmountToTwoDecimals(value: number | null | undefined): string {
-    if (value == null || !Number.isFinite(value)) return "0.00";
+    if (value == null || !Number.isFinite(value)) {
+      return formatMoneyAmountBound(0);
+    }
     const clamped = clampAmount(value);
-    return clamped == null ? "0.00" : clamped.toFixed(2);
+    return formatMoneyAmountBound(clamped ?? 0);
   }
   
   function formatDDMMYYYY(d: Date): string {
@@ -481,6 +491,13 @@ import {
       String(user?.country?.country_name ?? "")
         .toLowerCase()
         .includes("india");
+
+    const isVietnamBranch = useMemo(
+      () => isVietnamBranchFromUser(user),
+      [user],
+    );
+    bindMoneyWholeNumberMode(isVietnamBranch);
+    const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
     const cjvColSpans = useMemo(
       () =>
@@ -1583,7 +1600,7 @@ import {
         if (diff !== 0) {
           ToastNotification({
             type: "error",
-            message: `Difference Amount must be 0.00 to post. Current: ${diff.toFixed(2)}.`,
+            message: `Difference Amount must be ${formatMoneyAmountBound(0)} to post. Current: ${formatMoneyAmountBound(diff)}.`,
           });
           return;
         }
@@ -2170,7 +2187,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2188,7 +2205,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2207,7 +2224,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2227,7 +2244,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2246,7 +2263,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                   disabled={isReadOnly || reversalFormDisabled}
@@ -2262,7 +2279,7 @@ import {
                   value={form.values.Inv_crn_amount ?? undefined}
                   onChange={() => {}}
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2275,7 +2292,7 @@ import {
                   value={form.values.approved_amount ?? undefined}
                   onChange={() => {}}
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2287,7 +2304,7 @@ import {
                   placeholder="0"
                   value={form.values.difference_amount ?? undefined}
                   onChange={() => {}}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -3028,7 +3045,7 @@ import {
                             )
                           }
                           min={0}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           hideControls
                           disabled={isReadOnly || reversalFormDisabled}
                           styles={{
@@ -3051,7 +3068,7 @@ import {
                             )
                           }
                           min={0}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           hideControls
                           disabled={isReadOnly || reversalFormDisabled}
                           styles={{

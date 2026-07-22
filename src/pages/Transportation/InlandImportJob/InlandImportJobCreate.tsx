@@ -84,6 +84,11 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  bindMoneyWholeNumberMode,
+  isVietnamBranchFromUser,
+  roundMoneyToDecimals,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
 import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
@@ -442,6 +447,8 @@ function InlandImportJobCreate() {
     enabled: !!jobData?.id,
   });
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const jobServiceFields = useMemo(
     () =>
       resolveInlandImportJobServiceFields(
@@ -2724,19 +2731,19 @@ function InlandImportJobCreate() {
                   : "",
                 roe: roundRoeForPayload(charge.roe) ?? null,
                 amount_per_unit:
-                  roundToDecimals(charge.amount_per_unit) || null,
-                amount: roundToDecimals(charge.amount) || null,
+                  roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+                amount: roundMoneyToDecimals(charge.amount) ?? null,
                 sell_local_amount:
-                  roundToDecimals(charge.sell_local_amount) ??
-                  roundToDecimals(charge.local_amount) ??
+                  roundMoneyToDecimals(charge.sell_local_amount) ??
+                  roundMoneyToDecimals(charge.local_amount) ??
                   null,
                 unit_cost:
-                  roundToDecimals(charge.unit_cost) ??
-                  roundToDecimals(charge.cost_per_unit) ??
+                  roundMoneyToDecimals(charge.unit_cost) ??
+                  roundMoneyToDecimals(charge.cost_per_unit) ??
                   null,
-                total_cost: roundToDecimals(charge.total_cost) ?? null,
+                total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
                 cost_local_amount:
-                  roundToDecimals(charge.cost_local_amount) ?? null,
+                  roundMoneyToDecimals(charge.cost_local_amount) ?? null,
               }));
           })(),
         })),
@@ -2770,7 +2777,7 @@ function InlandImportJobCreate() {
             currency_id: e.currency_id ? Number(e.currency_id) : null,
             roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
-            total_cost: roundToDecimals(e.total_cost) ?? null,
+            total_cost: roundMoneyToDecimals(e.total_cost) ?? null,
           }));
         })(),
         document_ids: jobDocuments.document_ids,

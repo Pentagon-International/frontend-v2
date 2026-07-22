@@ -1,6 +1,8 @@
 export type BranchCurrencyContext = {
   is_default?: boolean;
-  country?: { country_code?: string };
+  branch_code?: string | null;
+  branch_name?: string | null;
+  country?: { country_code?: string; country_name?: string | null };
   currency?: { currency_code?: string };
 };
 

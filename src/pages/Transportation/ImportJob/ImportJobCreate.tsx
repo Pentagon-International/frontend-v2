@@ -72,6 +72,11 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
+import {
+  bindMoneyWholeNumberMode,
+  isVietnamBranchFromUser,
+  roundMoneyToDecimals,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
   formatInvoiceDocumentNo,
@@ -520,6 +525,8 @@ function ImportJobCreate() {
   const location = useLocation();
   const jobData = location.state?.job;
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
   const jobDocuments = useJobDocuments();
@@ -3255,28 +3262,32 @@ function ImportJobCreate() {
               no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
               roe: roundRoeForPayload(charge.roe as number | string) ?? null,
               amount_per_unit:
-                roundToDecimals(charge.amount_per_unit as number | string) ??
-                null,
-              amount: roundToDecimals(charge.amount as number | string) ?? null,
+                roundMoneyToDecimals(
+                  charge.amount_per_unit as number | string,
+                ) ?? null,
+              amount:
+                roundMoneyToDecimals(charge.amount as number | string) ?? null,
               sell_local_amount:
-                roundToDecimals(
+                roundMoneyToDecimals(
                   (charge.sell_local_amount != null
                     ? charge.sell_local_amount
                     : (charge as { local_amount?: number | string })
                         .local_amount) as number | string,
                 ) ?? null,
               unit_cost:
-                roundToDecimals(
+                roundMoneyToDecimals(
                   (charge.unit_cost != null
                     ? charge.unit_cost
                     : (charge as { cost_per_unit?: number | string })
                         .cost_per_unit) as number | string,
                 ) ?? null,
               total_cost:
-                roundToDecimals(charge.total_cost as number | string) ?? null,
-              cost_local_amount:
-                roundToDecimals(charge.cost_local_amount as number | string) ??
+                roundMoneyToDecimals(charge.total_cost as number | string) ??
                 null,
+              cost_local_amount:
+                roundMoneyToDecimals(
+                  charge.cost_local_amount as number | string,
+                ) ?? null,
             }));
           })(),
         })),
@@ -3341,7 +3352,7 @@ function ImportJobCreate() {
             currency_id: e.currency_id ? Number(e.currency_id) : null,
             roe: roundRoeForPayload(e.roe) ?? null,
             cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
-            total_cost: roundToDecimals(e.total_cost) ?? null,
+            total_cost: roundMoneyToDecimals(e.total_cost) ?? null,
           }));
         })(),
         document_ids: jobDocuments.document_ids,

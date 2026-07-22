@@ -4,7 +4,11 @@
  *   amount = no_of_unit * amount_per_unit (when amount not set)
  *   sell_local_amount = amount * roe
  *   cost_local_amount = total_cost * roe
+ *
+ * Rounding follows bound non-decimal money mode (see nonDecimalMoneyAmount.ts).
  */
+
+import { roundMoneyAmountBound } from "./nonDecimalMoneyAmount";
 
 export function toChargeNumber(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -14,7 +18,7 @@ export function toChargeNumber(value: unknown): number | null {
 }
 
 export function roundChargeAmount(value: number): number {
-  return Math.round(value * 100) / 100;
+  return roundMoneyAmountBound(value);
 }
 
 /** Resolve sell amount from amount or no_of_unit × amount_per_unit. */

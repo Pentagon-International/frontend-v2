@@ -35,6 +35,12 @@ import {
   validateEstimatesRoeRows,
   type BranchCurrencyLike,
 } from "../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+  roundMoneyAmountBound,
+} from "../utils/nonDecimalMoneyAmount";
 
 export type EstimateRow = {
   id?: number | string;
@@ -140,7 +146,7 @@ function calcTotalCost(
   if (!Number.isFinite(qty) || !Number.isFinite(cpu) || !Number.isFinite(rate)) {
     return null;
   }
-  return Math.round(qty * rate * cpu * 100) / 100;
+  return roundMoneyAmountBound(qty * rate * cpu);
 }
 
 function normalizePpCc(value: unknown): string {
@@ -191,6 +197,12 @@ export function EstimatesSection({
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
   const branches = userBranches ?? (user?.branches as BranchCurrencyContext[] | undefined);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const {
     isBaseCurrency,
     isChargeBaseCurrencyFor,
@@ -672,11 +684,14 @@ export function EstimatesSection({
               placeholder="Cost"
               min={0}
               hideControls
+              decimalScale={amountDecimalScale}
               value={row.cost_per_unit ?? undefined}
               onChange={(value) => {
                 const v = typeof value === "number" ? value : toNumberOrNull(value);
-                form.setFieldValue(`estimates.${index}.cost_per_unit`, v);
-                const total = calcTotalCost(row.no_of_unit, row.roe, v);
+                const rounded =
+                  v == null ? null : roundMoneyAmountBound(v);
+                form.setFieldValue(`estimates.${index}.cost_per_unit`, rounded);
+                const total = calcTotalCost(row.no_of_unit, row.roe, rounded);
                 form.setFieldValue(`estimates.${index}.total_cost`, total);
               }}
               disabled={readOnly}
@@ -688,11 +703,14 @@ export function EstimatesSection({
               placeholder="Total"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               value={row.total_cost ?? undefined}
               onChange={(value) => {
                 const v = typeof value === "number" ? value : toNumberOrNull(value);
-                form.setFieldValue(`estimates.${index}.total_cost`, v);
+                form.setFieldValue(
+                  `estimates.${index}.total_cost`,
+                  v == null ? null : roundMoneyAmountBound(v),
+                );
               }}
               disabled={readOnly}
               readOnly

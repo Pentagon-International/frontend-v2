@@ -2,8 +2,13 @@ import {
   formatUserDecimal,
   getDefaultBranchCountryCode,
   getDefaultBranchCurrencyCode,
+  getDefaultUserBranch,
   type BranchCurrencyContext,
 } from "./userNumberFormat";
+import {
+  isVietnamBranch,
+  roundMoneyAmount,
+} from "./nonDecimalMoneyAmount";
 
 export type JobLevelSummary = {
   estimates_total_cost?: number | string | null;
@@ -14,6 +19,19 @@ export type HousingLevelSummary = {
   total_local_cost?: number | string | null;
   [key: string]: unknown;
 };
+
+function isNonDecimalMoneyBranch(
+  branches?: BranchCurrencyContext[] | null,
+): boolean {
+  const branch = getDefaultUserBranch(branches);
+  return isVietnamBranch({
+    countryCode: branch?.country?.country_code,
+    countryName: branch?.country?.country_name,
+    branchCode: branch?.branch_code,
+    branchName: branch?.branch_name,
+    currencyCode: branch?.currency?.currency_code,
+  });
+}
 
 export function parseSummaryAmount(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -155,8 +173,10 @@ export function formatJobSummaryAmount(
   if (value == null) return "-";
   const currencyCode = getDefaultBranchCurrencyCode(branches);
   const countryCode = getDefaultBranchCountryCode(branches);
-  return formatUserDecimal(value, countryCode, currencyCode, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const noDecimals = isNonDecimalMoneyBranch(branches);
+  const displayValue = roundMoneyAmount(value, noDecimals);
+  return formatUserDecimal(displayValue, countryCode, currencyCode, {
+    minimumFractionDigits: noDecimals ? 0 : 2,
+    maximumFractionDigits: noDecimals ? 0 : 2,
   });
 }
