@@ -868,7 +868,28 @@ export default function SupplierInvoiceCreate({
     validate: {
       day_book_id: (v) => (!v ? "Day book is required" : null),
       date: (v) => (!v ? "Date is required" : null),
-      due_date: (v) => (!v ? "Due date is required" : null),
+      due_date: (v, values) => {
+        if (!v) return "Due date is required";
+        const documentDate = normalizeDate(values.date);
+        const dueDate = normalizeDate(v);
+        if (
+          documentDate &&
+          dueDate &&
+          new Date(
+            dueDate.getFullYear(),
+            dueDate.getMonth(),
+            dueDate.getDate(),
+          ).getTime() <
+            new Date(
+              documentDate.getFullYear(),
+              documentDate.getMonth(),
+              documentDate.getDate(),
+            ).getTime()
+        ) {
+          return "Due date cannot be before Date";
+        }
+        return null;
+      },
       currency_id: (v) => (!v ? "Currency is required" : null),
       state_id: (v) =>
         isIndiaUser && !v ? "State is required" : null,
@@ -2452,7 +2473,23 @@ export default function SupplierInvoiceCreate({
                 value={normalizeDate(form.values.date)}
                 onChange={(d) => {
                   form.setFieldValue("date", d);
-                  if (!form.values.due_date) form.setFieldValue("due_date", d);
+                  const currentDue = normalizeDate(form.values.due_date);
+                  if (
+                    !currentDue ||
+                    (d &&
+                      new Date(
+                        currentDue.getFullYear(),
+                        currentDue.getMonth(),
+                        currentDue.getDate(),
+                      ).getTime() <
+                        new Date(
+                          d.getFullYear(),
+                          d.getMonth(),
+                          d.getDate(),
+                        ).getTime())
+                  ) {
+                    form.setFieldValue("due_date", d);
+                  }
                 }}
                 withAsterisk
                 error={form.errors.date ? String(form.errors.date) : undefined}
@@ -2466,6 +2503,7 @@ export default function SupplierInvoiceCreate({
                 value={normalizeDate(form.values.due_date)}
                 onChange={(d) => form.setFieldValue("due_date", d)}
                 withAsterisk
+                minDate={normalizeDate(form.values.date) ?? undefined}
                 error={
                   form.errors.due_date
                     ? String(form.errors.due_date)

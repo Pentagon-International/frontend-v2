@@ -18,8 +18,6 @@ import {
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
-  IconCalendar,
-  IconChevronLeft,
   IconChevronRight,
   IconPlus,
   IconTrash,
@@ -38,12 +36,12 @@ import {
 } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { DateInput } from "@mantine/dates";
 import { URL } from "../../../api/serverUrls";
 import {
   SearchableSelect,
   Dropdown,
   ToastNotification,
+  SingleDateInput,
 } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -58,7 +56,6 @@ import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
-import useDateFormat from "../../../hooks/useDateFormat";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 import {
   formatExchangeSellRate,
@@ -608,81 +605,6 @@ function parseInvoiceDate(
 
   const native = new Date(trimmed);
   return isNaN(native.getTime()) ? null : native;
-}
-
-type InvoiceDateInputProps = {
-  label: string;
-  placeholder?: string;
-  value: Date | null;
-  onChange: (date: Date | null) => void;
-  withAsterisk?: boolean;
-  readOnly?: boolean;
-  error?: string;
-};
-
-const invoiceDateInputStyles = {
-  input: {
-    fontSize: "13px",
-    fontFamily: "Inter",
-    height: "36px",
-  },
-  label: {
-    fontSize: "13px",
-    fontWeight: 500,
-    color: "#424242",
-    marginBottom: "4px",
-    fontFamily: "Inter",
-  },
-};
-
-/** Invoice date field: display follows user country; payload uses formatDateDDMMYYYY. */
-function InvoiceDateInput({
-  label,
-  placeholder,
-  value,
-  onChange,
-  withAsterisk,
-  readOnly,
-  error,
-}: InvoiceDateInputProps) {
-  const dateFormat = useDateFormat();
-
-  const handleDateChange = (date: Date | null) => {
-    if (
-      date &&
-      value &&
-      date.getDate() === value.getDate() &&
-      date.getMonth() === value.getMonth() &&
-      date.getFullYear() === value.getFullYear()
-    ) {
-      onChange(null);
-      return;
-    }
-    onChange(date);
-  };
-
-  return (
-    <DateInput
-      key={`invoice-date-${dateFormat}`}
-      label={label}
-      placeholder={placeholder ?? dateFormat}
-      value={value}
-      onChange={handleDateChange}
-      valueFormat={dateFormat}
-      leftSection={<IconCalendar size={18} />}
-      leftSectionPointerEvents="none"
-      radius="sm"
-      size="sm"
-      nextIcon={<IconChevronRight size={16} />}
-      previousIcon={<IconChevronLeft size={16} />}
-      clearable
-      hideOutsideDates
-      readOnly={readOnly}
-      error={error}
-      withAsterisk={withAsterisk}
-      styles={invoiceDateInputStyles}
-    />
-  );
 }
 
 // Round monetary amounts (2 dp, or whole numbers for Vietnam — see nonDecimalMoneyAmount).
@@ -1496,7 +1418,7 @@ function InvoiceCreate({
       shipment_no: "",
       daybook_id: "",
       document_date: new Date(), // Set to today's date by default
-      due_date: new Date(), // Same as document date by default
+      due_date: new Date(), // Today's date by default; independent of document date
       currency: defaultBranchCurrency, // Default: active branch currency from login
       roe: null,
       narration: "",
@@ -1512,7 +1434,28 @@ function InvoiceCreate({
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
       daybook_id: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
-      due_date: (value) => (!value ? "Due Date is required" : null),
+      due_date: (value, values) => {
+        if (!value) return "Due Date is required";
+        const documentDate = parseInvoiceDate(values.document_date);
+        const dueDate = parseInvoiceDate(value);
+        if (
+          documentDate &&
+          dueDate &&
+          new Date(
+            dueDate.getFullYear(),
+            dueDate.getMonth(),
+            dueDate.getDate(),
+          ).getTime() <
+            new Date(
+              documentDate.getFullYear(),
+              documentDate.getMonth(),
+              documentDate.getDate(),
+            ).getTime()
+        ) {
+          return "Due Date cannot be before Document Date";
+        }
+        return null;
+      },
       currency: (value) => (!value ? "Currency is required" : null),
       roe: (value, values) =>
         validateRoeForCurrency(
@@ -4841,13 +4784,29 @@ function InvoiceCreate({
             </Grid.Col>
             {/* Document Date */}
             <Grid.Col span={2}>
-              <InvoiceDateInput
+              <SingleDateInput
                 label="Document Date"
                 placeholder="Select document date"
                 value={parseInvoiceDate(form.values.document_date)}
                 onChange={(date) => {
                   form.setFieldValue("document_date", date);
-                  form.setFieldValue("due_date", date);
+                  const currentDue = parseInvoiceDate(form.values.due_date);
+                  if (
+                    date &&
+                    currentDue &&
+                    new Date(
+                      currentDue.getFullYear(),
+                      currentDue.getMonth(),
+                      currentDue.getDate(),
+                    ).getTime() <
+                      new Date(
+                        date.getFullYear(),
+                        date.getMonth(),
+                        date.getDate(),
+                      ).getTime()
+                  ) {
+                    form.setFieldValue("due_date", date);
+                  }
                 }}
                 withAsterisk
                 readOnly={isReadOnly}
@@ -4861,15 +4820,18 @@ function InvoiceCreate({
               />
             </Grid.Col>
 
-            {/* Due Date - same value/onChange pattern as Document Date */}
+            {/* Due Date - cannot be before Document Date */}
             <Grid.Col span={2}>
-              <InvoiceDateInput
+              <SingleDateInput
                 label="Due Date"
                 placeholder="Select due date"
                 value={parseInvoiceDate(form.values.due_date)}
                 onChange={(date) => form.setFieldValue("due_date", date)}
                 withAsterisk
                 readOnly={isReadOnly}
+                minDate={
+                  parseInvoiceDate(form.values.document_date) ?? undefined
+                }
                 error={
                   form.errors.due_date
                     ? typeof form.errors.due_date === "string"
