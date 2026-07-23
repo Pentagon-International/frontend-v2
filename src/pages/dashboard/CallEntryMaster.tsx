@@ -98,7 +98,7 @@ type CallEntryTableRow = {
   customer_name?: string;
   city?: string;
   address?: string;
-  created_by_name?: string;
+  created_by?: string;
   area?: string;
   call_date?: string;
   call_mode_name?: string;
@@ -2864,7 +2864,7 @@ function CallEntry() {
                             {visibleColumns.salesPerson && (
                               <td style={erpListTdPaddingStyle()}>
                                 <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
-                                  {row.created_by_name || "—"}
+                                  {row.created_by || "—"}
                                 </Text>
                               </td>
                             )}
