@@ -12,7 +12,6 @@ import {
   Group,
   Loader,
   Menu,
-  NumberInput,
   Select,
   Stack,
   Text,
@@ -53,9 +52,16 @@ import {
   SingleDateInput,
   CustomerNameSelect,
 } from "../../components";
+import FormNumberInput from "../../components/FormNumberInput";
 import useAuthStore from "../../store/authStore";
 import { toTitleCase } from "../../utils/textFormatter";
 import { formatCoordinateForPayload } from "../../utils/numberInputUtils";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -368,6 +374,12 @@ function CallEntryNew() {
   const { id: callEntryId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const [opened, { open, close }] = useDisclosure(false);
   const [nearbyCustomer, { open: openCustomer, close: closeCustomer }] =
     useDisclosure(false);
@@ -1640,6 +1652,12 @@ function CallEntryNew() {
         accessorKey: "potential_profit",
         header: "Potential Profit",
         size: 100,
+        Cell: ({ cell }) => {
+          const raw = cell.getValue();
+          if (raw === null || raw === undefined || raw === "") return "—";
+          const n = Number(raw);
+          return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(raw);
+        },
       },
     ],
     [],
@@ -2637,13 +2655,46 @@ function CallEntryNew() {
                           </Grid.Col>
 
                           <Grid.Col span={4}>
-                            <NumberInput
+                            <FormNumberInput
                               label="Potential Profit"
                               placeholder="Enter potential profit"
                               hideControls
-                              {...profilingForm.getInputProps(
-                                `profiles.${index}.potential_profit`,
-                              )}
+                              decimalScale={amountDecimalScale}
+                              value={
+                                profilingForm.values.profiles[index]
+                                  ?.potential_profit === "" ||
+                                profilingForm.values.profiles[index]
+                                  ?.potential_profit == null
+                                  ? undefined
+                                  : Number(
+                                      profilingForm.values.profiles[index]
+                                        .potential_profit,
+                                    )
+                              }
+                              onChange={(value) => {
+                                if (value === "" || value == null) {
+                                  profilingForm.setFieldValue(
+                                    `profiles.${index}.potential_profit`,
+                                    "",
+                                  );
+                                  return;
+                                }
+                                const n =
+                                  typeof value === "number"
+                                    ? value
+                                    : parseFloat(String(value));
+                                profilingForm.setFieldValue(
+                                  `profiles.${index}.potential_profit`,
+                                  Number.isFinite(n)
+                                    ? formatMoneyAmountBound(n)
+                                    : "",
+                                );
+                              }}
+                              error={
+                                profilingForm.errors[
+                                  `profiles.${index}.potential_profit`
+                                ]
+                              }
                               styles={{
                                 input: {
                                   fontSize: "13px",
@@ -3787,11 +3838,32 @@ function CallEntryNew() {
                     />
                   </Grid.Col>
                   <Grid.Col span={4}>
-                    <NumberInput
+                    <FormNumberInput
                       label="Expected Profit"
                       placeholder="Enter expected profit"
                       hideControls
-                      {...callEntryForm.getInputProps("expected_profit")}
+                      decimalScale={amountDecimalScale}
+                      value={
+                        callEntryForm.values.expected_profit === "" ||
+                        callEntryForm.values.expected_profit == null
+                          ? undefined
+                          : Number(callEntryForm.values.expected_profit)
+                      }
+                      onChange={(value) => {
+                        if (value === "" || value == null) {
+                          callEntryForm.setFieldValue("expected_profit", "");
+                          return;
+                        }
+                        const n =
+                          typeof value === "number"
+                            ? value
+                            : parseFloat(String(value));
+                        callEntryForm.setFieldValue(
+                          "expected_profit",
+                          Number.isFinite(n) ? formatMoneyAmountBound(n) : "",
+                        );
+                      }}
+                      error={callEntryForm.errors.expected_profit}
                       styles={{
                         input: {
                           fontSize: "13px",

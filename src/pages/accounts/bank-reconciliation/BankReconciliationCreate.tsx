@@ -37,6 +37,13 @@ import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 type ChequeNotClearedRow = {
   daybook_id: number | null;
@@ -237,10 +244,7 @@ function sumAmounts(
 }
 
 function formatAmount(value: number): string {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmountBound(value);
 }
 
 function formatChartOfAccountsLabel(
@@ -472,6 +476,10 @@ export default function BankReconciliationCreate() {
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = recordId != null && !Number.isNaN(recordId);
   const canPostDocuments = useCanPostDocuments();
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const appliedRecordIdRef = useRef<number | null>(null);
   // const [fileInputKey, setFileInputKey] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -1282,7 +1290,7 @@ export default function BankReconciliationCreate() {
                           typeof v === "number" ? v : null,
                         )
                       }
-                      decimalScale={2}
+                      decimalScale={amountDecimalScale}
                       hideControls
                       styles={cellInput}
                       readOnly={isReadOnly}
@@ -1523,7 +1531,7 @@ export default function BankReconciliationCreate() {
                   typeof v === "number" ? v : null,
                 )
               }
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               hideControls
               error={form.errors.as_per_statement}
               styles={inputStyles}
@@ -1540,7 +1548,7 @@ export default function BankReconciliationCreate() {
                   typeof v === "number" ? v : null,
                 )
               }
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               hideControls
               readOnly
               styles={inputStyles}

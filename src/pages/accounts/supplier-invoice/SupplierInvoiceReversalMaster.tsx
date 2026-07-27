@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -169,6 +175,9 @@ function supplierInvoiceReversalColumnId<T extends Record<string, unknown>>(
 }
 
 function SupplierInvoiceReversalMaster() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
   const defaultDateFrom = dayjs().startOf("month").toDate();
@@ -661,7 +670,7 @@ function SupplierInvoiceReversalMaster() {
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
           if (val == null) return "-";
-          return typeof val === "number" ? val.toFixed(2) : String(val);
+          return typeof val === "number" ? formatMoneyAmountBound(val) : String(val);
         },
       },
       {

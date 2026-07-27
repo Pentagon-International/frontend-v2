@@ -48,6 +48,13 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmountBound,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 
@@ -56,7 +63,8 @@ import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
+  const rounded = clampMoneyAmountBound(value);
+  if (rounded == null) return null;
   const maxVal = 99999999.99;
   if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
   return rounded;
@@ -516,6 +524,9 @@ function PaymentRequest() {
   const location = useLocation();
   const { id: requestId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = location.pathname.includes("/edit/");
@@ -2924,6 +2935,7 @@ function PaymentRequest() {
                     placeholder="Amt/Unit"
                     min={0}
                     hideControls
+                    decimalScale={amountDecimalScale}
                     readOnly={isReadOnly}
                     value={charge.amount_per_unit ?? undefined}
                     onChange={(value) => {
@@ -2968,6 +2980,7 @@ function PaymentRequest() {
                     placeholder="Amount"
                     min={0}
                     hideControls
+                    decimalScale={amountDecimalScale}
                     readOnly={isReadOnly}
                     value={charge.amount ?? undefined}
                     onChange={(value) => {
@@ -2996,6 +3009,7 @@ function PaymentRequest() {
                   <NumberInput
                     placeholder="Local Amt"
                     hideControls
+                    decimalScale={amountDecimalScale}
                     readOnly
                     value={charge.amount_in_local ?? undefined}
                     styles={{
@@ -3153,9 +3167,12 @@ function PaymentRequest() {
               {/* Local Amt column */}
               <Grid.Col span={0.9}>
                 <Text size="sm" fw={700} c="#105476">
-                  {form.values.charges
-                    .reduce((sum, c) => sum + (c.amount_in_local ?? 0), 0)
-                    .toFixed(2)}
+                  {formatMoneyAmountBound(
+                    form.values.charges.reduce(
+                      (sum, c) => sum + (c.amount_in_local ?? 0),
+                      0,
+                    ),
+                  )}
                 </Text>
               </Grid.Col>
 

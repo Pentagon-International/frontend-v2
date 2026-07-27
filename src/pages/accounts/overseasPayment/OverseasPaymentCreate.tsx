@@ -54,6 +54,13 @@ import {
   ROE_DECIMAL_PLACES,
   ROE_MAX_VALUE,
 } from "../../../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmountBound,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -119,7 +126,8 @@ const AMOUNT_MAX = 9999999999999.99;
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
-  const rounded = Math.round(value * 100) / 100;
+  const rounded = clampMoneyAmountBound(value);
+  if (rounded == null) return null;
   if (Math.abs(rounded) > AMOUNT_MAX)
     return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
   return rounded;
@@ -491,9 +499,13 @@ function formatOutstandingDocumentAmountInLocal(
 ): string {
   if (amountInLocal == null || amountInLocal === "") return "—";
   if (typeof amountInLocal === "number")
-    return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+    return Number.isFinite(amountInLocal)
+      ? formatMoneyAmountBound(amountInLocal)
+      : "—";
   const n = parseFloat(String(amountInLocal).trim());
-  return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+  return Number.isFinite(n)
+    ? formatMoneyAmountBound(n)
+    : String(amountInLocal);
 }
 
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
@@ -526,6 +538,9 @@ export default function OverseasPaymentCreate({
   };
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const canPostDocuments = useCanPostDocuments();
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourcePaymentNoRef = useRef<string>("");
@@ -2433,7 +2448,7 @@ export default function OverseasPaymentCreate({
                   );
                 }}
                 min={0}
-                decimalScale={2}
+                decimalScale={amountDecimalScale}
                 max={AMOUNT_MAX}
                 hideControls
                 styles={headerFieldStyles}
@@ -2454,7 +2469,7 @@ export default function OverseasPaymentCreate({
                   );
                 }}
                 min={0}
-                decimalScale={2}
+                decimalScale={amountDecimalScale}
                 max={AMOUNT_MAX}
                 hideControls
                 styles={headerFieldStyles}
@@ -2808,7 +2823,7 @@ export default function OverseasPaymentCreate({
                                 );
                               }
                             }}
-                            decimalScale={2}
+                            decimalScale={amountDecimalScale}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
                             disabled={
@@ -2833,7 +2848,7 @@ export default function OverseasPaymentCreate({
                                 ) ?? null,
                               );
                             }}
-                            decimalScale={2}
+                            decimalScale={amountDecimalScale}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
                             disabled={
@@ -3096,7 +3111,7 @@ export default function OverseasPaymentCreate({
                               effectiveAdjustments,
                             );
                           }}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           styles={
                             isReadOnly || _isReversal
                               ? adjustmentFieldStyles
@@ -3114,7 +3129,7 @@ export default function OverseasPaymentCreate({
                             form.values.adjustments[idx].adj_local_amount ??
                             undefined
                           }
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>

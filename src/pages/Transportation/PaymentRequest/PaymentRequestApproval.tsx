@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -160,12 +166,12 @@ type FilterState = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function calcLocalAmount(charges?: PaymentRequestCharge[]): string {
-  if (!charges?.length) return "0.00";
+  if (!charges?.length) return formatMoneyAmountBound(0);
   const total = charges.reduce(
     (sum, c) => sum + (c.local_amount ? parseFloat(c.local_amount) : 0),
     0,
   );
-  return total.toFixed(2);
+  return formatMoneyAmountBound(total);
 }
 
 function getFirstJobNo(charges?: PaymentRequestCharge[]): string {
@@ -263,6 +269,9 @@ function paymentRequestColumnId(
 // ─── Component ───────────────────────────────────────────────────────────────
 
 function PaymentRequestApproval() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({

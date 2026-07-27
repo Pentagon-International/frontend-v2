@@ -57,6 +57,13 @@ import {
     ROE_DECIMAL_PLACES,
     ROE_MAX_VALUE,
   } from "../../../utils/exchangeRateRoe";
+  import {
+    bindMoneyWholeNumberMode,
+    clampMoneyAmountBound,
+    formatMoneyAmountBound,
+    getAmountDecimalScale,
+    isVietnamBranchFromUser,
+  } from "../../../utils/nonDecimalMoneyAmount";
   
   const RECEIPT_TYPE_OPTIONS = [
     { value: "CHEQUE", label: "CHEQUE" },
@@ -123,7 +130,8 @@ import {
   function clampAmount(value: number | null | undefined): number | null {
     if (value == null || !Number.isFinite(value))
       return value === undefined ? null : value;
-    const rounded = Math.round(value * 100) / 100;
+    const rounded = clampMoneyAmountBound(value);
+    if (rounded == null) return null;
     if (Math.abs(rounded) > AMOUNT_MAX)
       return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
     return rounded;
@@ -439,9 +447,13 @@ import {
   ): string {
     if (amountInLocal == null || amountInLocal === "") return "—";
     if (typeof amountInLocal === "number")
-      return Number.isFinite(amountInLocal) ? amountInLocal.toFixed(2) : "—";
+      return Number.isFinite(amountInLocal)
+        ? formatMoneyAmountBound(amountInLocal)
+        : "—";
     const n = parseFloat(String(amountInLocal).trim());
-    return Number.isFinite(n) ? n.toFixed(2) : String(amountInLocal);
+    return Number.isFinite(n)
+      ? formatMoneyAmountBound(n)
+      : String(amountInLocal);
   }
 
   /** First non-empty trimmed string — API often returns `receipt_no: ""` where `??` would not fall back. */
@@ -493,6 +505,9 @@ import {
     const location = useLocation();
     const queryClient = useQueryClient();
     const { user } = useAuthStore();
+    const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+    bindMoneyWholeNumberMode(isVietnamBranch);
+    const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
     const canPostDocuments = useCanPostDocuments();
     // const loadedFromStateIdRef = useRef<number | string | null>(null);
     /** When loading from list, hold details so Account Name displays for every row (state triggers re-render) */
@@ -2272,7 +2287,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   max={AMOUNT_MAX}
                   hideControls
                   styles={headerFieldStyles}
@@ -2292,7 +2307,7 @@ import {
                     )
                   }
                   min={0}
-                  decimalScale={2}
+                  decimalScale={amountDecimalScale}
                   max={AMOUNT_MAX}
                   hideControls
                   styles={headerFieldStyles}
@@ -2651,7 +2666,7 @@ import {
                                   );
                                 }
                               }}
-                              decimalScale={2}
+                              decimalScale={amountDecimalScale}
                               max={AMOUNT_MAX}
                               styles={partyFieldStyles}
                               disabled={
@@ -2677,7 +2692,7 @@ import {
                                   ) ?? null,
                                 )
                               }
-                              decimalScale={2}
+                              decimalScale={amountDecimalScale}
                               max={AMOUNT_MAX}
                               styles={partyFieldStyles}
                               disabled={
@@ -2942,7 +2957,7 @@ import {
                                 effectiveAdjustments,
                               );
                             }}
-                            decimalScale={2}
+                            decimalScale={amountDecimalScale}
                             max={AMOUNT_MAX}
                             styles={
                               isReadOnly || reversalFormDisabled
@@ -2966,7 +2981,7 @@ import {
                               form.values.adjustments[idx].adj_local_amount ??
                               undefined
                             }
-                            decimalScale={2}
+                            decimalScale={amountDecimalScale}
                             max={AMOUNT_MAX}
                             styles={adjustmentFieldStyles}
                           />

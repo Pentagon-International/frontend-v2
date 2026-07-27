@@ -33,6 +33,12 @@ import {
   erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
 } from "../../../components";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  isMoneyWholeNumberMode,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import "./tariffContractsList.css";
 
 export type TariffContractRow = {
@@ -115,7 +121,9 @@ function formatRateDisplay(row: TariffContractRow): string {
   if (row.avg_buy_rate && row.rate_unit) {
     const amount = Number(row.avg_buy_rate);
     const formattedAmount = Number.isFinite(amount)
-      ? amount.toLocaleString("en-US", { maximumFractionDigits: 2 })
+      ? amount.toLocaleString("en-US", {
+          maximumFractionDigits: isMoneyWholeNumberMode() ? 0 : 2,
+        })
       : row.avg_buy_rate;
     const unit = row.rate_unit.replace(/\s+/g, "");
     return `${prefix}${formattedAmount}/${unit}`;
@@ -222,6 +230,12 @@ async function fetchContracts(params: {
 export default function TariffContractsList() {
   const navigate = useNavigate();
   const erpTheme = DEFAULT_ERP_LIST_THEME;
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch] = useDebouncedValue(searchInput, 500);

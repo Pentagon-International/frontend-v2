@@ -53,6 +53,11 @@ import {
 } from "../../../utils/globalSearchNavigation";
 import useAuthStore from "../../../store/authStore";
 import { getDefaultBranchCurrencyCode } from "../../../utils/userNumberFormat";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 interface JobLedgerData {
   id: number;
@@ -241,6 +246,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const routerLocation = useLocation();
   const navState = (routerLocation.state ?? {}) as any;
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const activeCurrencyCode = useMemo(
     () => getDefaultBranchCurrencyCode(user?.branches),
     [user?.branches],
@@ -1221,7 +1228,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return value > 0 ? `${value.toFixed(2)}` : "-";
+          return value > 0 ? formatMoneyAmountBound(value) : "-";
         },
         mantineTableBodyCellProps: {
           style: {
@@ -1247,7 +1254,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return value > 0 ? `${value.toFixed(2)}` : "-";
+          return value > 0 ? formatMoneyAmountBound(value) : "-";
         },
         mantineTableBodyCellProps: {
           style: {
@@ -1273,7 +1280,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return `${value.toFixed(2)}`;
+          return formatMoneyAmountBound(value);
         },
         mantineTableBodyCellProps: {
           style: {
@@ -1299,7 +1306,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return `${value.toFixed(2)}`;
+          return formatMoneyAmountBound(value);
         },
         mantineTableBodyCellProps: {
           style: {
@@ -1325,7 +1332,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         enableSorting: false,
         Cell: ({ cell }) => {
           const value = cell.getValue<number>();
-          return `${value.toFixed(2)}`;
+          return formatMoneyAmountBound(value);
         },
         mantineTableBodyCellProps: {
           style: {
@@ -2112,7 +2119,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         {amountColumnLabel("Total Debit")}
                       </Text>
                       <Text size="lg" fw={600}>
-                        {totals.totalDebit.toFixed(2)}
+                        {formatMoneyAmountBound(totals.totalDebit)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -2122,7 +2129,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         {amountColumnLabel("Total Credit")}
                       </Text>
                       <Text size="lg" fw={600}>
-                        {totals.totalCredit.toFixed(2)}
+                        {formatMoneyAmountBound(totals.totalCredit)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -2132,7 +2139,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         {amountColumnLabel("Total Revenue")}
                       </Text>
                       <Text size="lg" fw={600}>
-                        {totals.totalRevenue.toFixed(2)}
+                        {formatMoneyAmountBound(totals.totalRevenue)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -2142,7 +2149,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         {amountColumnLabel("Total Actual Cost")}
                       </Text>
                       <Text size="lg" fw={600}>
-                        {totals.totalActualCost.toFixed(2)}
+                        {formatMoneyAmountBound(totals.totalActualCost)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -2152,7 +2159,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         Gross Profit
                       </Text>
                       <Text size="lg" fw={600}>
-                        {totals.grossProfit.toFixed(2)}
+                        {formatMoneyAmountBound(totals.grossProfit)}
                       </Text>
                     </Stack>
                   </Grid.Col>
@@ -2162,7 +2169,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         {amountColumnLabel("Total Neutral")}
                       </Text>
                       <Text size="lg" fw={600} c="#105476">
-                        {totals.totalNeutral.toFixed(2)}
+                        {formatMoneyAmountBound(totals.totalNeutral)}
                       </Text>
                     </Stack>
                   </Grid.Col>

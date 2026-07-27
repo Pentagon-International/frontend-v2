@@ -22,11 +22,34 @@ import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import { postAPICall } from "../../service/postApiCall";
 import { ToastNotification, SearchableSelect, SingleDateInput } from "../../components";
+import FormNumberInput from "../../components/FormNumberInput";
 import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
 import {
   EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
   normalizeEditPageAuditInfo,
 } from "../../utils/editPageAuditInfo";
+import useAuthStore from "../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../utils/nonDecimalMoneyAmount";
+
+function moneyFormValueToNumber(
+  value: string | number | null | undefined,
+): number | undefined {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function moneyNumberInputToFormString(value: string | number): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmountBound(n);
+}
 
 type PipelineFormData = {
   customer: string;
@@ -104,6 +127,13 @@ function formatDateYYYYMMDD(value: Date | null | undefined): string | null {
 }
 
 function PipelineCreate() {
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const [customerProfilingData, setCustomerProfilingData] = useState<
     CustomerProfilingData[]
   >([]);
@@ -1283,20 +1313,20 @@ function PipelineCreate() {
                   />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <TextInput
+                  <FormNumberInput
                     placeholder="Profit"
-                    type="number"
-                    value={profilingForm.values.profiles[index]?.profit || ""}
-                    onChange={(e) =>
+                    min={0}
+                    hideControls
+                    decimalScale={amountDecimalScale}
+                    value={moneyFormValueToNumber(
+                      profilingForm.values.profiles[index]?.profit || "",
+                    )}
+                    onChange={(value) =>
                       profilingForm.setFieldValue(
                         `profiles.${index}.profit`,
-                        e.currentTarget.value
+                        moneyNumberInputToFormString(value),
                       )
                     }
-                    // onInput={e => {
-                    //   const target = e.target as HTMLInputElement;
-                    //   target.value = target.value.replace(/^(\d+)(\.\d{0,2})?.*$/, (_, int, dec) => int + (dec ?? ''));
-                    // }}
                     error={
                       profilingForm.errors[
                         `profiles.${index}.profit`
@@ -1422,17 +1452,19 @@ function PipelineCreate() {
                   />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <TextInput
+                  <FormNumberInput
                     placeholder="Pipeline Profit"
-                    type="number"
-                    value={
+                    min={0}
+                    hideControls
+                    decimalScale={amountDecimalScale}
+                    value={moneyFormValueToNumber(
                       profilingForm.values.profiles[index]?.pipeline_profit ||
-                      ""
-                    }
-                    onChange={(e) =>
+                        "",
+                    )}
+                    onChange={(value) =>
                       profilingForm.setFieldValue(
                         `profiles.${index}.pipeline_profit`,
-                        e.currentTarget.value
+                        moneyNumberInputToFormString(value),
                       )
                     }
                     error={
@@ -1747,16 +1779,18 @@ function PipelineCreate() {
                   />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <TextInput
+                  <FormNumberInput
                     placeholder="Profit"
-                    type="number"
-                    value={
-                      profilingForm.values.newProfiles[index]?.profit || ""
-                    }
-                    onChange={(e) =>
+                    min={0}
+                    hideControls
+                    decimalScale={amountDecimalScale}
+                    value={moneyFormValueToNumber(
+                      profilingForm.values.newProfiles[index]?.profit || "",
+                    )}
+                    onChange={(value) =>
                       profilingForm.setFieldValue(
                         `newProfiles.${index}.profit`,
-                        e.currentTarget.value
+                        moneyNumberInputToFormString(value),
                       )
                     }
                     error={
@@ -1841,17 +1875,19 @@ function PipelineCreate() {
                   />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <TextInput
+                  <FormNumberInput
                     placeholder="Profit"
-                    type="number"
-                    value={
+                    min={0}
+                    hideControls
+                    decimalScale={amountDecimalScale}
+                    value={moneyFormValueToNumber(
                       profilingForm.values.newProfiles[index]
-                        ?.pipeline_profit || ""
-                    }
-                    onChange={(e) =>
+                        ?.pipeline_profit || "",
+                    )}
+                    onChange={(value) =>
                       profilingForm.setFieldValue(
                         `newProfiles.${index}.pipeline_profit`,
-                        e.currentTarget.value
+                        moneyNumberInputToFormString(value),
                       )
                     }
                     error={

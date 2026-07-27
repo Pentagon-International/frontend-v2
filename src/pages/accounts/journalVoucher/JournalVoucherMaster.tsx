@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -197,6 +203,9 @@ function journalVoucherColumnId(col: MRT_ColumnDef<JVRecord>): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 function JournalVoucherMaster() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
   const defaultDateFrom = dayjs().startOf("month").toDate();
@@ -624,13 +633,23 @@ function JournalVoucherMaster() {
         accessorKey: "debit_total",
         header: "Debit",
         size: 110,
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ cell }) => {
+          const val = cell.getValue<unknown>();
+          if (val == null || val === "") return "-";
+          const n = typeof val === "number" ? val : parseFloat(String(val));
+          return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(val);
+        },
       },
       {
         accessorKey: "credit_total",
         header: "Credit",
         size: 110,
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ cell }) => {
+          const val = cell.getValue<unknown>();
+          if (val == null || val === "") return "-";
+          const n = typeof val === "number" ? val : parseFloat(String(val));
+          return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(val);
+        },
       },
       {
         accessorKey: "difference",
@@ -646,7 +665,7 @@ function JournalVoucherMaster() {
               c={Math.abs(num) > 0.005 ? "red" : primary}
               style={{ fontFamily: erpTheme.fontSans }}
             >
-              {val || "-"}
+              {Number.isFinite(num) ? formatMoneyAmountBound(num) : val || "-"}
             </Text>
           );
         },

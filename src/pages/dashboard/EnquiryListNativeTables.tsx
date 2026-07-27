@@ -13,6 +13,7 @@ import {
 } from "@mantine/core";
 import {
   useCallback,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -41,6 +42,12 @@ import {
 } from "../../components";
 import { EnquirySummaryRowMenu, type EnquiryRowMenuContext } from "./EnquirySummaryRowMenu";
 import type { PreviewColDef } from "./EnquiryListPreviewBuild";
+import useAuthStore from "../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../utils/nonDecimalMoneyAmount";
 
 /**
  * Header column-filter keys supported by both the Summary and the Detailed list.
@@ -1328,6 +1335,12 @@ export function EnquiryPreviewNativeTable({
   loadingMessage = "Loading…",
 }: PreviewTableProps) {
   const { fg, fontSans, muted, primary } = theme;
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   // Which column id is currently in "edit" mode. Only meaningful when headerFilters is provided.
   const [editingColumn, setEditingColumn] = useState<PreviewEditingColumn>(null);
@@ -1721,6 +1734,23 @@ function renderPreviewCell({
       <Text size="sm" c={muted} style={{ fontFamily: fontSans }}>
         —
       </Text>
+    );
+  }
+  if (
+    col.key === "total_cost" ||
+    col.key === "total_sell" ||
+    col.key === "profit"
+  ) {
+    const n = Number(v);
+    const str = Number.isFinite(n) ? formatMoneyAmountBound(n) : String(v);
+    return (
+      <TextLineClampTooltip
+        text={str}
+        tooltip={str}
+        fg={fg}
+        fontSans={fontSans}
+        maxWidth={240}
+      />
     );
   }
   const str = String(v);

@@ -73,8 +73,20 @@ import { useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../utils/nonDecimalMoneyAmount";
 import { useListFilterStore } from "../../store/listFilterStore";
 import { generateNewQuotationPDF } from "./QuotationPDFTemplate";
+
+function formatQuotationMoneyDisplay(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "-";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return String(raw);
+  return formatMoneyAmountBound(n);
+}
 
 const PdfEditor = lazy(() =>
   import("../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
@@ -326,6 +338,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   // Refs to persist returnToDashboard flag and dashboard state
   const returnToDashboardRef = useRef<boolean>(
@@ -1695,15 +1712,11 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     }
   };
 
-  // Helper function to format numbers preserving decimals when converting to string
+  // Non-money download cells (container counts, revision nos).
   const formatNumberWithDecimals = (num: number): string => {
-    // Check if number has decimal places
     if (num % 1 !== 0) {
-      // Has decimal places, preserve them with proper formatting
       return num.toString();
     }
-    // For integers, preserve as decimal format (e.g., 336.0)
-    // This ensures decimal values from API are preserved in Excel
     return num.toFixed(1);
   };
 
@@ -1909,10 +1922,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                 ) || 0;
               return total;
             });
-            // If single value, return as number; otherwise format and join as string
+            // If single value, return formatted money string; otherwise join
             return totals.length === 1
-              ? totals[0]
-              : totals.map(formatNumberWithDecimals).join("\n");
+              ? formatQuotationMoneyDisplay(totals[0])
+              : totals.map((t: number) => formatQuotationMoneyDisplay(t)).join("\n");
           }
           return "N/A";
         },
@@ -1935,10 +1948,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                 ) || 0;
               return total;
             });
-            // If single value, return as number; otherwise format and join as string
+            // If single value, return formatted money string; otherwise join
             return totals.length === 1
-              ? totals[0]
-              : totals.map(formatNumberWithDecimals).join("\n");
+              ? formatQuotationMoneyDisplay(totals[0])
+              : totals.map((t: number) => formatQuotationMoneyDisplay(t)).join("\n");
           }
           return "N/A";
         },
@@ -1954,10 +1967,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             item.quotation.length > 0
           ) {
             const profits = item.quotation.map((q: any) => q.profit || 0);
-            // If single value, return as number; otherwise format and join as string
+            // If single value, return formatted money string; otherwise join
             return profits.length === 1
-              ? profits[0]
-              : profits.map(formatNumberWithDecimals).join("\n");
+              ? formatQuotationMoneyDisplay(profits[0])
+              : profits.map((p: number) => formatQuotationMoneyDisplay(p)).join("\n");
           }
           return "N/A";
         },
@@ -4152,14 +4165,18 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                           <Text fw={600} size="sm">
                             Total Cost
                           </Text>
-                          <Badge color="#085e61ff">{revision.total_cost}</Badge>
+                          <Badge color="#085e61ff">
+                            {formatQuotationMoneyDisplay(revision.total_cost)}
+                          </Badge>
                         </Box>
 
                         <Box style={{ flex: 1 }}>
                           <Text fw={600} size="sm">
                             Total Sell
                           </Text>
-                          <Badge color="#105475">{revision.total_sell}</Badge>
+                          <Badge color="#105475">
+                            {formatQuotationMoneyDisplay(revision.total_sell)}
+                          </Badge>
                         </Box>
 
                         <Box style={{ flex: 1 }}>
@@ -4175,7 +4192,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                                   : "#e00707ff"
                             }
                           >
-                            {revision.profit}
+                            {formatQuotationMoneyDisplay(revision.profit)}
                           </Badge>
                         </Box>
                         <Box style={{ flex: 2 }}>
@@ -4363,19 +4380,29 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                                         {charge.no_of_units || "-"}
                                       </Table.Td>
                                       <Table.Td>
-                                        {charge.sell_per_unit || "-"}
+                                        {formatQuotationMoneyDisplay(
+                                          charge.sell_per_unit,
+                                        )}
                                       </Table.Td>
                                       <Table.Td>
-                                        {charge.min_sell || "-"}
+                                        {formatQuotationMoneyDisplay(
+                                          charge.min_sell,
+                                        )}
                                       </Table.Td>
                                       <Table.Td>
-                                        {charge.cost_per_unit || "-"}
+                                        {formatQuotationMoneyDisplay(
+                                          charge.cost_per_unit,
+                                        )}
                                       </Table.Td>
                                       <Table.Td>
-                                        {charge.total_cost || "-"}
+                                        {formatQuotationMoneyDisplay(
+                                          charge.total_cost,
+                                        )}
                                       </Table.Td>
                                       <Table.Td>
-                                        {charge.total_sell || "-"}
+                                        {formatQuotationMoneyDisplay(
+                                          charge.total_sell,
+                                        )}
                                       </Table.Td>
                                       <Table.Td>{getActionBy(charge)}</Table.Td>
                                       <Table.Td>

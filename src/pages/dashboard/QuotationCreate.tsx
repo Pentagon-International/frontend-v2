@@ -71,6 +71,7 @@ import {
   SearchableSelect,
   SingleDateInput,
 } from "../../components";
+import FormNumberInput from "../../components/FormNumberInput";
 import EditPageAuditInfoIcon from "../../components/EditPageAuditInfoIcon";
 import {
   EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX,
@@ -86,11 +87,41 @@ import {
   parseRoeForPayload,
   sanitizeRoeInput,
 } from "../../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../utils/nonDecimalMoneyAmount";
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
 import {
   getBookingCreatePath,
   type OtherServiceOption,
 } from "../../utils/otherServiceType";
+
+/** Form money string → NumberInput value (empty stays undefined). */
+function moneyFormValueToNumber(
+  value: string | number | null | undefined,
+): number | undefined {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** NumberInput onChange → form money string (respects Vietnam whole-number mode). */
+function moneyNumberInputToFormString(value: string | number): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmountBound(n);
+}
+
+function formatHistoryMoney(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "-";
+  const n = parseFloat(String(raw));
+  if (!Number.isFinite(n)) return "-";
+  return formatMoneyAmountBound(n);
+}
 
 const QUOTATION_APPROVAL_PATH = "/quotation-approval";
 const QUOTATION_MASTER_PATH = "/quotation";
@@ -288,7 +319,7 @@ function computeChargeLineTotals(charge: {
   const calculatedSell = noOfUnits * sellPerUnit * roe;
   const calculatedCost = noOfUnits * costPerUnit * roe;
   const format = (value: number) =>
-    Number.isFinite(value) ? value.toFixed(2) : "0.00";
+    formatMoneyAmountBound(Number.isFinite(value) ? value : 0);
   return {
     total_sell: format(calculatedSell),
     total_cost: format(calculatedCost),
@@ -506,6 +537,12 @@ function QuotationCreate({
 }: QuotationCreateProps) {
   const user = useAuthStore((state) => state.user);
   const isManagerOrAdmin = Boolean(user?.is_manager || user?.is_staff);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const queryClient = useQueryClient();
   const [chargesData, setCharges] = useState<ChargesDataItem[]>([]);
   const {
@@ -517,6 +554,12 @@ function QuotationCreate({
     ROE_CANNOT_BE_ONE_TOAST,
   } = useExchangeRateRoe();
   const branchCurrencyCode = defaultBranchCurrency;
+  const formatMoneyDisplay = useCallback(
+    (value: number) => formatMoneyAmountBound(value),
+    // Recompute when Vietnam mode changes (bound formatter reads session flag).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isVietnamBranch],
+  );
   const [chargeRoeErrors, setChargeRoeErrors] = useState<
     Record<number, string>
   >({});
@@ -1135,6 +1178,33 @@ function QuotationCreate({
       handleChargeRoeChange,
       syncChargeTotalsAtIndex,
     ],
+  );
+
+  /** Money fields: FormNumberInput value/onChange while form state stays string. */
+  const bindChargeMoneyField = useCallback(
+    (
+      index: number,
+      field: "sell_per_unit" | "cost_per_unit" | "min_sell",
+    ) => {
+      const current = dynamicForm.values.charges[index]?.[field];
+      const formError = (dynamicForm.errors as any)?.charges?.[index]?.[
+        field
+      ] as string | undefined;
+      return {
+        value: moneyFormValueToNumber(
+          current === null || current === undefined ? "" : String(current),
+        ),
+        error: formError,
+        onChange: (value: string | number) => {
+          const stored = moneyNumberInputToFormString(value);
+          dynamicForm.setFieldValue(`charges.${index}.${field}`, stored);
+          if (field === "sell_per_unit" || field === "cost_per_unit") {
+            syncChargeTotalsAtIndex(index, { [field]: stored });
+          }
+        },
+      };
+    },
+    [dynamicForm, syncChargeTotalsAtIndex],
   );
 
   const tariffOption = useForm({
@@ -6113,13 +6183,11 @@ function QuotationCreate({
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
-                            <TextInput
-                              key={
-                                // dynamicForm.values.charges[index]?.sell_per_unit ||
-                                `unit-${index}-sell_per_unit`
-                              }
-                              //placeholder={"100"}
+                            <FormNumberInput
+                              key={`unit-${index}-sell_per_unit`}
                               min={0}
+                              hideControls
+                              decimalScale={amountDecimalScale}
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -6127,24 +6195,22 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...bindChargeAmountInput(index, "sell_per_unit")}
+                              {...bindChargeMoneyField(index, "sell_per_unit")}
                               readOnly={isViewMode}
                               disabled={isViewMode}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
-                            <TextInput
-                              key={
-                                // dynamicForm.values.charges[index]?.min_sell ||
-                                `unit-${index}-min_sell`
-                              }
+                            <FormNumberInput
+                              key={`unit-${index}-min_sell`}
                               disabled={
                                 isViewMode ||
                                 dynamicForm.values.charges[index]?.toBeDisabled
                               }
                               readOnly={isViewMode}
                               min={0}
-                              //placeholder={"100"}
+                              hideControls
+                              decimalScale={amountDecimalScale}
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -6152,24 +6218,20 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...dynamicForm.getInputProps(
-                                `charges.${index}.min_sell`,
-                              )}
+                              {...bindChargeMoneyField(index, "min_sell")}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
-                            <TextInput
-                              key={
-                                // dynamicForm.values.charges[index]?.cost_per_unit ||
-                                `unit-${index}-cost_per_unit`
-                              }
+                            <FormNumberInput
+                              key={`unit-${index}-cost_per_unit`}
                               disabled={
                                 isViewMode ||
                                 dynamicForm.values.charges[index]?.toBeDisabled
                               }
                               readOnly={isViewMode}
-                              //placeholder={"100"}
                               min={0}
+                              hideControls
+                              decimalScale={amountDecimalScale}
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -6177,7 +6239,7 @@ function QuotationCreate({
                                   height: "36px",
                                 },
                               }}
-                              {...bindChargeAmountInput(index, "cost_per_unit")}
+                              {...bindChargeMoneyField(index, "cost_per_unit")}
                             />
                           </Grid.Col>
                           {/* <Grid.Col span={1}>
@@ -6239,12 +6301,14 @@ function QuotationCreate({
                       />
                     </Grid.Col> */}
                           <Grid.Col span={1}>
-                            <TextInput
+                            <FormNumberInput
                               key={`unit-${index}-total_sell`}
-                              value={
+                              value={moneyFormValueToNumber(
                                 dynamicForm.values.charges[index]?.total_sell ??
-                                "0.00"
-                              }
+                                  formatMoneyAmountBound(0),
+                              )}
+                              decimalScale={amountDecimalScale}
+                              hideControls
                               readOnly
                               disabled={isViewMode}
                               styles={{
@@ -6263,12 +6327,14 @@ function QuotationCreate({
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
-                            <TextInput
+                            <FormNumberInput
                               key={`unit-${index}-total_cost`}
-                              value={
+                              value={moneyFormValueToNumber(
                                 dynamicForm.values.charges[index]?.total_cost ??
-                                "0.00"
-                              }
+                                  formatMoneyAmountBound(0),
+                              )}
+                              decimalScale={amountDecimalScale}
+                              hideControls
                               readOnly
                               disabled={isViewMode}
                               styles={{
@@ -6353,8 +6419,8 @@ function QuotationCreate({
                         {" "}
                         Total:
                       </Grid.Col>
-                      <Grid.Col span={1}>{netSell.toFixed(2)}</Grid.Col>
-                      <Grid.Col span={1}> {netCost.toFixed(2)}</Grid.Col>
+                      <Grid.Col span={1}>{formatMoneyDisplay(netSell)}</Grid.Col>
+                      <Grid.Col span={1}> {formatMoneyDisplay(netCost)}</Grid.Col>
                     </Grid>
                     <Grid
                       mt={8}
@@ -6369,7 +6435,7 @@ function QuotationCreate({
                         Profit
                         {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}=
                       </Grid.Col>
-                      <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
+                      <Grid.Col span={1}> {formatMoneyDisplay(profit)}</Grid.Col>
                     </Grid>
                     {showQuoteCurrencyProfit && (
                       <Grid
@@ -6385,7 +6451,7 @@ function QuotationCreate({
                         </Grid.Col>
                         <Grid.Col span={1}>
                           {" "}
-                          {profitInQuoteCurrency.toFixed(2)}
+                          {formatMoneyDisplay(profitInQuoteCurrency)}
                         </Grid.Col>
                       </Grid>
                     )}
@@ -7463,9 +7529,11 @@ function QuotationCreate({
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
-                          <TextInput
+                          <FormNumberInput
                             key={`unit-${index}-sell_per_unit`}
                             min={0}
+                            hideControls
+                            decimalScale={amountDecimalScale}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -7473,16 +7541,18 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...bindChargeAmountInput(index, "sell_per_unit")}
+                            {...bindChargeMoneyField(index, "sell_per_unit")}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
-                          <TextInput
+                          <FormNumberInput
                             key={`unit-${index}-min_sell`}
                             disabled={
                               dynamicForm.values.charges[index]?.toBeDisabled
                             }
                             min={0}
+                            hideControls
+                            decimalScale={amountDecimalScale}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -7490,18 +7560,18 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...dynamicForm.getInputProps(
-                              `charges.${index}.min_sell`,
-                            )}
+                            {...bindChargeMoneyField(index, "min_sell")}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
-                          <TextInput
+                          <FormNumberInput
                             key={`unit-${index}-cost_per_unit`}
                             disabled={
                               dynamicForm.values.charges[index]?.toBeDisabled
                             }
                             min={0}
+                            hideControls
+                            decimalScale={amountDecimalScale}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -7509,16 +7579,18 @@ function QuotationCreate({
                                 height: "36px",
                               },
                             }}
-                            {...bindChargeAmountInput(index, "cost_per_unit")}
+                            {...bindChargeMoneyField(index, "cost_per_unit")}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
-                          <TextInput
+                          <FormNumberInput
                             key={`unit-${index}-total_sell`}
-                            value={
+                            value={moneyFormValueToNumber(
                               dynamicForm.values.charges[index]?.total_sell ??
-                              "0.00"
-                            }
+                                formatMoneyAmountBound(0),
+                            )}
+                            decimalScale={amountDecimalScale}
+                            hideControls
                             readOnly
                             disabled={isViewMode}
                             styles={{
@@ -7535,12 +7607,14 @@ function QuotationCreate({
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
-                          <TextInput
+                          <FormNumberInput
                             key={`unit-${index}-total_cost`}
-                            value={
+                            value={moneyFormValueToNumber(
                               dynamicForm.values.charges[index]?.total_cost ??
-                              "0.00"
-                            }
+                                formatMoneyAmountBound(0),
+                            )}
+                            decimalScale={amountDecimalScale}
+                            hideControls
                             readOnly
                             disabled={isViewMode}
                             styles={{
@@ -7612,8 +7686,8 @@ function QuotationCreate({
                     <Grid.Col span={1} ml={10}>
                       Total:
                     </Grid.Col>
-                    <Grid.Col span={1}>{netSell.toFixed(2)}</Grid.Col>
-                    <Grid.Col span={1}> {netCost.toFixed(2)}</Grid.Col>
+                    <Grid.Col span={1}>{formatMoneyDisplay(netSell)}</Grid.Col>
+                    <Grid.Col span={1}> {formatMoneyDisplay(netCost)}</Grid.Col>
                   </Grid>
                   <Grid
                     mt={8}
@@ -7627,7 +7701,7 @@ function QuotationCreate({
                       Profit
                       {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}=
                     </Grid.Col>
-                    <Grid.Col span={1}> {profit.toFixed(2)}</Grid.Col>
+                    <Grid.Col span={1}> {formatMoneyDisplay(profit)}</Grid.Col>
                   </Grid>
                   {showQuoteCurrencyProfit && (
                     <Grid
@@ -7643,7 +7717,7 @@ function QuotationCreate({
                       </Grid.Col>
                       <Grid.Col span={1}>
                         {" "}
-                        {profitInQuoteCurrency.toFixed(2)}
+                        {formatMoneyDisplay(profitInQuoteCurrency)}
                       </Grid.Col>
                     </Grid>
                   )}
@@ -8770,34 +8844,22 @@ function QuotationCreate({
                         {historyItem.no_of_units || "-"}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {historyItem.sell_per_unit
-                          ? parseFloat(historyItem.sell_per_unit).toFixed(2)
-                          : "-"}
+                        {formatHistoryMoney(historyItem.sell_per_unit)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {historyItem.min_sell
-                          ? parseFloat(historyItem.min_sell).toFixed(2)
-                          : "-"}
+                        {formatHistoryMoney(historyItem.min_sell)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {historyItem.cost_per_unit
-                          ? parseFloat(historyItem.cost_per_unit).toFixed(2)
-                          : "-"}
+                        {formatHistoryMoney(historyItem.cost_per_unit)}
                       </Table.Td>
                       {/* <Table.Td style={{ textAlign: "center" }}>
-                        {historyItem.min_cost
-                          ? parseFloat(historyItem.min_cost).toFixed(2)
-                          : "-"}
+                        {formatHistoryMoney(historyItem.min_cost)}
                       </Table.Td> */}
                       <Table.Td style={{ textAlign: "center" }}>
-                        {historyItem.total_cost
-                          ? parseFloat(historyItem.total_cost).toFixed(2)
-                          : "-"}
+                        {formatHistoryMoney(historyItem.total_cost)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {historyItem.total_sell
-                          ? parseFloat(historyItem.total_sell).toFixed(2)
-                          : "-"}
+                        {formatHistoryMoney(historyItem.total_sell)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
                         {historyItem.action_type === "CREATED"
