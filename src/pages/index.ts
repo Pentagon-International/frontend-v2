@@ -180,6 +180,8 @@ import VatChargeMappingMaster from "./masters/vat-charge-mapping/VatChargeMappin
 import VatChargeMappingCreate from "./masters/vat-charge-mapping/VatChargeMappingCreate";
 import VatMasterMaster from "./masters/vat-master/VatMasterMaster";
 import VatMasterCreate from "./masters/vat-master/VatMasterCreate";
+import ExchangeRateMaster from "./masters/exchange-rate-master/ExchangeRateMaster";
+import ExchangeRateMasterCreate from "./masters/exchange-rate-master/ExchangeRateMasterCreate";
 import CFSMaster from "./masters/cfs/CFSMaster";
 import CFSCreate from "./masters/cfs/CFSCreate";
 
@@ -287,6 +289,8 @@ export {
   VatChargeMappingCreate,
   VatMasterMaster,
   VatMasterCreate,
+  ExchangeRateMaster,
+  ExchangeRateMasterCreate,
   CFSMaster,
   CFSCreate,
   QuotationCreate,

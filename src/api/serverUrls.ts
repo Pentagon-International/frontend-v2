@@ -44,6 +44,7 @@ export const URL = {
   enquiry: "enquiry/",
   currencyMaster: "currency-master/",
   exchangeRateMaster: "exchange-rate-master/",
+  exchangeRateMasterFilter: "filter/exchange-rate-master/",
   quotation: "quotation/",
   user: "user_master/",
   userByCoordinator: "user_master/by-coordinator/",

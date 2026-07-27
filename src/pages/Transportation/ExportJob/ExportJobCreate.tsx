@@ -2327,6 +2327,18 @@ function ExportJobCreate() {
           atd: mblDetailsForm.values.atd,
           ata: mblDetailsForm.values.ata,
           job_date: mblDetailsForm.values.job_date,
+          is_direct: mblDetailsForm.values.is_direct,
+          agent_name: mblDetailsForm.values.agent_name || "",
+          agent_address: mblDetailsForm.values.agent_address || "",
+          agent_email: String(
+            (jobWithMergedHousingDetails ?? jobData)?.agent_email ??
+              (jobWithMergedHousingDetails as { mblDetails?: { agent_email?: string } } | null)
+                ?.mblDetails?.agent_email ??
+              "",
+          ),
+          consignee_name: mblDetailsForm.values.consignee_name || "",
+          consignee_address: mblDetailsForm.values.consignee_address || "",
+          consignee_email: mblDetailsForm.values.consignee_email || "",
         },
         carrierDetails: {
           carrier_code: carrierDetailsForm.values.carrier_code,
@@ -2578,6 +2590,12 @@ function ExportJobCreate() {
             origin_agent: mblDetailsForm.values.origin_agent || "",
             agent_name: mblDetailsForm.values.agent_name || "",
             agent_address: mblDetailsForm.values.agent_address || "",
+            agent_email: String(
+              (jobWithMergedHousingDetails ?? jobData)?.agent_email ??
+                (jobWithMergedHousingDetails as { mblDetails?: { agent_email?: string } } | null)
+                  ?.mblDetails?.agent_email ??
+                "",
+            ),
             origin_code: mblDetailsForm.values.origin_code || "",
             origin_name: mblDetailsForm.values.origin_name || "",
             destination_code: mblDetailsForm.values.destination_code || "",

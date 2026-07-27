@@ -468,11 +468,18 @@ export const generateBillOfLadingPDF = (
       housingData?.notify1_customer_address ||
       "";
 
-    // To Obtain Delivery Contact
-    const deliveryContactCompany =  housingData?.consignee_name || "";
-    const deliveryContactAddress =  housingData?.consignee_address || "";
-    const deliveryContactTel = housingData?.consignee_email || "";
-    const deliveryContactEmail = housingData?.consignee_email || "";
+    // To Obtain Delivery Contact — master (MBL) only
+    const isDirectMaster = Boolean(mblDetails?.is_direct);
+    const deliveryContactCompany = isDirectMaster
+      ? mblDetails?.consignee_name || ""
+      : mblDetails?.agent_name || "";
+    const deliveryContactAddress = isDirectMaster
+      ? mblDetails?.consignee_address || ""
+      : mblDetails?.agent_address || "";
+    const deliveryContactTel = "";
+    const deliveryContactEmail = isDirectMaster
+      ? mblDetails?.consignee_email || ""
+      : mblDetails?.agent_email || "";
 
     // Shipment Route and Mode
     const houseOrigin = housingData?.origin_name || "";

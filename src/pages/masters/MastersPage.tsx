@@ -196,6 +196,10 @@ export default function MastersPage() {
             label: "Chart of Accounts",
           },
           {
+            icon: <IconExchange size={28} color="#105476" />,
+            label: "Exchange Rate Master",
+          },
+          {
             icon: <IconLink size={28} color="#105476" />,
             label: "GL Charge Mapping",
           },

@@ -98,6 +98,8 @@ import {
   VatChargeMappingCreate,
   VatMasterMaster,
   VatMasterCreate,
+  ExchangeRateMaster,
+  ExchangeRateMasterCreate,
   CFSMaster,
   CFSCreate,
   ExportShipmentMaster,
@@ -1234,6 +1236,12 @@ const NavigationRoutes = () => {
             <Route index element={<VatMasterMaster />} />
             <Route path="create" element={<VatMasterCreate />} />
             <Route path="edit" element={<VatMasterCreate />} />
+          </Route>
+
+          <Route path="exchange-rate-master">
+            <Route index element={<ExchangeRateMaster />} />
+            <Route path="create" element={<ExchangeRateMasterCreate />} />
+            <Route path="edit" element={<ExchangeRateMasterCreate />} />
           </Route>
         </Route>
       </Route>
