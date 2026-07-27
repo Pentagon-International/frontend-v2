@@ -174,6 +174,8 @@ import {
   
   type InvoiceCombinedItem = {
     id?: number;
+    /** Primary key of invoice when document type is INV */
+    doc_id?: number;
     document_no?: string;
     document_date?: string;
     due_date?: string;
@@ -185,6 +187,7 @@ import {
     day_book_id?: number | string;
     daybook_name?: string;
     day_book_type?: string;
+    day_book_document_type?: string;
     currency_id?: number | string;
     currency_code?: string;
     roe?: number | string;
@@ -306,8 +309,10 @@ import {
     supporting_documents: SupportingDocument[];
   };
   
+  const OVERSEAS_DEFAULT_CURRENCY = "USD";
+
   const getDefaultDetailRow = (
-    localCurrency: string,
+    currency: string = OVERSEAS_DEFAULT_CURRENCY,
     forReversal = false,
   ): DetailRow => ({
     subledger_id: null,
@@ -315,14 +320,16 @@ import {
     customer_code: "",
     customer_display: "",
     narration: "",
-    currency: localCurrency,
+    currency,
     roe: 1,
     amount: null,
     local_amount: null,
     dr_cr: forReversal ? "Dr" : "Cr",
   });
   
-  const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
+  const getDefaultAdjustmentRow = (
+    currency: string = OVERSEAS_DEFAULT_CURRENCY,
+  ): AdjustmentRow => ({
     location: "",
     type: "",
     subledger: "",
@@ -330,7 +337,7 @@ import {
     daybook_id: "",
     document_no: "",
     doc_date: null,
-    currency: localCurrency,
+    currency,
     roe: null,
     adj_curr_amount: null,
     adj_local_amount: null,
@@ -540,6 +547,8 @@ import {
     const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
       Set<number>
     >(new Set());
+    const [isOpeningInvoiceFromModal, setIsOpeningInvoiceFromModal] =
+      useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPosting, setIsPosting] = useState(false);
     const [saveResponse, setSaveResponse] = useState<{
@@ -567,7 +576,7 @@ import {
         daybook_id: "",
         type: "CASH",
         date: new Date(),
-        currency: localCurrency,
+        currency: OVERSEAS_DEFAULT_CURRENCY,
         roe: 1,
         amount: null,
         local_amount: null,
@@ -579,8 +588,8 @@ import {
         cheque_no: "",
         cheque_date: null,
         chq_clrd_date: null,
-        details: [getDefaultDetailRow(localCurrency, _isReversal)],
-        adjustments: [getDefaultAdjustmentRow(localCurrency)],
+        details: [getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal)],
+        adjustments: [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)],
         supporting_documents: [] as SupportingDocument[],
       },
       validate: {
@@ -690,13 +699,17 @@ import {
     }, [currencyData]);
   
     useEffect(() => {
-      if (!localCurrency || form.values.currency) return;
-      form.setFieldValue("currency", localCurrency);
+      if (form.values.currency) return;
+      form.setFieldValue("currency", OVERSEAS_DEFAULT_CURRENCY);
     }, [localCurrency]);
   
     // Load from list: state is receipt row (Receipt Master) or reversal row (Receipt Reversal list for edit/view)
     const receiptFromState = location.state as ReceiptListItem | null | undefined;
     const loadedFromListState = receiptFromState?.id != null;
+    /** Skip exchange-rate ROE fetch when currency is applied from a selected document. */
+    const skipNextCurrencyRoeSyncRef = useRef(false);
+    /** When true, allocation → party/header amount sync is skipped (user edited amounts). */
+    const userOverrodePartyAmountsRef = useRef(false);
     const pathname = location.pathname;
 
     useEffect(() => {
@@ -743,7 +756,9 @@ import {
               customer_code: String(p.subledger_code ?? "").trim(),
               customer_display: String(p.subledger_name ?? "").trim(),
               narration: String(p.narration ?? "").trim(),
-              currency: (p.currency_code ?? localCurrency).toString().trim(),
+              currency: (p.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
+                .toString()
+                .trim(),
               roe: parseNum(p.roe) ?? 1,
               amount: parseNum(p.amount),
               local_amount: parseNum(p.local_amount),
@@ -755,7 +770,7 @@ import {
                     : ("Dr" as const)
                 : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
             }))
-          : [getDefaultDetailRow(localCurrency, _isReversal)];
+          : [getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal)];
   
       const allocations = receiptFromState.allocations;
       const adjustments: AdjustmentRow[] =
@@ -772,13 +787,15 @@ import {
                 daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
                 document_no: (a.document_no ?? "").toString(),
                 doc_date: parseDocumentDate(a.document_date),
-                currency: (a.currency_code ?? localCurrency).toString().trim(),
+                currency: (a.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
+                  .toString()
+                  .trim(),
                 roe: parseNum(roeFromApi),
                 adj_curr_amount: parseNum(a.adj_curr_amount),
                 adj_local_amount: parseNum(a.adj_local_amount),
               };
             })
-          : [getDefaultAdjustmentRow(localCurrency)];
+          : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
   
       setLoadedDetails(details);
       form.setValues({
@@ -789,7 +806,7 @@ import {
             : "",
         type: (receiptFromState.type ?? "CASH").toString().trim(),
         date: dateVal ?? new Date(),
-        currency: (receiptFromState.currency_code ?? localCurrency)
+        currency: (receiptFromState.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
           .toString()
           .trim(),
         roe: roeVal ?? 1,
@@ -869,12 +886,24 @@ import {
       location.key,
     ]);
   
-    // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
-    // exchange rate master is called only when the user changes currency (dropdown onChange).
+    // Create only: auto-fetch ROE from exchange-rate master when currency is set.
+    // Document selection applies document currency/ROE and skips this fetch once.
+    // User currency changes (header/party dropdowns) clear the skip and fetch again.
     useEffect(() => {
       const curr = form.values.currency?.trim();
       if (!curr || !localCurrency || loadedFromListState) return;
-      syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
+      if (skipNextCurrencyRoeSyncRef.current) {
+        skipNextCurrencyRoeSyncRef.current = false;
+        return;
+      }
+      syncRoeForCurrencyChange(curr, (roe) => {
+        form.setFieldValue("roe", roe);
+        form.values.details.forEach((row, idx) => {
+          if ((row.currency ?? "").toString().trim() === curr) {
+            form.setFieldValue(`details.${idx}.roe`, roe);
+          }
+        });
+      });
     }, [
       form.values.currency,
       localCurrency,
@@ -934,8 +963,13 @@ import {
     /** Sync party details from allocation totals: only call when adjustments actually change (Adj Curr Amount or invoice selection), not when user changes Amount/ROE. */
     const syncPartyDetailsFromAllocations = (
       adjustmentsToUse?: AdjustmentRow[],
+      options?: { syncCurrency?: boolean; forceAmountSync?: boolean },
     ) => {
       const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
+      const syncCurrency = options?.syncCurrency === true;
+      const shouldSyncAmounts =
+        options?.forceAmountSync === true || !userOverrodePartyAmountsRef.current;
+      let headerCurrency: string | null = null;
       form.values.details.forEach((row, idx) => {
         const partyCode = (row.customer_code ?? "").toString().trim();
         const partyDisplay = (row.customer_display ?? "").toString().trim();
@@ -946,33 +980,50 @@ import {
               (a.subledger_display ?? "").toString().trim() === partyDisplay),
         );
         if (matchingAllocations.length === 0) return;
-        const sum = matchingAllocations.reduce(
+        const firstAlloc = matchingAllocations[0];
+        const currencyFromAlloc = (firstAlloc.currency ?? "").toString().trim();
+        if (syncCurrency) {
+          if (
+            currencyFromAlloc &&
+            form.values.details[idx].currency !== currencyFromAlloc
+          ) {
+            form.setFieldValue(`details.${idx}.currency`, currencyFromAlloc);
+          }
+          if (headerCurrency == null && currencyFromAlloc) {
+            headerCurrency = currencyFromAlloc;
+          }
+        }
+        if (!shouldSyncAmounts) return;
+        // Adj Curr Amount (sum) → party Amount; Local Amount = Amount * ROE (master).
+        const currSum = matchingAllocations.reduce(
           (s, a) =>
             s +
-            (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-              ? a.adj_local_amount
+            (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+              ? a.adj_curr_amount
               : 0),
           0,
         );
-        const local = clampAmount(sum);
+        const amount = clampAmount(currSum);
         const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-        const derivedAmount =
-          local != null &&
+        const local =
+          amount != null &&
+          Number.isFinite(amount) &&
           roeVal != null &&
-          Number.isFinite(roeVal) &&
-          roeVal !== 0
-            ? clampAmount(local / roeVal)
+          Number.isFinite(roeVal)
+            ? clampAmount(amount * roeVal)
             : null;
+        if (form.values.details[idx].amount !== amount) {
+          form.setFieldValue(`details.${idx}.amount`, amount);
+        }
         if (form.values.details[idx].local_amount !== local) {
           form.setFieldValue(`details.${idx}.local_amount`, local);
         }
-        if (
-          derivedAmount != null &&
-          form.values.details[idx].amount !== derivedAmount
-        ) {
-          form.setFieldValue(`details.${idx}.amount`, derivedAmount);
-        }
       });
+      if (syncCurrency && headerCurrency && form.values.currency !== headerCurrency) {
+        // Allow currency-change effect to fetch ROE from exchange-rate master.
+        skipNextCurrencyRoeSyncRef.current = false;
+        form.setFieldValue("currency", headerCurrency);
+      }
     };
   
     // When Amount or ROE change: Local Amount = Amount * ROE (always use ROE when available)
@@ -998,7 +1049,10 @@ import {
   
     const addDetailRow = () => {
       setLoadedDetails(null);
-      form.insertListItem("details", getDefaultDetailRow(localCurrency, _isReversal));
+      form.insertListItem(
+        "details",
+        getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal),
+      );
     };
   
     const removeDetailRow = (idx: number) => {
@@ -1008,7 +1062,10 @@ import {
     };
   
     const addAdjustmentRow = () => {
-      form.insertListItem("adjustments", getDefaultAdjustmentRow(localCurrency));
+      form.insertListItem(
+        "adjustments",
+        getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY),
+      );
     };
   
     const removeAdjustmentRow = (idx: number) => {
@@ -1067,6 +1124,88 @@ import {
         else next.add(idx);
         return next;
       });
+    };
+
+    const openInvoiceFromAllocationRow = async (inv: InvoiceCombinedItem) => {
+      const docType = String(
+        inv.day_book_document_type ?? inv.day_book_type ?? "",
+      )
+        .trim()
+        .toUpperCase();
+      if (docType !== "INV") return;
+
+      const docIdRaw = inv.doc_id;
+      const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+      if (!Number.isFinite(docId) || docId <= 0) {
+        ToastNotification({
+          type: "warning",
+          message: "Invoice not found",
+        });
+        return;
+      }
+
+      // Open the tab immediately (popup blockers allow this on user gesture).
+      // Never navigate away from the Receipt page.
+      const newTab = window.open("about:blank", "_blank");
+      if (!newTab) {
+        ToastNotification({
+          type: "warning",
+          message:
+            "Popup blocked. Please allow popups to open the invoice in a new tab.",
+        });
+        return;
+      }
+
+      try {
+        setIsOpeningInvoiceFromModal(true);
+        const res = await apiCallProtected.get(
+          `${URL.invoice}${docId}/`,
+          API_HEADER,
+        );
+        const rawData = (res as { data?: unknown })?.data ?? res;
+        const record =
+          rawData &&
+          typeof rawData === "object" &&
+          "data" in (rawData as Record<string, unknown>) &&
+          (rawData as { data?: unknown }).data &&
+          typeof (rawData as { data?: unknown }).data === "object"
+            ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+            : rawData && typeof rawData === "object"
+              ? (rawData as Record<string, unknown>)
+              : null;
+
+        const statusUpper = record
+          ? String(record.status ?? "")
+              .trim()
+              .toUpperCase()
+          : "";
+        const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+        setIsOpeningInvoiceFromModal(false);
+        const invoicePath = `/invoice/${mode}/${docId}`;
+        const invoiceUrl = new window.URL(
+          invoicePath,
+          window.location.origin,
+        ).toString();
+        newTab.location.href = invoiceUrl;
+        try {
+          newTab.opener = null;
+        } catch {
+          // ignore
+        }
+      } catch (e: unknown) {
+        console.error("Failed to open invoice", e);
+        ToastNotification({
+          type: "error",
+          message: "Unable to open invoice details.",
+        });
+        try {
+          newTab.close();
+        } catch {
+          // ignore
+        }
+        setIsOpeningInvoiceFromModal(false);
+      }
     };
   
     const handleSelectInvoice = () => {
@@ -1143,7 +1282,7 @@ import {
           daybook_id: daybookId != null ? String(daybookId) : "",
           document_no: inv.document_no ?? "",
           doc_date: docDate,
-          currency: inv.currency_code ?? localCurrency,
+          currency: inv.currency_code ?? OVERSEAS_DEFAULT_CURRENCY,
           roe: invRoe,
           adj_curr_amount: totalNum,
           adj_local_amount:
@@ -1169,10 +1308,30 @@ import {
         ...newRows,
       ];
       if (nextAdjustments.length === 0) {
-        nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
+        nextAdjustments.push(getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY));
       }
       form.setFieldValue("adjustments", nextAdjustments);
-      syncPartyDetailsFromAllocations(nextAdjustments);
+      const firstSelected = newRows[0];
+      if (firstSelected) {
+        const selectedCurrency =
+          (firstSelected.currency ?? "").toString().trim() ||
+          OVERSEAS_DEFAULT_CURRENCY;
+        // Currency from document; ROE stays from exchange-rate master (fetched on currency change).
+        skipNextCurrencyRoeSyncRef.current = false;
+        if (invoiceModalDetailRowIndex != null) {
+          form.setFieldValue(
+            `details.${invoiceModalDetailRowIndex}.currency`,
+            selectedCurrency,
+          );
+        }
+        form.setFieldValue("currency", selectedCurrency);
+      }
+      // Document selection always re-applies Adj Curr → party/header amounts.
+      userOverrodePartyAmountsRef.current = false;
+      syncPartyDetailsFromAllocations(nextAdjustments, {
+        syncCurrency: true,
+        forceAmountSync: true,
+      });
       setInvoiceModalOpen(false);
       setInvoiceModalDetailRowIndex(null);
       setInvoiceModalAllocationFilter(null);
@@ -2211,12 +2370,17 @@ import {
                   data={currencyOptions}
                   value={form.values.currency}
                   onChange={(v) => {
+                    skipNextCurrencyRoeSyncRef.current = false;
                     form.setFieldValue("currency", v ?? "");
                     form.clearFieldError("roe");
                     if (v) {
-                      syncRoeForCurrencyChange(v, (roe) =>
-                        form.setFieldValue("roe", roe),
-                      );
+                      syncRoeForCurrencyChange(v, (roe) => {
+                        form.setFieldValue("roe", roe);
+                        form.values.details.forEach((_, idx) => {
+                          form.setFieldValue(`details.${idx}.currency`, v);
+                          form.setFieldValue(`details.${idx}.roe`, roe);
+                        });
+                      });
                     }
                   }}
                   searchable
@@ -2264,13 +2428,14 @@ import {
                   label="Amount"
                   placeholder="Amount"
                   value={form.values.amount ?? undefined}
-                  onChange={(v) =>
+                  onChange={(v) => {
+                    userOverrodePartyAmountsRef.current = true;
                     form.setFieldValue(
                       "amount",
                       clampAmount(typeof v === "string" ? parseFloat(v) : v) ??
                         null,
-                    )
-                  }
+                    );
+                  }}
                   min={0}
                   decimalScale={2}
                   max={AMOUNT_MAX}
@@ -2499,9 +2664,19 @@ import {
                                 );
                                 form.setFieldValue(
                                   `details.${idx}.currency`,
-                                  localCurrency,
+                                  OVERSEAS_DEFAULT_CURRENCY,
                                 );
-                                form.setFieldValue(`details.${idx}.roe`, 1);
+                                syncRoeForCurrencyChange(
+                                  OVERSEAS_DEFAULT_CURRENCY,
+                                  (roe) => {
+                                    form.setFieldValue(`details.${idx}.roe`, roe);
+                                    form.setFieldValue(
+                                      "currency",
+                                      OVERSEAS_DEFAULT_CURRENCY,
+                                    );
+                                    form.setFieldValue("roe", roe);
+                                  },
+                                );
                               }}
                               dropdownZIndex={dropdownZIndex}
                               displayFormat={(item) => {
@@ -2556,12 +2731,16 @@ import {
                 // value={form.values.currency}
                 value={form.values.details[idx].currency}
                 onChange={(v) => {
+                  skipNextCurrencyRoeSyncRef.current = false;
                   form.setFieldValue(`details.${idx}.currency`, v ?? "");
                   form.clearFieldError(`details.${idx}.roe`);
+                  form.clearFieldError("roe");
                   if (v) {
-                    syncRoeForCurrencyChange(v, (roe) =>
-                      form.setFieldValue(`details.${idx}.roe`, roe),
-                    );
+                    form.setFieldValue("currency", v);
+                    syncRoeForCurrencyChange(v, (roe) => {
+                      form.setFieldValue(`details.${idx}.roe`, roe);
+                      form.setFieldValue("roe", roe);
+                    });
                   }
                 }}
                 searchable
@@ -2630,6 +2809,7 @@ import {
                               hideControls
                               value={form.values.details[idx].amount ?? undefined}
                               onChange={(v) => {
+                                userOverrodePartyAmountsRef.current = true;
                                 const newAmount =
                                   clampAmount(
                                     typeof v === "string" ? parseFloat(v) : v,
@@ -3020,11 +3200,35 @@ import {
                 setInvoiceModalAllocationFilter(null);
                 setInvoiceList([]);
                 setSelectedInvoiceIndices(new Set());
+                setIsOpeningInvoiceFromModal(false);
               }}
               title="Select Document"
               size="lg"
-              styles={{ title: { fontWeight: 600, color: "#105476" } }}
+              styles={{
+                title: { fontWeight: 600, color: "#105476" },
+                body: { position: "relative" },
+              }}
             >
+              {isOpeningInvoiceFromModal && (
+                <Box
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundColor: "rgba(255,255,255,0.75)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 10,
+                  }}
+                >
+                  <Group gap="sm">
+                    <Loader size="sm" color="#105476" />
+                    <Text size="sm" c="#105476" fw={600}>
+                      Opening invoice…
+                    </Text>
+                  </Group>
+                </Box>
+              )}
               {filterInvoiceLoading || filterInvoiceFetching ? (
                 <Text size="sm" c="dimmed">
                   Loading invoices...
@@ -3045,6 +3249,7 @@ import {
                         <Table.Th>Document Date</Table.Th>
                         <Table.Th>Document Amount</Table.Th>
                         <Table.Th>Outstanding Amount</Table.Th>
+                        <Table.Th>Currency</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -3056,7 +3261,34 @@ import {
                               onChange={() => toggleInvoiceSelection(idx)}
                             />
                           </Table.Td>
-                          <Table.Td>{inv.document_no ?? "—"}</Table.Td>
+                          <Table.Td>
+                            {String(
+                              inv.day_book_document_type ??
+                                inv.day_book_type ??
+                                "",
+                            )
+                              .trim()
+                              .toUpperCase() === "INV" ? (
+                              <Text
+                                component="span"
+                                style={{
+                                  color: "#105476",
+                                  textDecoration: "underline",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() =>
+                                  void openInvoiceFromAllocationRow(inv)
+                                }
+                                title="Open invoice"
+                              >
+                                {inv.document_no ?? "—"}
+                              </Text>
+                            ) : (
+                              <Text component="span">
+                                {inv.document_no ?? "—"}
+                              </Text>
+                            )}
+                          </Table.Td>
                           <Table.Td>
                             {formatDocumentDateDisplay(
                               inv.document_date as string,
@@ -3071,6 +3303,10 @@ import {
                             {formatOutstandingDocumentAmountInLocal(
                               inv.amount,
                             )}
+                          </Table.Td>
+                          <Table.Td>
+                            {(inv.currency_code ?? "—").toString().trim() ||
+                              "—"}
                           </Table.Td>
                         </Table.Tr>
                       ))}

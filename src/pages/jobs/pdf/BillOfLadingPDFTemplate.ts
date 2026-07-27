@@ -458,9 +458,15 @@ export const generateBillOfLadingPDF = (
     const consigneeName = housingData?.consignee_name || "";
     const consigneeAddress = housingData?.consignee_address || "";
 
-    // Notify Address Details
-    const notifyName = housingData?.notify_customer1_name || "";
-    const notifyAddress = housingData?.notify_customer1_address || "";
+    // Notify Address Details (API/house card: notify_customer1_*; house form: notify1_customer_*)
+    const notifyName =
+      housingData?.notify_customer1_name ||
+      housingData?.notify1_customer_name ||
+      "";
+    const notifyAddress =
+      housingData?.notify_customer1_address ||
+      housingData?.notify1_customer_address ||
+      "";
 
     // To Obtain Delivery Contact
     const deliveryContactCompany =  housingData?.consignee_name || "";

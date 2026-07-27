@@ -363,8 +363,10 @@ function mapPaymentPartyDrCr(
   return side === "Dr" ? "Cr" : "Dr";
 }
 
+const OVERSEAS_DEFAULT_CURRENCY = "USD";
+
 const getDefaultDetailRow = (
-  localCurrency: string,
+  currency: string = OVERSEAS_DEFAULT_CURRENCY,
   isReversalFlow = false,
 ): DetailRow => ({
   subledger_id: null,
@@ -372,14 +374,16 @@ const getDefaultDetailRow = (
   customer_code: "",
   customer_display: "",
   narration: "",
-  currency: localCurrency,
+  currency,
   roe: 1,
   amount: null,
   local_amount: null,
   dr_cr: isReversalFlow ? "Cr" : "Dr",
 });
 
-const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
+const getDefaultAdjustmentRow = (
+  currency: string = OVERSEAS_DEFAULT_CURRENCY,
+): AdjustmentRow => ({
   location: "",
   type: "",
   subledger: "",
@@ -387,7 +391,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   daybook_id: "",
   document_no: "",
   doc_date: null,
-  currency: localCurrency,
+  currency,
   roe: null,
   adj_curr_amount: null,
   adj_local_amount: null,
@@ -576,6 +580,10 @@ export default function OverseasPaymentCreate({
   const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
     Set<number>
   >(new Set());
+  const [
+    isOpeningSupplierInvoiceFromModal,
+    setIsOpeningSupplierInvoiceFromModal,
+  ] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -596,7 +604,7 @@ export default function OverseasPaymentCreate({
       daybook_id: "",
       type: "CASH",
       date: new Date(),
-      currency: localCurrency,
+      currency: OVERSEAS_DEFAULT_CURRENCY,
       roe: 1,
       amount: null,
       local_amount: null,
@@ -606,8 +614,8 @@ export default function OverseasPaymentCreate({
       cheque_no: "",
       cheque_date: null,
       chq_clrd_date: null,
-      details: [getDefaultDetailRow(localCurrency, _isReversal)],
-      adjustments: [getDefaultAdjustmentRow(localCurrency)],
+      details: [getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal)],
+      adjustments: [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)],
       supporting_documents: [] as SupportingDocument[],
     },
     validate: {
@@ -717,13 +725,17 @@ export default function OverseasPaymentCreate({
   }, [currencyData]);
 
   useEffect(() => {
-    if (!localCurrency || form.values.currency) return;
-    form.setFieldValue("currency", localCurrency);
+    if (form.values.currency) return;
+    form.setFieldValue("currency", OVERSEAS_DEFAULT_CURRENCY);
   }, [localCurrency]);
 
   const paymentFromState = location.state as PaymentListItem | null | undefined;
   const loadedFromListState = paymentFromState?.id != null;
   const suppressAutoCalculationsRef = useRef(loadedFromListState);
+  /** Skip exchange-rate ROE fetch when currency is applied from a selected document. */
+  const skipNextCurrencyRoeSyncRef = useRef(false);
+  /** When true, allocation → party/header amount sync is skipped (user edited amounts). */
+  const userOverrodePartyAmountsRef = useRef(false);
   const enableAutoCalculations = () => {
     suppressAutoCalculationsRef.current = false;
   };
@@ -795,14 +807,16 @@ export default function OverseasPaymentCreate({
                 pAny.subledger_name ?? pAny.subledger ?? "",
               ).trim(),
               narration: String(pAny.narration ?? "").trim(),
-              currency: (pAny.currency_code ?? localCurrency).toString().trim(),
+              currency: (pAny.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
+                .toString()
+                .trim(),
               roe: parseNum(pAny.roe) ?? 1,
               amount: parseNum(pAny.amount),
               local_amount: parseNum(pAny.local_amount),
               dr_cr: mapPaymentPartyDrCr(pAny.dr_cr, isReversalCreate),
             };
           })
-        : [getDefaultDetailRow(localCurrency, _isReversal)];
+        : [getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal)];
 
     // Map list response allocations: document_no, document_date, subledger_code, subledger_name, day_book_id, type, location, supplier_invoice_id, adj_curr_amount, adj_local_amount
     const allocations = paymentFromState.allocations;
@@ -849,13 +863,15 @@ export default function OverseasPaymentCreate({
                 aAny.day_book_id != null ? String(aAny.day_book_id) : "",
               document_no: String(aAny.document_no ?? "").trim(),
               doc_date: parseDocumentDate(aAny.document_date),
-              currency: (aAny.currency_code ?? localCurrency).toString().trim(),
+              currency: (aAny.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
+                .toString()
+                .trim(),
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: parseNum(aAny.adj_local_amount),
             };
           })
-        : [getDefaultAdjustmentRow(localCurrency)];
+        : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
 
     setLoadedDetails(details);
     form.setValues({
@@ -866,7 +882,7 @@ export default function OverseasPaymentCreate({
           : "",
       type: (paymentFromState.type ?? "CASH").toString().trim(),
       date: dateVal ?? new Date(),
-      currency: (paymentFromState.currency_code ?? localCurrency)
+      currency: (paymentFromState.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
         .toString()
         .trim(),
       roe: roeVal ?? 1,
@@ -1058,12 +1074,24 @@ export default function OverseasPaymentCreate({
     partyAccountCodeBackfillKey,
   ]);
 
-  // Create only: auto-fetch ROE when currency is set. Edit/view/reversal-from-list use list row ROE;
-  // exchange rate master is called only when the user changes currency (dropdown onChange).
+  // Create only: auto-fetch ROE from exchange-rate master when currency is set.
+  // Document selection applies document currency/ROE and skips this fetch once.
+  // User currency changes (header/party dropdowns) clear the skip and fetch again.
   useEffect(() => {
     const curr = form.values.currency?.trim();
     if (!curr || !localCurrency || loadedFromListState) return;
-    syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
+    if (skipNextCurrencyRoeSyncRef.current) {
+      skipNextCurrencyRoeSyncRef.current = false;
+      return;
+    }
+    syncRoeForCurrencyChange(curr, (roe) => {
+      form.setFieldValue("roe", roe);
+      form.values.details.forEach((row, idx) => {
+        if ((row.currency ?? "").toString().trim() === curr) {
+          form.setFieldValue(`details.${idx}.roe`, roe);
+        }
+      });
+    });
   }, [
     form.values.currency,
     localCurrency,
@@ -1138,8 +1166,13 @@ export default function OverseasPaymentCreate({
 
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
+    options?: { syncCurrency?: boolean; forceAmountSync?: boolean },
   ) => {
     const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
+    const syncCurrency = options?.syncCurrency === true;
+    const shouldSyncAmounts =
+      options?.forceAmountSync === true || !userOverrodePartyAmountsRef.current;
+    let headerCurrency: string | null = null;
     form.values.details.forEach((row, idx) => {
       const partyCode = (row.customer_code ?? "").toString().trim();
       const partyDisplay = (row.customer_display ?? "").toString().trim();
@@ -1150,33 +1183,50 @@ export default function OverseasPaymentCreate({
             (a.subledger_display ?? "").toString().trim() === partyDisplay),
       );
       if (matchingAllocations.length === 0) return;
-      const sum = matchingAllocations.reduce(
+      const firstAlloc = matchingAllocations[0];
+      const currencyFromAlloc = (firstAlloc.currency ?? "").toString().trim();
+      if (syncCurrency) {
+        if (
+          currencyFromAlloc &&
+          form.values.details[idx].currency !== currencyFromAlloc
+        ) {
+          form.setFieldValue(`details.${idx}.currency`, currencyFromAlloc);
+        }
+        if (headerCurrency == null && currencyFromAlloc) {
+          headerCurrency = currencyFromAlloc;
+        }
+      }
+      if (!shouldSyncAmounts) return;
+      // Adj Curr Amount (sum) → party Amount; Local Amount = Amount * ROE (master).
+      const currSum = matchingAllocations.reduce(
         (s, a) =>
           s +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
+          (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+            ? a.adj_curr_amount
             : 0),
         0,
       );
-      const local = clampAmount(sum);
+      const amount = clampAmount(currSum);
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const derivedAmount =
-        local != null &&
+      const local =
+        amount != null &&
+        Number.isFinite(amount) &&
         roeVal != null &&
-        Number.isFinite(roeVal) &&
-        roeVal !== 0
-          ? clampAmount(local / roeVal)
+        Number.isFinite(roeVal)
+          ? clampAmount(amount * roeVal)
           : null;
+      if (form.values.details[idx].amount !== amount) {
+        form.setFieldValue(`details.${idx}.amount`, amount);
+      }
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
-      if (
-        derivedAmount != null &&
-        form.values.details[idx].amount !== derivedAmount
-      ) {
-        form.setFieldValue(`details.${idx}.amount`, derivedAmount);
-      }
     });
+    if (syncCurrency && headerCurrency && form.values.currency !== headerCurrency) {
+      // Allow currency-change effect to fetch ROE from exchange-rate master.
+      skipNextCurrencyRoeSyncRef.current = false;
+      form.setFieldValue("currency", headerCurrency);
+    }
   };
 
   const detailsSnapshotForLocal = form.values.details
@@ -1206,7 +1256,7 @@ export default function OverseasPaymentCreate({
     setLoadedDetails(null);
     form.insertListItem(
       "details",
-      getDefaultDetailRow(localCurrency, _isReversal),
+      getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal),
     );
   };
 
@@ -1219,7 +1269,10 @@ export default function OverseasPaymentCreate({
 
   const addAdjustmentRow = () => {
     enableAutoCalculations();
-    form.insertListItem("adjustments", getDefaultAdjustmentRow(localCurrency));
+    form.insertListItem(
+      "adjustments",
+      getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY),
+    );
   };
 
   const removeAdjustmentRow = (idx: number) => {
@@ -1310,6 +1363,87 @@ export default function OverseasPaymentCreate({
     });
   };
 
+  const openSupplierInvoiceFromAllocationRow = async (
+    inv: InvoiceCombinedItem,
+  ) => {
+    const docType = String(
+      inv.day_book_document_type ?? inv.day_book_type ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (docType !== "CRJ") return;
+
+    const docId = resolveSupplierInvoiceId(inv);
+    if (docId == null) {
+      ToastNotification({
+        type: "warning",
+        message: "Supplier invoice not found",
+      });
+      return;
+    }
+
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the supplier invoice in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setIsOpeningSupplierInvoiceFromModal(true);
+      const res = await apiCallProtected.get(
+        `${URL.supplierInvoice}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? "")
+            .trim()
+            .toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+      setIsOpeningSupplierInvoiceFromModal(false);
+      const supplierPath = `/supplier-invoice/${mode}/${docId}`;
+      const supplierUrl = new window.URL(
+        supplierPath,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = supplierUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open supplier invoice", e);
+      ToastNotification({
+        type: "error",
+        message: "Unable to open supplier invoice details.",
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningSupplierInvoiceFromModal(false);
+    }
+  };
+
   const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
     enableAutoCalculations();
@@ -1374,7 +1508,9 @@ export default function OverseasPaymentCreate({
         daybook_id: daybookId != null ? String(daybookId) : "",
         document_no: (inv.document_no ?? "").toString(),
         doc_date: docDate,
-        currency: (inv.currency_code ?? localCurrency).toString().trim(),
+        currency: (inv.currency_code ?? OVERSEAS_DEFAULT_CURRENCY)
+          .toString()
+          .trim(),
         roe: invRoe,
         adj_curr_amount: totalNum,
         adj_local_amount:
@@ -1400,14 +1536,34 @@ export default function OverseasPaymentCreate({
       ...newRows,
     ];
     if (nextAdjustments.length === 0) {
-      nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
+      nextAdjustments.push(getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY));
     }
     seedAllocationRoeMap(
       allocationRoeByDocumentRef.current,
       sorted.map((listIdx) => invoiceList[listIdx]),
     );
     form.setFieldValue("adjustments", nextAdjustments);
-    syncPartyDetailsFromAllocations(nextAdjustments);
+    const firstSelected = newRows[0];
+    if (firstSelected) {
+      const selectedCurrency =
+        (firstSelected.currency ?? "").toString().trim() ||
+        OVERSEAS_DEFAULT_CURRENCY;
+      // Currency from document; ROE stays from exchange-rate master (fetched on currency change).
+      skipNextCurrencyRoeSyncRef.current = false;
+      if (invoiceModalDetailRowIndex != null) {
+        form.setFieldValue(
+          `details.${invoiceModalDetailRowIndex}.currency`,
+          selectedCurrency,
+        );
+      }
+      form.setFieldValue("currency", selectedCurrency);
+    }
+    // Document selection always re-applies Adj Curr → party/header amounts.
+    userOverrodePartyAmountsRef.current = false;
+    syncPartyDetailsFromAllocations(nextAdjustments, {
+      syncCurrency: true,
+      forceAmountSync: true,
+    });
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
     setInvoiceModalAllocationFilter(null);
@@ -2371,12 +2527,17 @@ export default function OverseasPaymentCreate({
                 value={form.values.currency}
                 onChange={(v) => {
                   enableAutoCalculations();
+                  skipNextCurrencyRoeSyncRef.current = false;
                   form.setFieldValue("currency", v ?? "");
                   form.clearFieldError("roe");
                   if (v) {
-                    syncRoeForCurrencyChange(v, (roe) =>
-                      form.setFieldValue("roe", roe),
-                    );
+                    syncRoeForCurrencyChange(v, (roe) => {
+                      form.setFieldValue("roe", roe);
+                      form.values.details.forEach((_, idx) => {
+                        form.setFieldValue(`details.${idx}.currency`, v);
+                        form.setFieldValue(`details.${idx}.roe`, roe);
+                      });
+                    });
                   }
                 }}
                 searchable
@@ -2426,6 +2587,7 @@ export default function OverseasPaymentCreate({
                 value={form.values.amount ?? undefined}
                 onChange={(v) => {
                   enableAutoCalculations();
+                  userOverrodePartyAmountsRef.current = true;
                   form.setFieldValue(
                     "amount",
                     clampAmount(typeof v === "string" ? parseFloat(v) : v) ??
@@ -2657,9 +2819,16 @@ export default function OverseasPaymentCreate({
                               );
                               form.setFieldValue(
                                 `details.${idx}.currency`,
-                                localCurrency,
+                                OVERSEAS_DEFAULT_CURRENCY,
                               );
-                              form.setFieldValue(`details.${idx}.roe`, 1);
+                              syncRoeForCurrencyChange(
+                                OVERSEAS_DEFAULT_CURRENCY,
+                                (roe) => {
+                                  form.setFieldValue(`details.${idx}.roe`, roe);
+                                  form.setFieldValue("currency", OVERSEAS_DEFAULT_CURRENCY);
+                                  form.setFieldValue("roe", roe);
+                                },
+                              );
                             }}
                             dropdownZIndex={dropdownZIndex}
                             displayFormat={(item) => {
@@ -2712,12 +2881,16 @@ export default function OverseasPaymentCreate({
                 value={form.values.details[idx].currency}
                 onChange={(v) => {
                   enableAutoCalculations();
+                  skipNextCurrencyRoeSyncRef.current = false;
                   form.setFieldValue(`details.${idx}.currency`, v ?? "");
                   form.clearFieldError(`details.${idx}.roe`);
+                  form.clearFieldError("roe");
                   if (v) {
-                    syncRoeForCurrencyChange(v, (roe) =>
-                      form.setFieldValue(`details.${idx}.roe`, roe),
-                    );
+                    form.setFieldValue("currency", v);
+                    syncRoeForCurrencyChange(v, (roe) => {
+                      form.setFieldValue(`details.${idx}.roe`, roe);
+                      form.setFieldValue("roe", roe);
+                    });
                   }
                 }}
                 searchable
@@ -2787,6 +2960,7 @@ export default function OverseasPaymentCreate({
                             value={form.values.details[idx].amount ?? undefined}
                             onChange={(v) => {
                               enableAutoCalculations();
+                              userOverrodePartyAmountsRef.current = true;
                               const newAmount =
                                 clampAmount(
                                   typeof v === "string" ? parseFloat(v) : v,
@@ -3160,11 +3334,35 @@ export default function OverseasPaymentCreate({
               setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
+              setIsOpeningSupplierInvoiceFromModal(false);
             }}
             title="Select Document"
             size="lg"
-            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+            styles={{
+              title: { fontWeight: 600, color: "#105476" },
+              body: { position: "relative" },
+            }}
           >
+            {isOpeningSupplierInvoiceFromModal && (
+              <Box
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="#105476" />
+                  <Text size="sm" c="#105476" fw={600}>
+                    Opening supplier invoice…
+                  </Text>
+                </Group>
+              </Box>
+            )}
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading documents...
@@ -3186,6 +3384,7 @@ export default function OverseasPaymentCreate({
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                       <Table.Th>Outstanding Amount</Table.Th>
+                      <Table.Th>Currency</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -3198,7 +3397,32 @@ export default function OverseasPaymentCreate({
                           />
                         </Table.Td>
                         <Table.Td>
-                          {(inv.document_no ?? "—").toString()}
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "",
+                          )
+                            .trim()
+                            .toUpperCase() === "CRJ" ? (
+                            <Text
+                              component="span"
+                              style={{
+                                color: "#105476",
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                              }}
+                              onClick={() =>
+                                void openSupplierInvoiceFromAllocationRow(inv)
+                              }
+                              title="Open supplier invoice"
+                            >
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          ) : (
+                            <Text component="span">
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          )}
                         </Table.Td>
                         <Table.Td>
                           {(
@@ -3221,6 +3445,9 @@ export default function OverseasPaymentCreate({
                           {formatOutstandingDocumentAmountInLocal(
                             inv.amount,
                           )}
+                        </Table.Td>
+                        <Table.Td>
+                          {(inv.currency_code ?? "—").toString().trim() || "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}

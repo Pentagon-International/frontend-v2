@@ -2473,6 +2473,7 @@ function HouseCreate() {
   };
 
   // Generate Bill of Lading PDF preview from current form data
+  // Shape must match ExportJobCreate house-card BL generator / PDF template fields.
   const generatePDFPreview = () => {
     try {
       setPreviewOpen(true);
@@ -2481,6 +2482,76 @@ function HouseCreate() {
       ) ||
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
+      const containerDetailsForPdf =
+        (location.state?.containerDetails as Record<string, unknown>[]) ||
+        (location.state?.job as { container_details?: Record<string, unknown>[] })
+          ?.container_details ||
+        [];
+      const notifyName = form.values.notify1_customer_name || "";
+      const notifyAddress = form.values.notify1_customer_address || "";
+      const notifyEmail = form.values.notify1_customer_email || "";
+      const freightPpCc = form.values.pp_cc || "Collect";
+      const editSummary = (
+        editData as {
+          summary?: {
+            total_no_of_packages?: number | string;
+            total_gross_weight?: number | string;
+            total_volume?: number | string;
+            container_type?: string[];
+          };
+        } | undefined
+      )?.summary;
+      const cargoDetailsForPdf = cargoDetails.map((c) => {
+        const matchedContainer = containerDetailsForPdf.find(
+          (container) =>
+            String(container.container_no ?? "") ===
+            String(c.container_number ?? ""),
+        );
+        return {
+          no_of_packages: c.no_of_packages,
+          gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),
+          volume: formatHouseCargoWeightForPayload(c.volume),
+          chargeable_weight: formatHouseCargoChargeableForPayload(
+            c.gross_weight,
+            c.volume,
+            "ocean",
+          ),
+          haz: c.haz === true || String(c.haz) === "Yes",
+          container_no: c.container_number || "",
+          container_id: c.container_id,
+          actual_seal_no:
+            (matchedContainer?.actual_seal_no as string | undefined) || "",
+          container_type_name:
+            (
+              matchedContainer?.container_type_details as
+                | { container_type_name?: string }
+                | undefined
+            )?.container_type_name ||
+            (matchedContainer?.container_type_name as string | undefined) ||
+            "",
+        };
+      });
+      const computedSummary = {
+        total_no_of_packages: cargoDetailsForPdf.reduce(
+          (sum, cargo) => sum + (Number(cargo.no_of_packages) || 0),
+          0,
+        ),
+        total_gross_weight: cargoDetailsForPdf.reduce(
+          (sum, cargo) => sum + (parseFloat(String(cargo.gross_weight)) || 0),
+          0,
+        ),
+        total_volume: cargoDetailsForPdf.reduce(
+          (sum, cargo) => sum + (parseFloat(String(cargo.volume)) || 0),
+          0,
+        ),
+        container_type: Array.from(
+          new Set(
+            cargoDetailsForPdf
+              .map((cargo) => cargo.container_type_name)
+              .filter((name): name is string => Boolean(name && String(name).trim())),
+          ),
+        ),
+      };
       const housingData = {
         id: (editData as { id?: number | string } | undefined)?.id,
         hbl_number: form.values.hbl_number,
@@ -2513,26 +2584,22 @@ function HouseCreate() {
         consignee_name: form.values.consignee_name,
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
-        notify1_customer_name: form.values.notify1_customer_name,
-        notify1_customer_address: form.values.notify1_customer_address,
-        notify1_customer_email: form.values.notify1_customer_email,
+        // House form uses notify1_*; PDF / house-card path uses notify_customer1_*
+        notify1_customer_name: notifyName,
+        notify1_customer_address: notifyAddress,
+        notify1_customer_email: notifyEmail,
+        notify_customer1_name: notifyName,
+        notify_customer1_address: notifyAddress,
+        notify_customer1_email: notifyEmail,
         notify2_customer_name: form.values.notify2_customer_name,
         notify2_customer_address: form.values.notify2_customer_address,
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
-        pp_cc: form.values.pp_cc || "Collect",
-        cargo_details: cargoDetails.map((c) => ({
-          no_of_packages: c.no_of_packages,
-          gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),
-          volume: formatHouseCargoWeightForPayload(c.volume),
-          chargeable_weight: formatHouseCargoChargeableForPayload(
-            c.gross_weight,
-            c.volume,
-            "ocean",
-          ),
-          haz: c.haz === true || String(c.haz) === "Yes",
-        })),
+        pp_cc: freightPpCc,
+        freight: freightPpCc,
+        summary: editSummary ?? computedSummary,
+        cargo_details: cargoDetailsForPdf,
         mbl_charges: (() => {
           const meaningfulCharges = getMeaningfulHouseCharges(
             chargesForm.values.charges,
@@ -2568,7 +2635,8 @@ function HouseCreate() {
         ...(location.state?.job || {}),
         mblDetails: location.state?.mblDetails || {},
         carrierDetails: location.state?.carrierDetails || {},
-        containerDetails: location.state?.containerDetails || [],
+        containerDetails: containerDetailsForPdf,
+        container_details: containerDetailsForPdf,
       };
 
       const blobUrl = generateBillOfLadingPDF(
