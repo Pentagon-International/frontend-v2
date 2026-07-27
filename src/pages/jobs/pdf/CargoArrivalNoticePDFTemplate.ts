@@ -433,17 +433,6 @@ const getLogoByCountry = (country: any): string | null => {
   }
 };
 
-const KENYA_CAN_BRANCH_INFO = {
-  name: "PENTAGON PRIME KENYA CO LIMITED",
-  address:
-    "OFFICE NO. S9-08, MTC BUILDING (AMBALAL HOUSE), 9TH FLOOR, SOUTH TOWER, NKRUMAH ROAD, P.O.BOX 2050-80100,MOMBASA,KENYA.",
-  tel: "",
-  email: "",
-  pan: "",
-  gstn: "",
-  isKenya: true,
-} as const;
-
 const isKenyaCountry = (country?: any): boolean => {
   let countryName = "";
   let countryCode = "";
@@ -462,17 +451,6 @@ const isKenyaCountry = (country?: any): boolean => {
 
   return countryName.includes("KENYA") || countryCode === "KE";
 };
-
-const USA_CAN_BRANCH_INFO = {
-  name: "PENTAGON PRIME AMERICAS INC",
-  address:
-    "8400 NW 33rd STREET, SUITE 310, MIAMI FL 33178",
-  tel: "",
-  email: "",
-  pan: "",
-  gstn: "",
-  isKenya: true,
-} as const;
 
 const isUSACountry = (country?: any): boolean => {
   let countryName = "";
@@ -499,13 +477,9 @@ const getBranchInfo = (defaultBranch: any, country?: any) => {
     return { ...getCctBranchInfoFromLogin() };
   }
 
-  if (isUSACountry(country)) {
-    return { ...USA_CAN_BRANCH_INFO };
-  }
-
-  if (isKenyaCountry(country)) {
-    return { ...KENYA_CAN_BRANCH_INFO };
-  }
+  // Kenya/USA use the same reporting_* flow; keep larger header fonts for those countries
+  const useLargerHeaderFonts =
+    isKenyaCountry(country) || isUSACountry(country);
 
   return {
     name:
@@ -520,7 +494,7 @@ const getBranchInfo = (defaultBranch: any, country?: any) => {
     email: defaultBranch?.email || "",
     pan: defaultBranch?.pan || "",
     gstn: defaultBranch?.gstn || "",
-    isKenya: false,
+    isKenya: useLargerHeaderFonts,
   };
 };
 
