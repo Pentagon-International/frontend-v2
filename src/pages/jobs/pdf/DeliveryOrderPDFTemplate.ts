@@ -141,6 +141,10 @@ const KENYA_DO_BRANCH_INFO = {
 const DO_INNER_FONT_SIZE = 9;
 const DO_INNER_TEXT_LINE_HEIGHT = 5;
 const DO_INNER_ROW_HEIGHT = 8;
+/** Computer-generated + B/L terms lines pinned above the content-box bottom */
+const DO_DISCLAIMER_LINE_GAP = 2;
+const DO_DISCLAIMER_BLOCK_HEIGHT =
+  DO_INNER_TEXT_LINE_HEIGHT + DO_DISCLAIMER_LINE_GAP + DO_INNER_TEXT_LINE_HEIGHT;
 
 const isKenyaCountry = (country: any): boolean => {
   let countryName = "";
@@ -499,8 +503,6 @@ export const generateDeliveryOrderPDF = (
       ? formatDateForDisplay(jobData.eta || jobInfo.eta || mawbDetails.eta)
       : "";
     
-    const tsaNo = housingData?.tsa_no || "";
-    
     // IGM NO./Date - from consol_details (jobData) / mawbDetails
     const igmNo =
       jobData?.igm_no || jobInfo?.igm_no || mawbDetails?.igm_no || "";
@@ -761,13 +763,6 @@ export const generateDeliveryOrderPDF = (
     doc.text(itemLineNo || "", valueStartX, currentY);
     currentY += lineHeight;
 
-    // TSA No.
-    doc.setFont("helvetica", "bold");
-    doc.text("TSA No.:", leftColumnX, currentY);
-    doc.setFont("helvetica", "normal");
-    doc.text(tsaNo || "", valueStartX, currentY);
-    currentY += lineHeight;
-
     // Sub Item / Line No.
     doc.setFont("helvetica", "bold");
     doc.text("Sub Item / Line No.:", leftColumnX, currentY);
@@ -881,7 +876,8 @@ export const generateDeliveryOrderPDF = (
           top: continuationContentStartY, // Space for headers on continuation pages
           left: leftColumnX, 
           right: margin+5,
-          bottom: footerHeight + bottomBorderPadding // Space for footer + bottom border padding
+          // Space for page footer + bottom border + pinned disclaimer lines
+          bottom: footerHeight + bottomBorderPadding + DO_DISCLAIMER_BLOCK_HEIGHT + 2
         },
         
         // Use didDrawPage to add page layout (header, border, footer) to continuation pages
@@ -1004,9 +1000,20 @@ export const generateDeliveryOrderPDF = (
     // ===== NOTES SECTION =====
     currentY += 4; // Gap before notes
 
+    const deliverToName = (pleaseDeliverTo || "").trim();
+    const isIndia = isIndiaCountry(country);
+    // Carrier Agent DO uses heading "DELIVERY ADVICE"; Unstuff Place uses "DELIVERY ORDER"
+    const isCarrierAgentDo =
+      String(headingText || "").trim().toUpperCase() === "DELIVERY ADVICE";
+    const showIndiaCarrierAgentSignatory = isIndia && isCarrierAgentDo;
+    // Reserve bottom space for the pinned disclaimer footer (except India carrier-agent stamp layout)
+    const notesBottomPadding = showIndiaCarrierAgentSignatory
+      ? bottomBorderPadding
+      : bottomBorderPadding + DO_DISCLAIMER_BLOCK_HEIGHT + 2;
+
     // Check if we need a new page before notes
     const estimatedNotesHeight = 30;
-    if (needsNewPage(currentY, estimatedNotesHeight, fixedBoxEndY, bottomBorderPadding)) {
+    if (needsNewPage(currentY, estimatedNotesHeight, fixedBoxEndY, notesBottomPadding)) {
       // Create new page with layout
       doc.addPage();
       const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
@@ -1019,7 +1026,9 @@ export const generateDeliveryOrderPDF = (
     doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "normal");
 
-    const deliverToName = (pleaseDeliverTo || "").trim();
+    const pleaseNoteBody =
+      "Please note this Delivery Order is valid for 30 days from the vessel arrival date. Thereafter reissue due to loss of original DO or exceeding the validity of aforesaid 30 days will incur additional charges of INR 1000 for every additional 10 days.";
+
     const notes = branchInfo.isKenya
       ? [
           "Dear Sir,",
@@ -1027,16 +1036,22 @@ export const generateDeliveryOrderPDF = (
           "The Original Master B/L is already surrendered at the Port of Loading. Enclosed please find the copy of HBL duly endorsed by us for your reference.",
           `For ${branchInfo.name || ""}`,
         ]
-      : isIndiaCountry(country)
-        ? [
-            "Dear Sir,",
-            `With reference to the above shipment, we request you to issue the Delivery Order to CHA/CNEE: ${deliverToName} against collection of your necessary charges.`,
-            "The Original Master B/L is already surrendered at the Port of Loading. Enclosed please find the copy of HBL duly endorsed by us for your reference.",
-            `For ${branchInfo.name || ""}`,
-          ]
+      : isIndia
+        ? isCarrierAgentDo
+          ? [
+              "Dear Sir,",
+              `With reference to the above shipment, we request you to issue the Delivery Order to CHA/CNEE: ${deliverToName} against collection of your necessary charges.`,
+              "The Original Master B/L is already surrendered at the Port of Loading. Enclosed please find the copy of HBL duly endorsed by us for your reference.",
+              `For: ${branchInfo.name || ""}`,
+            ]
+          : [
+              "Dear Sir,",
+              pleaseNoteBody,
+              `For: ${branchInfo.name || ""}`,
+            ]
         : [
             "Dear Sir,",
-            "Please note this Delivery Order is valid for 30 days from the vessel arrival date. Thereafter reissue due to loss of original DO or exceeding the validity of aforesaid 30 days will incur additional charges of INR 1000 for every additional 10 days.",
+            pleaseNoteBody,
             `For ${branchInfo.name || ""}`,
           ];
     notes.forEach((note) => {
@@ -1047,7 +1062,7 @@ export const generateDeliveryOrderPDF = (
         );
         noteLines.forEach((line: string) => {
           // Check if we need a new page for each line
-          if (needsNewPage(currentY, DO_INNER_TEXT_LINE_HEIGHT, fixedBoxEndY, bottomBorderPadding)) {
+          if (needsNewPage(currentY, DO_INNER_TEXT_LINE_HEIGHT, fixedBoxEndY, notesBottomPadding)) {
             // Create new page with layout
             doc.addPage();
             const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
@@ -1062,22 +1077,42 @@ export const generateDeliveryOrderPDF = (
         currentY += 2;
       }
     });
-    const disclaimerY = currentY + 5;
-    doc.setFontSize(DO_INNER_FONT_SIZE);
-    doc.setFont("helvetica", "bold");
-    doc.text(
-      "THIS IS A COMPUTER GENERATED DOCUMENT AND DOES NOT REQUIRE A SIGNATURE",
-      pageWidth / 2,
-      disclaimerY,
-      { align: "center" }
-    );
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      "This Delivery order is subjected to the terms and conditions of the relative B/L",
-      pageWidth / 2,
-      disclaimerY + DO_INNER_TEXT_LINE_HEIGHT + 2,
-      { align: "center" }
-    );
+
+    // India + Carrier Agent: stamp space + "Authorized Signatory" on same page (never orphan alone on page 2)
+    if (showIndiaCarrierAgentSignatory) {
+      const contentBottomY = fixedBoxEndY - bottomBorderPadding;
+      const preferredStampSpace = 28;
+      const minStampSpace = 10;
+      // Shrink stamp gap to remaining room so label stays under "For:" on this page
+      let signatoryY = currentY + preferredStampSpace;
+      if (signatoryY > contentBottomY) {
+        signatoryY = Math.max(currentY + minStampSpace, contentBottomY);
+      }
+      doc.setFontSize(DO_INNER_FONT_SIZE);
+      doc.setFont("helvetica", "bold");
+      doc.text("Authorized Signatory", leftColumnX, signatoryY);
+    } else {
+      // Pin disclaimer as footer just above the content-box bottom margin
+      const contentBottomY = fixedBoxEndY - bottomBorderPadding;
+      const disclaimerLine2Y = contentBottomY;
+      const disclaimerLine1Y =
+        disclaimerLine2Y - DO_INNER_TEXT_LINE_HEIGHT - DO_DISCLAIMER_LINE_GAP;
+      doc.setFontSize(DO_INNER_FONT_SIZE);
+      doc.setFont("helvetica", "bold");
+      doc.text(
+        "THIS IS A COMPUTER GENERATED DOCUMENT AND DOES NOT REQUIRE A SIGNATURE",
+        pageWidth / 2,
+        disclaimerLine1Y,
+        { align: "center" }
+      );
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        "This Delivery order is subjected to the terms and conditions of the relative B/L",
+        pageWidth / 2,
+        disclaimerLine2Y,
+        { align: "center" }
+      );
+    }
 
     // Generate blob URL
     const pdfBlob = doc.output("blob");
