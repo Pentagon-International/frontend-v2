@@ -493,8 +493,8 @@ const isUSACountry = (country?: any): boolean => {
   return countryName.includes("UNITED STATES ") || countryCode === "US";
 };
 
-// Helper function to get branch info
-const getBranchInfo = (branchName: string, country?: any) => {
+// Helper function to get branch info (header name/address from reporting_* like DO)
+const getBranchInfo = (defaultBranch: any, country?: any) => {
   if (isCctCompany()) {
     return { ...getCctBranchInfoFromLogin() };
   }
@@ -507,84 +507,20 @@ const getBranchInfo = (branchName: string, country?: any) => {
     return { ...KENYA_CAN_BRANCH_INFO };
   }
 
-  const branchNameUpper = branchName?.toUpperCase() || "";
-
-  let companyName = "";
-  let countryCode = "";
-
-  const userStr = localStorage.getItem("user");
-  if (userStr) {
-    const user = JSON.parse(userStr);
-    if (user?.company) {
-      companyName = (user.company.company_name || "").toUpperCase();
-    }
-    if (user?.country) {
-      countryCode = (user.country.country_code || "").toUpperCase();
-    }
-  }
-
-  if (country) {
-    countryCode = (country.country_code || "").toUpperCase();
-  }
-
-  const normalizedCompanyName = companyName.replace(/\s+/g, "").toUpperCase();
-  if (
-    normalizedCompanyName === "CARGOCONSOLIDATORSINDIA" &&
-    countryCode === "IN" &&
-    branchNameUpper.includes("MUMBAI")
-  ) {
-    return {
-      name: "Cargo Consolidators India Pvt Ltd",
-      address:
-        "Unit no – 101, Satellite Silver, Marol Naka, Andheri Kurla Road, Andheri (east), Mumbai – 400059",
-      tel: "",
-      email: "",
-      pan: "",
-      gstn: "",
-    };
-  } else if (
-    normalizedCompanyName === "CARGOCONSOLIDATORSINDIA" &&
-    countryCode === "IN" &&
-    branchNameUpper.includes("CHENNAI")
-  ) {
-    return {
-      name: "Cargo Consolidators India Pvt Ltd",
-      address:
-        "Door No: 205/325, 3rd Floor, Poonamallee High Road, Aminjikarai, Chennai-600 029. Tel: 044 42078064 / 044 42623690 / 044 43201012",
-      tel: "044 42078064 / 044 42623690 / 044 43201012",
-      email: "",
-      pan: "",
-      gstn: "",
-    };
-  } else if (branchNameUpper.includes("CHENNAI")) {
-    return {
-      name: "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PVT LTD (CHENNAI)",
-      address: "No. 15, Dr. Gopala Menon Road, Kodambakkam, Chennai - 600 024.",
-      tel: "+ 91 4443012828",
-      email: "customerservice.maa@pentagonindia.net",
-      pan: "AAGCP4765J",
-      gstn: "33AAGCP4765J1Z5",
-    };
-  } else if (branchNameUpper.includes("MUMBAI")) {
-    return {
-      name: "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PVT LTD (MUMBAI)",
-      address:
-        "Unit no – 204, Satellite Silver, Marol Naka, Andheri Kurla Road, Andheri (east), Mumbai – 400059",
-      tel: "",
-      email: "",
-      pan: "",
-      gstn: "",
-    };
-  }
-
-  // Default
   return {
-    name: "PENTAGON INTERNATIONAL FREIGHT SOLUTIONS PVT LTD (CHENNAI)",
-    address: "No. 15, Dr. Gopala Menon Road, Kodambakkam, Chennai - 600 024.",
-    tel: "+ 91 4443012828",
-    email: "customerservice.maa@pentagonindia.net",
-    pan: "AAGCP4765J",
-    gstn: "33AAGCP4765J1Z5",
+    name:
+      defaultBranch?.reporting_name ||
+      defaultBranch?.branch_title ||
+      "",
+    address:
+      defaultBranch?.reporting_address ||
+      defaultBranch?.address ||
+      "",
+    tel: defaultBranch?.tel || "",
+    email: defaultBranch?.email || "",
+    pan: defaultBranch?.pan || "",
+    gstn: defaultBranch?.gstn || "",
+    isKenya: false,
   };
 };
 
@@ -881,9 +817,8 @@ export const generateCargoArrivalNoticePDF = (
     let totalPages = 1;
     let sectionY = 0; // Declare sectionY for use in multiple sections
 
-    // Get branch info
-    const branchName = defaultBranch?.branch_name || "CHENNAI";
-    const branchInfo = getBranchInfo(branchName, country);
+    // Get branch info (reporting_name / reporting_address for header, same as DO)
+    const branchInfo = getBranchInfo(defaultBranch, country);
     const logoImage = getLogoByCountry(country);
     const isIndiaCan = isIndianUserFromProfile(country);
     const indiaSacWiseTotals = isIndiaCan ? sacWiseTotals : [];
