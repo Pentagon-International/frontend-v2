@@ -28,6 +28,12 @@ import {
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
 import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
+import useAuthStore from "../../../store/authStore";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 
 type CoaItem = {
@@ -123,7 +129,7 @@ const formatTwoDecimalsFromString = (
   value: string | null | undefined,
 ): string => {
   const n = parseDecimal(String(value ?? ""));
-  return n == null ? "" : formatFixed(n, 2);
+  return n == null ? "" : formatMoneyAmountBound(n);
 };
 
 const formatDateForApi = (date: Date | null): string => {
@@ -298,6 +304,9 @@ export default function DocumentAllocation() {
   const navigate = useNavigate();
   const location = useLocation();
   const canPostDocuments = useCanPostDocuments();
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const hydratedDocumentIdRef = useRef<number | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
@@ -445,10 +454,10 @@ export default function DocumentAllocation() {
       next[rowIndex] = {
         ...current,
         outstanding_amount: nextAmountRaw,
-        outstanding_local_amount: formatFixed(local, 2),
+        outstanding_local_amount: formatMoneyAmountBound(local),
         // keep older keys in sync (if backend still uses them)
         amount: nextAmountRaw,
-        amount_in_local: formatFixed(local, 2),
+        amount_in_local: formatMoneyAmountBound(local),
       };
       return next;
     });
@@ -471,9 +480,9 @@ export default function DocumentAllocation() {
       next[rowIndex] = {
         ...current,
         outstanding_amount: formatted,
-        outstanding_local_amount: formatFixed(local, 2),
+        outstanding_local_amount: formatMoneyAmountBound(local),
         amount: formatted,
-        amount_in_local: formatFixed(local, 2),
+        amount_in_local: formatMoneyAmountBound(local),
       };
 
       return next;
@@ -561,8 +570,8 @@ export default function DocumentAllocation() {
           document_date: r.document_date ?? "",
           currency_id: r.currency_id ?? null,
           roe: formatFixed(roeNum, ROE_DECIMAL_PLACES),
-          amount: formatFixed(amountNum, 3),
-          amount_in_local: formatFixed(localNum, 3),
+          amount: formatMoneyAmountBound(amountNum),
+          amount_in_local: formatMoneyAmountBound(localNum),
           Dr_Cr: r.Dr_Cr ?? "",
         };
 

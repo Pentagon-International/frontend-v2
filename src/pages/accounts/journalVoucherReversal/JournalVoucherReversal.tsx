@@ -54,6 +54,13 @@ import {
   parseRoeForPayload,
   ROE_DECIMAL_PLACES,
 } from "../../../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmountBound,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
@@ -148,7 +155,8 @@ const emptyRow = (): JVChargeRow => ({
 
 function clampAmt(v: number | null | undefined): number | null {
   if (v == null || !Number.isFinite(v)) return null;
-  const r = Math.round(v * 100) / 100;
+  const r = clampMoneyAmountBound(v);
+  if (r == null) return null;
   const MAX = 99999999.99;
   return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
 }
@@ -195,6 +203,9 @@ function JournalVoucherReversal() {
   const queryClient = useQueryClient();
   const { id: recordId } = useParams<{ id: string }>();
   const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const canPostDocuments = useCanPostDocuments();
 
   const isViewMode = location.pathname.includes("/view/");
@@ -499,9 +510,9 @@ function JournalVoucherReversal() {
       journal_date: formatDate(values.journal_date),
       note: values.note ?? "",
       status: overrideStatus ?? values.status ?? "UNPOSTED",
-      debit_total: debitTotal.toFixed(3),
-      credit_total: creditTotal.toFixed(3),
-      difference: difference.toFixed(3),
+      debit_total: formatMoneyAmountBound(debitTotal),
+      credit_total: formatMoneyAmountBound(creditTotal),
+      difference: formatMoneyAmountBound(difference),
       daybook_id: values.day_book_id ? Number(values.day_book_id) : null,
       charges: values.charges.map((c) => ({
         ...(c.id != null ? { id: c.id } : {}),
@@ -512,9 +523,14 @@ function JournalVoucherReversal() {
         code: c.code ?? "",
         key: c.key ?? "",
         roe: formatRoeForAccountsPayload(c.roe),
-        amount: c.amount != null ? Number(c.amount).toFixed(3) : "0.000",
+        amount:
+          c.amount != null
+            ? formatMoneyAmountBound(Number(c.amount))
+            : formatMoneyAmountBound(0),
         local_amount:
-          c.local_amount != null ? Number(c.local_amount).toFixed(3) : "0.000",
+          c.local_amount != null
+            ? formatMoneyAmountBound(Number(c.local_amount))
+            : formatMoneyAmountBound(0),
         dr_cr: c.dr_cr ?? "Dr",
         narration: c.narration ?? "",
         c_r_n: c.cn_r ?? "",
@@ -1699,6 +1715,7 @@ function JournalVoucherReversal() {
                             placeholder="Amount"
                             min={0}
                             hideControls
+                            decimalScale={amountDecimalScale}
                             readOnly={isReadOnly}
                             value={row.amount ?? undefined}
                             onChange={(v) => {
@@ -1724,6 +1741,7 @@ function JournalVoucherReversal() {
                           <NumberInput
                             placeholder="Local Amt"
                             hideControls
+                            decimalScale={amountDecimalScale}
                             readOnly
                             value={row.local_amount ?? undefined}
                             styles={{
@@ -1852,7 +1870,7 @@ function JournalVoucherReversal() {
                       c="#105476"
                       style={{ fontFamily: "Inter" }}
                     >
-                      {totals.debit.toFixed(2)}
+                      {formatMoneyAmountBound(totals.debit)}
                     </Text>
                   </Box>
                 </Grid.Col>
@@ -1882,7 +1900,7 @@ function JournalVoucherReversal() {
                       c="#105476"
                       style={{ fontFamily: "Inter" }}
                     >
-                      {totals.credit.toFixed(2)}
+                      {formatMoneyAmountBound(totals.credit)}
                     </Text>
                   </Box>
                 </Grid.Col>
@@ -1917,7 +1935,7 @@ function JournalVoucherReversal() {
                       }
                       style={{ fontFamily: "Inter" }}
                     >
-                      {totals.difference.toFixed(2)}
+                      {formatMoneyAmountBound(totals.difference)}
                     </Text>
                   </Box>
                 </Grid.Col>

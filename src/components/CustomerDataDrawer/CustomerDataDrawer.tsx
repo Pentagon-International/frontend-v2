@@ -10,7 +10,15 @@ import {
   Card,
 } from "@mantine/core";
 import dayjs from "dayjs";
+import { useMemo } from "react";
 import DateRangeInput from "../DateRangeInput"; // <-- If needed, adjust path
+import useAuthStore from "../../store/authStore";
+import {
+  getDefaultBranchCountryCode,
+  getDefaultBranchCurrencyCode,
+  formatUserDecimal,
+} from "../../utils/userNumberFormat";
+import { isVietnamBranchFromUser } from "../../utils/nonDecimalMoneyAmount";
 
 interface CustomerDataDrawerProps {
   opened: boolean;
@@ -80,6 +88,19 @@ export default function CustomerDataDrawer({
 
   onQuotationClick,
 }: CustomerDataDrawerProps) {
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+  const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+  const formatDrawerMoney = (value: number) =>
+    formatUserDecimal(value, branchCountryCode, branchCurrencyCode, {
+      maximumFractionDigits: isVietnamBranch ? 0 : 2,
+      minimumFractionDigits: 0,
+    });
+
   return (
     <Drawer
       opened={opened}
@@ -204,7 +225,7 @@ export default function CustomerDataDrawer({
                           </Text>
                           <Text size="sm" fw={500} c="#333">
                             {customerCurrency}{" "}
-                            {customerTotalCreditAmount.toLocaleString("en-IN")}
+                            {formatDrawerMoney(customerTotalCreditAmount)}
                           </Text>
                         </Grid.Col>
                       )}
@@ -226,7 +247,7 @@ export default function CustomerDataDrawer({
                           }}
                         >
                           {customerCurrency}{" "}
-                          {totalOutstandingAmount.toLocaleString("en-IN")}
+                          {formatDrawerMoney(totalOutstandingAmount)}
                         </Text>
                       </Grid.Col>
 
@@ -266,7 +287,7 @@ export default function CustomerDataDrawer({
                             </Text>
                             <Text size="sm" fw={500} c="#FF9800">
                               {customerCurrency}{" "}
-                              {totalRevenue?.toLocaleString("en-IN")}
+                              {formatDrawerMoney(totalRevenue ?? 0)}
                             </Text>
                           </Box>
                         )}
@@ -278,7 +299,7 @@ export default function CustomerDataDrawer({
                             </Text>
                             <Text size="sm" fw={500} c="#105476">
                               {customerCurrency}{" "}
-                              {totalProfit?.toLocaleString("en-IN")}
+                              {formatDrawerMoney(totalProfit ?? 0)}
                             </Text>
                           </Box>
                         )}
@@ -766,7 +787,7 @@ export default function CustomerDataDrawer({
                               </Text>
                               <Text size="sm" fw={500} c="#28a745">
                                 {profile.potential_profit
-                                  ? `${customerCurrency} ${profile.potential_profit.toLocaleString("en-IN")}`
+                                  ? `${customerCurrency} ${formatDrawerMoney(profile.potential_profit)}`
                                   : "-"}
                               </Text>
                             </Box>

@@ -63,6 +63,11 @@ import {
 import FormTextInput from "../../../components/FormTextInput";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getFilterBranchMasterOptions } from "../../../service/dashboard.service";
 import { getDefaultBranchCurrencyFromUser } from "../../../utils/exchangeRateRoe";
@@ -266,10 +271,7 @@ function CustomerNamesDisplay({
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmountBound(value);
 }
 
 function formatCurrencyAmount(
@@ -411,6 +413,8 @@ export default function JobProfitVerificationMaster() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const theme = DEFAULT_ERP_LIST_THEME;
   const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
   const dateFormat = useDateFormat();

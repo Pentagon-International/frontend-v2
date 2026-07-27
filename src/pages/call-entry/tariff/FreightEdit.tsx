@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Card,
   Text,
@@ -21,6 +21,12 @@ import { SingleDateInput, ToastNotification } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 type FreightEditProps = {
   actionType?: "edit" | "view";
@@ -37,6 +43,12 @@ export default function FreightEdit() {
   const navigate = useNavigate();
   const location = useLocation();
   const { actionType = "edit", ...freightData } = location.state || {};
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isViewMode] = useState(actionType === "view");
@@ -271,7 +283,13 @@ export default function FreightEdit() {
                   </Badge>
                 </Group>
                 <Text size="xs" c="dimmed">
-                  Amount: {charge.amount || "N/A"} {charge.currency || ""}
+                  Amount:{" "}
+                  {charge.amount != null && charge.amount !== ""
+                    ? Number.isFinite(Number(charge.amount))
+                      ? formatMoneyAmountBound(Number(charge.amount))
+                      : charge.amount
+                    : "N/A"}{" "}
+                  {charge.currency || ""}
                 </Text>
               </Box>
             ))}

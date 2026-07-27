@@ -64,6 +64,11 @@ import {
 import type { ErpListTheme } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -98,7 +103,7 @@ function parseSupplierInvoiceAmount(value: unknown): number | null {
 function formatSupplierInvoiceAmount(value: unknown): string {
   const n = parseSupplierInvoiceAmount(value);
   if (n == null) return "-";
-  return n.toFixed(2);
+  return formatMoneyAmountBound(n);
 }
 
 function getSupplierInvoiceCurrencyAmount(row: SupplierInvoiceRow): number | null {
@@ -199,6 +204,8 @@ function SupplierInvoiceMaster() {
   const defaultDateTo = dayjs().toDate();
   const dateFormat = useDateFormat();
   const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const isChinaUser = useMemo(() => {
     const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
     if (branchCountryCode) {
@@ -676,7 +683,7 @@ function SupplierInvoiceMaster() {
           const total = getSupplierInvoiceCurrencyAmount(row.original);
           return (
             <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              {total == null ? "-" : total.toFixed(2)}
+              {total == null ? "-" : formatMoneyAmountBound(total)}
             </Text>
           );
         },

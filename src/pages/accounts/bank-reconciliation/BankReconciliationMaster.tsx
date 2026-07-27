@@ -63,6 +63,12 @@ import type { ErpListTheme } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 const LIST_KEY = "BANK_RECONCILIATION_MASTER";
@@ -196,10 +202,7 @@ function formatAmount(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value);
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmountBound(n);
 }
 
 function receiptStatusBadgeColor(status?: string): string {
@@ -292,6 +295,9 @@ const BankReconciliationRowActions = memo(function BankReconciliationRowActions(
 });
 
 export default function BankReconciliationMaster() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
   const dateFormat = useDateFormat();

@@ -59,6 +59,12 @@ import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useListFilterStore } from "../../../store/listFilterStore";
@@ -204,10 +210,7 @@ function formatAmount(value: unknown): string {
   if (value == null || value === "") return "-";
   const n = typeof value === "number" ? value : parseFloat(String(value));
   if (Number.isNaN(n)) return "-";
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmountBound(n);
 }
 
 function formatArrayCell(value: unknown): string {
@@ -265,6 +268,9 @@ function humanizeRecordType(recordType: string): string {
 export default function UnpostedDocumentsList({
   variant = "unposted",
 }: UnpostedDocumentsListProps = {}) {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const isCheckerList = variant === "checker";
   const listKey = isCheckerList ? CHECKER_LIST_KEY : UNPOSTED_LIST_KEY;
   const financeQueryKey = isCheckerList

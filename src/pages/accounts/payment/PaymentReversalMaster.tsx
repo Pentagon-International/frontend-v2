@@ -1,4 +1,10 @@
 import { useMemo, useState } from "react";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -58,6 +64,9 @@ type PaymentReversalListResult = {
 };
 
 export default function PaymentReversalMaster() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
@@ -165,7 +174,7 @@ export default function PaymentReversalMaster() {
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
           if (val == null) return "-";
-          return typeof val === "number" ? val.toFixed(2) : String(val);
+          return typeof val === "number" ? formatMoneyAmountBound(val) : String(val);
         },
       },
       {

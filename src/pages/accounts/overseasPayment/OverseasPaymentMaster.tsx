@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -154,6 +160,9 @@ function overseasPaymentColumnId<T extends Record<string, unknown>>(
 }
 
 export default function OverseasPaymentMaster() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
   const defaultDateFrom = dayjs().startOf("month").toDate();
@@ -595,7 +604,7 @@ export default function OverseasPaymentMaster() {
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
           if (val == null) return "-";
-          return typeof val === "number" ? val.toFixed(2) : String(val);
+          return typeof val === "number" ? formatMoneyAmountBound(val) : String(val);
         },
       },
       {

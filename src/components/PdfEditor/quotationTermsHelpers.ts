@@ -1,4 +1,4 @@
-import { formatUserDecimal } from "../../utils/userNumberFormat";
+import { formatUserDecimal, isVietnameseUserCountry } from "../../utils/userNumberFormat";
 
 /** Mirrors default instruction lines rendered in QuotationPDFTemplate (not imported from PDF file). */
 export const DEFAULT_QUOTATION_INSTRUCTIONS = [
@@ -171,12 +171,14 @@ export function formatPdfChargeUnitAmount(
   if (value === null || value === undefined || value === "") return "N/A";
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value);
+  const isVietnam = isVietnameseUserCountry(branchCountryCode);
   return formatUserDecimal(n, branchCountryCode, branchCurrencyCode, {
-    maximumFractionDigits: 2,
+    maximumFractionDigits: isVietnam ? 0 : 2,
+    minimumFractionDigits: 0,
   });
 }
 
-/** Total / overall total: 2 decimal places with India vs foreign comma grouping. */
+/** Total / overall total: branch-aware decimals with India vs foreign comma grouping. */
 export function formatPdfChargeTotalAmount(
   value: string | number | null | undefined,
   branchCountryCode?: string | null,
@@ -184,9 +186,10 @@ export function formatPdfChargeTotalAmount(
 ): string {
   const n = Number(value ?? 0);
   const safe = Number.isFinite(n) ? n : 0;
+  const isVietnam = isVietnameseUserCountry(branchCountryCode);
   return formatUserDecimal(safe, branchCountryCode, branchCurrencyCode, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: isVietnam ? 0 : 2,
+    maximumFractionDigits: isVietnam ? 0 : 2,
   });
 }
 

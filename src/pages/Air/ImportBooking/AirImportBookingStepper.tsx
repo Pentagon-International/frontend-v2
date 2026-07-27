@@ -60,6 +60,13 @@ import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+  roundMoneyToDecimals,
+} from "../../../utils/nonDecimalMoneyAmount";
+import {
   applyBookingChargeUnitChange,
   buildBookingCargoNoOfUnitsSyncKey,
   buildBookingUnitOptions,
@@ -823,6 +830,12 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   // Get user data from auth store
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   // Events master and Trigger Type master
   const { data: eventMasterData = [] } = useQuery({
@@ -948,8 +961,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             const sellPerUnit = parseFloat(updatedCharge.sell_per_unit) || 0;
             const roe = parseFloat(updatedCharge.roe) || 1;
 
-            updatedCharge.total_sell = (noOfUnits * sellPerUnit * roe).toFixed(
-              2,
+            updatedCharge.total_sell = formatMoneyAmountBound(
+              noOfUnits * sellPerUnit * roe,
             );
           }
 
@@ -963,8 +976,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             const costPerUnit = parseFloat(updatedCharge.cost_per_unit) || 0;
             const roe = parseFloat(updatedCharge.roe) || 1;
 
-            updatedCharge.total_cost = (noOfUnits * costPerUnit * roe).toFixed(
-              2,
+            updatedCharge.total_cost = formatMoneyAmountBound(
+              noOfUnits * costPerUnit * roe,
             );
           }
 
@@ -2741,12 +2754,12 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             unit: charge.unit,
             no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
             sell_per_unit:
-              roundToDecimals(parseFloat(charge.sell_per_unit)) || 0,
-            min_sell: roundToDecimals(parseFloat(charge.min_sell)) || 0,
+              roundMoneyToDecimals(parseFloat(charge.sell_per_unit)) || 0,
+            min_sell: roundMoneyToDecimals(parseFloat(charge.min_sell)) || 0,
             cost_per_unit:
-              roundToDecimals(parseFloat(charge.cost_per_unit)) || 0,
-            total_cost: roundToDecimals(parseFloat(charge.total_cost)) || 0,
-            total_sell: roundToDecimals(parseFloat(charge.total_sell)) || 0,
+              roundMoneyToDecimals(parseFloat(charge.cost_per_unit)) || 0,
+            total_cost: roundMoneyToDecimals(parseFloat(charge.total_cost)) || 0,
+            total_sell: roundMoneyToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
@@ -5805,7 +5818,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.sell_per_unit}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           onChange={(val) =>
                             updateCharge(index, "sell_per_unit", val || "")
                           }
@@ -5816,7 +5829,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.min_sell}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           onChange={(val) =>
                             updateCharge(index, "min_sell", val || "")
                           }
@@ -5827,7 +5840,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.cost_per_unit}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           onChange={(val) =>
                             updateCharge(index, "cost_per_unit", val || "")
                           }
@@ -5837,7 +5850,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       <Grid.Col span={1}>
                         <FormNumberInput
                           value={charge.total_sell || ""}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           readOnly
                           size="xs"
                         />
@@ -5845,7 +5858,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       <Grid.Col span={1}>
                         <FormNumberInput
                           value={charge.total_cost || ""}
-                          decimalScale={2}
+                          decimalScale={amountDecimalScale}
                           readOnly
                           size="xs"
                         />
@@ -5895,22 +5908,22 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={1} pl={8}>
                   <Text size="sm" fw={600} mb="md" c="#105476">
-                    {charges
-                      .reduce((sum, charge) => {
+                    {formatMoneyAmountBound(
+                      charges.reduce((sum, charge) => {
                         const totalSell = parseFloat(charge.total_sell) || 0;
                         return sum + totalSell;
-                      }, 0)
-                      .toFixed(2)}
+                      }, 0),
+                    )}
                   </Text>
                 </Grid.Col>
                 <Grid.Col span={1} pl={8}>
                   <Text size="sm" fw={600} mb="md" c="#105476">
-                    {charges
-                      .reduce((sum, charge) => {
+                    {formatMoneyAmountBound(
+                      charges.reduce((sum, charge) => {
                         const totalCost = parseFloat(charge.total_cost) || 0;
                         return sum + totalCost;
-                      }, 0)
-                      .toFixed(2)}
+                      }, 0),
+                    )}
                   </Text>
                 </Grid.Col>
               </Grid>

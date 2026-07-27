@@ -18,11 +18,41 @@ import { postAPICall } from "../../service/postApiCall";
 import { URL } from "../../api/serverUrls";
 import { API_HEADER } from "../../store/storeKeys";
 import { SingleDateInput, ToastNotification } from "../../components";
+import FormNumberInput from "../../components/FormNumberInput";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAPICall } from "../../service/getApiCall";
+import useAuthStore from "../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../utils/nonDecimalMoneyAmount";
+
+function moneyFormValueToNumber(
+  value: string | number | null | undefined,
+): number | undefined {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function moneyNumberInputToFormString(value: string | number): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmountBound(n);
+}
 
 function TariffCreate() {
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const [customerData, setCustomer] = useState([]);
   const [originData, setOrigin] = useState([]);
   const [destinationData, setDestination] = useState([]);
@@ -331,11 +361,21 @@ function TariffCreate() {
                   />
                 </Grid.Col>
                 <Grid.Col span={1}>
-                  <NumberInput
+                  <FormNumberInput
                     key={`rate-name-${gridForm.values.tariff_charges[index].id || index}`}
-                    min={1}
+                    min={0}
+                    hideControls
                     label="Rate"
-                    {...gridForm.getInputProps(`tariff_charges.${index}.rate`)}
+                    decimalScale={amountDecimalScale}
+                    value={moneyFormValueToNumber(
+                      gridForm.values.tariff_charges[index]?.rate,
+                    )}
+                    onChange={(value) => {
+                      gridForm.setFieldValue(
+                        `tariff_charges.${index}.rate`,
+                        moneyNumberInputToFormString(value),
+                      );
+                    }}
                   />
                 </Grid.Col>
                 <Grid.Col span={0.75}>

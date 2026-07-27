@@ -29,6 +29,11 @@ import {
   peekContractEditPayload,
 } from "./contractDetail/contractEditSession";
 import type { ContractDetailResponse } from "./contractDetail/types";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import "./createContract.css";
 
 
@@ -163,9 +168,7 @@ function getCurrencyPrefix(currencyCode: string): string {
 }
 
 function formatMoney(amount: number, currencyCode: string): string {
-  return `${getCurrencyPrefix(currencyCode)}${amount.toLocaleString("en-US", {
-    maximumFractionDigits: 0,
-  })}`;
+  return `${getCurrencyPrefix(currencyCode)}${formatMoneyAmountBound(amount)}`;
 }
 
 function isPercentRate(value: string): boolean {
@@ -175,7 +178,7 @@ function isPercentRate(value: string): boolean {
 function formatRateValue(value: string): string {
   if (isPercentRate(value)) return value.trim();
   const parsed = parseRate(value);
-  return parsed !== null ? parsed.toFixed(2) : value.trim();
+  return parsed !== null ? formatMoneyAmountBound(parsed) : value.trim();
 }
 
 function portMasterDisplayFormat(item: Record<string, unknown>) {
@@ -226,6 +229,11 @@ export default function CreateContract() {
   const isSidebarCollapsed = useLayoutStore((state) => state.isSidebarCollapsed);
   const sidebarOffset = isSidebarCollapsed ? 64 : 260;
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const contractOwner = user?.full_name || user?.username || "";
 
   const editDetail = useMemo((): ContractDetailResponse | null => {
@@ -1088,6 +1096,12 @@ export default function CreateContract() {
                         onChange={(event) =>
                           updateRateRow(row.key, { buy_rate: event.target.value })
                         }
+                        onBlur={() => {
+                          const formatted = formatRateValue(row.buy_rate);
+                          if (formatted !== row.buy_rate) {
+                            updateRateRow(row.key, { buy_rate: formatted });
+                          }
+                        }}
                         placeholder="Enter buy rate"
                         inputMode="decimal"
                       />
@@ -1288,6 +1302,13 @@ export default function CreateContract() {
                               onChange={(event) =>
                                 updateSurchargeRow(row.key, { rate: event.target.value })
                               }
+                              onBlur={() => {
+                                if (isPercentRate(row.rate)) return;
+                                const formatted = formatRateValue(row.rate);
+                                if (formatted !== row.rate) {
+                                  updateSurchargeRow(row.key, { rate: formatted });
+                                }
+                              }}
                               placeholder={isPercentRate(row.rate) ? "Enter value" : "Enter value"}
                             />
                           </div>

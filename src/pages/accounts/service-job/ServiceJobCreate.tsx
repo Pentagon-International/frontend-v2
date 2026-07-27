@@ -64,6 +64,12 @@ import {
   ROE_DECIMAL_PLACES,
   roundRoeForPayload,
 } from "../../../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { buildJobUnitOptions } from "../../../utils/houseCargoChargeableWeight";
 import {
@@ -517,6 +523,9 @@ function ServiceJobChargesSection({
   onCreateInvoice?: () => void;
 }) {
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
   >({});
@@ -578,9 +587,10 @@ function ServiceJobChargesSection({
         charge.no_of_unit != null &&
         charge.no_of_unit > 0
       ) {
-        const calculatedAmount = parseFloat(
-          (charge.no_of_unit * charge.amount_per_unit).toFixed(2),
-        );
+        const calculatedAmount =
+          clampMoneyAmountBound(
+            charge.no_of_unit * charge.amount_per_unit,
+          ) ?? 0;
         if (calculatedAmount > 0) next.amount = calculatedAmount;
       }
       if (next.amount != null && next.amount > 0 && next.roe != null && next.roe > 0) {
@@ -828,7 +838,7 @@ function ServiceJobChargesSection({
               placeholder="Amount/Unit"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               readOnly={readOnly}
               value={charge.amount_per_unit || undefined}
               onChange={(value) => {
@@ -846,7 +856,7 @@ function ServiceJobChargesSection({
               placeholder="Amount"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               readOnly={readOnly}
               value={charge.amount || undefined}
               onChange={(value) => {
@@ -859,7 +869,7 @@ function ServiceJobChargesSection({
               placeholder="Local Amount"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               readOnly={readOnly}
               value={charge.local_amount || undefined}
               onChange={(value) => {
@@ -872,7 +882,7 @@ function ServiceJobChargesSection({
               placeholder="Cost/Unit"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               readOnly={readOnly}
               value={charge.cost_per_unit || undefined}
               onChange={(value) => {
@@ -890,7 +900,7 @@ function ServiceJobChargesSection({
               placeholder="Total Cost"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               readOnly={readOnly}
               value={charge.total_cost || undefined}
               onChange={(value) => {
@@ -903,7 +913,7 @@ function ServiceJobChargesSection({
               placeholder="Local Amount"
               min={0}
               hideControls
-              decimalScale={2}
+              decimalScale={amountDecimalScale}
               readOnly={readOnly}
               value={charge.cost_local_amount || undefined}
               onChange={(value) => {
@@ -1207,6 +1217,8 @@ export default function ServiceJobCreate() {
   const { id: routeId } = useParams<{ id: string }>();
   const isEditMode = Boolean(routeId);
   const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const stateJobFromNav =
     (location.state as { job?: Record<string, unknown> } | null)?.job ?? null;
   const [resolvedJob, setResolvedJob] = useState<Record<string, unknown> | null>(

@@ -44,6 +44,12 @@ import {
   parseRoeForPayload,
   sanitizeRoeInput,
 } from "../../../utils/exchangeRateRoe";
+import {
+  bindMoneyWholeNumberMode,
+  clampMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
+import useAuthStore from "../../../store/authStore";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -261,6 +267,9 @@ export function DebitCreditNoteCreateBase({
   const navigate = useNavigate();
   const location = useLocation();
   const canPostDocuments = useCanPostDocuments();
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   useParams(); // keep route `:id` segment for identification
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calcLoading, setCalcLoading] = useState(false);
@@ -414,7 +423,7 @@ export function DebitCreditNoteCreateBase({
     if (amount === "" || roe === "") return "";
     if (!Number.isFinite(Number(amount)) || !Number.isFinite(Number(roe)))
       return "";
-    return Number(amount) * Number(roe);
+    return clampMoneyAmountBound(Number(amount) * Number(roe)) ?? "";
   };
 
   const computeAmountInHeaderCurrency = (
@@ -424,7 +433,9 @@ export function DebitCreditNoteCreateBase({
     if (amount === "" || headerRoe === "") return "";
     if (!Number.isFinite(Number(amount)) || !Number.isFinite(Number(headerRoe)))
       return "";
-    return Number(amount) * Number(headerRoe);
+    return (
+      clampMoneyAmountBound(Number(amount) * Number(headerRoe)) ?? ""
+    );
   };
 
   const saveForGst = async (): Promise<string | null> => {

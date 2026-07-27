@@ -1,4 +1,10 @@
 import { useCallback, useMemo, useState, useEffect } from "react";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import { useNavigate } from "react-router-dom";
 import {
   ActionIcon,
@@ -119,6 +125,9 @@ const columnDefault: Record<ColumnKey, boolean> = {
 };
 
 export default function DebitCreditNoteNonTradeMaster() {
+  const user = useAuthStore((s) => s.user);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const [showFilters, setShowFilters] = useState(false);
   const [paginationPageSize, setPaginationPageSize] = useState(25);
@@ -460,7 +469,7 @@ export default function DebitCreditNoteNonTradeMaster() {
           if (!Number.isFinite(total) || total === 0) return <Text size="sm">-</Text>;
           return (
             <Text size="sm">
-              {total.toFixed(2)}
+              {formatMoneyAmountBound(total)}
             </Text>
           );
         },

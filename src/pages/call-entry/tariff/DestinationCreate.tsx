@@ -34,6 +34,7 @@ import dayjs from "dayjs";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ToastNotification, SearchableSelect, SingleDateInput } from "../../../components";
+import FormNumberInput from "../../../components/FormNumberInput";
 import EditPageAuditInfoIcon from "../../../components/EditPageAuditInfoIcon";
 import { normalizeEditPageAuditInfo } from "../../../utils/editPageAuditInfo";
 import { postAPICall } from "../../../service/postApiCall";
@@ -46,6 +47,28 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { getAPICall } from "../../../service/getApiCall";
 import RequiredLabel from "../../../components/RequiredLabel";
+import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  getAmountDecimalScale,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
+
+function moneyFormValueToNumber(
+  value: string | number | null | undefined,
+): number | undefined {
+  if (value === "" || value === null || value === undefined) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function moneyNumberInputToFormString(value: string | number): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmountBound(n);
+}
 
 // Type definitions for better type safety
 
@@ -108,6 +131,13 @@ const fetchContainerType = async () => {
 };
 
 function DestinationCreate() {
+  const user = useAuthStore((state) => state.user);
+  const isVietnamBranch = useMemo(
+    () => isVietnamBranchFromUser(user),
+    [user],
+  );
+  bindMoneyWholeNumberMode(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
   const editData = location.state || null;
@@ -1228,14 +1258,27 @@ function DestinationCreate() {
                             />
                           </Grid.Col>
                           <Grid.Col span={!isViewMode ? 1.6 : 2}>
-                            <NumberInput
+                            <FormNumberInput
                               key={`rate-name-${index}`}
                               min={1}
+                              hideControls
                               withAsterisk={!isViewMode}
                               disabled={isViewMode}
-                              {...gridForm.getInputProps(
-                                `tariff_charges.${index}.rate`
+                              decimalScale={amountDecimalScale}
+                              value={moneyFormValueToNumber(
+                                gridForm.values.tariff_charges[index]?.rate,
                               )}
+                              onChange={(value) => {
+                                gridForm.setFieldValue(
+                                  `tariff_charges.${index}.rate`,
+                                  moneyNumberInputToFormString(value),
+                                );
+                              }}
+                              error={
+                                (gridForm.errors as any)?.tariff_charges?.[
+                                  index
+                                ]?.rate
+                              }
                               styles={{
                                 input: {
                                   fontSize: "13px",
@@ -1337,7 +1380,9 @@ function DestinationCreate() {
                                           Per Container{" : "}
                                         </Text>
                                         <Text size="sm" fw={600} c="dimmed">
-                                          {(total / numberOfContainers).toFixed(2)}
+                                          {formatMoneyAmountBound(
+                                            total / numberOfContainers,
+                                          )}
                                         </Text>
                                       </Group>
                                     </Grid.Col>
@@ -1348,10 +1393,7 @@ function DestinationCreate() {
                                     </Grid.Col>
                                     <Grid.Col span={!isViewMode ? 1.6 : 2}>
                                       <Text size="md" pl="sm" fw={600} c="#105476">
-                                        {total.toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}
+                                        {formatMoneyAmountBound(total)}
                                       </Text>
                                     </Grid.Col>
                                     

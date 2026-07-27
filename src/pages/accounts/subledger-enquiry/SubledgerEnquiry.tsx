@@ -61,6 +61,11 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import {
+  bindMoneyWholeNumberMode,
+  formatMoneyAmountBound,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -240,10 +245,7 @@ function formatAmount(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "";
   }
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmountBound(value);
 }
 
 function formatSubledgerCell(
@@ -470,6 +472,8 @@ export default function SubledgerEnquiry() {
 
   const dateFormat = useDateFormat();
   const { user } = useAuthStore();
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
+  bindMoneyWholeNumberMode(isVietnamBranch);
 
   const { data: currencyData = [] } = useQuery({
     queryKey: ["currencyMaster", "subledger-enquiry"],
