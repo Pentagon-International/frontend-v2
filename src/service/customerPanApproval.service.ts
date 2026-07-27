@@ -34,6 +34,8 @@ export type CustomerPanApprovalAddress = {
   uin_no?: string | null;
   composite_regular?: string | null;
   sez?: boolean;
+  sez_valid_date?: string | null;
+  iec_code?: string | null;
 };
 
 export type CustomerPanApprovalRow = {
@@ -243,6 +245,17 @@ export async function submitCustomerVerification(
 ): Promise<unknown> {
   const formData = buildCustomerVerificationFormData(customerData, documents);
   return apiCallProtected.post(URL.customerVerification, formData, {
+    ...MULTIPART_FORM_HEADERS,
+  });
+}
+
+export async function updateCustomerVerification(
+  id: number,
+  customerData: Record<string, unknown>,
+  documents: SupportingDocument[] = [],
+): Promise<unknown> {
+  const formData = buildCustomerVerificationFormData(customerData, documents);
+  return apiCallProtected.put(`${URL.customerVerification}${id}/`, formData, {
     ...MULTIPART_FORM_HEADERS,
   });
 }

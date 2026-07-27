@@ -89,6 +89,8 @@ const pathTitleMap: Record<string, string> = {
   "/bank-reconciliation/create": "Bank Reconciliation",
   "/bank-reconciliation": "Bank Reconciliation",
   "/master": "Masters",
+  "/master/create-customer-pan": "Create Customer from PAN",
+  "/master/approve-customers": "Approve Customers",
   "/master/create-customer": "Customer for Approval",
   "/reports": "Reports",
   "/help": "Help",

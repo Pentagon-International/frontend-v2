@@ -3,8 +3,14 @@ import {
   Button,
   Card,
   Checkbox,
+  Divider,
+  Grid,
   Group,
+  Modal,
+  MultiSelect,
   ScrollArea,
+  Select,
+  Stack,
   Table,
   Text,
   TextInput,
@@ -14,7 +20,12 @@ import { IconPaperclip, IconSearch } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ToastNotification } from "../../../components";
+import {
+  Dropdown,
+  SearchableSelect,
+  SingleDateInput,
+  ToastNotification,
+} from "../../../components";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
@@ -42,8 +53,13 @@ import {
 } from "../../../utils/customerDocuments";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
-const DUMMY_EMAIL = "customer@dummy.local";
-const DUMMY_PHONE = "9999999999";
+const TERM_CODE_OPTIONS = [
+  { label: "Credit", value: "CREDIT" },
+  { label: "Cash", value: "CASH" },
+  { label: "Prepaid", value: "PREPAID" },
+];
+
+const TWO_DECIMAL_INPUT_REGEX = /^\d*(\.\d{0,2})?$/;
 
 type CustomerTypeRow = {
   customer_type_code: string;
@@ -58,6 +74,56 @@ type SalespersonRow = {
 type SalespersonsResponse = {
   success?: boolean;
   data?: SalespersonRow[];
+};
+
+type AdditionalDetailsForm = {
+  customer_type_code: string[];
+  term_code: string;
+  own_office: string;
+  network_id: string;
+  network_name: string;
+  credit_amount: string;
+  credit_day: string;
+  assigned_to: string;
+  phone_no: string;
+  mobile_no: string;
+  email: string;
+  iec_code: string;
+  tan_no: string;
+  arn_no: string;
+  uin_no: string;
+  composite_regular: string;
+  sez: boolean;
+  sez_valid_date: string | null;
+  msme: boolean;
+  msme_no: string;
+};
+
+type AdditionalDetailsErrors = Partial<
+  Record<keyof AdditionalDetailsForm, string>
+>;
+
+const EMPTY_ADDITIONAL_DETAILS: AdditionalDetailsForm = {
+  customer_type_code: [],
+  term_code: "",
+  own_office: "",
+  network_id: "",
+  network_name: "",
+  credit_amount: "",
+  credit_day: "",
+  assigned_to: "",
+  phone_no: "",
+  mobile_no: "",
+  email: "",
+  iec_code: "",
+  tan_no: "",
+  arn_no: "",
+  uin_no: "",
+  composite_regular: "",
+  sez: false,
+  sez_valid_date: null,
+  msme: false,
+  msme_no: "",
 };
 
 function resolveCustomerTypeCode(types: CustomerTypeRow[]): string {
@@ -87,11 +153,7 @@ function resolveLoggedInAssignTo(
     const person = String(sp.sales_person ?? "").trim();
     const norm = person.toLowerCase();
     if (candidates.some((c) => c === norm)) return person;
-    if (
-      candidates.some(
-        (c) => norm.includes(c) || c.includes(norm),
-      )
-    ) {
+    if (candidates.some((c) => norm.includes(c) || c.includes(norm))) {
       return person;
     }
   }
@@ -105,10 +167,83 @@ function resolveLoggedInAssignTo(
   );
 }
 
+function formatDateYYYYMMDD(value: Date | null): string | null {
+  if (!value) return null;
+  const y = value.getFullYear();
+  const m = String(value.getMonth() + 1).padStart(2, "0");
+  const d = String(value.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseDateYYYYMMDD(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  );
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseOptionalNumber(value: string | undefined): number | null {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function validateAdditionalDetails(
+  form: AdditionalDetailsForm,
+): AdditionalDetailsErrors {
+  const errors: AdditionalDetailsErrors = {};
+
+  if (!form.customer_type_code.length) {
+    errors.customer_type_code = "Customer type is required";
+  }
+  if (!form.term_code.trim()) {
+    errors.term_code = "Credit type is required";
+  }
+  if (!form.own_office) {
+    errors.own_office = "Own office selection is required";
+  }
+  if (!form.assigned_to.trim()) {
+    errors.assigned_to = "Assign To is required";
+  }
+  if (
+    form.credit_amount.trim() &&
+    !/^\d+(\.\d{1,2})?$/.test(form.credit_amount.trim()) &&
+    !/^\d+$/.test(form.credit_amount.trim())
+  ) {
+    errors.credit_amount = "Enter a valid credit amount";
+  }
+  if (form.credit_day.trim() && !/^\d+$/.test(form.credit_day.trim())) {
+    errors.credit_day = "Enter a valid number of days";
+  }
+  if (!form.mobile_no.trim()) {
+    errors.mobile_no = "Mobile number is required";
+  }
+  if (!form.email.trim()) {
+    errors.email = "Email is required";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    errors.email = "Please enter a valid email address";
+  }
+  if (form.sez && !form.sez_valid_date) {
+    errors.sez_valid_date = "SEZ validity date is required";
+  }
+  if (form.msme && !form.msme_no.trim()) {
+    errors.msme_no = "MSME number is required";
+  }
+
+  return errors;
+}
+
 function buildAddressEntry(
   record: AttestrGstinRecord,
   pan: string,
   addressType: "Primary" | "Secondary",
+  details: AdditionalDetailsForm,
 ) {
   const addr = record.primaryAddress ?? {};
   const addressLine = buildAddressLine(addr);
@@ -123,12 +258,21 @@ function buildAddressEntry(
     state: addr.state || "",
     country: "India",
     pincode: addr.zip || "",
-    phone_no: DUMMY_PHONE,
-    mobile_no: DUMMY_PHONE,
-    email: DUMMY_EMAIL,
+    phone_no: details.phone_no.trim(),
+    mobile_no: details.mobile_no.trim(),
+    email: details.email.trim(),
     pan_no: record.pan || pan,
     gst_id: record.gstin || "",
     gst_registration_status: "Registered",
+    iec_code: details.iec_code.trim(),
+    tan_no: details.tan_no.trim(),
+    arn_no: details.arn_no.trim(),
+    uin_no: details.uin_no.trim(),
+    composite_regular: details.composite_regular,
+    sez: details.sez,
+    sez_valid_date: details.sez ? details.sez_valid_date : null,
+    msme: details.msme,
+    msme_no: details.msme ? details.msme_no.trim() : "",
     latitude: Number.isFinite(lat) ? lat : 0,
     longitude: Number.isFinite(lng) ? lng : 0,
   };
@@ -137,22 +281,25 @@ function buildAddressEntry(
 function buildCustomerPayload(
   records: AttestrGstinRecord[],
   pan: string,
-  customerTypeCode: string,
-  assignedTo: string,
+  details: AdditionalDetailsForm,
 ) {
   const primary = records[0];
   return {
     customer_name: primary.legalName || primary.tradeName || "",
-    customer_type_code: [customerTypeCode],
-    term_code: "CREDIT",
-    own_office: false,
+    customer_type_code: details.customer_type_code,
+    term_code: details.term_code,
+    own_office: details.own_office === "true",
     status: "ACTIVE",
-    assigned_to: assignedTo,
+    assigned_to: details.assigned_to,
+    network_id: details.network_id ? Number(details.network_id) : null,
+    credit_amount: parseOptionalNumber(details.credit_amount),
+    credit_day: parseOptionalNumber(details.credit_day),
     addresses_data: records.map((record, index) =>
       buildAddressEntry(
         record,
         pan,
         index === 0 ? "Primary" : "Secondary",
+        details,
       ),
     ),
   };
@@ -194,6 +341,15 @@ export default function CustomerPanMaster() {
     documentsModalOpened,
     { open: openDocumentsModal, close: closeDocumentsModal },
   ] = useDisclosure(false);
+  const [
+    detailsModalOpened,
+    { open: openDetailsModal, close: closeDetailsModal },
+  ] = useDisclosure(false);
+  const [additionalDetails, setAdditionalDetails] =
+    useState<AdditionalDetailsForm>(EMPTY_ADDITIONAL_DETAILS);
+  const [detailsErrors, setDetailsErrors] = useState<AdditionalDetailsErrors>(
+    {},
+  );
 
   const { data: customerTypes = [] } = useQuery({
     queryKey: ["customerTypes", "pan-master"],
@@ -235,6 +391,24 @@ export default function CustomerPanMaster() {
     [salespersons, user],
   );
 
+  const customerTypeOptions = useMemo(
+    () =>
+      customerTypes.map((t) => ({
+        value: t.customer_type_code,
+        label: t.customer_type_name,
+      })),
+    [customerTypes],
+  );
+
+  const salespersonOptions = useMemo(
+    () =>
+      salespersons
+        .map((sp) => String(sp.sales_person ?? "").trim())
+        .filter(Boolean)
+        .map((person) => ({ value: person, label: person })),
+    [salespersons],
+  );
+
   const allSelected =
     records.length > 0 && selectedGstins.size === records.length;
   const someSelected =
@@ -257,6 +431,22 @@ export default function CustomerPanMaster() {
       return new Set(records.map((r) => r.gstin));
     });
   }, [records]);
+
+  const updateAdditionalDetails = useCallback(
+    <K extends keyof AdditionalDetailsForm>(
+      key: K,
+      value: AdditionalDetailsForm[K],
+    ) => {
+      setAdditionalDetails((prev) => ({ ...prev, [key]: value }));
+      setDetailsErrors((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    },
+    [],
+  );
 
   const handleSearchClick = async () => {
     const pan = panNumber.trim().toUpperCase();
@@ -319,21 +509,43 @@ export default function CustomerPanMaster() {
     }
   };
 
+  const handleOpenDetailsModal = () => {
+    const selected = records.filter((r) => selectedGstins.has(r.gstin));
+    if (!selected.length) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Please select at least one GST registration to create a customer",
+      });
+      return;
+    }
+
+    setAdditionalDetails({
+      ...EMPTY_ADDITIONAL_DETAILS,
+      customer_type_code: customerTypeCode ? [customerTypeCode] : [],
+      assigned_to: assignedTo,
+    });
+    setDetailsErrors({});
+    openDetailsModal();
+  };
+
   const handleCreateCustomers = async () => {
     const selected = records.filter((r) => selectedGstins.has(r.gstin));
     if (!selected.length) {
       ToastNotification({
         type: "error",
-        message: "Please select at least one GST registration to create a customer",
+        message:
+          "Please select at least one GST registration to create a customer",
       });
       return;
     }
 
-    if (!assignedTo) {
+    const errors = validateAdditionalDetails(additionalDetails);
+    if (Object.keys(errors).length > 0) {
+      setDetailsErrors(errors);
       ToastNotification({
         type: "error",
-        message:
-          "Could not resolve Assign To for the logged-in user. Check salesperson mapping.",
+        message: "Please fill the required customer details",
       });
       return;
     }
@@ -350,13 +562,14 @@ export default function CustomerPanMaster() {
       const payload = buildCustomerPayload(
         selected,
         panNumber.trim().toUpperCase(),
-        customerTypeCode,
-        assignedTo,
+        additionalDetails,
       );
       const response = (await submitCustomerVerification(
         payload,
         supportingDocuments,
-      )) as { message?: string; documents_list?: CustomerDocumentListItem[] } | null;
+      )) as
+        | { message?: string; documents_list?: CustomerDocumentListItem[] }
+        | null;
 
       const uploadedDocs = extractDocumentsListFromResponse(response);
       if (uploadedDocs.length > 0) {
@@ -383,6 +596,7 @@ export default function CustomerPanMaster() {
             : `Customer verification submitted with ${selected.length} addresses.`),
       });
       setSelectedGstins(new Set());
+      closeDetailsModal();
       if (uploadedDocs.length === 0) {
         setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
       }
@@ -555,9 +769,8 @@ export default function CustomerPanMaster() {
           </Button>
           <Button
             color="#105476"
-            onClick={handleCreateCustomers}
+            onClick={handleOpenDetailsModal}
             disabled={selectedGstins.size === 0}
-            loading={isCreating}
           >
             Create Customer
             {selectedGstins.size > 0 ? ` (${selectedGstins.size})` : ""}
@@ -572,6 +785,357 @@ export default function CustomerPanMaster() {
         onChange={setSupportingDocuments}
         title="Attach Supporting Documents"
       />
+
+      <Modal
+        opened={detailsModalOpened}
+        onClose={() => !isCreating && closeDetailsModal()}
+        title="Additional Customer Details"
+        centered
+        size="xl"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Fill India customer details that are not fetched from GSTIN search.
+            These values will be included in the create payload.
+          </Text>
+
+          <ScrollArea.Autosize mah="65vh" offsetScrollbars type="auto">
+            <Stack gap="lg">
+              <div>
+                <Text size="sm" fw={600} c="#105476" mb="sm">
+                  Customer details
+                </Text>
+                <Grid gutter="sm">
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <MultiSelect
+                      label="Customer Type"
+                      withAsterisk
+                      placeholder="Select customer type"
+                      searchable
+                      data={customerTypeOptions}
+                      value={additionalDetails.customer_type_code}
+                      onChange={(value) =>
+                        updateAdditionalDetails("customer_type_code", value)
+                      }
+                      error={detailsErrors.customer_type_code}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label="Credit Type"
+                      withAsterisk
+                      placeholder="Select credit type"
+                      data={TERM_CODE_OPTIONS}
+                      value={additionalDetails.term_code || null}
+                      onChange={(value) =>
+                        updateAdditionalDetails("term_code", value ?? "")
+                      }
+                      error={detailsErrors.term_code}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label="Own Office"
+                      withAsterisk
+                      placeholder="Select Own Office"
+                      data={[
+                        { value: "true", label: "Yes" },
+                        { value: "false", label: "No" },
+                      ]}
+                      value={additionalDetails.own_office || null}
+                      onChange={(value) =>
+                        updateAdditionalDetails("own_office", value ?? "")
+                      }
+                      error={detailsErrors.own_office}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <SearchableSelect
+                      label="Network Name"
+                      placeholder="Search network..."
+                      apiEndpoint={URL.networkMaster}
+                      value={additionalDetails.network_id || null}
+                      displayValue={additionalDetails.network_name || null}
+                      onChange={(value, selectedData) => {
+                        setAdditionalDetails((prev) => ({
+                          ...prev,
+                          network_id: value ?? "",
+                          network_name: selectedData?.label ?? "",
+                        }));
+                      }}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.id ?? ""),
+                        label: String(item.network_name ?? ""),
+                      })}
+                      searchFields={["network_name"]}
+                      dropdownZIndex={1000}
+                      minSearchLength={1}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <TextInput
+                      label="Credit Amount"
+                      placeholder="Enter credit amount"
+                      value={additionalDetails.credit_amount}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (next === "" || TWO_DECIMAL_INPUT_REGEX.test(next)) {
+                          updateAdditionalDetails("credit_amount", next);
+                        }
+                      }}
+                      error={detailsErrors.credit_amount}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <TextInput
+                      label="Credit Day"
+                      placeholder="Enter credit days"
+                      value={additionalDetails.credit_day}
+                      onChange={(e) =>
+                        updateAdditionalDetails(
+                          "credit_day",
+                          e.target.value.replace(/\D/g, ""),
+                        )
+                      }
+                      error={detailsErrors.credit_day}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Dropdown
+                      label="Assign To"
+                      withAsterisk
+                      placeholder="Select Salesperson"
+                      searchable
+                      data={salespersonOptions}
+                      nothingFoundMessage="No salespersons found"
+                      value={additionalDetails.assigned_to || null}
+                      onChange={(value) =>
+                        updateAdditionalDetails("assigned_to", value || "")
+                      }
+                      error={detailsErrors.assigned_to}
+                      dropdownZIndex={1000}
+                    />
+                  </Grid.Col>
+                </Grid>
+              </div>
+
+              <Divider />
+
+              <div>
+                <Text size="sm" fw={600} c="#105476" mb="sm">
+                  Contact details
+                </Text>
+                <Grid gutter="sm">
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="Landline Number"
+                      placeholder="Enter landline number"
+                      value={additionalDetails.phone_no}
+                      onChange={(e) =>
+                        updateAdditionalDetails("phone_no", e.target.value)
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="Mobile Number"
+                      withAsterisk
+                      placeholder="Enter mobile number"
+                      value={additionalDetails.mobile_no}
+                      onChange={(e) =>
+                        updateAdditionalDetails("mobile_no", e.target.value)
+                      }
+                      error={detailsErrors.mobile_no}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="Email Id"
+                      withAsterisk
+                      placeholder="Enter email address"
+                      value={additionalDetails.email}
+                      onChange={(e) =>
+                        updateAdditionalDetails("email", e.target.value)
+                      }
+                      error={detailsErrors.email}
+                    />
+                  </Grid.Col>
+                </Grid>
+              </div>
+
+              <Divider />
+
+              <div>
+                <Text size="sm" fw={600} c="#105476" mb="sm">
+                  GST details
+                </Text>
+                <Grid gutter="sm">
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="IEC Code"
+                      placeholder="Enter IEC Code"
+                      value={additionalDetails.iec_code}
+                      onChange={(e) =>
+                        updateAdditionalDetails("iec_code", e.target.value)
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="TAN No"
+                      placeholder="Enter TAN number"
+                      value={additionalDetails.tan_no}
+                      onChange={(e) =>
+                        updateAdditionalDetails("tan_no", e.target.value)
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="ARN No"
+                      placeholder="Enter ARN number"
+                      value={additionalDetails.arn_no}
+                      onChange={(e) =>
+                        updateAdditionalDetails("arn_no", e.target.value)
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <TextInput
+                      label="UIN No"
+                      placeholder="Enter UIN number"
+                      value={additionalDetails.uin_no}
+                      onChange={(e) =>
+                        updateAdditionalDetails("uin_no", e.target.value)
+                      }
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <Select
+                      label="Composite / Regular"
+                      placeholder="Select"
+                      data={[
+                        { value: "composite", label: "Composite" },
+                        { value: "Regular", label: "Regular" },
+                      ]}
+                      value={additionalDetails.composite_regular || null}
+                      onChange={(value) =>
+                        updateAdditionalDetails(
+                          "composite_regular",
+                          value ?? "",
+                        )
+                      }
+                      clearable
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <Select
+                      label="SEZ"
+                      placeholder="Select"
+                      data={[
+                        { value: "Yes", label: "Yes" },
+                        { value: "No", label: "No" },
+                      ]}
+                      value={additionalDetails.sez ? "Yes" : "No"}
+                      onChange={(value) => {
+                        const enabled = value === "Yes";
+                        setAdditionalDetails((prev) => ({
+                          ...prev,
+                          sez: enabled,
+                          sez_valid_date: enabled ? prev.sez_valid_date : null,
+                        }));
+                        setDetailsErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.sez;
+                          delete next.sez_valid_date;
+                          return next;
+                        });
+                      }}
+                    />
+                  </Grid.Col>
+                  {additionalDetails.sez && (
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <SingleDateInput
+                        label="SEZ Validity Date"
+                        placeholder="Select SEZ validity date"
+                        withAsterisk
+                        value={parseDateYYYYMMDD(
+                          additionalDetails.sez_valid_date,
+                        )}
+                        onChange={(value) =>
+                          updateAdditionalDetails(
+                            "sez_valid_date",
+                            formatDateYYYYMMDD(value),
+                          )
+                        }
+                        error={detailsErrors.sez_valid_date}
+                      />
+                    </Grid.Col>
+                  )}
+                  <Grid.Col span={{ base: 12, sm: 4 }}>
+                    <Select
+                      label="MSME"
+                      placeholder="Select"
+                      data={[
+                        { value: "Yes", label: "Yes" },
+                        { value: "No", label: "No" },
+                      ]}
+                      value={additionalDetails.msme ? "Yes" : "No"}
+                      onChange={(value) => {
+                        const enabled = value === "Yes";
+                        setAdditionalDetails((prev) => ({
+                          ...prev,
+                          msme: enabled,
+                          msme_no: enabled ? prev.msme_no : "",
+                        }));
+                        setDetailsErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.msme;
+                          delete next.msme_no;
+                          return next;
+                        });
+                      }}
+                    />
+                  </Grid.Col>
+                  {additionalDetails.msme && (
+                    <Grid.Col span={{ base: 12, sm: 4 }}>
+                      <TextInput
+                        label="MSME No"
+                        withAsterisk
+                        placeholder="Enter MSME number"
+                        value={additionalDetails.msme_no}
+                        onChange={(e) =>
+                          updateAdditionalDetails("msme_no", e.target.value)
+                        }
+                        error={detailsErrors.msme_no}
+                      />
+                    </Grid.Col>
+                  )}
+                </Grid>
+              </div>
+            </Stack>
+          </ScrollArea.Autosize>
+
+          <Divider />
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="outline"
+              color="#105476"
+              onClick={closeDetailsModal}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="#105476"
+              onClick={handleCreateCustomers}
+              loading={isCreating}
+            >
+              Submit for Approval
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   );
 }
