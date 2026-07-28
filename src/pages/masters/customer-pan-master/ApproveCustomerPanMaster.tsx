@@ -156,7 +156,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: "active", label: "Active" },
 ];
 
-function getStatusBadgeColor(status?: string): string {
+export function getStatusBadgeColor(status?: string): string {
   const normalized = String(status ?? "")
     .trim()
     .toLowerCase();
@@ -237,7 +237,7 @@ function DetailSection({
   );
 }
 
-function CustomerPanApprovalDetails({
+export function CustomerPanApprovalDetails({
   row,
   editable = false,
   onChange,

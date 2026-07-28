@@ -4661,7 +4661,7 @@ function InlandImportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : (
+                                      ) : isPosted ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -4716,7 +4716,7 @@ function InlandImportJobCreate() {
                                         >
                                           Invoice Reversal
                                         </Menu.Item>
-                                      )}
+                                      ) : null}
                                     </Menu.Dropdown>
                                   </Menu>
                                 </Table.Td>

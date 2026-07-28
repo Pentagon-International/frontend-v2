@@ -5348,7 +5348,7 @@ function ExportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : (
+                                      ) : isPosted ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -5403,7 +5403,7 @@ function ExportJobCreate() {
                                         >
                                           Invoice Reversal
                                         </Menu.Item>
-                                      )}
+                                      ) : null}
                                     </Menu.Dropdown>
                                   </Menu>
                                 </Table.Td>

@@ -70,6 +70,7 @@ export type CustomerPanApprovalFilters = {
   customer_name?: string;
   term_code?: string;
   status?: string;
+  assigned_to?: string;
 };
 
 export type RelatedCustomer = {
@@ -178,10 +179,12 @@ function buildCustomerPanApprovalFiltersPayload(
   const customerName = String(filters?.customer_name ?? "").trim();
   const termCode = String(filters?.term_code ?? "").trim();
   const status = String(filters?.status ?? "").trim();
+  const assignedTo = String(filters?.assigned_to ?? "").trim();
 
   if (customerName) payload.customer_name = customerName;
   if (termCode) payload.term_code = termCode;
   if (status) payload.status = status;
+  if (assignedTo) payload.assigned_to = assignedTo;
 
   return payload;
 }

@@ -43,6 +43,7 @@ export default function MastersPage() {
   const formatRoute = (label: string) => {
     if (label === "Customer for Approval") return "create-customer";
     if (label === "Create Customer-PAN") return "create-customer-pan";
+    if (label === "Customer Approval Status") return "customer-approval-status";
     if (label === "Maker & Checker Mapping") return "maker-checker-mapping";
     return label.toLowerCase().replace(/\s+/g, "-");
   };
@@ -159,6 +160,10 @@ export default function MastersPage() {
                   icon: <IconFileStack size={28} color="#105476" />,
                   label: "Create Customer-PAN",
                 },
+                {
+                  icon: <IconClipboardCheck size={28} color="#105476" />,
+                  label: "Customer Approval Status",
+                },
               ]
             : [
                 {
@@ -207,18 +212,22 @@ export default function MastersPage() {
             icon: <IconUserCheck size={28} color="#105476" />,
             label: "Maker & Checker Mapping",
           },
-          {
-            icon: <IconReceiptTax size={28} color="#105476" />,
-            label: "GST SAC",
-          },
-          {
-            icon: <IconPercentage size={28} color="#105476" />,
-            label: "GST Rate",
-          },
-          {
-            icon: <IconLink size={28} color="#105476" />,
-            label: "GST Charge Mapping",
-          },
+          ...(isIndiaUser
+            ? [
+                {
+                  icon: <IconReceiptTax size={28} color="#105476" />,
+                  label: "GST SAC",
+                },
+                {
+                  icon: <IconPercentage size={28} color="#105476" />,
+                  label: "GST Rate",
+                },
+                {
+                  icon: <IconLink size={28} color="#105476" />,
+                  label: "GST Charge Mapping",
+                },
+              ]
+            : []),
           ...(!isIndiaUser
             ? [
                 {

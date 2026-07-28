@@ -5414,7 +5414,7 @@ function AirImportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : (
+                                      ) : isPosted ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -5469,7 +5469,7 @@ function AirImportJobCreate() {
                                         >
                                           Invoice Reversal
                                         </Menu.Item>
-                                      )}
+                                      ) : null}
                                     </Menu.Dropdown>
                                   </Menu>
                                 </Table.Td>

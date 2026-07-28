@@ -37,7 +37,6 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
@@ -70,7 +69,6 @@ type VatChargeMappingFilters = {
 };
 
 export default function VatChargeMappingMasterList() {
-  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
@@ -503,30 +501,28 @@ export default function VatChargeMappingMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    "&:hover": { backgroundColor: "#105476" },
-                  },
-                }}
-                onClick={() => {
-                  setStoreFilters(LIST_KEY, appliedFilters);
-                  setStoreSearch(LIST_KEY, search);
-                  setShouldRestore(LIST_KEY, true);
-                  navigate("/master/vat-charge-mapping/create");
-                }}
-              >
-                Create New
-              </Button>
-            )}
+            <Button
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  color: "#FFFFFF",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  "&:hover": { backgroundColor: "#105476" },
+                },
+              }}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/master/vat-charge-mapping/create");
+              }}
+            >
+              Create New
+            </Button>
           </Group>
         </Group>
       </Box>

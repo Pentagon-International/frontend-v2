@@ -514,6 +514,8 @@ function ServiceJobChargesSection({
   readOnly = false,
   showCreateInvoice = false,
   onCreateInvoice,
+  showCreateSupplierInvoice = false,
+  onCreateSupplierInvoice,
 }: {
   form: UseFormReturnType<{ charges: ServiceJobChargeDetail[] }>;
   transportMode: string;
@@ -521,6 +523,8 @@ function ServiceJobChargesSection({
   readOnly?: boolean;
   showCreateInvoice?: boolean;
   onCreateInvoice?: () => void;
+  showCreateSupplierInvoice?: boolean;
+  onCreateSupplierInvoice?: () => void;
 }) {
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -641,6 +645,16 @@ function ServiceJobChargesSection({
           Charges
         </Text>
         <Group gap="sm">
+          {showCreateSupplierInvoice && onCreateSupplierInvoice && (
+            <Button
+              variant="outline"
+              color="#105476"
+              size="sm"
+              onClick={onCreateSupplierInvoice}
+            >
+              Create Supplier Invoice
+            </Button>
+          )}
           {showCreateInvoice && onCreateInvoice && (
             <Button
               variant="outline"
@@ -1632,6 +1646,57 @@ export default function ServiceJobCreate() {
     transportMode,
   ]);
 
+  const handleCreateSupplierInvoice = useCallback(() => {
+    const toStr = (v: unknown) => String(v ?? "").trim();
+    const jobId = toStr(jobData?.job_id ?? jobData?.id);
+    if (!jobId) {
+      ToastNotification({
+        type: "error",
+        message: "Job ID not found for Supplier Invoice prefill.",
+      });
+      return;
+    }
+
+    const charges = (chargesForm.values.charges ?? [])
+      .map((e) => ({
+        shipment_no: jobId,
+        charge_id: e.charge_id ?? null,
+        charge_name: e.charge_name ?? "",
+        currency_id: e.currency_id || null,
+        roe: e.roe ?? null,
+        amount: e.total_cost ?? null,
+        supplier_code: toStr(e.supplier_code),
+        supplier_name: toStr(e.supplier_name),
+      }))
+      .filter(
+        (c) =>
+          toStr(c.shipment_no) &&
+          c.charge_id != null &&
+          c.amount != null &&
+          String(c.amount).trim() !== "" &&
+          (toStr(c.supplier_code) || toStr(c.supplier_name)),
+      );
+
+    if (charges.length === 0) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Please select a supplier on the charge(s) to proceed with creating a Supplier Invoice.",
+      });
+      return;
+    }
+
+    navigate("/supplier-invoice/create", {
+      state: {
+        prefillSupplierInvoiceFromJob: {
+          source: "service-job",
+          job_id: jobId,
+          charges,
+        },
+      },
+    });
+  }, [chargesForm.values.charges, jobData, navigate]);
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
@@ -2050,6 +2115,8 @@ export default function ServiceJobCreate() {
             defaultPpCc={defaultPpCc}
             showCreateInvoice={isEditMode && jobData?.id != null}
             onCreateInvoice={handleCreateInvoice}
+            showCreateSupplierInvoice={isEditMode && jobData?.id != null}
+            onCreateSupplierInvoice={handleCreateSupplierInvoice}
           />
         </Tabs.Panel>
 

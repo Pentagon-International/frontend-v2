@@ -1,12 +1,7 @@
 import { jsPDF } from "jspdf";
-import pentagonFreightInd from "../../../assets/images/pentagon-freight-ind.png";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
-import pentagonPrimeChina from "../../../assets/images/PentagonPrimeChina.png";
-import cargoConsolidators from "../../../assets/images/CCIPL.png";
-import primeLogo from "../../../assets/images/prime.png";
 import {
   getCctBranchInfoFromLogin,
-  getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
 import type { CanSacWiseTotal } from "./canGstBreakup";
@@ -363,19 +358,15 @@ const drawCanKeyValueRow = (
   return Math.max(1, lines.length) * CAN_LINE_SPACING;
 };
 
-// Helper function to get logo based on country and company
+// USA logo for India and USA branches; empty otherwise (no fallback)
 const getLogoByCountry = (country: any): string | null => {
   try {
-    let companyName = "";
     let countryName = "";
     let countryCode = "";
 
     const userStr = localStorage.getItem("user");
     if (userStr) {
       const user = JSON.parse(userStr);
-      if (user?.company) {
-        companyName = (user.company.company_name || "").toUpperCase();
-      }
       if (user?.country) {
         countryName = (user.country.country_name || "").toUpperCase();
         countryCode = (user.country.country_code || "").toUpperCase();
@@ -387,49 +378,23 @@ const getLogoByCountry = (country: any): string | null => {
       countryCode = (country.country_code || "").toUpperCase();
     }
 
-    if (isCctCompany()) {
-      return getCctLogo();
-    }
-
-    const normalizedCompanyName = companyName.replace(/\s+/g, "").toUpperCase();
-    if (
-      normalizedCompanyName === "CARGOCONSOLIDATORSINDIA" &&
-      countryCode === "IN"
-    ) {
-      return cargoConsolidators;
-    }
-
-    if (
+    const isIndia =
       countryName.includes("INDIA") ||
       countryCode === "IN" ||
-      countryName === "INDIA"
-    ) {
-      return pentagonFreightInd;
-    }
-    if (
+      countryName === "INDIA";
+    const isUSA =
       countryName.includes("USA") ||
       countryCode === "US" ||
-      countryName === "USA"
-    ) {
+      countryName === "USA" ||
+      countryName.includes("UNITED STATES");
+
+    if (isIndia || isUSA) {
       return pentagonPrimeAmericas;
     }
-    if (
-      countryName.includes("CHINA") ||
-      countryCode === "CN" ||
-      countryName === "CHINA"
-    ) {
-      return pentagonPrimeChina;
-    }
-    if (
-      countryName.includes("KENYA") ||
-      countryCode === "KE"
-    ) {
-      return primeLogo;
-    }
-    return primeLogo;
+    return null;
   } catch (error) {
     console.error("Error getting logo by country:", error);
-    return primeLogo;
+    return null;
   }
 };
 

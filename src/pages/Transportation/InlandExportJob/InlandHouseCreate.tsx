@@ -5182,7 +5182,7 @@ function HouseCreate() {
                                             }
                                           />
                                         </>
-                                      ) : (
+                                      ) : isPosted ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -5237,7 +5237,7 @@ function HouseCreate() {
                                         >
                                           Invoice Reversal
                                         </Menu.Item>
-                                      )}
+                                      ) : null}
                                     </Menu.Dropdown>
                                   </Menu>
                                 </Table.Td>
