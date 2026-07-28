@@ -63,11 +63,10 @@ function authConfig(extra?: Record<string, string>) {
 
 function parseInvoiceRecords(data: unknown): VendorInvoiceRecord[] {
   const payload = data as Record<string, unknown>;
-  const rows =
-    payload?.files ??
-    (payload?.data as Record<string, unknown> | undefined)?.rows ??
-    (Array.isArray(payload?.data) ? payload.data : null) ??
-    (Array.isArray(data) ? data : []);
+  const rows = payload?.rows;
+    // (payload?.data as Record<string, unknown> | undefined)?.rows ??
+    // (Array.isArray(payload?.data) ? payload.data : null) ??
+    // (Array.isArray(data) ? data : []);
   return Array.isArray(rows) ? (rows as VendorInvoiceRecord[]) : [];
 }
 
@@ -91,8 +90,8 @@ export async function uploadVendorInvoicePdf(
     fd,
     authConfig({ "Content-Type": "multipart/form-data" }),
   );
-  const uploaded = data?.uploaded?.[0];
-  const recordId = uploaded?.id;
+  const uploaded = data;
+  const recordId = uploaded?.record_id;
   if (recordId == null) {
     throw new Error("Upload succeeded but no record id was returned.");
   }
@@ -106,6 +105,7 @@ export async function fetchVendorInvoiceRecord(
     VENDOR_INVOICE_AUTOMATION_URLS.list,
     authConfig(),
   );
+  console.log("Fetched invoice records:", data);
   return parseInvoiceRecords(data).find((r) => r.id === recordId) ?? null;
 }
 

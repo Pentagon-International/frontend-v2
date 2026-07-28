@@ -48,6 +48,8 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 import {
   bindMoneyWholeNumberMode,
   clampMoneyAmountBound,
@@ -524,6 +526,7 @@ function PaymentRequest() {
   const location = useLocation();
   const { id: requestId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -1019,7 +1022,13 @@ function PaymentRequest() {
     setIsSubmitting(true);
     try {
       const values = form.values;
-      const formatDate = (d: Date | null) => (d ? d.toISOString().split("T")[0] : null);
+      const formatDate = (d: Date | null) => {
+        if (!d) return null;
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${year}-${month}-${day}`;
+      };
 
       const currencyList = currencyData as Array<{
         id?: number;
@@ -1195,8 +1204,13 @@ function PaymentRequest() {
     shouldRejectRef.current = false;
     setIsSubmitting(true);
     try {
-      const formatDate = (d: Date | null) =>
-        d ? d.toISOString().split("T")[0] : null;
+      const formatDate = (d: Date | null) => {
+        if (!d) return null;
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${year}-${month}-${day}`;
+      };
 
       // Resolve billing currency code → numeric id
       const currencyList = currencyData as Array<{ id?: number; currency_code?: string; code?: string }>;
@@ -1998,14 +2012,10 @@ function PaymentRequest() {
                       {
                         label: "Approved Date",
                         value: form.values.approved_date
-                          ? (normalizeDate(form.values.approved_date)?.toLocaleDateString(
-                              "en-IN",
-                              {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              },
-                            ) ?? "—")
+                          ? (() => {
+                              const d = normalizeDate(form.values.approved_date);
+                              return d ? dayjs(d).format(dateFormat) : "—";
+                            })()
                           : "—",
                       },
                       {

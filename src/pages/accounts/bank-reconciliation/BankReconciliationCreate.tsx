@@ -38,6 +38,8 @@ import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmountBound,
@@ -258,12 +260,13 @@ function formatChartOfAccountsLabel(
   return [c, b, a].filter(Boolean).join(" - ");
 }
 
+/** YYYY-MM-DD for BRS API payloads (local calendar day) */
 function formatDateDDMMYYYY(date: Date | null | undefined): string {
   if (!date) return "";
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${year}-${month}-${day}`;
 }
 
 function parseApiDate(value: string | null | undefined): Date | null {
@@ -290,9 +293,13 @@ function parseAmount(value: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function formatDateDisplay(date: Date | null | undefined): string {
+/** UI-only date string for read-only BRS line fields (country-based format) */
+function formatDateDisplay(
+  date: Date | null | undefined,
+  dateFormat: string,
+): string {
   if (!date) return "";
-  return formatDateDDMMYYYY(date);
+  return dayjs(date).format(dateFormat);
 }
 
 function mapChequeLineToRow(
@@ -477,6 +484,7 @@ export default function BankReconciliationCreate() {
   const isEditMode = recordId != null && !Number.isNaN(recordId);
   const canPostDocuments = useCanPostDocuments();
   const user = useAuthStore((s) => s.user);
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -1120,7 +1128,7 @@ export default function BankReconciliationCreate() {
                   <Table.Td>
                     <TextInput
                       readOnly
-                      value={formatDateDisplay(row.date)}
+                      value={formatDateDisplay(row.date, dateFormat)}
                       styles={cellInput}
                     />
                   </Table.Td>
@@ -1148,14 +1156,14 @@ export default function BankReconciliationCreate() {
                   <Table.Td>
                     <TextInput
                       readOnly
-                      value={formatDateDisplay(row.cheque_date)}
+                      value={formatDateDisplay(row.cheque_date, dateFormat)}
                       styles={cellInput}
                     />
                   </Table.Td>
                   <Table.Td>
                     <TextInput
                       readOnly
-                      value={formatDateDisplay(row.cheque_clr_date)}
+                      value={formatDateDisplay(row.cheque_clr_date, dateFormat)}
                       styles={cellInput}
                     />
                   </Table.Td>

@@ -63,6 +63,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import { URL } from "../../../api/serverUrls";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import useDateFormat from "../../../hooks/useDateFormat";
 
 const LIST_KEY = "DOCUMENT_ALLOCATION_LIST";
 
@@ -250,6 +251,7 @@ const DocumentAllocationRowActions = memo(function DocumentAllocationRowActions(
 export default function DocumentAllocationList() {
   const navigate = useNavigate();
   const location = useLocation();
+  const dateFormat = useDateFormat();
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -511,7 +513,7 @@ export default function DocumentAllocationList() {
           const v = cell.getValue<string | undefined>();
           return (
             <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              {v ? dayjs(v).format("YYYY-MM-DD") : "—"}
+              {v ? dayjs(v).format(dateFormat) : "—"}
             </Text>
           );
         },
@@ -544,7 +546,7 @@ export default function DocumentAllocationList() {
         ),
       },
     ],
-    [navigate, search, appliedFilters, erpTheme, primary, setStoreFilters, setStoreSearch, setShouldRestore],
+    [navigate, search, appliedFilters, erpTheme, primary, dateFormat, setStoreFilters, setStoreSearch, setShouldRestore],
   );
 
   const columns = useMemo(

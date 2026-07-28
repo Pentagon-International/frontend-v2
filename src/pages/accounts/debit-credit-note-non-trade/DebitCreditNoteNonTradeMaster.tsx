@@ -37,6 +37,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import dayjs from "dayjs";
+import useDateFormat from "../../../hooks/useDateFormat";
 import {
   Dropdown,
   ERPListColumnHeaderFilter,
@@ -126,6 +127,7 @@ const columnDefault: Record<ColumnKey, boolean> = {
 
 export default function DebitCreditNoteNonTradeMaster() {
   const user = useAuthStore((s) => s.user);
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
@@ -356,7 +358,19 @@ export default function DebitCreditNoteNonTradeMaster() {
           );
         },
       },
-      { accessorKey: "document_date", header: "Document Date", size: 140 },
+      {
+        accessorKey: "document_date",
+        header: "Document Date",
+        size: 140,
+        Cell: ({ cell }) => {
+          const v = cell.getValue<string | undefined>();
+          return (
+            <Text size="sm">
+              {v ? dayjs(String(v)).format(dateFormat) : "-"}
+            </Text>
+          );
+        },
+      },
       {
         accessorKey: "party_name",
         header: "Party Name",
@@ -565,6 +579,7 @@ export default function DebitCreditNoteNonTradeMaster() {
       headerFilterFieldStyles,
       erpTheme,
       primary,
+      dateFormat,
     ],
   );
 

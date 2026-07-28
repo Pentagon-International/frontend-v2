@@ -99,6 +99,7 @@ export function VendorInvoiceAutomationModal({
         recordId,
         (item) =>
           item.status === "done" ||
+          item.status === "COMPLETED" ||
           item.status === "failed" ||
           isVendorInvoiceExtracted(item),
       );

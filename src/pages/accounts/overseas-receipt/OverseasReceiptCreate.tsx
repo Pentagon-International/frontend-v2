@@ -50,6 +50,8 @@ import {
   import { API_HEADER } from "../../../store/storeKeys";
   import { postAPICall } from "../../../service/postApiCall";
   import useAuthStore from "../../../store/authStore";
+  import useDateFormat from "../../../hooks/useDateFormat";
+  import dayjs from "dayjs";
   import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
   import {
@@ -359,7 +361,7 @@ import {
     return isNaN(d.getTime()) ? null : d;
   }
   
-  /** DD-MM-YYYY for receipt and reverse-receipt APIs */
+  /** YYYY-MM-DD for overseas receipt API payloads (local calendar day) */
   function formatDateDDMMYYYY(date: Date | null | undefined): string {
     if (date == null) return "";
     const d = date instanceof Date ? date : new Date(date);
@@ -367,7 +369,7 @@ import {
     const day = String(d.getDate()).padStart(2, "0");
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const y = d.getFullYear();
-    return `${day}-${m}-${y}`;
+    return `${y}-${m}-${day}`;
   }
   
   const fieldStyles = {
@@ -443,10 +445,13 @@ import {
     return isNaN(d.getTime()) ? null : d;
   }
   
-  // Display document_date from API (supports DD-MM-YYYY or ISO)
-  function formatDocumentDateDisplay(value: string | null | undefined): string {
+  // Display document_date from API (supports DD-MM-YYYY or ISO) in country format
+  function formatDocumentDateDisplay(
+    value: string | null | undefined,
+    dateFormat: string,
+  ): string {
     const d = parseDocumentDate(value);
-    return d ? d.toLocaleDateString() : "—";
+    return d ? dayjs(d).format(dateFormat) : "—";
   }
 
   function formatOutstandingDocumentAmountInLocal(
@@ -512,6 +517,7 @@ import {
     const location = useLocation();
     const queryClient = useQueryClient();
     const { user } = useAuthStore();
+    const dateFormat = useDateFormat();
     const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
     bindMoneyWholeNumberMode(isVietnamBranch);
     const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -3307,6 +3313,7 @@ import {
                           <Table.Td>
                             {formatDocumentDateDisplay(
                               inv.document_date as string,
+                              dateFormat,
                             )}
                           </Table.Td>
                           <Table.Td>

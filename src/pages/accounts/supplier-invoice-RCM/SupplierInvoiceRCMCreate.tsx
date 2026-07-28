@@ -254,11 +254,12 @@ import {
     return formatMoneyAmountBound(clamped ?? 0);
   }
   
+  /** YYYY-MM-DD for supplier invoice RCM API payloads (local calendar day) */
   function formatDDMMYYYY(d: Date): string {
     const day = String(d.getDate()).padStart(2, "0");
     const month = String(d.getMonth() + 1).padStart(2, "0");
     const year = d.getFullYear();
-    return `${day}-${month}-${year}`;
+    return `${year}-${month}-${day}`;
   }
   
   function normalizeDrCr(value: unknown): "Dr" | "Cr" {
@@ -267,13 +268,26 @@ import {
     return "Dr";
   }
   
+  /** Accept YYYY-MM-DD or DD-MM-YYYY from API when hydrating edit/view */
   function parseDDMMYYYY(s: string | null | undefined): Date | null {
     if (s == null || String(s).trim() === "") return null;
     const p = String(s).trim().split("-");
     if (p.length !== 3) return null;
-    const d = parseInt(p[0], 10);
-    const m = parseInt(p[1], 10) - 1;
-    const y = parseInt(p[2], 10);
+    const a = String(p[0] ?? "").trim();
+    const b = String(p[1] ?? "").trim();
+    const c = String(p[2] ?? "").trim();
+    let d: number;
+    let m: number;
+    let y: number;
+    if (a.length === 4) {
+      y = parseInt(a, 10);
+      m = parseInt(b, 10) - 1;
+      d = parseInt(c, 10);
+    } else {
+      d = parseInt(a, 10);
+      m = parseInt(b, 10) - 1;
+      y = parseInt(c, 10);
+    }
     if (!Number.isFinite(d) || !Number.isFinite(m) || !Number.isFinite(y))
       return null;
     const date = new Date(y, m, d);

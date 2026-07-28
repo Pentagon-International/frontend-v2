@@ -308,11 +308,12 @@ function formatAmountToTwoDecimals(value: number | null | undefined): string {
   return formatMoneyAmountBound(clamped ?? 0);
 }
 
+/** YYYY-MM-DD for supplier invoice API payloads (local calendar day) */
 function formatDDMMYYYY(d: Date): string {
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${year}-${month}-${day}`;
 }
 
 function normalizeDrCr(value: unknown): "Dr" | "Cr" {
