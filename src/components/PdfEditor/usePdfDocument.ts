@@ -8,21 +8,30 @@ export function usePdfDocument(pdfBlobUrl: string | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadIdRef = useRef(0);
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
 
   useEffect(() => {
     if (!pdfBlobUrl) {
+      if (pdfDocRef.current) {
+        void pdfDocRef.current.destroy();
+        pdfDocRef.current = null;
+      }
       setPdfDoc(null);
       setNumPages(0);
+      setIsLoading(false);
       return;
     }
 
     const loadId = ++loadIdRef.current;
     let cancelled = false;
-    let activeDoc: PDFDocumentProxy | null = null;
 
     const load = async () => {
-      setIsLoading(true);
+      // Keep the current page visible while replacing the blob after Save —
+      // flipping isLoading would unmount the viewer and break fit-scale.
+      const isFirstLoad = pdfDocRef.current == null;
+      if (isFirstLoad) setIsLoading(true);
       setError(null);
+
       try {
         const loadingTask = getDocument(pdfBlobUrl);
         const doc = await loadingTask.promise;
@@ -30,14 +39,21 @@ export function usePdfDocument(pdfBlobUrl: string | null) {
           await doc.destroy();
           return;
         }
-        activeDoc = doc;
+
+        const previous = pdfDocRef.current;
+        pdfDocRef.current = doc;
         setPdfDoc(doc);
         setNumPages(doc.numPages);
+        if (previous && previous !== doc) {
+          void previous.destroy();
+        }
       } catch (err) {
         if (!cancelled && loadId === loadIdRef.current) {
           setError(err instanceof Error ? err.message : "Failed to load PDF");
-          setPdfDoc(null);
-          setNumPages(0);
+          if (pdfDocRef.current == null) {
+            setPdfDoc(null);
+            setNumPages(0);
+          }
         }
       } finally {
         if (!cancelled && loadId === loadIdRef.current) {
@@ -46,15 +62,21 @@ export function usePdfDocument(pdfBlobUrl: string | null) {
       }
     };
 
-    load();
+    void load();
 
     return () => {
       cancelled = true;
-      if (activeDoc) {
-        activeDoc.destroy();
-      }
     };
   }, [pdfBlobUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfDocRef.current) {
+        void pdfDocRef.current.destroy();
+        pdfDocRef.current = null;
+      }
+    };
+  }, []);
 
   const reload = useCallback(() => {}, []);
 

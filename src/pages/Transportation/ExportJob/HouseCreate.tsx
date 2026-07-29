@@ -40,6 +40,8 @@ import {
   useCallback,
   Fragment,
   useRef,
+  lazy,
+  Suspense,
 } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -109,7 +111,12 @@ import {
   calcSellLocalAmount,
   resolveSellAmount,
 } from "../../../utils/houseChargeAmounts";
-import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { generateBillOfLadingPDF, isUsBranchForBillOfLading } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
+
+const BolPdfEditor = lazy(() =>
+  import("../../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
+);
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
@@ -461,6 +468,12 @@ function HouseCreate() {
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+  const [bolPreviewRowData, setBolPreviewRowData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [previewHasUnsavedChanges, setPreviewHasUnsavedChanges] =
+    useState(false);
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [
@@ -2649,6 +2662,17 @@ function HouseCreate() {
         defaultBranch,
         country,
       );
+      if (isUsBranchForBillOfLading(country, defaultBranch)) {
+        setBolPreviewRowData({
+          jobData,
+          housingData,
+          defaultBranch,
+          country,
+        });
+      } else {
+        setBolPreviewRowData(null);
+      }
+      setPreviewHasUnsavedChanges(false);
       setPdfBlob(blobUrl);
       void patchHousingPdfReleasedEvent().catch((e) =>
         console.error("Failed to patch PDF release event:", e),
@@ -2663,12 +2687,30 @@ function HouseCreate() {
     }
   };
 
+  const regenerateBolPreviewPdf = async (rowData: Record<string, unknown>) => {
+    return generateBillOfLadingPDF(
+      rowData.jobData,
+      rowData.housingData,
+      rowData.defaultBranch,
+      rowData.country,
+    );
+  };
+
+  const handleBolPreviewPdfRegenerated = (newBlobUrl: string) => {
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(newBlobUrl);
+  };
+
   const handleClosePreview = () => {
     setPreviewOpen(false);
     if (pdfBlob) {
       window.URL.revokeObjectURL(pdfBlob);
     }
     setPdfBlob(null);
+    setBolPreviewRowData(null);
+    setPreviewHasUnsavedChanges(false);
   };
 
   const handleDownloadPDF = () => {
@@ -6005,11 +6047,63 @@ function HouseCreate() {
         opened={previewOpen}
         onClose={handleClosePreview}
         title="PDF Preview"
-        size="xl"
+        size="95%"
         styles={{ body: { padding: 0 } }}
       >
-        <Stack h="82vh">
-          {pdfBlob ? (
+        <Stack h="82vh" style={{ width: "100%" }}>
+          {pdfBlob && bolPreviewRowData ? (
+            <>
+              <Box
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: "flex",
+                  width: "100%",
+                }}
+              >
+                <Suspense
+                  fallback={
+                    <Center style={{ flex: 1 }}>
+                      <Loader size="lg" color="#105476" />
+                    </Center>
+                  }
+                >
+                  <BolPdfEditor
+                    pdfBlobUrl={pdfBlob}
+                    rowData={bolPreviewRowData}
+                    generatePdf={regenerateBolPreviewPdf}
+                    onQuotationChange={setBolPreviewRowData}
+                    onPdfRegenerated={handleBolPreviewPdfRegenerated}
+                    onUnsavedChangesChange={setPreviewHasUnsavedChanges}
+                    buildFieldRegistry={buildBolFieldRegistry}
+                    editable
+                  />
+                </Suspense>
+              </Box>
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                  disabled={previewHasUnsavedChanges}
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : pdfBlob ? (
             <>
               <iframe
                 src={pdfBlob}

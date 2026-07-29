@@ -623,10 +623,14 @@ export const generateUsBillOfLadingPDF = (
   );
   const dateOfIssue = templateOnly
     ? ""
-    : formatUsDate(new Date().toISOString());
+    : formatUsDate(
+        housingData?.date_of_issue || new Date().toISOString(),
+      );
   const placeOfIssue = templateOnly
     ? ""
-    : activeBranch?.branch_name || "United States";
+    : housingData?.place_of_issue ||
+      activeBranch?.branch_name ||
+      "United States";
 
   const numberOfOriginalBl = templateOnly
     ? ""
@@ -735,11 +739,13 @@ export const generateUsBillOfLadingPDF = (
   const packagesCount = parseInt(String(totalNoOfPackages), 10);
   const packagesInWords = templateOnly
     ? ""
-    : !isNaN(packagesCount)
-      ? `SAY ${numberToWords(packagesCount)} ${packageType || "PACKAGE(S)"} ONLY.`
-      : packagesText
-        ? `SAY ${packagesText} ONLY.`
-        : "";
+    : housingData?.packages_in_words
+      ? String(housingData.packages_in_words)
+      : !isNaN(packagesCount)
+        ? `SAY ${numberToWords(packagesCount)} ${packageType || "PACKAGE(S)"} ONLY.`
+        : packagesText
+          ? `SAY ${packagesText} ONLY.`
+          : "";
 
   doc.setProperties({
     title: templateOnly
@@ -834,7 +840,12 @@ export const generateUsBillOfLadingPDF = (
   const exportRefLines = buildTextLines(doc, [exportReference], textWidth);
   const forwardingAgentLines = buildTextLines(
     doc,
-    templateOnly ? [] : [US_FORWARDING_AGENT_NAME, US_FORWARDING_AGENT_ADDRESS],
+    templateOnly
+      ? []
+      : [
+          housingData?.forwarding_agent_name || US_FORWARDING_AGENT_NAME,
+          housingData?.forwarding_agent_address || US_FORWARDING_AGENT_ADDRESS,
+        ],
     textWidth,
   );
   const consigneeLines = buildTextLines(doc, consigneeParts, textWidth);

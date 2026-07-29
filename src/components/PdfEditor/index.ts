@@ -6,3 +6,4 @@ export {
   type EditableFieldDef,
   type PdfEditorContext,
 } from "./quotationFieldRegistry";
+export type { BuildFieldRegistryFn } from "./usePdfEditor";

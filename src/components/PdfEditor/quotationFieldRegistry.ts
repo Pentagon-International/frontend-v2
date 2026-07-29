@@ -34,6 +34,7 @@ export type EditableFieldDef = {
     | "right"
     | "full"
     | "content"
+    | "fit_content"
     | "service"
     | "charge_description"
     | "charge_min"
@@ -41,8 +42,35 @@ export type EditableFieldDef = {
     | "customer_details";
   /** PDF line spacing in mm (mirrors QuotationPDFTemplate). */
   pdfLineHeightMm?: number;
+  /**
+   * Optional fixed overlay/edit width as a fraction of page width
+   * (e.g. US BOL half/quarter/cargo/footer columns). Caps box to column.
+   */
+  columnWidthRatio?: number;
+  /**
+   * Prefer the Nth text match on the page (1-based). Use 2 when the same
+   * string appears in the header and again in body (e.g. forwarding agent).
+   */
+  matchOccurrence?: number;
+  /**
+   * Optional text used only for pdf.js hit testing when display value is
+   * multi-line / wrapped (keeps overlay anchored on the field).
+   */
+  getMatchValue?: (
+    rowData: Record<string, unknown>,
+    ctx: PdfEditorContext,
+  ) => string;
   getDisplayValue: (rowData: Record<string, unknown>, ctx: PdfEditorContext) => string;
   parseInput?: (rawInput: string, rowData: Record<string, unknown>) => unknown;
+  /**
+   * Optional full-row apply for multi-path sync (e.g. BOL packages ↔ packages-in-words).
+   * When set, takes precedence over path/parseInput.
+   */
+  applyEdit?: (
+    rowData: Record<string, unknown>,
+    rawInput: string,
+    ctx: PdfEditorContext,
+  ) => Record<string, unknown>;
 };
 
 const formatDate = (dateString: unknown): string => {
@@ -570,6 +598,10 @@ export function applyFieldEdit(
   rawInput: string,
   ctx: PdfEditorContext = {},
 ): Record<string, unknown> {
+  if (field.applyEdit) {
+    return field.applyEdit(rowData, rawInput, ctx);
+  }
+
   let workingData = rowData;
 
   const notesMatch = field.path.match(/^quotation\[(\d+)\]\.notes\[(\d+)\]$/);

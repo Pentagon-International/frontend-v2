@@ -9,7 +9,7 @@ import {
 } from "@tabler/icons-react";
 import { PdfViewer } from "./PdfViewer";
 import { usePdfDocument } from "./usePdfDocument";
-import { usePdfEditor } from "./usePdfEditor";
+import { usePdfEditor, type BuildFieldRegistryFn } from "./usePdfEditor";
 import type { PdfEditorContext } from "./quotationFieldRegistry";
 
 export type PdfEditorProps = {
@@ -21,6 +21,8 @@ export type PdfEditorProps = {
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   editorContext?: PdfEditorContext;
   editable?: boolean;
+  /** Defaults to quotation registry — pass BOL registry for Bill of Lading. */
+  buildFieldRegistry?: BuildFieldRegistryFn;
 };
 
 export function PdfEditor({
@@ -32,6 +34,7 @@ export function PdfEditor({
   onUnsavedChangesChange,
   editorContext,
   editable = true,
+  buildFieldRegistry,
 }: PdfEditorProps) {
   const viewerAreaRef = useRef<HTMLDivElement | null>(null);
   const { pdfDoc, numPages, isLoading, error } = usePdfDocument(pdfBlobUrl);
@@ -46,6 +49,7 @@ export function PdfEditor({
     onPdfRegenerated,
     editorContext,
     editable,
+    buildFieldRegistry,
     viewerAreaRef,
   });
 
@@ -183,7 +187,7 @@ export function PdfEditor({
               {error}
             </Text>
           </Box>
-        ) : isLoading || !pdfDoc ? (
+        ) : isLoading || !pdfDoc || !editor.isLayoutReady ? (
           <Center style={{ flex: 1, backgroundColor: "#525659" }}>
             <Group gap="sm">
               <Loader size="sm" color="#e8eaed" />
@@ -212,7 +216,7 @@ export function PdfEditor({
             editable={editable}
           />
         )}
-        {editor.isRegenerating && pdfDoc && !isLoading && (
+        {editor.isRegenerating && pdfDoc && !isLoading && editor.isLayoutReady && (
           <Overlay
             color="#323639"
             backgroundOpacity={0.35}
