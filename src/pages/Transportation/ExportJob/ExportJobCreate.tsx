@@ -35,6 +35,7 @@ import {
   IconFileInvoice,
   IconRefresh,
   IconPaperclip,
+  IconLink,
 } from "@tabler/icons-react";
 import { useEffect, useState, useMemo, useCallback, Fragment, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -121,6 +122,7 @@ import {
   extractHouseDocumentFields,
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
+import { buildJobCreatePayloadFromBooking, fetchJobRecordByDetailsId } from "../../../utils/bookingCreateJob";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 
 // Type definitions
@@ -396,6 +398,7 @@ const containerDetailsFormSchema = yup.object({
 
 type HousingDetail = HouseDocumentFields & {
   id?: number | string;
+  booking_id?: number | null;
   shipment_id: string;
   hbl_number: string;
   house_date: Date | null;
@@ -626,6 +629,7 @@ function ExportJobCreate() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
+  const [linkingHousesLoader, setLinkingHousesLoader] = useState(false);
   const jobDocuments = useJobDocuments();
   const [housingDetails, setHousingDetails] = useState<HousingDetail[]>(
     location.state?.housingDetails &&
@@ -633,6 +637,20 @@ function ExportJobCreate() {
       ? location.state.housingDetails
       : [],
   );
+
+  const [bookingLinkModalOpen, setBookingLinkModalOpen] = useState(false);
+  const [bookingLinkLoading, setBookingLinkLoading] = useState(false);
+  const [bookingLinkBookings, setBookingLinkBookings] = useState<
+    Record<string, unknown>[]
+  >([]);
+  const [bookingLinkSelectedIds, setBookingLinkSelectedIds] = useState<number[]>(
+    [],
+  );
+  // Step 2 of the link-booking modal: container selection
+  const [bookingLinkStep, setBookingLinkStep] = useState<"booking" | "containers">("booking");
+  const [bookingLinkSelectedContainersByBooking, setBookingLinkSelectedContainersByBooking] =
+    useState<Record<number, string[]>>({});
+  const [bookingLinkConfirmOpen, setBookingLinkConfirmOpen] = useState(false);
 
   /** Keeps `job.housing_details` aligned with `housingDetails` (events, etc.) without retriggering the job load effect. */
   const jobWithMergedHousingDetails = useMemo(() => {
@@ -1094,6 +1112,10 @@ function ExportJobCreate() {
                   ? house.id
                   : Number(house.id)
                 : undefined,
+              booking_id:
+                house.booking_id != null && house.booking_id !== ""
+                  ? Number(house.booking_id)
+                  : null,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
               house_date: house.house_date
@@ -2533,7 +2555,10 @@ function ExportJobCreate() {
     (
       editIndex?: number,
       editData?: HousingDetail,
-      options?: { openEventsModal?: boolean },
+      options?: {
+        openEventsModal?: boolean;
+        housingDetailsOverride?: HousingDetail[];
+      },
     ) => {
       // Validate MBL mandatory fields before navigating
       const missingFields: string[] = [];
@@ -2577,11 +2602,16 @@ function ExportJobCreate() {
       navigate("/SeaExport/export-job/house-create", {
         state: {
           fromHouseCreate: true,
-          housingDetails: housingDetails,
+          housingDetails: options?.housingDetailsOverride ?? housingDetails,
           ...(editIndex !== undefined && { editIndex }),
           ...(editData && { editData }),
-          ...(jobWithMergedHousingDetails && {
-            job: jobWithMergedHousingDetails,
+          ...((options?.housingDetailsOverride || jobWithMergedHousingDetails) && {
+            job: options?.housingDetailsOverride
+              ? {
+                  ...(jobWithMergedHousingDetails ?? jobData ?? {}),
+                  housing_details: options.housingDetailsOverride,
+                }
+              : jobWithMergedHousingDetails,
           }),
           mblDetails: {
             service: mblDetailsForm.values.service || "",
@@ -2645,8 +2675,328 @@ function ExportJobCreate() {
       housingDetails,
       jobWithMergedHousingDetails,
       jobDocuments,
+      jobData,
+      navigate,
     ],
   );
+
+  const resolveBookingHouseNumber = useCallback(
+    (booking: Record<string, unknown>): string => {
+      return String(
+        booking.houseno ??
+          booking.house_no ??
+          booking.hawb_no ??
+          booking.hawb_number ??
+          booking.hbl_number ??
+          "",
+      ).trim();
+    },
+    [],
+  );
+
+  const handleOpenBookingLinkModal = useCallback(async () => {
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Please save the job before linking bookings.",
+      });
+      return;
+    }
+
+    const missingFields: string[] = [];
+    if (!mblDetailsForm.values.service?.trim()) missingFields.push("Service");
+    if (
+      !mblDetailsForm.values.is_direct &&
+      !mblDetailsForm.values.origin_agent?.trim()
+    ) {
+      missingFields.push("Destination Agent");
+    }
+    if (!mblDetailsForm.values.origin_code?.trim()) missingFields.push("Origin");
+    if (!mblDetailsForm.values.destination_code?.trim())
+      missingFields.push("Destination");
+    if (!mblDetailsForm.values.etd) missingFields.push("ETD");
+    if (!mblDetailsForm.values.eta) missingFields.push("ETA");
+
+    if (missingFields.length > 0) {
+      ToastNotification({
+        type: "error",
+        message: `Please fill all mandatory MBL details before linking booking: ${missingFields.join(", ")}`,
+      });
+      setActive(0);
+      return;
+    }
+
+    setBookingLinkModalOpen(true);
+    setBookingLinkLoading(true);
+    setBookingLinkBookings([]);
+    setBookingLinkSelectedIds([]);
+    setBookingLinkStep("booking");
+    setBookingLinkSelectedContainersByBooking({});
+
+    try {
+      const payload = {
+        filters: {
+          service_type: "EXPORT",
+          status: ["BOOKED", "RECEIVED"],
+          service: mblDetailsForm.values.service,
+          origin_code: mblDetailsForm.values.origin_code,
+          destination_code: mblDetailsForm.values.destination_code,
+        },
+      };
+
+      const response = await apiCallProtected.post(
+        URL.customerServiceShipmentFilter,
+        payload,
+      );
+
+      const rawList: unknown =
+        (response as unknown as Record<string, unknown>)?.data ?? response;
+      const list = Array.isArray(rawList)
+        ? (rawList as Record<string, unknown>[])
+        : [];
+
+      const existingHouseNumbers = new Set(
+        housingDetails
+          .map((h) => String(h.hbl_number ?? "").trim())
+          .filter(Boolean),
+      );
+
+      const eligible = list.filter((b) => {
+        const houseNo = resolveBookingHouseNumber(b);
+        if (!houseNo) return true;
+        return !existingHouseNumbers.has(houseNo);
+      });
+
+      setBookingLinkBookings(eligible);
+    } catch (err: unknown) {
+      console.error("Error fetching eligible bookings:", err);
+      ToastNotification({
+        type: "error",
+        message: "Failed to fetch eligible bookings.",
+      });
+    } finally {
+      setBookingLinkLoading(false);
+    }
+  }, [
+    housingDetails,
+    jobData?.id,
+    mblDetailsForm.values.destination_code,
+    mblDetailsForm.values.etd,
+    mblDetailsForm.values.eta,
+    mblDetailsForm.values.is_direct,
+    mblDetailsForm.values.origin_agent,
+    mblDetailsForm.values.origin_code,
+    mblDetailsForm.values.service,
+    resolveBookingHouseNumber,
+  ]);
+
+  // Step 1 → Step 2: move to container selection
+  const handleBookingLinkNext = useCallback(() => {
+    if (bookingLinkSelectedIds.length === 0) return;
+    const allNos = Array.from(
+      new Set(
+        containerDetailsForm.values.containers
+          .map((c) => String(c.container_no ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
+    const defaultSelections = bookingLinkSelectedIds.reduce<
+      Record<number, string[]>
+    >((acc, bookingId) => {
+      acc[bookingId] = [...allNos];
+      return acc;
+    }, {});
+    setBookingLinkSelectedContainersByBooking(defaultSelections);
+    setBookingLinkStep("containers");
+  }, [bookingLinkSelectedIds, containerDetailsForm.values.containers]);
+
+  // Step 2: update job with new houses (same mapping as create-job-from-booking)
+  const handleConfirmLinkBooking = useCallback(async () => {
+    if (bookingLinkSelectedIds.length === 0) return;
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Please save the job before linking bookings.",
+      });
+      return;
+    }
+
+    setBookingLinkModalOpen(false);
+    setBookingLinkStep("booking");
+    const selectedIds = [...bookingLinkSelectedIds];
+    const selectedContainersByBooking = {
+      ...bookingLinkSelectedContainersByBooking,
+    };
+    setBookingLinkSelectedIds([]);
+    setBookingLinkSelectedContainersByBooking({});
+    setLinkingHousesLoader(true);
+    setIsFetchingJobById(true);
+
+    try {
+      const bookingResponses = await Promise.all(
+        selectedIds.map((bookingId) =>
+          getAPICall(`${URL.customerServiceShipment}${bookingId}/`, API_HEADER),
+        ),
+      );
+
+      const newHouses: Record<string, unknown>[] = [];
+      const linkedBookingIds: number[] = [];
+
+      bookingResponses.forEach((bookingRes, index) => {
+        const bookingId = selectedIds[index];
+        const bookingDetail =
+          (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
+        const bookingRecord =
+          (Array.isArray(bookingDetail)
+            ? bookingDetail[0]
+            : bookingDetail) as Record<string, unknown>;
+
+        const payload = buildJobCreatePayloadFromBooking(
+          bookingRecord,
+          "ocean-export",
+        );
+        const mappedHousing = Array.isArray(payload.housing_details)
+          ? payload.housing_details[0]
+          : null;
+        if (!mappedHousing || typeof mappedHousing !== "object") {
+          return;
+        }
+
+        const oceanHousing = {
+          ...(mappedHousing as Record<string, unknown>),
+        };
+
+        const selectedContainerNos =
+          selectedContainersByBooking[bookingId] ?? [];
+        if (selectedContainerNos.length > 0) {
+          const selectedContainers =
+            containerDetailsForm.values.containers.filter((c) =>
+              selectedContainerNos.includes(String(c.container_no ?? "").trim()),
+            );
+          const existingCargo = Array.isArray(oceanHousing.cargo_details)
+            ? (oceanHousing.cargo_details as Array<Record<string, unknown>>)
+            : [];
+          const updatedCargo = selectedContainers.map((c, cargoIndex) => {
+            const base = existingCargo[cargoIndex] ?? existingCargo[0] ?? {};
+            return {
+              ...base,
+              container_no: c.container_no,
+              container_id:
+                c.id != null
+                  ? typeof c.id === "number"
+                    ? c.id
+                    : Number(c.id)
+                  : null,
+            };
+          });
+          if (updatedCargo.length > 0) {
+            oceanHousing.cargo_details = updatedCargo;
+          }
+        }
+
+        newHouses.push(oceanHousing);
+        linkedBookingIds.push(bookingId);
+      });
+
+      if (newHouses.length === 0) {
+        ToastNotification({
+          type: "error",
+          message: "Could not map booking details to a house.",
+        });
+        return;
+      }
+
+      const existingHouseIds = housingDetails
+        .map((h) => {
+          if (h.id == null || h.id === "") return null;
+          const n = typeof h.id === "number" ? h.id : Number(h.id);
+          return Number.isFinite(n) && n > 0 ? { id: n } : null;
+        })
+        .filter((row): row is { id: number } => row != null);
+
+      const existingBookingIds = Array.from(
+        new Set(
+          [
+            ...(Array.isArray((jobData as { booking_ids?: unknown }).booking_ids)
+              ? ((jobData as { booking_ids?: unknown[] }).booking_ids ?? [])
+              : []),
+            ...housingDetails.map((h) => h.booking_id),
+            ...linkedBookingIds,
+          ]
+            .map((v) => (v == null || v === "" ? null : Number(v)))
+            .filter(
+              (n): n is number =>
+                typeof n === "number" && !Number.isNaN(n) && n > 0,
+            ),
+        ),
+      );
+
+      await putAPICall(
+        URL.importJob,
+        {
+          id: jobData.id,
+          booking_ids: existingBookingIds,
+          housing_details: [...existingHouseIds, ...newHouses],
+        },
+        API_HEADER,
+      );
+
+      const refreshedJob = await fetchJobRecordByDetailsId(Number(jobData.id));
+      if (!refreshedJob) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Houses were linked but failed to reload the job. Please refresh the page.",
+        });
+        return;
+      }
+
+      ToastNotification({
+        type: "success",
+        message:
+          newHouses.length === 1
+            ? "Booking linked and job updated."
+            : `${newHouses.length} bookings linked and job updated.`,
+      });
+
+      navigate("/SeaExport/export-job/edit", {
+        state: {
+          job: refreshedJob,
+          returnTo: location.state?.returnTo,
+          viewMode: location.state?.viewMode,
+        },
+        replace: true,
+      });
+    } catch (err: unknown) {
+      console.error("Error linking booking to house:", err);
+      const axiosErr = err as {
+        response?: {
+          data?: { message?: string; detail?: string; error?: string };
+        };
+      };
+      ToastNotification({
+        type: "error",
+        message:
+          axiosErr?.response?.data?.message ||
+          axiosErr?.response?.data?.detail ||
+          axiosErr?.response?.data?.error ||
+          "Failed to link booking.",
+      });
+    } finally {
+      setBookingLinkLoading(false);
+      setLinkingHousesLoader(false);
+      setIsFetchingJobById(false);
+    }
+  }, [
+    bookingLinkSelectedContainersByBooking,
+    bookingLinkSelectedIds,
+    containerDetailsForm.values.containers,
+    housingDetails,
+    jobData,
+    location.state?.returnTo,
+    location.state?.viewMode,
+    navigate,
+  ]);
 
   // Handle edit housing detail
   const handleEditHousingDetail = (index: number) => {
@@ -2755,6 +3105,17 @@ function ExportJobCreate() {
       return;
     }
     try {
+      const bookingIds = Array.from(
+        new Set(
+          (housingDetails ?? [])
+            .map((h) => h.booking_id)
+            .map((v) => (v == null || v === ("" as unknown) ? null : Number(v)))
+            .filter(
+              (n): n is number => typeof n === "number" && !Number.isNaN(n),
+            ),
+        ),
+      );
+
       const payload = {
         service: mblDetailsForm.values.service,
         pp_cc:
@@ -2770,6 +3131,7 @@ function ExportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
+        booking_ids: bookingIds,
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
         destination_code: mblDetailsForm.values.destination_code,
@@ -3134,7 +3496,14 @@ function ExportJobCreate() {
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
-        <Loader color="#105476" size="lg" />
+        <Stack align="center" gap="md">
+          <Loader color="#105476" size="lg" />
+          {linkingHousesLoader && (
+            <Text c="dimmed" size="sm">
+              Updating houses...
+            </Text>
+          )}
+        </Stack>
       </Center>
     );
   }
@@ -5644,6 +6013,336 @@ function ExportJobCreate() {
         onSubmit={jobDocuments.handleSubmitDocumentsModal}
       />
 
+      <Modal
+        opened={bookingLinkModalOpen}
+        onClose={() => {
+          setBookingLinkModalOpen(false);
+          setBookingLinkStep("booking");
+          setBookingLinkSelectedIds([]);
+          setBookingLinkSelectedContainersByBooking({});
+        }}
+        title={bookingLinkStep === "booking" ? "Link Booking — Step 1: Select Booking" : "Link Booking — Step 2: Select Containers"}
+        centered
+        size="xl"
+      >
+        <Stack>
+          {bookingLinkStep === "booking" ? (
+            <>
+              <Text size="sm" c="dimmed">
+                Select one or more eligible bookings to create linked houses.
+              </Text>
+
+              {bookingLinkLoading ? (
+                <Center style={{ minHeight: 140 }}>
+                  <Loader color="#105476" size="lg" />
+                </Center>
+              ) : bookingLinkBookings.length === 0 ? (
+                <Text c="dimmed">No eligible bookings found for this route.</Text>
+              ) : (
+                <ScrollArea style={{ height: 360 }}>
+                  <Table
+                    highlightOnHover
+                    verticalSpacing="sm"
+                    horizontalSpacing="md"
+                    striped
+                  >
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th style={{ width: 80, paddingRight: 16 }}>
+                          Select
+                        </Table.Th>
+                        <Table.Th style={{ paddingRight: 16 }}>Booking ID</Table.Th>
+                        <Table.Th style={{ paddingRight: 16 }}>House</Table.Th>
+                        <Table.Th style={{ paddingRight: 16 }}>Customer</Table.Th>
+                        <Table.Th style={{ paddingRight: 16 }}>Origin</Table.Th>
+                        <Table.Th>Destination</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {bookingLinkBookings.map((b) => {
+                        const idNum = Number(b.id ?? "");
+                        const bookingId = String(
+                          b.shipment_code ??
+                            b.shipment_id ??
+                            b.shipment_no ??
+                            b.id ??
+                            "",
+                        );
+                        const houseNo = resolveBookingHouseNumber(b);
+                        return (
+                          <Table.Tr
+                            key={idNum}
+                            style={{
+                              cursor: "pointer",
+                              backgroundColor: bookingLinkSelectedIds.includes(idNum)
+                                ? "rgba(16, 84, 118, 0.08)"
+                                : undefined,
+                            }}
+                            onClick={() =>
+                              setBookingLinkSelectedIds((prev) =>
+                                prev.includes(idNum)
+                                  ? prev.filter((id) => id !== idNum)
+                                  : [...prev, idNum],
+                              )
+                            }
+                          >
+                            <Table.Td
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ width: 80, paddingRight: 16 }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={bookingLinkSelectedIds.includes(idNum)}
+                                onChange={() =>
+                                  setBookingLinkSelectedIds((prev) =>
+                                    prev.includes(idNum)
+                                      ? prev.filter((id) => id !== idNum)
+                                      : [...prev, idNum],
+                                  )
+                                }
+                              />
+                            </Table.Td>
+                            <Table.Td style={{ paddingRight: 16 }}>
+                              {bookingId || idNum}
+                            </Table.Td>
+                            <Table.Td style={{ paddingRight: 16 }}>
+                              {houseNo || "-"}
+                            </Table.Td>
+                            <Table.Td style={{ paddingRight: 16 }}>
+                              {String(b.customer_name ?? "-")}
+                            </Table.Td>
+                            <Table.Td style={{ paddingRight: 16 }}>
+                              {String(b.origin_name ?? "-")}
+                            </Table.Td>
+                            <Table.Td>
+                              {String(b.destination_name ?? "-")}
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+              )}
+
+              <Group justify="flex-end" mt="md">
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => {
+                    setBookingLinkModalOpen(false);
+                    setBookingLinkStep("booking");
+                    setBookingLinkSelectedIds([]);
+                    setBookingLinkSelectedContainersByBooking({});
+                  }}
+                  disabled={bookingLinkLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  color="#105476"
+                  onClick={handleBookingLinkNext}
+                  disabled={bookingLinkSelectedIds.length === 0 || bookingLinkLoading}
+                >
+                  Next: Select Containers
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <>
+              <Text size="sm" c="dimmed">
+                Select which containers from this job should be included in each new house.
+              </Text>
+
+              {containerDetailsForm.values.containers.filter(
+                (c) => String(c.container_no ?? "").trim() !== "",
+              ).length === 0 ? (
+                <Text c="dimmed">No containers found on this job. You can add them after creating the house.</Text>
+              ) : (
+                <ScrollArea style={{ maxHeight: 420 }}>
+                  <Stack gap="lg">
+                    {bookingLinkBookings
+                      .filter((b) =>
+                        bookingLinkSelectedIds.includes(Number(b.id ?? "")),
+                      )
+                      .map((booking) => {
+                        const bookingId = Number(booking.id ?? "");
+                        const bookingCode = String(
+                          booking.shipment_code ??
+                            booking.shipment_id ??
+                            booking.shipment_no ??
+                            booking.id ??
+                            "",
+                        );
+                        const houseNo = resolveBookingHouseNumber(booking);
+                        return (
+                          <Stack key={bookingId} gap="xs">
+                            <Text fw={600}>
+                              {bookingCode || bookingId}
+                              {houseNo ? ` (${houseNo})` : ""}
+                            </Text>
+                            <Table
+                              highlightOnHover
+                              verticalSpacing="sm"
+                              horizontalSpacing="md"
+                              striped
+                            >
+                              <Table.Thead>
+                                <Table.Tr>
+                                  <Table.Th style={{ width: 80, paddingRight: 16 }}>
+                                    Select
+                                  </Table.Th>
+                                  <Table.Th style={{ paddingRight: 16 }}>
+                                    Container No
+                                  </Table.Th>
+                                  <Table.Th>Container Type</Table.Th>
+                                </Table.Tr>
+                              </Table.Thead>
+                              <Table.Tbody>
+                                {containerDetailsForm.values.containers
+                                  .filter(
+                                    (c) => String(c.container_no ?? "").trim() !== "",
+                                  )
+                                  .map((c) => {
+                                    const cNo = String(c.container_no ?? "").trim();
+                                    const typeCode = String(
+                                      c.container_type ?? "",
+                                    ).trim();
+                                    const typeLabel =
+                                      containerTypeData.find(
+                                        (opt) => opt.value === typeCode,
+                                      )?.label ||
+                                      typeCode ||
+                                      "-";
+                                    const selectedForBooking =
+                                      bookingLinkSelectedContainersByBooking[
+                                        bookingId
+                                      ] ?? [];
+                                    const isChecked =
+                                      selectedForBooking.includes(cNo);
+                                    return (
+                                      <Table.Tr
+                                        key={`${bookingId}-${cNo}`}
+                                        style={{
+                                          cursor: "pointer",
+                                          backgroundColor: isChecked
+                                            ? "rgba(16, 84, 118, 0.08)"
+                                            : undefined,
+                                        }}
+                                        onClick={() => {
+                                          setBookingLinkSelectedContainersByBooking(
+                                            (prev) => {
+                                              const current =
+                                                prev[bookingId] ?? [];
+                                              const next = current.includes(cNo)
+                                                ? current.filter(
+                                                    (value) => value !== cNo,
+                                                  )
+                                                : [...current, cNo];
+                                              return {
+                                                ...prev,
+                                                [bookingId]: next,
+                                              };
+                                            },
+                                          );
+                                        }}
+                                      >
+                                        <Table.Td
+                                          onClick={(e) => e.stopPropagation()}
+                                          style={{ width: 80, paddingRight: 16 }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={() => {
+                                              setBookingLinkSelectedContainersByBooking(
+                                                (prev) => {
+                                                  const current =
+                                                    prev[bookingId] ?? [];
+                                                  const next = current.includes(cNo)
+                                                    ? current.filter(
+                                                        (value) => value !== cNo,
+                                                      )
+                                                    : [...current, cNo];
+                                                  return {
+                                                    ...prev,
+                                                    [bookingId]: next,
+                                                  };
+                                                },
+                                              );
+                                            }}
+                                          />
+                                        </Table.Td>
+                                        <Table.Td style={{ paddingRight: 16 }}>
+                                          {cNo}
+                                        </Table.Td>
+                                        <Table.Td>{typeLabel}</Table.Td>
+                                      </Table.Tr>
+                                    );
+                                  })}
+                              </Table.Tbody>
+                            </Table>
+                          </Stack>
+                        );
+                      })}
+                  </Stack>
+                </ScrollArea>
+              )}
+
+              <Group justify="flex-end" mt="md">
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  onClick={() => setBookingLinkStep("booking")}
+                  disabled={bookingLinkLoading}
+                >
+                  Back
+                </Button>
+                <Button
+                  color="#105476"
+                  leftSection={<IconLink size={16} />}
+                  onClick={() => setBookingLinkConfirmOpen(true)}
+                  loading={bookingLinkLoading}
+                  disabled={bookingLinkLoading}
+                >
+                  Link Booking
+                </Button>
+              </Group>
+            </>
+          )}
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={bookingLinkConfirmOpen}
+        onClose={() => setBookingLinkConfirmOpen(false)}
+        title="Confirm Link Booking"
+        centered
+      >
+        <Text size="sm" mb="md">
+          {bookingLinkSelectedIds.length === 1
+            ? "Do you want to link this booking and update the job with a new house?"
+            : `Do you want to link ${bookingLinkSelectedIds.length} bookings and update the job with new houses?`}
+        </Text>
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={() => setBookingLinkConfirmOpen(false)}
+          >
+            No
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setBookingLinkConfirmOpen(false);
+              void handleConfirmLinkBooking();
+            }}
+          >
+            Yes
+          </Button>
+        </Group>
+      </Modal>
+
       <Group justify="space-between" mt="xl">
         <Group>
           <Button
@@ -5680,6 +6379,18 @@ function ExportJobCreate() {
           >
             {isReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconLink size={16} />}
+              onClick={handleOpenBookingLinkModal}
+              loading={bookingLinkLoading}
+              disabled={bookingLinkLoading}
+            >
+              Link Booking
+            </Button>
+          )}
           {!isReadOnly && (
             <Button
               variant="outline"

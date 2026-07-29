@@ -2272,6 +2272,10 @@ function HouseCreate() {
     // Prepare housing detail object - use current form values
     const housingDetail = {
       ...(housingPk > 0 ? { id: housingPk } : {}),
+      ...((editData as { booking_id?: number | null } | undefined)?.booking_id !=
+        null && {
+        booking_id: (editData as { booking_id?: number | null }).booking_id,
+      }),
       hawb_number: currentFormValues.hawb_number,
       shipment_terms_code: currentFormValues.shipment_terms_code,
       shipment_terms_name: currentFormValues.shipment_terms_name,

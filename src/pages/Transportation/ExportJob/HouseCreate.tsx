@@ -2213,7 +2213,7 @@ function HouseCreate() {
 
     // Prepare housing detail object
     const housingDetail = {
-      // Include id and shipment_id only in edit mode
+      // Include id and shipment_id when editing (for update operations)
       ...(isEditMode &&
         editData?.id && {
           id:
@@ -2221,6 +2221,10 @@ function HouseCreate() {
         }),
       ...(isEditMode &&
         editData?.shipment_id && { shipment_id: editData.shipment_id }),
+      ...((editData as { booking_id?: number | null } | undefined)?.booking_id !=
+        null && {
+        booking_id: (editData as { booking_id?: number | null }).booking_id,
+      }),
       hbl_number: form.values.hbl_number,
       house_date: form.values.house_date
         ? dayjs(form.values.house_date).format("YYYY-MM-DD")
