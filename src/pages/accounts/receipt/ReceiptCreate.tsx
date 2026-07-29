@@ -48,6 +48,8 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
@@ -360,7 +362,7 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-/** DD-MM-YYYY for receipt and reverse-receipt APIs */
+/** YYYY-MM-DD for receipt and reverse-receipt API payloads (local calendar day) */
 function formatDateDDMMYYYY(date: Date | null | undefined): string {
   if (date == null) return "";
   const d = date instanceof Date ? date : new Date(date);
@@ -368,7 +370,7 @@ function formatDateDDMMYYYY(date: Date | null | undefined): string {
   const day = String(d.getDate()).padStart(2, "0");
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const y = d.getFullYear();
-  return `${day}-${m}-${y}`;
+  return `${y}-${m}-${day}`;
 }
 
 const fieldStyles = {
@@ -444,10 +446,13 @@ function parseDocumentDate(value: string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// Display document_date from API (supports DD-MM-YYYY or ISO)
-function formatDocumentDateDisplay(value: string | null | undefined): string {
+// Display document_date from API (supports DD-MM-YYYY or ISO) in country format
+function formatDocumentDateDisplay(
+  value: string | null | undefined,
+  dateFormat: string,
+): string {
   const d = parseDocumentDate(value);
-  return d ? d.toLocaleDateString() : "—";
+  return d ? dayjs(d).format(dateFormat) : "—";
 }
 
 function formatOutstandingDocumentAmountInLocal(
@@ -517,6 +522,7 @@ export default function ReceiptCreate({
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -1414,7 +1420,7 @@ export default function ReceiptCreate({
     return base;
   };
 
-  /** Reverse-receipt payload: header dr_cr is always Cr (do not inherit source receipt). Party dr_cr from form, default Dr. DD-MM-YYYY dates. */
+  /** Reverse-receipt payload: header dr_cr is always Cr (do not inherit source receipt). Party dr_cr from form, default Dr. YYYY-MM-DD dates. */
   const buildReversalPayload = (
     values: ReceiptFormValues,
     options?: {
@@ -3316,6 +3322,7 @@ export default function ReceiptCreate({
                         <Table.Td>
                           {formatDocumentDateDisplay(
                             inv.document_date as string,
+                            dateFormat,
                           )}
                         </Table.Td>
                         <Table.Td>

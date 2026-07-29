@@ -47,6 +47,8 @@ import { postAPICall } from "../../../service/postApiCall";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
@@ -413,6 +415,7 @@ function normalizeDate(value: Date | string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/** YYYY-MM-DD for overseas payment API payloads (local calendar day) */
 function formatDateDDMMYYYY(date: Date | null | undefined): string {
   if (date == null) return "";
   const d = date instanceof Date ? date : new Date(date);
@@ -420,7 +423,7 @@ function formatDateDDMMYYYY(date: Date | null | undefined): string {
   const day = String(d.getDate()).padStart(2, "0");
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const y = d.getFullYear();
-  return `${day}-${m}-${y}`;
+  return `${y}-${m}-${day}`;
 }
 
 const fieldStyles = {
@@ -493,9 +496,12 @@ function parseDocumentDate(value: string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function formatDocumentDateDisplay(value: string | null | undefined): string {
+function formatDocumentDateDisplay(
+  value: string | null | undefined,
+  dateFormat: string,
+): string {
   const d = parseDocumentDate(value);
-  return d ? d.toLocaleDateString() : "—";
+  return d ? dayjs(d).format(dateFormat) : "—";
 }
 
 function formatOutstandingDocumentAmountInLocal(
@@ -542,6 +548,7 @@ export default function OverseasPaymentCreate({
   };
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -3449,6 +3456,7 @@ export default function OverseasPaymentCreate({
                         <Table.Td>
                           {formatDocumentDateDisplay(
                             inv.document_date as string,
+                            dateFormat,
                           )}
                         </Table.Td>
                         <Table.Td>

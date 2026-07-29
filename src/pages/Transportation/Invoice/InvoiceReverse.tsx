@@ -1711,11 +1711,12 @@ function InvoiceReverse() {
         setIsPosting(false);
         return;
       }
+      /** YYYY-MM-DD for reverse-invoice API payloads (local calendar day) */
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
         const year = d.getFullYear();
-        return `${day}-${month}-${year}`;
+        return `${year}-${month}-${day}`;
       };
 
       let sacWiseTotals: Array<{
@@ -2288,11 +2289,12 @@ function InvoiceReverse() {
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         values.charges,
       );
+      /** YYYY-MM-DD for reverse-invoice API payloads (local calendar day) */
       const formatDateDDMMYYYY = (d: Date) => {
         const day = String(d.getDate()).padStart(2, "0");
         const month = String(d.getMonth() + 1).padStart(2, "0");
         const year = d.getFullYear();
-        return `${day}-${month}-${year}`;
+        return `${year}-${month}-${day}`;
       };
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
 

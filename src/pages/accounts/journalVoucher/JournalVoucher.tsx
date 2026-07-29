@@ -618,8 +618,13 @@ function JournalVoucher() {
   // ─── Submit ───────────────────────────────────────────────────────────────
 
   const buildPayload = (values: JVFormValues, overrideStatus?: string) => {
-    const formatDate = (d: Date | null) =>
-      d ? d.toISOString().split("T")[0] : null;
+    const formatDate = (d: Date | null) => {
+      if (!d) return null;
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${year}-${month}-${day}`;
+    };
 
     // Compute totals from charges (3 decimal precision)
     let debit = 0;

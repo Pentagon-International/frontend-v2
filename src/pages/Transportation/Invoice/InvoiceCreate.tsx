@@ -545,6 +545,7 @@ type InvoiceFormData = {
 };
 
 // Invoice API payloads: document/due dates always sent as DD-MM-YYYY.
+/** YYYY-MM-DD for invoice create/update API payloads (local calendar day) */
 function formatDateDDMMYYYY(date: Date | null | undefined): string {
   if (date == null) return "";
   const d = date instanceof Date ? date : parseInvoiceDate(date);
@@ -552,7 +553,7 @@ function formatDateDDMMYYYY(date: Date | null | undefined): string {
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${year}-${month}-${day}`;
 }
 
 /** Parse document/due date from API or form (DD-MM-YYYY or YYYY-MM-DD) to local Date. */

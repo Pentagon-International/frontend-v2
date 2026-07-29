@@ -34,7 +34,9 @@ import {
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import useAuthStore from "../../../store/authStore";
+import useDateFormat from "../../../hooks/useDateFormat";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import dayjs from "dayjs";
 
 type CoaItem = {
   id?: number;
@@ -157,6 +159,27 @@ const parseAllocationDateString = (s: string | null | undefined): Date | null =>
   if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return null;
   const [y, m, d] = part.split("-").map(Number);
   return new Date(y, m - 1, d);
+};
+
+/** Format API document_date for UI using country-based dateFormat */
+const formatDocumentDateDisplay = (
+  value: string | null | undefined,
+  dateFormat: string,
+): string => {
+  if (value == null || String(value).trim() === "") return "";
+  const trimmed = String(value).trim();
+  const iso = parseAllocationDateString(trimmed);
+  if (iso) return dayjs(iso).format(dateFormat);
+  const parts = trimmed.split("-");
+  if (parts.length === 3 && parts[0].length !== 4) {
+    const d = Number(parts[0]);
+    const m = Number(parts[1]) - 1;
+    const y = Number(parts[2]);
+    const date = new Date(y, m, d);
+    if (!Number.isNaN(date.getTime())) return dayjs(date).format(dateFormat);
+  }
+  const parsed = dayjs(trimmed);
+  return parsed.isValid() ? parsed.format(dateFormat) : trimmed;
 };
 
 const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRow => {
@@ -305,6 +328,7 @@ export default function DocumentAllocation() {
   const location = useLocation();
   const canPostDocuments = useCanPostDocuments();
   const user = useAuthStore((s) => s.user);
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const hydratedDocumentIdRef = useRef<number | null>(null);
@@ -883,7 +907,7 @@ export default function DocumentAllocation() {
                 </Grid.Col>
                 <Grid.Col span={1.1}>
                   <FormTextInput
-                    value={row.document_date ?? ""}
+                    value={formatDocumentDateDisplay(row.document_date, dateFormat)}
                     readOnly
                     styles={{ input: readOnlyInputStyles.input }}
                     format="normal"
@@ -1342,7 +1366,10 @@ export default function DocumentAllocation() {
                                   <Grid.Col span={1.2}>
                                     <FormTextInput
                                       placeholder="Document Date"
-                                      value={row.document_date ?? ""}
+                                      value={formatDocumentDateDisplay(
+                                        row.document_date,
+                                        dateFormat,
+                                      )}
                                       readOnly
                                       styles={{
                                         input: readOnlyInputStyles.input,
