@@ -93,6 +93,7 @@ type SubledgerEntryRow = {
   party_name?: string | null;
   date_document?: string | null;
   due_date?: string | null;
+  inv_crn_date?: string | null;
   shipment_no?: string | null;
   service?: string | null;
   job_id?: string | null;
@@ -129,6 +130,7 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "party_name", label: "Party Name", span: 1.5 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
+  { key: "inv_crn_date", label: "Supplier Doc Date", span: 0.9 },
   { key: "service", label: "Service", span: 0.55 },
   { key: "job_id", label: "Job Id", span: 0.95 },
   { key: "shipment_no", label: "Shipment No", span: 1.0 },
@@ -201,6 +203,7 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
       return 180;
     case "date_document":
     case "due_date":
+    case "inv_crn_date":
       return 100;
     case "service":
       return 80;
@@ -255,7 +258,7 @@ function formatSubledgerCell(
 ): string {
   if (value === null || value === undefined || value === "") return "";
   if (key === "sno") return String(value);
-  if (key === "date_document" || key === "due_date") {
+  if (key === "date_document" || key === "due_date" || key === "inv_crn_date") {
     if (
       typeof value === "string" ||
       typeof value === "number" ||
@@ -421,7 +424,8 @@ const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
 function subledgerColumnTone(
   key: keyof SubledgerEntryRow,
 ): ErpListBodyCellTone {
-  if (key === "date_document" || key === "due_date") return "muted";
+  if (key === "date_document" || key === "due_date" || key === "inv_crn_date")
+    return "muted";
   if (
     key === "debit_amount" ||
     key === "credit_amount" ||
