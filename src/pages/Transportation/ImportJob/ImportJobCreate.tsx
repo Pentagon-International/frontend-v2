@@ -1490,6 +1490,8 @@ function ImportJobCreate() {
                     number | string | null | undefined,
                 };
               })(),
+              booking_id:
+                house.booking_id != null ? Number(house.booking_id) : null,
               ...extractHouseDocumentFields(house),
             }),
           );

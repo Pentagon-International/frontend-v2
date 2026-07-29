@@ -1339,6 +1339,8 @@ function AirImportJobCreate() {
                       date: String(e.date ?? ""),
                     }))
                   : [],
+                booking_id:
+                  house.booking_id != null ? Number(house.booking_id) : null,
                 ...extractHouseDocumentFields(house),
               };
             },
