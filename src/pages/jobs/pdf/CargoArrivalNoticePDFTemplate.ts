@@ -774,6 +774,8 @@ export const generateCargoArrivalNoticePDF = (
                         (jobInfo?.service_type === "Import" || jobData?.service_type === "Import");
     const isOceanImport = (jobInfo?.service === "FCL" || jobInfo?.service === "LCL" || jobData?.service === "FCL" || jobData?.service === "LCL") && 
                           (jobInfo?.service_type === "Import" || jobData?.service_type === "Import");
+    const isInlandImport = (jobInfo?.service === "INLAND" || jobData?.service === "INLAND") &&
+                           (jobInfo?.service_type === "Import" || jobData?.service_type === "Import");
     
     // Consignee details - from housing_details
     const consigneeName = pickCanField(hawbData?.consignee_name);
@@ -879,6 +881,12 @@ export const generateCargoArrivalNoticePDF = (
     );
     const mawbCreatedAt = mawbDateSource ? formatDateForDisplay(mawbDateSource) : "";
     const bookingNo = formatCanBookingNo(jobInfo);
+    const flightNumber = isAirImport
+      ? pickCanField(carrierDetails?.flight_voyage_number, jobInfo?.flightno)
+      : "";
+    const truckNumber = isInlandImport
+      ? pickCanField(carrierDetails?.truck_no, carrierDetails?.flight_voyage_number, jobInfo?.truck_no)
+      : "";
     const cargoLocation = pickCanField(jobInfo?.cargo_location);
 
     // Set document properties
@@ -946,6 +954,8 @@ export const generateCargoArrivalNoticePDF = (
       masterBillLabel,
       "Booking No:",
       "Carrier:",
+      "Flight No:",
+      "Truck No:",
       "POL:",
       "POD:",
       "Final Dest:",
@@ -993,6 +1003,8 @@ export const generateCargoArrivalNoticePDF = (
     const mawbInfoLines = doc.splitTextToSize(mawbInfo, shipmentValueMaxWidth);
     const bookingNoLines = doc.splitTextToSize(bookingNo || "", shipmentValueMaxWidth);
     const carrierNameLines = doc.splitTextToSize(carrierName || "", shipmentValueMaxWidth);
+    const flightNumberLines = doc.splitTextToSize(flightNumber || "", shipmentValueMaxWidth);
+    const truckNumberLines = doc.splitTextToSize(truckNumber || "", shipmentValueMaxWidth);
     const originNameLines = doc.splitTextToSize(originName || "", shipmentValueMaxWidth);
     const destinationNameLines = doc.splitTextToSize(destinationName || "", shipmentValueMaxWidth);
     const etaLines = doc.splitTextToSize(eta || "", shipmentValueMaxWidth);
@@ -1017,6 +1029,12 @@ export const generateCargoArrivalNoticePDF = (
     rightColumnHeight += Math.max(1, mawbInfoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, bookingNoLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, carrierNameLines.length) * lineSpacing;
+    if (isAirImport) {
+      rightColumnHeight += Math.max(1, flightNumberLines.length) * lineSpacing;
+    }
+    if (isInlandImport) {
+      rightColumnHeight += Math.max(1, truckNumberLines.length) * lineSpacing;
+    }
     rightColumnHeight += Math.max(1, originNameLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, destinationNameLines.length) * lineSpacing;
     rightColumnHeight += Math.max(1, destinationNameLines.length) * lineSpacing; // Final Dest
@@ -1284,6 +1302,24 @@ export const generateCargoArrivalNoticePDF = (
       shipmentColumnLayout,
       rightYPos
     );
+    if (isAirImport) {
+      rightYPos += drawCanKeyValueRow(
+        doc,
+        "Flight No:",
+        flightNumberLines,
+        shipmentColumnLayout,
+        rightYPos
+      );
+    }
+    if (isInlandImport) {
+      rightYPos += drawCanKeyValueRow(
+        doc,
+        "Truck No:",
+        truckNumberLines,
+        shipmentColumnLayout,
+        rightYPos
+      );
+    }
     rightYPos += drawCanKeyValueRow(doc, "POL:", originNameLines, shipmentColumnLayout, rightYPos);
     rightYPos += drawCanKeyValueRow(
       doc,
