@@ -1823,7 +1823,10 @@ function CustomerCreate() {
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
   const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
   const isCreateMode = !params.id;
-  const maxStep = isVendorMasterRoute ? 3 : 1;
+  // TDS is India-specific; overseas vendor create skips that step (Bank becomes step 2).
+  const showVendorTdsStep = isVendorMasterRoute && isIndiaUser;
+  const vendorBankStep = showVendorTdsStep ? 3 : 2;
+  const maxStep = isVendorMasterRoute ? vendorBankStep : 1;
 
   const tdsDisplayForm = useForm<TdsDisplayFormValues>({
     initialValues: {
@@ -2044,7 +2047,7 @@ function CustomerCreate() {
     staleTime: 10 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: isVendorMasterRoute,
+    enabled: showVendorTdsStep,
   });
 
   const tdsSectionOptions = useMemo(() => {
@@ -3182,7 +3185,7 @@ function CustomerCreate() {
     // Validate both forms before final submission
     const customerResult = customerForm.validate();
     const addressResult = addressForm.validate();
-    const tdsResult = isVendorMasterRoute ? tdsDisplayForm.validate() : null;
+    const tdsResult = showVendorTdsStep ? tdsDisplayForm.validate() : null;
     const bankDetailsResult = isVendorMasterRoute
       ? bankDetailsForm.validate()
       : null;
@@ -3190,7 +3193,7 @@ function CustomerCreate() {
     if (
       !customerResult.hasErrors &&
       !addressResult.hasErrors &&
-      (!isVendorMasterRoute || (tdsResult && !tdsResult.hasErrors)) &&
+      (!showVendorTdsStep || (tdsResult && !tdsResult.hasErrors)) &&
       (!isVendorMasterRoute ||
         (bankDetailsResult && !bankDetailsResult.hasErrors))
     ) {
@@ -3204,32 +3207,38 @@ function CustomerCreate() {
       };
 
       if (isVendorMasterRoute) {
-        finalData.tds_section_data = (tdsDisplayForm.values.tds_sections || [])
-          .filter((r) => r.section_id != null)
-          .map((r) => ({
-            ...(r.id != null ? { id: r.id } : {}),
-            section_id: Number(r.section_id),
-            exemption_tds: Boolean(r.exemption_tds),
-            exemption_certificate_no: r.exemption_tds
-              ? r.exemption_certificate_no?.trim() || null
-              : null,
-            tds_percentage: r.exemption_tds
-              ? (() => {
-                  const v = normalizeTwoDecimalString(r.tds_percent || "");
-                  return v ? v : null;
-                })()
-              : null,
-            valid_from: r.exemption_tds
-              ? formatDateYYYYMMDD(r.valid_from)
-              : null,
-            valid_to: r.exemption_tds ? formatDateYYYYMMDD(r.valid_to) : null,
-            tds_lower_limit: r.exemption_tds
-              ? (() => {
-                  const v = normalizeTwoDecimalString(r.tds_lower_limit || "");
-                  return v ? v : null;
-                })()
-              : null,
-          }));
+        finalData.tds_section_data = showVendorTdsStep
+          ? (tdsDisplayForm.values.tds_sections || [])
+              .filter((r) => r.section_id != null)
+              .map((r) => ({
+                ...(r.id != null ? { id: r.id } : {}),
+                section_id: Number(r.section_id),
+                exemption_tds: Boolean(r.exemption_tds),
+                exemption_certificate_no: r.exemption_tds
+                  ? r.exemption_certificate_no?.trim() || null
+                  : null,
+                tds_percentage: r.exemption_tds
+                  ? (() => {
+                      const v = normalizeTwoDecimalString(r.tds_percent || "");
+                      return v ? v : null;
+                    })()
+                  : null,
+                valid_from: r.exemption_tds
+                  ? formatDateYYYYMMDD(r.valid_from)
+                  : null,
+                valid_to: r.exemption_tds
+                  ? formatDateYYYYMMDD(r.valid_to)
+                  : null,
+                tds_lower_limit: r.exemption_tds
+                  ? (() => {
+                      const v = normalizeTwoDecimalString(
+                        r.tds_lower_limit || "",
+                      );
+                      return v ? v : null;
+                    })()
+                  : null,
+              }))
+          : [];
         finalData.bank_details_data = (
           bankDetailsForm.values.bank_details || []
         )
@@ -3254,7 +3263,7 @@ function CustomerCreate() {
         addressForm.validate();
         if (!customerResult.hasErrors) setActive(1);
       }
-      if (isVendorMasterRoute && tdsResult?.hasErrors) {
+      if (showVendorTdsStep && tdsResult?.hasErrors) {
         tdsDisplayForm.validate();
         if (!customerResult.hasErrors && !addressResult.hasErrors) setActive(2);
       }
@@ -3265,7 +3274,7 @@ function CustomerCreate() {
           !addressResult.hasErrors &&
           !tdsResult?.hasErrors
         ) {
-          setActive(3);
+          setActive(vendorBankStep);
         }
       }
 
@@ -3419,7 +3428,7 @@ function CustomerCreate() {
                 Address
               </Tabs.Tab>
 
-              {isVendorMasterRoute && (
+              {showVendorTdsStep && (
                 <Tabs.Tab
                   value="2"
                   style={{
@@ -3438,15 +3447,16 @@ function CustomerCreate() {
 
               {isVendorMasterRoute && (
                 <Tabs.Tab
-                  value="3"
+                  value={String(vendorBankStep)}
                   style={{
                     textAlign: "center",
                     padding: "12px",
                     backgroundColor: "transparent",
-                    borderBottom: active === 3 ? "3px solid #105476" : "none",
+                    borderBottom:
+                      active === vendorBankStep ? "3px solid #105476" : "none",
                     color: "#105476",
                     fontSize: 16,
-                    fontWeight: active === 3 ? 600 : 400,
+                    fontWeight: active === vendorBankStep ? 600 : 400,
                   }}
                 >
                   Bank Details
@@ -3696,7 +3706,7 @@ function CustomerCreate() {
               </Box>
             </Tabs.Panel>
 
-            {isVendorMasterRoute && (
+            {showVendorTdsStep && (
               <Tabs.Panel value="2" style={{ flex: 1, minHeight: 0 }}>
                 <Box
                   style={{
@@ -4117,7 +4127,10 @@ function CustomerCreate() {
             )}
 
             {isVendorMasterRoute && (
-              <Tabs.Panel value="3" style={{ flex: 1, minHeight: 0 }}>
+              <Tabs.Panel
+                value={String(vendorBankStep)}
+                style={{ flex: 1, minHeight: 0 }}
+              >
                 <Box
                   style={{
                     flex: 1,

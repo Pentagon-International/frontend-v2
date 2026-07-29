@@ -71,6 +71,7 @@ import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMe
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import * as yup from "yup";
@@ -3129,7 +3130,7 @@ function AirExportJobCreate() {
           </EditPageHeadingRow>
           {jobData?.job_id && (
             <Badge color="#105476" radius="md" size="md">
-              {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
+              {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
           )}
         </Group>

@@ -46,6 +46,8 @@ import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerD
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import useAuthStore from "../../../store/authStore";
+import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 const LIST_KEY = "VENDOR_MASTER";
 
@@ -331,6 +333,20 @@ function buildVendorFilterPayload(
 
 export default function VendorMaster() {
   const isAdmin = useIsAdminUser();
+  const userPulseId = useAuthStore((s) => s.user?.pulse_id);
+  const userCountry = useAuthStore((s) => s.user?.country);
+  const isPentagonUser =
+    String(userPulseId ?? "")
+      .trim()
+      .toUpperCase() === "P2PEN";
+  const isIndiaUser =
+    isIndianUserCountry(userCountry?.country_code) ||
+    String(userCountry?.country_name ?? "")
+      .toLowerCase()
+      .includes("india");
+  // Hide only for non-admin P2PEN users based in India; P2PEN abroad (e.g. US) may create
+  const showCreateButton =
+    isAdmin || !isPentagonUser || !isIndiaUser;
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -1134,33 +1150,33 @@ export default function VendorMaster() {
               >
                 <IconFilter size={18} />
               </ActionIcon>
-              {isAdmin && (
-<Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontStyle: "semibold",
-                    "&:hover": {
+              {showCreateButton && (
+                <Button
+                  leftSection={<IconPlus size={16} />}
+                  size="sm"
+                  styles={{
+                    root: {
                       backgroundColor: "#105476",
+                      borderRadius: "4px",
+                      color: "#FFFFFF",
+                      fontSize: "14px",
+                      fontFamily: "Inter",
+                      fontStyle: "semibold",
+                      "&:hover": {
+                        backgroundColor: "#105476",
+                      },
                     },
-                  },
-                }}
-                onClick={() => {
-                  setStoreFilters(LIST_KEY, appliedFilters);
-                  setStoreSearch(LIST_KEY, search);
-                  setShouldRestore(LIST_KEY, true);
-                  navigate("/master/vendor/create");
-                }}
-              >
-                Create New
-              </Button>
-            )}
+                  }}
+                  onClick={() => {
+                    setStoreFilters(LIST_KEY, appliedFilters);
+                    setStoreSearch(LIST_KEY, search);
+                    setShouldRestore(LIST_KEY, true);
+                    navigate("/master/vendor/create");
+                  }}
+                >
+                  Create New
+                </Button>
+              )}
             </Group>
           </Group>
         </Box>
