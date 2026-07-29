@@ -51,9 +51,14 @@ export function PdfViewer({
   const [pageSizes, setPageSizes] = useState<Map<number, PageSize>>(new Map());
   const [isRendering, setIsRendering] = useState(false);
   const renderTokenRef = useRef(0);
+  const onPagesRenderedRef = useRef(onPagesRendered);
+  onPagesRenderedRef.current = onPagesRendered;
+
+  // Round scale so sub-pixel fit-scale noise does not restart page renders.
+  const renderScale = Math.round(scale * 1000) / 1000;
 
   const renderPageCanvases = useCallback(async () => {
-    if (!pdfDoc || numPages === 0 || scale <= 0) return;
+    if (!pdfDoc || numPages === 0 || renderScale <= 0) return;
 
     const token = ++renderTokenRef.current;
     setIsRendering(true);
@@ -64,7 +69,7 @@ export function PdfViewer({
         if (token !== renderTokenRef.current) return;
 
         const page = await pdfDoc.getPage(pageNumber);
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale: renderScale });
 
         let canvas = canvasRefs.current.get(pageNumber);
         if (!canvas) {
@@ -79,6 +84,13 @@ export function PdfViewer({
         if (!context) continue;
 
         const outputScale = new OutputScale();
+        // Cap DPR on multi-page docs (e.g. 6-copy BOL) so first open finishes quickly.
+        if (numPages > 2) {
+          const cap = 1.25;
+          outputScale.sx = Math.min(outputScale.sx, cap);
+          outputScale.sy = Math.min(outputScale.sy, cap);
+        }
+
         const cssWidth = Math.floor(viewport.width);
         const cssHeight = Math.floor(viewport.height);
 
@@ -98,6 +110,8 @@ export function PdfViewer({
             : undefined,
         }).promise;
 
+        if (token !== renderTokenRef.current) return;
+
         nextSizes.set(pageNumber, {
           width: cssWidth,
           height: cssHeight,
@@ -107,7 +121,7 @@ export function PdfViewer({
       if (token === renderTokenRef.current) {
         setPageSizes(nextSizes);
         requestAnimationFrame(() => {
-          onPagesRendered?.();
+          onPagesRenderedRef.current?.();
         });
       }
     } finally {
@@ -115,10 +129,10 @@ export function PdfViewer({
         setIsRendering(false);
       }
     }
-  }, [pdfDoc, numPages, scale, onPagesRendered]);
+  }, [pdfDoc, numPages, renderScale]);
 
   useLayoutEffect(() => {
-    renderPageCanvases();
+    void renderPageCanvases();
   }, [renderPageCanvases]);
 
   const fieldsByPage = matchedFields.reduce<Map<number, MatchedFieldPosition[]>>(
@@ -165,7 +179,7 @@ export function PdfViewer({
 
           return (
             <Box
-              key={`${pageNumber}-${scale}`}
+              key={pageNumber}
               ref={(el) => registerPageRef(pageNumber, el)}
               style={{ flexShrink: 0, display: "flex", justifyContent: "center" }}
             >

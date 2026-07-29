@@ -5,6 +5,7 @@ export type FieldLayoutZone =
   | "right"
   | "full"
   | "content"
+  | "fit_content"
   | "service"
   | "charge_description"
   | "charge_min"
@@ -105,6 +106,20 @@ export function countWrappedLines(
   return Math.max(totalLines, 1);
 }
 
+function measureLongestLineWidthPx(
+  text: string,
+  fontSize: number,
+  fontWeight = 400,
+): number {
+  if (!text) return 0;
+  const lines = text.split(/\r?\n/);
+  let max = 0;
+  for (const line of lines) {
+    max = Math.max(max, measureTextWidthPx(line || " ", fontSize, fontWeight));
+  }
+  return max;
+}
+
 function zoneMaxWidth(
   zone: FieldLayoutZone,
   rect: PdfTextRect,
@@ -121,6 +136,9 @@ function zoneMaxWidth(
       return Math.max(midLine - rect.left - innerPad, 24);
     case "right":
       return Math.max(pageWidth - marginPx - rect.left - innerPad, 24);
+    case "fit_content":
+      // Soft cap only — primary width comes from measured text content.
+      return Math.max(pageWidth * 0.48, 24);
     case "service":
       return Math.max(
         Math.min(
@@ -225,7 +243,39 @@ export function constrainMatchedFieldRect(
   multiline = false,
   fontWeight = 400,
   pdfLineHeightMm = PDF_DEFAULT_LINE_HEIGHT_MM,
+  columnWidthRatio?: number,
 ): PdfTextRect {
+  const lineHeightPx = pdfMmToViewportPx(pdfLineHeightMm, pageWidth);
+  const marginPx = pageWidth * PDF_PAGE_MARGIN_RATIO;
+
+  // Fixed column width (US BOL etc.): fill column, never exceed remaining page.
+  if (columnWidthRatio && columnWidthRatio > 0) {
+    const desired = pageWidth * columnWidthRatio;
+    const maxAllowed = Math.max(pageWidth - marginPx - rect.left, 16);
+    const width = Math.min(Math.max(desired, 16), maxAllowed);
+    const explicitLines = Math.max(
+      String(displayValue || "")
+        .split(/\r?\n/)
+        .filter((l) => l.trim() !== "").length,
+      1,
+    );
+    const wrappedLines = multiline
+      ? countWrappedLines(
+          displayValue,
+          Math.max(width - 4, 16),
+          rect.fontSize,
+          fontWeight,
+        )
+      : 1;
+    const lineCount = Math.max(explicitLines, wrappedLines, 1);
+    return {
+      ...rect,
+      width,
+      height: Math.max(rect.height, lineCount * lineHeightPx),
+      lineHeightPx,
+    };
+  }
+
   if (usesFixedColumnLayout(layoutZone, multiline)) {
     return applyFixedColumnLayout(
       rect,
@@ -239,8 +289,33 @@ export function constrainMatchedFieldRect(
   }
 
   const zoneMax = zoneMaxWidth(layoutZone, rect, pageWidth);
+
+  // BOL (and similar): hover/active hitbox follows text content width only.
+  if (layoutZone === "fit_content") {
+    const measured =
+      measureLongestLineWidthPx(displayValue, rect.fontSize, fontWeight) + 4;
+    const contentWidth = Math.min(Math.max(measured, 16), zoneMax);
+    const explicitLines = Math.max(displayValue.split(/\r?\n/).length, 1);
+    const wrappedLines = multiline
+      ? countWrappedLines(
+          displayValue,
+          Math.max(contentWidth - 4, 16),
+          rect.fontSize,
+          fontWeight,
+        )
+      : 1;
+    const lineCount = Math.max(explicitLines, wrappedLines);
+    return {
+      ...rect,
+      width: contentWidth,
+      height: multiline
+        ? Math.max(rect.height, lineCount * lineHeightPx)
+        : Math.max(rect.height, lineHeightPx),
+      lineHeightPx,
+    };
+  }
+
   const measured = measureTextWidthPx(displayValue, rect.fontSize, fontWeight) + 3;
-  const lineHeightPx = pdfMmToViewportPx(pdfLineHeightMm, pageWidth);
 
   if (multiline) {
     const columnWidth = Math.min(Math.max(rect.width, measured), zoneMax);
@@ -272,4 +347,13 @@ export function constrainMatchedFieldRect(
     width,
     lineHeightPx,
   };
+}
+
+/** Public helper for active edit inputs that should track content width. */
+export function measureFieldContentWidthPx(
+  text: string,
+  fontSize: number,
+  fontWeight = 400,
+): number {
+  return measureLongestLineWidthPx(text, fontSize, fontWeight) + 4;
 }

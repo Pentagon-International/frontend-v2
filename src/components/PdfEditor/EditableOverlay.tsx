@@ -30,7 +30,7 @@ export function EditableOverlay({
               position: "absolute",
               left: field.rect.left,
               top: field.rect.top,
-              width: field.rect.width,
+              width: Math.max(field.rect.width - 12, 16),
               height: Math.max(
                 field.rect.height,
                 field.rect.lineHeightPx ?? 16,

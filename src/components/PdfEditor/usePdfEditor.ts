@@ -32,6 +32,10 @@ export type ActiveEditState = {
   value: string;
 };
 
+export type BuildFieldRegistryFn = (
+  rowData: Record<string, unknown>,
+) => EditableFieldDef[];
+
 type UsePdfEditorArgs = {
   pdfBlobUrl: string | null;
   pdfDoc: PDFDocumentProxy | null;
@@ -42,6 +46,8 @@ type UsePdfEditorArgs = {
   onPdfRegenerated?: (newBlobUrl: string) => void;
   editorContext?: PdfEditorContext;
   editable?: boolean;
+  /** Defaults to quotation registry — other docs (e.g. BOL) pass their own. */
+  buildFieldRegistry?: BuildFieldRegistryFn;
   /** Always-mounted wrapper used to measure available preview width. */
   viewerAreaRef: React.RefObject<HTMLDivElement | null>;
 };
@@ -78,6 +84,7 @@ export function usePdfEditor({
   onPdfRegenerated,
   editorContext = {},
   editable = true,
+  buildFieldRegistry = buildQuotationFieldRegistry,
   viewerAreaRef,
 }: UsePdfEditorArgs) {
   const [rowData, setRowData] = useState<Record<string, unknown> | null>(
@@ -105,16 +112,21 @@ export function usePdfEditor({
     currentPage: 1,
   });
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  /** Persist fit metrics across Save/regenerate so page size does not jump. */
+  const layoutMetricsRef = useRef<{ width: number; fitScale: number }>({
+    width: 0,
+    fitScale: 0,
+  });
 
   const fieldRegistry = useMemo(() => {
     if (!rowData) return [];
-    return buildQuotationFieldRegistry(rowData);
-  }, [rowData]);
+    return buildFieldRegistry(rowData);
+  }, [rowData, buildFieldRegistry]);
 
   const baselineFieldRegistry = useMemo(() => {
     if (!baselineRowData) return [];
-    return buildQuotationFieldRegistry(baselineRowData);
-  }, [baselineRowData]);
+    return buildFieldRegistry(baselineRowData);
+  }, [baselineRowData, buildFieldRegistry]);
 
   const fieldById = useMemo(() => {
     const map = new Map<string, EditableFieldDef>();
@@ -135,37 +147,72 @@ export function usePdfEditor({
     }
 
     let cancelled = false;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const updateFitScale = async () => {
+    const updateFitScale = async (forceMeasure = false) => {
       try {
         for (let attempt = 0; attempt < 15; attempt++) {
           const el = viewerAreaRef.current;
-          if (el && el.clientWidth > 0) break;
+          if (el && el.clientWidth > 50) break;
           await new Promise<void>((resolve) =>
             requestAnimationFrame(() => resolve()),
           );
         }
 
-        const nextScale = await measureFitScale(
-          pdfDoc,
-          viewerAreaRef.current,
-        );
-        if (!cancelled) {
-          setFitScale(nextScale);
+        if (cancelled) return;
+
+        const el = viewerAreaRef.current;
+        const width = el?.clientWidth ?? 0;
+        const prev = layoutMetricsRef.current;
+
+        // After Save the PDF page size is unchanged — reuse fit scale when the
+        // viewer width is stable so content does not appear tiny until zoom.
+        if (
+          !forceMeasure &&
+          prev.fitScale > 0.1 &&
+          prev.width > 0 &&
+          width > 50 &&
+          Math.abs(width - prev.width) < 2
+        ) {
+          setFitScale(prev.fitScale);
           setIsLayoutReady(true);
+          return;
         }
+
+        if (width < 50) {
+          // Container not ready; keep prior fit if we have one.
+          if (prev.fitScale > 0.1) {
+            setFitScale(prev.fitScale);
+            setIsLayoutReady(true);
+          }
+          return;
+        }
+
+        const nextScale = await measureFitScale(pdfDoc, el);
+        if (cancelled) return;
+
+        layoutMetricsRef.current = { width, fitScale: nextScale };
+        setFitScale((prevScale) =>
+          Math.abs(prevScale - nextScale) < 0.008 ? prevScale : nextScale,
+        );
+        setIsLayoutReady(true);
       } catch {
         if (!cancelled) {
-          setFitScale(1);
+          const prev = layoutMetricsRef.current;
+          setFitScale(prev.fitScale > 0.1 ? prev.fitScale : 1);
           setIsLayoutReady(true);
         }
       }
     };
 
-    updateFitScale();
+    // Prefer preserving scale on doc swap; only measure when we have no prior fit.
+    void updateFitScale(layoutMetricsRef.current.fitScale <= 0.1);
 
     const observer = new ResizeObserver(() => {
-      updateFitScale();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        void updateFitScale(true);
+      }, 160);
     });
 
     const area = viewerAreaRef.current;
@@ -173,6 +220,7 @@ export function usePdfEditor({
 
     return () => {
       cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
       observer.disconnect();
     };
   }, [pdfDoc, pdfBlobUrl, viewerAreaRef]);
@@ -251,6 +299,10 @@ export function usePdfEditor({
 
     try {
       for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+        if (matches.length >= sortedFields.length) {
+          break;
+        }
+
         const page = await pdfDoc.getPage(pageNumber);
         const viewport = page.getViewport({ scale });
         const textContent = await page.getTextContent();
@@ -268,15 +320,33 @@ export function usePdfEditor({
             baselineRowData,
             editorContext,
           );
-          const match = matchFieldToTextItems(
-            field.id,
-            displayValue,
-            pageItems,
-            usedItemKeys,
-          );
-          if (match) {
+          const matchTarget =
+            field.getMatchValue?.(baselineRowData, editorContext)?.trim() ||
+            (field.multiline || field.type === "textarea"
+              ? displayValue.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ||
+                displayValue
+              : displayValue);
+          const occurrence = Math.max(1, field.matchOccurrence ?? 1);
+          const tempUsed = new Set(usedItemKeys);
+          let match: MatchedFieldPosition | null = null;
+          let foundCount = 0;
+          for (let i = 0; i < occurrence; i++) {
+            const next = matchFieldToTextItems(
+              field.id,
+              matchTarget,
+              pageItems,
+              tempUsed,
+            );
+            if (!next) break;
+            foundCount += 1;
+            match = next;
+          }
+          // Keep skipped earlier occurrences consumed so header text stays non-editable.
+          tempUsed.forEach((key) => usedItemKeys.add(key));
+          if (match && foundCount === occurrence) {
             matches.push({
               ...match,
+              displayValue,
               rect: constrainMatchedFieldRect(
                 match.rect,
                 displayValue,
@@ -285,6 +355,28 @@ export function usePdfEditor({
                 Boolean(field.multiline || field.type === "textarea"),
                 field.fontWeight ?? 400,
                 field.pdfLineHeightMm ?? PDF_DEFAULT_LINE_HEIGHT_MM,
+                field.columnWidthRatio,
+              ),
+            });
+          } else if (
+            match &&
+            occurrence > 1 &&
+            foundCount === 1 &&
+            matchTarget.toUpperCase() !== "PENTAGON PRIME AMERICAS INC"
+          ) {
+            // Unique body text that only appears once — still editable.
+            matches.push({
+              ...match,
+              displayValue,
+              rect: constrainMatchedFieldRect(
+                match.rect,
+                displayValue,
+                field.layoutZone ?? "content",
+                viewport.width,
+                Boolean(field.multiline || field.type === "textarea"),
+                field.fontWeight ?? 400,
+                field.pdfLineHeightMm ?? PDF_DEFAULT_LINE_HEIGHT_MM,
+                field.columnWidthRatio,
               ),
             });
           }
@@ -363,11 +455,10 @@ export function usePdfEditor({
       setHasUnsavedChanges(true);
       setActiveEdit(null);
       setMatchedFields((prev) =>
-        prev.map((match) =>
-          match.fieldId === field.id
-            ? { ...match, displayValue: nextDisplayValue }
-            : match,
-        ),
+        prev.map((match) => {
+          if (match.fieldId !== field.id) return match;
+          return { ...match, displayValue: nextDisplayValue };
+        }),
       );
     },
     [rowData, editorContext],

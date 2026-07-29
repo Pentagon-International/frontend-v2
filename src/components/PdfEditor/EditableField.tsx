@@ -28,6 +28,7 @@ export function EditableField({
   const fontSize = Math.max(position.rect.fontSize, 7);
   const lineHeightPx =
     position.rect.lineHeightPx ?? Math.max(fontSize * 1.15, fontSize + 2);
+  const editWidth = Math.max(position.rect.width - 12, 16);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -47,7 +48,7 @@ export function EditableField({
     if (!isTextarea || !inputRef.current) return;
 
     const el = inputRef.current;
-    const innerWidth = Math.max(position.rect.width - 4, 16);
+    const innerWidth = Math.max(editWidth - 4,16);
     const wrappedLines = countWrappedLines(
       value,
       innerWidth,
@@ -65,7 +66,7 @@ export function EditableField({
   }, [
     value,
     isTextarea,
-    position.rect.width,
+    editWidth,
     position.rect.height,
     lineHeightPx,
     fontSize,
@@ -76,7 +77,7 @@ export function EditableField({
     position: "absolute",
     left: position.rect.left,
     top: position.rect.top,
-    width: position.rect.width,
+    width: editWidth,
     minHeight: Math.max(position.rect.height, lineHeightPx),
     margin: 0,
     padding: "0 2px",
@@ -112,7 +113,6 @@ export function EditableField({
       onCommit();
       return;
     }
-    // Enter / Shift+Enter in textarea: allow default (new line) — do not commit
   };
 
   if (isTextarea) {
@@ -128,7 +128,7 @@ export function EditableField({
           resize: "none",
           overflow: "hidden",
           overflowX: "hidden",
-          maxWidth: position.rect.width,
+          maxWidth: editWidth,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
           overflowWrap: "anywhere",

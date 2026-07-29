@@ -4,6 +4,8 @@ import React, {
   useEffect,
   useCallback,
   useRef,
+  lazy,
+  Suspense,
 } from "react";
 import {
   Box,
@@ -37,8 +39,13 @@ import {
   IconBellRinging,
   IconFileInvoice,
 } from "@tabler/icons-react";
-import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { generateBillOfLadingPDF, isUsBranchForBillOfLading } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { mapOceanExportBookingToBillOfLadingData } from "../../jobs/pdf/mapOceanExportBookingToBillOfLading";
+import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
+
+const BolPdfEditor = lazy(() =>
+  import("../../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
+);
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -754,6 +761,12 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [bolPreviewOpen, setBolPreviewOpen] = useState(false);
   const [bolPdfBlob, setBolPdfBlob] = useState<string | null>(null);
+  const [bolPreviewRowData, setBolPreviewRowData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [bolPreviewHasUnsavedChanges, setBolPreviewHasUnsavedChanges] =
+    useState(false);
   const [bolPreviewLabel, setBolPreviewLabel] = useState("HBL");
 
   // State for display values
@@ -3168,6 +3181,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setBolPreviewLabel(
         String(housingData.hbl_number || bookingRecord?.shipment_code || "HBL"),
       );
+      if (isUsBranchForBillOfLading(country, defaultBranch)) {
+        setBolPreviewRowData({
+          jobData: bolJobData,
+          housingData,
+          defaultBranch,
+          country,
+        });
+      } else {
+        setBolPreviewRowData(null);
+      }
+      setBolPreviewHasUnsavedChanges(false);
       setBolPdfBlob(blobUrl);
     } catch (error) {
       console.error("Error generating draft Bill of Lading PDF:", error);
@@ -3179,12 +3203,30 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
   };
 
+  const regenerateBolPreviewPdf = async (rowData: Record<string, unknown>) => {
+    return generateBillOfLadingPDF(
+      rowData.jobData,
+      rowData.housingData,
+      rowData.defaultBranch,
+      rowData.country,
+    );
+  };
+
+  const handleBolPreviewPdfRegenerated = (newBlobUrl: string) => {
+    if (bolPdfBlob) {
+      window.URL.revokeObjectURL(bolPdfBlob);
+    }
+    setBolPdfBlob(newBlobUrl);
+  };
+
   const handleCloseBolPreview = () => {
     setBolPreviewOpen(false);
     if (bolPdfBlob) {
       window.URL.revokeObjectURL(bolPdfBlob);
     }
     setBolPdfBlob(null);
+    setBolPreviewRowData(null);
+    setBolPreviewHasUnsavedChanges(false);
   };
 
   const handleDownloadBolPdf = () => {
@@ -3453,9 +3495,67 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         centered
         fullScreen
         transitionProps={{ transition: "fade", duration: 200 }}
+        styles={{
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
       >
-        <Stack h="82vh">
-          {bolPdfBlob ? (
+        <Stack h="82vh" style={{ width: "100%" }}>
+          {bolPdfBlob && bolPreviewRowData ? (
+            <>
+              <Box
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: "flex",
+                  width: "100%",
+                }}
+              >
+                <Suspense
+                  fallback={
+                    <Center style={{ flex: 1 }}>
+                      <Loader size="lg" color="#105476" />
+                    </Center>
+                  }
+                >
+                  <BolPdfEditor
+                    pdfBlobUrl={bolPdfBlob}
+                    rowData={bolPreviewRowData}
+                    generatePdf={regenerateBolPreviewPdf}
+                    onQuotationChange={setBolPreviewRowData}
+                    onPdfRegenerated={handleBolPreviewPdfRegenerated}
+                    onUnsavedChangesChange={setBolPreviewHasUnsavedChanges}
+                    buildFieldRegistry={buildBolFieldRegistry}
+                    editable
+                  />
+                </Suspense>
+              </Box>
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCloseBolPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadBolPdf}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                  disabled={bolPreviewHasUnsavedChanges}
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : bolPdfBlob ? (
             <>
               <iframe
                 src={bolPdfBlob}
