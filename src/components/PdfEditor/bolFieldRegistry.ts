@@ -499,7 +499,7 @@ function field(
  * US Bill of Lading editable fields.
  * Excludes: B/L No, Export Reference, Header, Carrier, Signed By.
  */
-export function buildBolFieldRegistry(
+function buildUsBolFieldRegistry(
   rowData: BolPreviewRowData,
 ): EditableFieldDef[] {
   const fields: EditableFieldDef[] = [
@@ -1102,4 +1102,462 @@ export function buildBolFieldRegistry(
     const display = f.getDisplayValue(rowData, {});
     return Boolean(display && String(display).trim());
   });
+}
+
+/** India / non-US MTD column widths as fraction of A4 (210mm, ~10mm side margins). */
+const INDIA_COL = {
+  half: 95 / 210,
+  third: (95 / 3) / 210,
+  vessel: (190 * 0.25) / 210,
+  marks: (190 * 0.14) / 210,
+  description: (190 * 0.44) / 210,
+  cargoNarrow: (190 * 0.12) / 210,
+  container: (190 * 0.18) / 210,
+  footerThird: (190 * (0.18 + 0.14 + 0.44) / 3) / 210,
+  footerRight: (190 * (0.12 + 0.12)) / 210,
+} as const;
+
+function formatIndiaBolDate(dateString: unknown): string {
+  if (!dateString) return "";
+  try {
+    const date = new Date(dateString as string);
+    if (isNaN(date.getTime())) return "";
+    const day = String(date.getDate()).padStart(2, "0");
+    const monthNames = [
+      "JAN",
+      "FEB",
+      "MAR",
+      "APR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AUG",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DEC",
+    ];
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}-${monthNames[date.getMonth()]}-${year}`;
+  } catch {
+    return "";
+  }
+}
+
+function getIndiaVesselVoyDisplay(data: BolPreviewRowData): string {
+  const carrier = getCarrierDetails(data);
+  const vessel = String(carrier.vessel_name || "");
+  const voyage = String(carrier.voyage_number || "");
+  if (vessel && voyage) return `${vessel} / ${voyage}`;
+  return vessel || voyage;
+}
+
+function getIndiaDeliveryAgent(data: BolPreviewRowData): {
+  name: string;
+  address: string;
+  email: string;
+} {
+  const mbl = getMblDetails(data);
+  const isDirect = Boolean(mbl.is_direct);
+  return {
+    name: String(
+      isDirect ? mbl.consignee_name || "" : mbl.agent_name || "",
+    ),
+    address: String(
+      isDirect ? mbl.consignee_address || "" : mbl.agent_address || "",
+    ),
+    email: String(
+      isDirect ? mbl.consignee_email || "" : mbl.agent_email || "",
+    ),
+  };
+}
+
+function isUsBolRowData(rowData: BolPreviewRowData): boolean {
+  const codes: string[] = [];
+  const names: string[] = [];
+  const add = (code?: unknown, name?: unknown) => {
+    if (code) codes.push(String(code).trim().toUpperCase());
+    if (name) names.push(String(name).trim().toUpperCase());
+  };
+  const country = rowData.country as
+    | { country_code?: string; country_name?: string }
+    | null
+    | undefined;
+  const branch = rowData.defaultBranch as
+    | { country?: { country_code?: string; country_name?: string } }
+    | null
+    | undefined;
+  add(country?.country_code, country?.country_name);
+  add(branch?.country?.country_code, branch?.country?.country_name);
+  return (
+    codes.includes("US") ||
+    names.some((n) => n.includes("USA") || n.includes("UNITED STATES"))
+  );
+}
+
+/**
+ * India / non-US Multimodal Transport Document editable fields.
+ * Matches BillOfLadingPDFTemplate India layout text.
+ */
+function buildIndiaBolFieldRegistry(
+  rowData: BolPreviewRowData,
+): EditableFieldDef[] {
+  const fields: EditableFieldDef[] = [
+    field({
+      id: "bol_shipper_name",
+      path: "housingData.shipper_name",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => String(getHousing(data).shipper_name || ""),
+    }),
+    field({
+      id: "bol_shipper_address",
+      path: "housingData.shipper_address",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => String(getHousing(data).shipper_address || ""),
+    }),
+    field({
+      id: "bol_consignee_name",
+      path: "housingData.consignee_name",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => String(getHousing(data).consignee_name || ""),
+    }),
+    field({
+      id: "bol_consignee_address",
+      path: "housingData.consignee_address",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) =>
+        String(getHousing(data).consignee_address || ""),
+    }),
+    field({
+      id: "bol_notify_name",
+      path: "housingData.notify_customer1_name",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => getNotifyName(getHousing(data)),
+      parseInput: (raw) => ({
+        notify_customer1_name: raw,
+        notify1_customer_name: raw,
+      }),
+    }),
+    field({
+      id: "bol_notify_address",
+      path: "housingData.notify_customer1_address",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => getNotifyAddress(getHousing(data)),
+      parseInput: (raw) => ({
+        notify_customer1_address: raw,
+        notify1_customer_address: raw,
+      }),
+    }),
+    field({
+      id: "bol_place_of_acceptance",
+      path: "housingData.origin_name",
+      editable: true,
+      columnWidthRatio: INDIA_COL.third,
+      getDisplayValue: (data) => String(getHousing(data).origin_name || ""),
+    }),
+    field({
+      id: "bol_date_of_acceptance",
+      path: "jobData.carrierDetails.mbl_date",
+      editable: true,
+      columnWidthRatio: INDIA_COL.third,
+      getDisplayValue: (data) =>
+        formatIndiaBolDate(getCarrierDetails(data).mbl_date),
+    }),
+    field({
+      id: "bol_port_of_loading",
+      path: "jobData.mblDetails.origin_name",
+      editable: true,
+      columnWidthRatio: INDIA_COL.third,
+      getDisplayValue: (data) => {
+        const m = getMblDetails(data);
+        const j = getJob(data);
+        return String(m.origin_name || j.origin_name || "");
+      },
+    }),
+    field({
+      id: "bol_port_of_discharge",
+      path: "jobData.mblDetails.destination_name",
+      editable: true,
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => {
+        const m = getMblDetails(data);
+        const j = getJob(data);
+        return String(m.destination_name || j.destination_name || "");
+      },
+    }),
+    field({
+      id: "bol_place_of_delivery",
+      path: "housingData.destination_name",
+      editable: true,
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) =>
+        String(getHousing(data).destination_name || ""),
+    }),
+    field({
+      id: "bol_delivery_agent_name",
+      path: "jobData.mblDetails.agent_name",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => getIndiaDeliveryAgent(data).name,
+    }),
+    field({
+      id: "bol_delivery_agent_address",
+      path: "jobData.mblDetails.agent_address",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => getIndiaDeliveryAgent(data).address,
+    }),
+    field({
+      id: "bol_delivery_agent_email",
+      path: "jobData.mblDetails.agent_email",
+      editable: true,
+      columnWidthRatio: INDIA_COL.half,
+      getDisplayValue: (data) => {
+        const email = getIndiaDeliveryAgent(data).email;
+        return email ? `Email: ${email}` : "";
+      },
+      parseInput: (raw) => stripPrefix(raw, /^Email:\s*/i),
+    }),
+    field({
+      id: "bol_vessel_voy",
+      path: "jobData.carrierDetails.vessel_name",
+      editable: true,
+      columnWidthRatio: INDIA_COL.vessel,
+      getDisplayValue: (data) => getIndiaVesselVoyDisplay(data),
+      parseInput: (raw, data) => parseVesselVoyInput(raw, data),
+    }),
+    field({
+      id: "bol_marks_no",
+      path: "housingData.marks_no",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.marks,
+      getDisplayValue: (data) => String(getHousing(data).marks_no || ""),
+    }),
+    ...(() => {
+      const housing = getHousing(rowData);
+      const cargoDetails = Array.isArray(housing.cargo_details)
+        ? housing.cargo_details
+        : [];
+      const marksFields: EditableFieldDef[] = [];
+      cargoDetails.forEach((_, index) => {
+        marksFields.push(
+          field({
+            id: `bol_marks_container_no_${index}`,
+            path: `housingData.cargo_details.${index}.container_no`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) =>
+              String(getCargoAt(data, index).container_no || ""),
+          }),
+          field({
+            id: `bol_marks_container_type_${index}`,
+            path: `housingData.cargo_details.${index}.container_type_name`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) => resolveContainerTypeName(data, index),
+          }),
+          field({
+            id: `bol_marks_seal_${index}`,
+            path: `housingData.cargo_details.${index}.actual_seal_no`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) => {
+              const seal = getCargoAt(data, index).actual_seal_no;
+              return seal ? `Seal No: ${seal}` : "";
+            },
+            parseInput: (raw) => stripPrefix(raw, /^Seal No:\s*/i),
+          }),
+          field({
+            id: `bol_marks_gross_wt_${index}`,
+            path: `housingData.cargo_details.${index}.gross_weight`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) => {
+              const wt = getCargoAt(data, index).gross_weight;
+              return wt ? `Gross Wt: ${wt} KGS` : "";
+            },
+            parseInput: (raw) =>
+              stripPrefix(raw, /^Gross Wt:\s*/i)
+                .replace(/\s*KGS\s*$/i, "")
+                .trim(),
+          }),
+          field({
+            id: `bol_marks_volume_${index}`,
+            path: `housingData.cargo_details.${index}.volume`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) => {
+              const vol = getCargoAt(data, index).volume;
+              return vol !== undefined && vol !== null && vol !== ""
+                ? `Volume: ${vol} CBM`
+                : "";
+            },
+            parseInput: (raw) =>
+              stripPrefix(raw, /^Volume:\s*/i)
+                .replace(/\s*CBM\s*$/i, "")
+                .trim(),
+          }),
+          field({
+            id: `bol_marks_pkgs_${index}`,
+            path: `housingData.cargo_details.${index}.no_of_packages`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) => {
+              const pkgs = getCargoAt(data, index).no_of_packages;
+              return pkgs ? `Pkgs: ${pkgs} PACKAGE(S)` : "";
+            },
+            parseInput: (raw) => {
+              const cleaned = stripPrefix(raw, /^Pkgs:\s*/i).replace(
+                /\s*PACKAGE\(S\)\s*$/i,
+                "",
+              );
+              const num = parseFloat(cleaned);
+              return Number.isFinite(num) ? num : cleaned.trim();
+            },
+          }),
+        );
+      });
+      return marksFields;
+    })(),
+    field({
+      id: "bol_packages",
+      path: "housingData.summary.total_no_of_packages",
+      editable: true,
+      columnWidthRatio: INDIA_COL.description,
+      getDisplayValue: (data) => {
+        const total = getSummary(data).total_no_of_packages;
+        if (total === "" || total == null) return "";
+        return `${total} PACKAGE(S)`;
+      },
+      parseInput: (raw) => {
+        const cleaned = raw.replace(/\s*PACKAGE\(S\)\s*$/i, "").trim();
+        const num = parseFloat(cleaned);
+        return Number.isFinite(num) ? num : cleaned;
+      },
+    }),
+    field({
+      id: "bol_commodity_description",
+      path: "housingData.commodity_description",
+      editable: true,
+      multiline: true,
+      type: "textarea",
+      columnWidthRatio: INDIA_COL.description,
+      getDisplayValue: (data) =>
+        String(getHousing(data).commodity_description || ""),
+    }),
+    field({
+      id: "bol_gross_weight",
+      path: "housingData.summary.total_gross_weight",
+      editable: true,
+      columnWidthRatio: INDIA_COL.cargoNarrow,
+      getDisplayValue: (data) => {
+        const total = getSummary(data).total_gross_weight;
+        if (total === "" || total == null) return "";
+        return `${total} KGS`;
+      },
+      parseInput: (raw) => {
+        const num = parseFloat(stripPrefix(raw, /\s*KGS\s*$/i));
+        return Number.isFinite(num) ? num : raw.trim();
+      },
+    }),
+    field({
+      id: "bol_measurement",
+      path: "housingData.summary.total_volume",
+      editable: true,
+      columnWidthRatio: INDIA_COL.cargoNarrow,
+      getDisplayValue: (data) => {
+        const total = getSummary(data).total_volume;
+        if (total === "" || total == null) return "";
+        return `${total} CBM`;
+      },
+      parseInput: (raw) => {
+        const num = parseFloat(stripPrefix(raw, /\s*CBM\s*$/i));
+        return Number.isFinite(num) ? num : raw.trim();
+      },
+    }),
+    field({
+      id: "bol_freight_payable_at",
+      path: "housingData.freight_payable_at",
+      editable: true,
+      columnWidthRatio: INDIA_COL.footerThird,
+      getDisplayValue: (data) =>
+        String(getHousing(data).freight_payable_at || "DESTINATION"),
+    }),
+    field({
+      id: "bol_number_of_originals",
+      path: "housingData.number_of_originals",
+      editable: true,
+      columnWidthRatio: INDIA_COL.footerThird,
+      getDisplayValue: (data) => {
+        const h = getHousing(data);
+        return String(
+          h.number_of_originals ?? h.no_of_originals ?? "0/ZERO",
+        );
+      },
+    }),
+    field({
+      id: "bol_place_and_date_of_issue",
+      path: "housingData.place_and_date_of_issue",
+      editable: true,
+      columnWidthRatio: INDIA_COL.footerRight,
+      getDisplayValue: (data) => {
+        const h = getHousing(data);
+        if (h.place_and_date_of_issue) {
+          return String(h.place_and_date_of_issue);
+        }
+        if (h.place_of_issue && h.date_of_issue) {
+          return `${h.place_of_issue} / ${formatIndiaBolDate(h.date_of_issue)}`;
+        }
+        const m = getMblDetails(data);
+        const j = getJob(data);
+        const origin = String(m.origin_name || j.origin_name || "");
+        const date =
+          formatIndiaBolDate(getCarrierDetails(data).mbl_date) ||
+          formatIndiaBolDate(new Date().toISOString());
+        return origin ? `${origin} / ${date}` : date;
+      },
+    }),
+  ];
+
+  return fields.filter((f) => {
+    if (!f.editable) return false;
+    const display = f.getDisplayValue(rowData, {});
+    return Boolean(display && String(display).trim());
+  });
+}
+
+/**
+ * Bill of Lading editable fields — US template vs India/MTD layout.
+ */
+export function buildBolFieldRegistry(
+  rowData: BolPreviewRowData,
+): EditableFieldDef[] {
+  if (isUsBolRowData(rowData)) {
+    return buildUsBolFieldRegistry(rowData);
+  }
+  return buildIndiaBolFieldRegistry(rowData);
 }

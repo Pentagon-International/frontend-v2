@@ -168,6 +168,7 @@ type HAWBDetailsForm = {
   handling_information: string;
   is_agreed_charges: boolean;
   marks_no: string;
+  note: string;
   item_no: string;
   sub_item_no: string;
   ref_no: string;
@@ -638,6 +639,7 @@ function HouseCreate() {
           ?.is_agreed_charges,
       ),
       marks_no: editData?.marks_no || "",
+      note: (editData as { note?: string } | undefined)?.note || "",
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
@@ -969,6 +971,7 @@ function HouseCreate() {
           (editData as { is_agreed_charges?: unknown }).is_agreed_charges,
         ),
         marks_no: editData.marks_no || "",
+        note: (editData as { note?: string }).note || "",
         ref_no: (editData as { ref_no?: string }).ref_no || "",
       });
 
@@ -2231,6 +2234,7 @@ function HouseCreate() {
       handling_information: v.handling_information,
       is_agreed_charges: v.is_agreed_charges,
       marks_no: v.marks_no,
+      note: v.note || "",
       item_no: v.item_no,
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
@@ -2318,6 +2322,7 @@ function HouseCreate() {
       handling_information: currentFormValues.handling_information,
       is_agreed_charges: currentFormValues.is_agreed_charges,
       marks_no: currentFormValues.marks_no,
+      note: currentFormValues.note || "",
       item_no: currentFormValues.item_no,
       sub_item_no: currentFormValues.sub_item_no,
       ref_no: currentFormValues.ref_no,
@@ -2422,6 +2427,7 @@ function HouseCreate() {
         handling_information: form.values.handling_information,
         is_agreed_charges: form.values.is_agreed_charges,
         marks_no: form.values.marks_no,
+        note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
@@ -3228,6 +3234,17 @@ function HouseCreate() {
                   error={form.errors.ref_no}
                 />
               </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  radius="sm"
+                  {...form.getInputProps("note")}
+                />
+              </Grid.Col>
             </Grid>
           </Box>
         </Tabs.Panel>
@@ -3967,6 +3984,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
             </Grid>
+
           </Box>
         </Tabs.Panel>
 

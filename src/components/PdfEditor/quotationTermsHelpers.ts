@@ -158,8 +158,7 @@ export function computePdfPreviewChargeTotalInQuoteCurrency(
 
   const roe = Number(charge.roe || 1);
   const effectiveRoe = roe > 0 ? roe : 1;
-  const noOfUnits = Number(charge.no_of_units ?? 1) || 1;
-  return amount / effectiveRoe / noOfUnits;
+  return amount / effectiveRoe;
 }
 
 /** Amount/Unit column: numeric value only, India en-IN / foreign en-US grouping. */
@@ -228,6 +227,5 @@ export function parseChargeTotalDisplayInput(
 
   const roe = Number(charge?.roe ?? roeForQuote ?? 1);
   const effectiveRoe = roe > 0 ? roe : 1;
-  const noOfUnits = Number(charge?.no_of_units ?? 1) || 1;
-  return parsed * effectiveRoe * noOfUnits;
+  return parsed * effectiveRoe;
 }

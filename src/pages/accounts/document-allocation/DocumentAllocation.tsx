@@ -134,6 +134,148 @@ const formatTwoDecimalsFromString = (
   return n == null ? "" : formatMoneyAmountBound(n);
 };
 
+const isCreditSide = (drCr: string | null | undefined): boolean => {
+  const v = String(drCr ?? "")
+    .trim()
+    .toUpperCase();
+  return v === "CR" || v === "CREDIT" || v === "C";
+};
+
+const isDebitSide = (drCr: string | null | undefined): boolean => {
+  const v = String(drCr ?? "")
+    .trim()
+    .toUpperCase();
+  return v === "DR" || v === "DEBIT" || v === "D";
+};
+
+const getRowLocalAmount = (row: DocumentAllocationRow): number =>
+  parseDecimal(
+    String(row.outstanding_local_amount ?? row.amount_in_local ?? ""),
+  ) ?? 0;
+
+const computeAllocationTotals = (source: DocumentAllocationRow[]) => {
+  let credit = 0;
+  let debit = 0;
+  for (const row of source) {
+    const amount = getRowLocalAmount(row);
+    if (isCreditSide(row.Dr_Cr)) credit += amount;
+    else if (isDebitSide(row.Dr_Cr)) debit += amount;
+  }
+  return {
+    credit,
+    debit,
+    net: credit - debit,
+  };
+};
+
+type AllocationTotals = ReturnType<typeof computeAllocationTotals>;
+
+/** Exact leading column spans (same as table rows) so gutters align. */
+const MODAL_TOTALS_LEADING_SPANS = [
+  0.4, 0.8, 1.2, 0.9, 1.8, 1.1, 0.8, 0.7, 1.1,
+];
+const MODAL_TOTALS_LABEL_SPAN = 1.1; // Outstanding amount
+const MODAL_TOTALS_VALUE_SPAN = 1.5; // Outstanding local amount
+
+const MAIN_TOTALS_LEADING_SPANS = [
+  0.9, 0.8, 0.7, 1.7, 1.2, 0.9, 0.7, 1.2,
+];
+const MAIN_TOTALS_LABEL_SPAN = 1.2; // Outstanding amount
+const MAIN_TOTALS_VALUE_SPAN = 1.3; // Outstanding local amount
+
+const AllocationTotalsSummary = ({
+  totals,
+  leadingSpans,
+  labelSpan,
+  valueSpan,
+}: {
+  totals: AllocationTotals;
+  leadingSpans: number[];
+  labelSpan: number;
+  valueSpan: number;
+}) => {
+  const items: {
+    label: string;
+    value: number;
+    colorBySign?: boolean;
+  }[] = [
+    { label: "Credit Total:", value: totals.credit },
+    { label: "Debit Total:", value: totals.debit },
+    { label: "Net Total:", value: totals.net, colorBySign: true },
+  ];
+
+  return (
+    <Box mt="md">
+      {items.map((item) => {
+        const valueColor = item.colorBySign
+          ? item.value > 0
+            ? "#16a34a"
+            : item.value < 0
+              ? "#dc2626"
+              : "#105476"
+          : "#105476";
+
+        return (
+        <Grid
+          key={item.label}
+          w="100%"
+          gutter="xs"
+          // mt={index !== 0 ? 2 : 0}
+          align="center"
+        >
+          {leadingSpans.map((span, leadIndex) => (
+            <Grid.Col key={`lead-${leadIndex}`} span={span} />
+          ))}
+          <Grid.Col span={labelSpan}>
+            <Box
+              style={{
+                height: "36px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-end",
+              }}
+            >
+              <Text
+                size="xs"
+                fw={600}
+                c="dimmed"
+                ta="right"
+                style={{ fontFamily: "Inter" }}
+              >
+                {item.label}
+              </Text>
+            </Box>
+          </Grid.Col>
+          <Grid.Col span={valueSpan}>
+            <Box
+              style={{
+                height: "36px",
+                display: "flex",
+                alignItems: "center",
+                // Match FormTextInput size="sm": 1px border + input horizontal padding
+                paddingLeft:
+                  "calc(1px + 0.75rem * var(--mantine-scale, 1))",
+                fontSize: "13px",
+                fontFamily: "Inter",
+              }}
+            >
+              <Text
+                size="sm"
+                fw={700}
+                c={valueColor}
+                style={{ fontFamily: "Inter" }}
+              >
+                {formatMoneyAmountBound(item.value)}
+              </Text>
+            </Box>
+          </Grid.Col>
+        </Grid>
+        );
+      })}
+    </Box>
+  );
+};
+
 const formatDateForApi = (date: Date | null): string => {
   if (!date) return "";
   const yyyy = date.getFullYear();
@@ -359,6 +501,15 @@ export default function DocumentAllocation() {
     String(savedHeader?.status ?? "").toUpperCase() === "POSTED" ||
     isViewMode;
   const hasSavedId = savedHeader?.id != null;
+
+  const allocationTotals = useMemo(
+    () => computeAllocationTotals(rows),
+    [rows],
+  );
+  const fetchedAllocationTotals = useMemo(
+    () => computeAllocationTotals(fetchedRows),
+    [fetchedRows],
+  );
 
   const allocationAuditSource = useMemo(() => {
     const row = (
@@ -804,6 +955,7 @@ export default function DocumentAllocation() {
           {/* Modal header */}
           <Grid
             w="100%"
+            gutter="xs"
             py="sm"
             style={{
               fontWeight: 600,
@@ -816,7 +968,7 @@ export default function DocumentAllocation() {
             <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
               Branch
             </Grid.Col>
-            <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
+            <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
               Daybook code
             </Grid.Col>
             <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
@@ -964,6 +1116,15 @@ export default function DocumentAllocation() {
               </Grid>
             );
           })}
+
+          {fetchedRows.length > 0 ? (
+            <AllocationTotalsSummary
+              totals={fetchedAllocationTotals}
+              leadingSpans={MODAL_TOTALS_LEADING_SPANS}
+              labelSpan={MODAL_TOTALS_LABEL_SPAN}
+              valueSpan={MODAL_TOTALS_VALUE_SPAN}
+            />
+          ) : null}
 
           <Group justify="flex-end" mt="md">
             <Button
@@ -1238,7 +1399,7 @@ export default function DocumentAllocation() {
                         {/* Static header (matches InvoiceCreate Charges section style) */}
                         <Grid
                           w="100%"
-                          // gutter="sm"
+                          gutter="xs"
                           py="sm"
                           mb="sm"
                           style={{
@@ -1483,6 +1644,12 @@ export default function DocumentAllocation() {
                             })()}
                           </Grid>
                         ))}
+                      <AllocationTotalsSummary
+                        totals={allocationTotals}
+                        leadingSpans={MAIN_TOTALS_LEADING_SPANS}
+                        labelSpan={MAIN_TOTALS_LABEL_SPAN}
+                        valueSpan={MAIN_TOTALS_VALUE_SPAN}
+                      />
                       </Box>
                     </Card>
                   </Grid.Col>

@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { generateUsBillOfLadingPDF } from "./BillOfLadingPDFTemplateUS";
 
 // Helper function for date formatting (DD-MMM-YY)
@@ -56,7 +57,45 @@ const getActiveBranchFromStore = () => {
   return null;
 };
 
-// USA logo for India and USA branches; empty otherwise (no fallback)
+type BolCountryRef = {
+  country_code?: string;
+  country_name?: string;
+} | null;
+
+type BolBranchRef = {
+  country?: BolCountryRef;
+} | null;
+
+/** Collect country codes/names from args + user store (default branch). */
+const collectBolCountryHints = (
+  country?: BolCountryRef,
+  defaultBranch?: BolBranchRef,
+): { codes: string[]; names: string[] } => {
+  const codes: string[] = [];
+  const names: string[] = [];
+  const add = (code?: string, name?: string) => {
+    if (code) codes.push(String(code).trim().toUpperCase());
+    if (name) names.push(String(name).trim().toUpperCase());
+  };
+  add(country?.country_code, country?.country_name);
+  add(defaultBranch?.country?.country_code, defaultBranch?.country?.country_name);
+  try {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      add(user?.country?.country_code, user?.country?.country_name);
+      const def = user?.branches?.find(
+        (b: { is_default?: boolean }) => b.is_default === true,
+      );
+      add(def?.country?.country_code, def?.country?.country_name);
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return { codes, names };
+};
+
+// USA logo for India, USA, and Vietnam branches; empty otherwise (no fallback)
 const getLogoByCountry = (country: any): string | null => {
   try {
     let countryName = "";
@@ -85,8 +124,13 @@ const getLogoByCountry = (country: any): string | null => {
       countryCode === "US" ||
       countryName === "USA" ||
       countryName.includes("UNITED STATES");
+    const isVietnam =
+      countryName.includes("VIETNAM") ||
+      countryName.includes("VIET NAM") ||
+      countryCode === "VN" ||
+      countryCode === "VNM";
 
-    if (isIndia || isUSA) {
+    if (isIndia || isUSA || isVietnam) {
       return pentagonPrimeAmericas;
     }
     return null;
@@ -97,70 +141,33 @@ const getLogoByCountry = (country: any): string | null => {
 };
 
 const isUsBranchForBillOfLading = (
-  country?: { country_code?: string; country_name?: string } | null,
-  defaultBranch?: {
-    country?: { country_code?: string; country_name?: string };
-  } | null,
+  country?: BolCountryRef,
+  defaultBranch?: BolBranchRef,
 ): boolean => {
-  const codes: string[] = [];
-  const names: string[] = [];
-  const add = (code?: string, name?: string) => {
-    if (code) codes.push(String(code).trim().toUpperCase());
-    if (name) names.push(String(name).trim().toUpperCase());
-  };
-  add(country?.country_code, country?.country_name);
-  add(defaultBranch?.country?.country_code, defaultBranch?.country?.country_name);
-  try {
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      add(user?.country?.country_code, user?.country?.country_name);
-      const def = user?.branches?.find(
-        (b: { is_default?: boolean }) => b.is_default === true,
-      );
-      add(def?.country?.country_code, def?.country?.country_name);
-    }
-  } catch {
-    // ignore parse errors
-  }
+  const { codes, names } = collectBolCountryHints(country, defaultBranch);
   return (
     codes.includes("US") ||
-    names.some(
-      (n) => n.includes("USA") || n.includes("UNITED STATES"),
-    )
+    names.some((n) => n.includes("USA") || n.includes("UNITED STATES"))
   );
 };
 
 const isIndiaBranchForBillOfLading = (
-  country?: { country_code?: string; country_name?: string } | null,
-  defaultBranch?: {
-    country?: { country_code?: string; country_name?: string };
-  } | null,
+  country?: BolCountryRef,
+  defaultBranch?: BolBranchRef,
 ): boolean => {
-  const codes: string[] = [];
-  const names: string[] = [];
-  const add = (code?: string, name?: string) => {
-    if (code) codes.push(String(code).trim().toUpperCase());
-    if (name) names.push(String(name).trim().toUpperCase());
-  };
-  add(country?.country_code, country?.country_name);
-  add(defaultBranch?.country?.country_code, defaultBranch?.country?.country_name);
-  try {
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      add(user?.country?.country_code, user?.country?.country_name);
-      const def = user?.branches?.find(
-        (b: { is_default?: boolean }) => b.is_default === true,
-      );
-      add(def?.country?.country_code, def?.country?.country_name);
-    }
-  } catch {
-    // ignore parse errors
-  }
+  const { codes, names } = collectBolCountryHints(country, defaultBranch);
+  return codes.includes("IN") || names.some((n) => n.includes("INDIA"));
+};
+
+const isVietnamBranchForBillOfLading = (
+  country?: BolCountryRef,
+  defaultBranch?: BolBranchRef,
+): boolean => {
+  const { codes, names } = collectBolCountryHints(country, defaultBranch);
   return (
-    codes.includes("IN") ||
-    names.some((n) => n.includes("INDIA"))
+    codes.includes("VN") ||
+    codes.includes("VNM") ||
+    names.some((n) => n.includes("VIETNAM") || n.includes("VIET NAM"))
   );
 };
 
@@ -355,7 +362,8 @@ export const generateBillOfLadingPDF = (
   jobData: any,
   housingData: any,
   defaultBranch: any,
-  country?: any
+  country?: any,
+  options?: { draft?: boolean; blType?: string; houseIndex?: number },
 ): string => {
   try {
     if (isUsBranchForBillOfLading(country, defaultBranch)) {
@@ -373,17 +381,39 @@ export const generateBillOfLadingPDF = (
     const boxPadding = 5;
     const initialYPos = 10;
 
-    const copyLabels = [
-      "1st ORIGINAL",
-      "2nd ORIGINAL",
-      "3rd ORIGINAL",
-      "NON NEGOTIABLE COPY",
-      "NON NEGOTIABLE COPY",
-      "NON NEGOTIABLE COPY",
-    ];
-
     const activeBranch = defaultBranch || getActiveBranchFromStore();
-    const isIndiaBranch = isIndiaBranchForBillOfLading(country, defaultBranch);
+    // India layout/spacing for all non-US branches; India-only content stays gated.
+    const isIndiaContent = isIndiaBranchForBillOfLading(country, defaultBranch);
+    const isIndiaBranch = true;
+    const isDraftBol = options?.draft === true;
+    const blTypeRaw = String(
+      options?.blType ?? housingData?.bl_type ?? "",
+    ).trim();
+    // Normalize legacy values from earlier dropdown labels.
+    const blType =
+      blTypeRaw === "Original"
+        ? "ORIGINAL"
+        : blTypeRaw === "Surrender" || blTypeRaw === "SURRENDER"
+          ? "SURRENDERED"
+          : blTypeRaw;
+    const isSeawayOrSurrendered =
+      blType === "SEAWAY BILL" || blType === "SURRENDERED";
+    // Draft / SEAWAY BILL / SURRENDERED: single page. Empty or ORIGINAL: 6 copies.
+    const isSinglePageBol = isDraftBol || isSeawayOrSurrendered;
+    // Only DRAFT appears beside the document title (black). SEAWAY/SURRENDERED use red copy labels.
+    const titleSuffix = isDraftBol ? "DRAFT" : "";
+    const copyLabels = isDraftBol
+      ? [""]
+      : isSeawayOrSurrendered
+        ? [blType]
+        : [
+            "1st ORIGINAL",
+            "2nd ORIGINAL",
+            "3rd ORIGINAL",
+            "NON NEGOTIABLE COPY",
+            "NON NEGOTIABLE COPY",
+            "NON NEGOTIABLE COPY",
+          ];
     const transportLabelGap = isIndiaBranch ? 3 : 4;
     const transportDataHeight = isIndiaBranch ? 5 : 8;
     const transportSectionGap = isIndiaBranch ? 3 : 5;
@@ -421,7 +451,42 @@ export const generateBillOfLadingPDF = (
 
     // Document Numbers — Bill of Lading uses house (HBL) number
     const billOfLadingNo = housingData?.hbl_number || "";
-    const shipmentReferenceNo = housingData?.shipment_id || housingData?.hbl_number || "";
+    const housingList = Array.isArray(jobInfo?.housing_details)
+      ? jobInfo.housing_details
+      : Array.isArray(jobInfo?.housingDetails)
+        ? jobInfo.housingDetails
+        : [];
+    const houseIndexFromList = housingList.findIndex(
+      (h: { id?: unknown; hbl_number?: unknown }) => {
+        if (
+          housingData?.id != null &&
+          h?.id != null &&
+          String(h.id) === String(housingData.id)
+        ) {
+          return true;
+        }
+        if (
+          housingData?.hbl_number &&
+          h?.hbl_number &&
+          String(h.hbl_number) === String(housingData.hbl_number)
+        ) {
+          return true;
+        }
+        return false;
+      },
+    );
+    const houseSubJobNo =
+      options?.houseIndex != null && Number(options.houseIndex) > 0
+        ? Number(options.houseIndex)
+        : houseIndexFromList >= 0
+          ? houseIndexFromList + 1
+          : 1;
+    const displayJobId =
+      formatDisplayJobId(jobInfo?.job_id, jobInfo?.service_code) ||
+      String(jobInfo?.job_id ?? "").trim();
+    const shipmentReferenceNo = displayJobId
+      ? `${displayJobId}-${houseSubJobNo}`
+      : "";
 
     // Consignor (Shipper) Details
     const consignorName = housingData?.shipper_name || "";
@@ -498,11 +563,23 @@ export const generateBillOfLadingPDF = (
       };
     });
 
-    // Financial and Other Particulars
-    const freightAmount = "";
-    const freightPayableAt = "DESTINATION";
-    const numberOfOriginalMTD = "0/ZERO";
-    const placeAndDateOfIssue = `${masterOrigin} / ${dateOfAcceptance || formatDateForDisplay(new Date().toISOString())}`;
+    // Financial and Other Particulars (editable overrides from preview)
+    const freightAmount = housingData?.freight_amount || "";
+    const freightPayableAt =
+      housingData?.freight_payable_at || "DESTINATION";
+    const numberOfOriginalMTD =
+      housingData?.number_of_originals ??
+      housingData?.no_of_originals ??
+      "0/ZERO";
+    const placeAndDateOfIssue =
+      housingData?.place_and_date_of_issue ||
+      (housingData?.place_of_issue
+        ? `${housingData.place_of_issue}${
+            housingData?.date_of_issue
+              ? ` / ${formatDateForDisplay(housingData.date_of_issue)}`
+              : ""
+          }`
+        : `${masterOrigin} / ${dateOfAcceptance || formatDateForDisplay(new Date().toISOString())}`);
 
     // Set document properties
     doc.setProperties({
@@ -529,7 +606,19 @@ export const generateBillOfLadingPDF = (
     // yPos = margin + 5;
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text("MULTIMODAL TRANSPORT DOCUMENT", pageWidth / 2, yPos, { align: "center" });
+    const docTitle = "MULTIMODAL TRANSPORT DOCUMENT";
+    if (titleSuffix) {
+      const titleWidth = doc.getTextWidth(docTitle);
+      const titleGap = 3;
+      const suffixWidth = doc.getTextWidth(titleSuffix);
+      const blockWidth = titleWidth + titleGap + suffixWidth;
+      const blockStartX = (pageWidth - blockWidth) / 2;
+      doc.setTextColor(0, 0, 0);
+      doc.text(docTitle, blockStartX, yPos);
+      doc.text(titleSuffix, blockStartX + titleWidth + titleGap, yPos);
+    } else {
+      doc.text(docTitle, pageWidth / 2, yPos, { align: "center" });
+    }
     yPos += 5;
 
     // ===== MAIN BOX - DIVIDED INTO TWO HALVES =====
@@ -691,10 +780,19 @@ export const generateBillOfLadingPDF = (
       rightY,
     );
     rightY += isIndiaBranch ? 6 : 8;
-    if (isIndiaBranch) {
+    if (isIndiaContent) {
       doc.setFont("helvetica", "bold");
       doc.text(
         "MTO NO : MTO/DGS/3208/SEP/2026",
+        midLineX + boxPadding,
+        rightY,
+      );
+      rightY += 4;
+    } else if (shipmentReferenceNo) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(
+        `SHIPMENT REF NO: ${shipmentReferenceNo}`,
         midLineX + boxPadding,
         rightY,
       );
@@ -756,8 +854,8 @@ export const generateBillOfLadingPDF = (
     });
     rightY += branchAddressLines.length * 3.5;
     
-    // PAN and GSTN (if available)
-    if (branchInfo.pan || branchInfo.gstn) {
+    // PAN and GSTN — India branches only (when present on branch)
+    if (isIndiaContent && (branchInfo.pan || branchInfo.gstn)) {
       const panGstnText = [];
       if (branchInfo.pan) {
         panGstnText.push(`PAN: ${branchInfo.pan}`);
@@ -1403,14 +1501,21 @@ export const generateBillOfLadingPDF = (
         }
       }
 
-      // Red copy label at end of Column 3 data area (just above footer border)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(255, 0, 0);
-      doc.text(copyLabel, containerCol3X + boxPadding, footerStartY - 6);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6);
+      // Copy label at end of Column 3 (packages) — red, center-aligned
+      if (copyLabel) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(255, 0, 0);
+        doc.text(
+          copyLabel,
+          containerCol3X + containerCol3Width / 2,
+          footerStartY - 6,
+          { align: "center" },
+        );
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6);
+      }
       
       // Column 4: Gross Weight (single value, drawn once on first page only)
       if (grossWeightText) {
@@ -1457,14 +1562,21 @@ export const generateBillOfLadingPDF = (
       // Empty row if no container details - draw vertical lines to footer section start
       const containerDetailsEndY = footerStartY;
 
-      // Red copy label at end of Column 3 data area even when no container details exist
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(255, 0, 0);
-      doc.text(copyLabel, containerCol3X + boxPadding, footerStartY - 6);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6);
+      // Copy label even when no container details exist (red, center-aligned)
+      if (copyLabel) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(255, 0, 0);
+        doc.text(
+          copyLabel,
+          containerCol3X + containerCol3Width / 2,
+          footerStartY - 6,
+          { align: "center" },
+        );
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6);
+      }
 
       doc.line(containerCol2X, headerBottomY, containerCol2X, containerDetailsEndY);
       doc.line(containerCol3X, headerBottomY, containerCol3X, containerDetailsEndY);
@@ -1565,7 +1677,8 @@ export const generateBillOfLadingPDF = (
     doc.line(innerMargin + mainBoxWidth, footerStartY, innerMargin + mainBoxWidth, footerBottomY);
     
     // ===== REMAINING CONTENT ON SUBSEQUENT PAGES (NO FOOTER) =====
-    if (containerDetails && containerDetails.length > 0) {
+    // Single-page BOL variants (draft / SEAWAY BILL / SURRENDERED) stay on one page.
+    if (!isSinglePageBol && containerDetails && containerDetails.length > 0) {
       const remainingContainers = containerEntries.slice(containersDrawnOnFirstPage);
       const remainingCommodityLines = commodityLines.slice(commodityLinesDrawn);
       
@@ -1664,7 +1777,7 @@ export const generateBillOfLadingPDF = (
   }
 };
 
-export { isUsBranchForBillOfLading };
+export { isUsBranchForBillOfLading, isIndiaBranchForBillOfLading, isVietnamBranchForBillOfLading };
 
 /** Blank US BOL template PDF download (Export Job — US branch). */
 export const downloadUsBillOfLadingTemplate = (): void => {

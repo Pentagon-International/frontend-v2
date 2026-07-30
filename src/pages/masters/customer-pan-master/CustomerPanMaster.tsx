@@ -46,11 +46,6 @@ import {
   validateSupportingDocumentSizes,
   type SupportingDocument,
 } from "../../../utils/customerVerificationFormData";
-import {
-  extractDocumentsListFromResponse,
-  mapDocumentsListToSupportingDocuments,
-  type CustomerDocumentListItem,
-} from "../../../utils/customerDocuments";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
 const TERM_CODE_OPTIONS = [
@@ -60,6 +55,10 @@ const TERM_CODE_OPTIONS = [
 ];
 
 const TWO_DECIMAL_INPUT_REGEX = /^\d*(\.\d{0,2})?$/;
+
+/** Used when mobile/email are left blank in the additional-details modal. */
+const DUMMY_MOBILE_NO = "9999999999";
+const DUMMY_EMAIL = "noreply@dummy.com";
 
 type CustomerTypeRow = {
   customer_type_code: string;
@@ -106,7 +105,7 @@ type AdditionalDetailsErrors = Partial<
 const EMPTY_ADDITIONAL_DETAILS: AdditionalDetailsForm = {
   customer_type_code: [],
   term_code: "",
-  own_office: "",
+  own_office: "true",
   network_id: "",
   network_name: "",
   credit_amount: "",
@@ -221,12 +220,10 @@ function validateAdditionalDetails(
   if (form.credit_day.trim() && !/^\d+$/.test(form.credit_day.trim())) {
     errors.credit_day = "Enter a valid number of days";
   }
-  if (!form.mobile_no.trim()) {
-    errors.mobile_no = "Mobile number is required";
-  }
-  if (!form.email.trim()) {
-    errors.email = "Email is required";
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+  if (
+    form.email.trim() &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+  ) {
     errors.email = "Please enter a valid email address";
   }
   if (form.sez && !form.sez_valid_date) {
@@ -259,8 +256,8 @@ function buildAddressEntry(
     country: "India",
     pincode: addr.zip || "",
     phone_no: details.phone_no.trim(),
-    mobile_no: details.mobile_no.trim(),
-    email: details.email.trim(),
+    mobile_no: details.mobile_no.trim() || DUMMY_MOBILE_NO,
+    email: details.email.trim() || DUMMY_EMAIL,
     pan_no: record.pan || pan,
     gst_id: record.gstin || "",
     gst_registration_status: "Registered",
@@ -567,17 +564,7 @@ export default function CustomerPanMaster() {
       const response = (await submitCustomerVerification(
         payload,
         supportingDocuments,
-      )) as
-        | { message?: string; documents_list?: CustomerDocumentListItem[] }
-        | null;
-
-      const uploadedDocs = extractDocumentsListFromResponse(response);
-      if (uploadedDocs.length > 0) {
-        setSupportingDocuments([
-          ...mapDocumentsListToSupportingDocuments(uploadedDocs),
-          { ...EMPTY_SUPPORTING_DOCUMENT },
-        ]);
-      }
+      )) as { message?: string } | null;
 
       const apiMessage =
         response &&
@@ -595,11 +582,15 @@ export default function CustomerPanMaster() {
             ? "Customer verification submitted successfully."
             : `Customer verification submitted with ${selected.length} addresses.`),
       });
-      setSelectedGstins(new Set());
       closeDetailsModal();
-      if (uploadedDocs.length === 0) {
-        setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
-      }
+      setPanNumber("");
+      setRecords([]);
+      setSelectedGstins(new Set());
+      setSearchMessage("");
+      setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+      setAdditionalDetails({ ...EMPTY_ADDITIONAL_DETAILS });
+      setDetailsErrors({});
+      navigate("/master/create-customer-pan", { replace: true });
     } catch (error) {
       ToastNotification({
         type: "error",
@@ -939,7 +930,6 @@ export default function CustomerPanMaster() {
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <TextInput
                       label="Mobile Number"
-                      withAsterisk
                       placeholder="Enter mobile number"
                       value={additionalDetails.mobile_no}
                       onChange={(e) =>
@@ -951,7 +941,6 @@ export default function CustomerPanMaster() {
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <TextInput
                       label="Email Id"
-                      withAsterisk
                       placeholder="Enter email address"
                       value={additionalDetails.email}
                       onChange={(e) =>

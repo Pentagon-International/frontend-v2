@@ -83,6 +83,7 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
+import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -160,6 +161,7 @@ type MAWBDetailsForm = {
   service_code: string;
   service_name: string;
   pp_cc: string;
+  note: string;
   is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
@@ -247,6 +249,7 @@ type HAWBDetail = HouseDocumentFields & {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  note?: string;
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
@@ -673,6 +676,11 @@ function InlandExportJobCreate() {
         (jobData as Record<string, unknown> | undefined)?.freight,
         location.state?.mawbDetails?.pp_cc,
       ),
+      note: String(
+        (location.state?.mawbDetails as { note?: unknown } | undefined)?.note ??
+          (jobData as { note?: unknown } | undefined)?.note ??
+          "",
+      ),
       is_direct:
         parseBoolean(
           jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
@@ -805,6 +813,7 @@ function InlandExportJobCreate() {
       service_code: mawbDetailsForm.values.service_code || "",
       service_name: mawbDetailsForm.values.service_name || "",
       pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+      note: mawbDetailsForm.values.note || "",
       is_direct: mawbDetailsForm.values.is_direct,
       agent_code: mawbDetailsForm.values.agent_code || "",
       agent_name: mawbDetailsForm.values.agent_name || "",
@@ -949,6 +958,7 @@ function InlandExportJobCreate() {
             (jobData as Record<string, unknown>).pp_cc,
             (jobData as Record<string, unknown>).freight,
           ),
+          note: String((jobData as { note?: unknown }).note ?? ""),
           is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
@@ -991,6 +1001,9 @@ function InlandExportJobCreate() {
             service_code: savedMawbDetailsFromState.service_code || "",
             service_name: savedMawbDetailsFromState.service_name || "",
             pp_cc: resolveFreightPpCc(savedMawbDetailsFromState.pp_cc),
+            note: String(
+              (savedMawbDetailsFromState as { note?: unknown }).note ?? "",
+            ),
             is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
             agent_code: savedMawbDetailsFromState.agent_code || "",
             agent_name: savedMawbDetailsFromState.agent_name || "",
@@ -1192,6 +1205,9 @@ function InlandExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              note: (house as { note?: unknown }).note
+                ? String((house as { note?: unknown }).note)
+                : "",
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
@@ -1929,6 +1945,7 @@ function InlandExportJobCreate() {
             pp_cc: resolveFreightPpCc(
               (savedMawbDetails as { pp_cc?: string }).pp_cc,
             ),
+            note: String((savedMawbDetails as { note?: unknown })?.note ?? ""),
             is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
@@ -2497,6 +2514,7 @@ function InlandExportJobCreate() {
           mawbDetailsForm.values.service_code,
         ),
         pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+        note: mawbDetailsForm.values.note || "",
         is_direct: mawbDetailsForm.values.is_direct,
         agent: mawbDetailsForm.values.agent_code?.trim() || null,
         origin_code: mawbDetailsForm.values.origin_code,
@@ -2631,6 +2649,7 @@ function InlandExportJobCreate() {
           notify2_customer_email: hawb.notify2_customer_email ?? "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
+          note: hawb.note || "",
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
@@ -3390,6 +3409,16 @@ function InlandExportJobCreate() {
                   }}
                   error={mawbDetailsForm.errors.ata as string}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  {...mawbDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
 

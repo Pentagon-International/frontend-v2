@@ -52,7 +52,6 @@ import {
 import {
   generateBillOfLadingPDF,
   downloadUsBillOfLadingTemplate,
-  isUsBranchForBillOfLading,
 } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
 
@@ -76,6 +75,7 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import FormTextInput from "../../../components/FormTextInput";
+import FormTextArea from "../../../components/FormTextArea";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
@@ -135,6 +135,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 type MBLDetailsForm = {
   service: string;
   pp_cc: string;
+  note: string;
   origin_agent: string; // Stores customer_code (code) for API payload
   agent_name: string;
   agent_address: string;
@@ -430,6 +431,8 @@ type HousingDetail = HouseDocumentFields & {
   notify_customer1_email: string;
   commodity_description: string;
   marks_no: string;
+  note?: string;
+  bl_type?: string;
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
@@ -806,6 +809,12 @@ function ExportJobCreate() {
           (jobData as { pp_cc?: unknown } | undefined)?.pp_cc ??
           (jobData as { freight?: unknown } | undefined)?.freight,
       ),
+      note:
+        String(
+          (location.state?.mblDetails as { note?: unknown } | undefined)?.note ??
+            (jobData as { note?: unknown } | undefined)?.note ??
+            "",
+        ),
       origin_agent: "", // Stores customer_code
       agent_name: "",
       agent_address: "",
@@ -979,6 +988,12 @@ function ExportJobCreate() {
               (mblData as { freight?: unknown }).freight ??
               stateMbl.pp_cc ??
               stateMbl.freight,
+          ),
+          note: String(
+            (mblData as { note?: unknown }).note ??
+              (stateMbl as { note?: unknown }).note ??
+              (jobData as { note?: unknown } | null)?.note ??
+              "",
           ),
           is_direct: parseBoolean(
             (mblData as { is_direct?: unknown })?.is_direct,
@@ -1253,6 +1268,18 @@ function ExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              note: (house as { note?: unknown }).note
+                ? String((house as { note?: unknown }).note)
+                : "",
+              bl_type: (() => {
+                const raw = String(
+                  (house as { bl_type?: unknown }).bl_type ?? "",
+                ).trim();
+                if (raw === "Original") return "ORIGINAL";
+                if (raw === "Surrender" || raw === "SURRENDER")
+                  return "SURRENDERED";
+                return raw;
+              })(),
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
@@ -1705,6 +1732,7 @@ function ExportJobCreate() {
             (mblDetails as { pp_cc?: unknown })?.pp_cc ??
               (mblDetails as { freight?: unknown })?.freight,
           ),
+          note: String((mblDetails as { note?: unknown })?.note ?? ""),
           is_direct: parseBoolean(
             (mblDetails as { is_direct?: unknown })?.is_direct,
           ),
@@ -2332,7 +2360,10 @@ function ExportJobCreate() {
   };
 
   // Generate Bill Of Lading PDF Preview
-  const generateBillOfLadingPDFPreview = async (housing: HousingDetail) => {
+  const generateBillOfLadingPDFPreview = async (
+    housing: HousingDetail,
+    options?: { draft?: boolean },
+  ) => {
     try {
       setPreviewOpen(true);
       setCurrentHousingForPreview(housing);
@@ -2343,6 +2374,7 @@ function ExportJobCreate() {
       ) ||
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
+      const isDraft = options?.draft === true;
 
       // Combine job data and housing data for PDF generation
       const combinedData = {
@@ -2410,23 +2442,46 @@ function ExportJobCreate() {
         summary: housing.summary ?? housingFromJob?.summary,
       };
 
+      const houseIndex = housingDetails.findIndex(
+        (h) =>
+          (housing.id != null &&
+            h.id != null &&
+            String(h.id) === String(housing.id)) ||
+          (housing.hbl_number &&
+            h.hbl_number &&
+            String(h.hbl_number) === String(housing.hbl_number)),
+      );
+      const houseIndex1Based = houseIndex >= 0 ? houseIndex + 1 : 1;
+      const blType = String(
+        (housingForPdf as { bl_type?: unknown }).bl_type ?? "",
+      );
+
       const blobUrl = generateBillOfLadingPDF(
-        combinedData,
+        {
+          ...combinedData,
+          housing_details: housingDetails,
+        },
         housingForPdf,
         defaultBranch,
         country,
+        {
+          draft: isDraft,
+          blType,
+          houseIndex: houseIndex1Based,
+        },
       );
-      // Editable preview is US BOL template only; non-US keeps read-only iframe.
-      if (isUsBranchForBillOfLading(country, defaultBranch)) {
-        setBolPreviewRowData({
-          jobData: combinedData,
-          housingData: housingForPdf,
-          defaultBranch,
-          country,
-        });
-      } else {
-        setBolPreviewRowData(null);
-      }
+      setBolPreviewRowData({
+        jobData: {
+          ...combinedData,
+          housing_details: housingDetails,
+        },
+        housingData: housingForPdf,
+        defaultBranch,
+        country,
+        draft: isDraft,
+        blType,
+        houseIndex: houseIndex1Based,
+      });
       setPreviewHasUnsavedChanges(false);
       setPdfBlob(blobUrl);
       void patchHousingPdfReleasedEvent(
@@ -2450,6 +2505,19 @@ function ExportJobCreate() {
       rowData.housingData,
       rowData.defaultBranch,
       rowData.country,
+      {
+        draft: rowData.draft === true,
+        blType: String(
+          rowData.blType ??
+            (rowData.housingData as { bl_type?: unknown } | undefined)
+              ?.bl_type ??
+            "",
+        ),
+        houseIndex:
+          typeof rowData.houseIndex === "number"
+            ? rowData.houseIndex
+            : undefined,
+      },
     );
     return blobUrl;
   };
@@ -2659,6 +2727,7 @@ function ExportJobCreate() {
           mblDetails: {
             service: mblDetailsForm.values.service || "",
             pp_cc: mblDetailsForm.values.pp_cc || "Collect",
+            note: mblDetailsForm.values.note || "",
             is_direct: mblDetailsForm.values.is_direct,
             origin_agent: mblDetailsForm.values.origin_agent || "",
             agent_name: mblDetailsForm.values.agent_name || "",
@@ -3163,6 +3232,7 @@ function ExportJobCreate() {
         service: mblDetailsForm.values.service,
         pp_cc:
           normalizeFreightPpCc(mblDetailsForm.values.pp_cc) || "Collect",
+        note: mblDetailsForm.values.note || "",
         service_type: "Export", // Export job creation
         shipper_name: partyDetailsForm.values.shipper_name || "",
         shipper_email: partyDetailsForm.values.shipper_email || "",
@@ -3320,6 +3390,8 @@ function ExportJobCreate() {
           notify2_customer_email: house.notify2_customer_email ?? "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
+          note: house.note || "",
+          bl_type: house.bl_type || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
           ref_no: house.ref_no || "",
@@ -4250,6 +4322,17 @@ function ExportJobCreate() {
                   size="sm"
                 />
               </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  radius="sm"
+                  {...mblDetailsForm.getInputProps("note")}
+                />
+              </Grid.Col>
             </Grid>
 
             {/* Direct */}
@@ -4292,7 +4375,6 @@ function ExportJobCreate() {
                   </Group>
                 </Radio.Group>
               </Grid.Col>
-              
             </Grid>
 
             <Divider my="md" />
@@ -6649,7 +6731,9 @@ function ExportJobCreate() {
                                 },
                               }}
                               onClick={() =>
-                                generateBillOfLadingPDFPreview(house)
+                                generateBillOfLadingPDFPreview(house, {
+                                  draft: true,
+                                })
                               }
                             >
                               Draft Bill Of Lading

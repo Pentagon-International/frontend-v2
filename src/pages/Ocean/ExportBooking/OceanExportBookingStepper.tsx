@@ -39,7 +39,7 @@ import {
   IconBellRinging,
   IconFileInvoice,
 } from "@tabler/icons-react";
-import { generateBillOfLadingPDF, isUsBranchForBillOfLading } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { mapOceanExportBookingToBillOfLadingData } from "../../jobs/pdf/mapOceanExportBookingToBillOfLading";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
 
@@ -3176,21 +3176,19 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         housingData,
         defaultBranch,
         country,
+        { draft: true },
       );
 
       setBolPreviewLabel(
         String(housingData.hbl_number || bookingRecord?.shipment_code || "HBL"),
       );
-      if (isUsBranchForBillOfLading(country, defaultBranch)) {
-        setBolPreviewRowData({
-          jobData: bolJobData,
-          housingData,
-          defaultBranch,
-          country,
-        });
-      } else {
-        setBolPreviewRowData(null);
-      }
+      setBolPreviewRowData({
+        jobData: bolJobData,
+        housingData,
+        defaultBranch,
+        country,
+        draft: true,
+      });
       setBolPreviewHasUnsavedChanges(false);
       setBolPdfBlob(blobUrl);
     } catch (error) {
@@ -3209,6 +3207,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       rowData.housingData,
       rowData.defaultBranch,
       rowData.country,
+      { draft: rowData.draft === true },
     );
   };
 

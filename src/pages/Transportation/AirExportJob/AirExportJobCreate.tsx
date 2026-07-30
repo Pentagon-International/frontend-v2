@@ -138,6 +138,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 type MAWBDetailsForm = {
   service: string;
   pp_cc: string;
+  note: string;
   is_direct: boolean;
   agent_code: string; // Stores agent_code (code) for API payload
   agent_name: string; // Stores agent_name (name) for display
@@ -236,6 +237,7 @@ type HAWBDetail = HouseDocumentFields & {
   handling_information?: string;
   is_agreed_charges?: boolean;
   marks_no?: string;
+  note?: string;
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
@@ -616,6 +618,11 @@ function AirExportJobCreate() {
         (jobData as { freight?: string } | undefined)?.freight,
         location.state?.mawbDetails?.pp_cc,
       ),
+      note: String(
+        (location.state?.mawbDetails as { note?: unknown } | undefined)?.note ??
+          (jobData as { note?: unknown } | undefined)?.note ??
+          "",
+      ),
       is_direct:
         parseBoolean(
           jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
@@ -757,6 +764,7 @@ function AirExportJobCreate() {
     () => ({
       service: mawbDetailsForm.values.service || "AIR",
       pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+      note: mawbDetailsForm.values.note || "",
       is_direct: mawbDetailsForm.values.is_direct,
       agent_code: mawbDetailsForm.values.agent_code || "",
       agent_name: mawbDetailsForm.values.agent_name || "",
@@ -909,6 +917,7 @@ function AirExportJobCreate() {
             jobData.pp_cc,
             (jobData as { freight?: string }).freight,
           ),
+          note: String((jobData as { note?: unknown }).note ?? ""),
           is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
@@ -961,6 +970,9 @@ function AirExportJobCreate() {
           mawbDetailsForm.setValues({
             service: savedMawbDetailsFromState.service || "AIR",
             pp_cc: resolveJobFreightPpCc(savedMawbDetailsFromState.pp_cc),
+            note: String(
+              (savedMawbDetailsFromState as { note?: unknown }).note ?? "",
+            ),
             is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
             agent_code: savedMawbDetailsFromState.agent_code || "",
             agent_name: savedMawbDetailsFromState.agent_name || "",
@@ -1182,6 +1194,9 @@ function AirExportJobCreate() {
                 : "",
               is_agreed_charges: parseBoolean(house.is_agreed_charges),
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              note: (house as { note?: unknown }).note
+                ? String((house as { note?: unknown }).note)
+                : "",
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
@@ -1881,6 +1896,7 @@ function AirExportJobCreate() {
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "AIR",
             pp_cc: resolveJobFreightPpCc(savedMawbDetails.pp_cc),
+            note: String((savedMawbDetails as { note?: unknown })?.note ?? ""),
             is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
@@ -2797,6 +2813,7 @@ function AirExportJobCreate() {
       const payload = {
         service: mawbDetailsForm.values.service,
         pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+        note: mawbDetailsForm.values.note || "",
         is_direct: mawbDetailsForm.values.is_direct,
         service_type: "Export",
         agent: mawbDetailsForm.values.is_direct
@@ -2950,6 +2967,7 @@ function AirExportJobCreate() {
           handling_information: hawb.handling_information || null,
           is_agreed_charges: hawb.is_agreed_charges ?? false,
           marks_no: hawb.marks_no || null,
+          note: hawb.note || "",
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
@@ -3794,6 +3812,16 @@ function AirExportJobCreate() {
                   }}
                   error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  {...mawbDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
 

@@ -78,6 +78,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
+import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -129,6 +130,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 type MAWBDetailsForm = {
   service: string;
   pp_cc: string;
+  note: string;
   origin_agent: string; // Stores agent_code (code) for API payload
   origin_agent_name: string; // Stores agent_name (name) for display
   origin_code: string;
@@ -225,6 +227,7 @@ type HAWBDetail = HouseDocumentFields & {
   notify_customer1_email: string;
   commodity_description?: string;
   marks_no?: string;
+  note?: string;
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
@@ -585,6 +588,11 @@ function AirImportJobCreate() {
         (jobData as { freight?: string } | undefined)?.freight,
         location.state?.mawbDetails?.pp_cc,
       ),
+      note: String(
+        (location.state?.mawbDetails as { note?: unknown } | undefined)?.note ??
+          (jobData as { note?: unknown } | undefined)?.note ??
+          "",
+      ),
       origin_agent:
         jobData?.agent_code ||
         jobData?.origin_agent ||
@@ -720,6 +728,7 @@ function AirImportJobCreate() {
     () => ({
       service: mawbDetailsForm.values.service || "Air",
       pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+      note: mawbDetailsForm.values.note || "",
       origin_agent: mawbDetailsForm.values.origin_agent || "",
       origin_agent_name: mawbDetailsForm.values.origin_agent_name || "",
       origin_code: mawbDetailsForm.values.origin_code || "",
@@ -892,6 +901,7 @@ function AirImportJobCreate() {
             jobData.pp_cc,
             (jobData as { freight?: string }).freight,
           ),
+          note: String((jobData as { note?: unknown }).note ?? ""),
           // Use origin_agent_name from API response, fallback to origin_agent for backward compatibility
           origin_agent: jobData.agent_code || jobData.origin_agent || "",
           origin_agent_name:
@@ -1253,6 +1263,9 @@ function AirImportJobCreate() {
                   ? String(house.commodity_description)
                   : "",
                 marks_no: house.marks_no ? String(house.marks_no) : "",
+                note: (house as { note?: unknown }).note
+                  ? String((house as { note?: unknown }).note)
+                  : "",
                 item_no: house.item_no ? String(house.item_no) : "",
                 sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
                 ref_no: house.ref_no ? String(house.ref_no) : "",
@@ -2012,6 +2025,7 @@ function AirImportJobCreate() {
           mawbDetailsForm.setValues({
             service: savedMawbDetails.service || "Air",
             pp_cc: resolveJobFreightPpCc(savedMawbDetails.pp_cc),
+            note: String((savedMawbDetails as { note?: unknown })?.note ?? ""),
             origin_agent: savedMawbDetails.origin_agent || "",
             origin_agent_name: savedMawbDetails.origin_agent_name || "",
             origin_code: savedMawbDetails.origin_code || "",
@@ -2813,6 +2827,7 @@ function AirImportJobCreate() {
       const payload = {
         service: mawbDetailsForm.values.service,
         pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
+        note: mawbDetailsForm.values.note || "",
         service_type: "Import",
         agent: mawbDetailsForm.values.origin_agent || null,
         origin_code: mawbDetailsForm.values.origin_code,
@@ -2936,6 +2951,7 @@ function AirImportJobCreate() {
             hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
+          note: hawb.note || "",
           item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
@@ -3740,6 +3756,16 @@ function AirImportJobCreate() {
                   }}
                   error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  {...mawbDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
             </Grid>

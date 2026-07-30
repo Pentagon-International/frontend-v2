@@ -111,7 +111,7 @@ import {
   calcSellLocalAmount,
   resolveSellAmount,
 } from "../../../utils/houseChargeAmounts";
-import { generateBillOfLadingPDF, isUsBranchForBillOfLading } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
 
 const BolPdfEditor = lazy(() =>
@@ -156,6 +156,7 @@ type HouseDetailsForm = {
   shipment_terms_code: string;
   shipment_terms_name: string;
   pp_cc: string;
+  bl_type: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -188,6 +189,7 @@ type HouseDetailsForm = {
   notify2_customer_email: string;
   commodity_description: string;
   marks_no: string;
+  note: string;
   item_no: string;
   sub_item_no: string;
   ref_no: string;
@@ -1197,6 +1199,14 @@ function HouseCreate() {
         (editData as { pp_cc?: unknown } | undefined)?.pp_cc ??
           (editData as { freight?: unknown } | undefined)?.freight,
       ),
+      bl_type: (() => {
+        const raw = String(
+          (editData as { bl_type?: unknown } | undefined)?.bl_type ?? "",
+        ).trim();
+        if (raw === "Original") return "ORIGINAL";
+        if (raw === "Surrender" || raw === "SURRENDER") return "SURRENDERED";
+        return raw;
+      })(),
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -1276,6 +1286,7 @@ function HouseCreate() {
           ?.notify2_customer_email ?? "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
+      note: String((editData as { note?: unknown } | undefined)?.note ?? ""),
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
@@ -2245,6 +2256,7 @@ function HouseCreate() {
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
       pp_cc: form.values.pp_cc || "Collect",
+      bl_type: form.values.bl_type || "",
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2280,6 +2292,7 @@ function HouseCreate() {
       notify2_customer_email: form.values.notify2_customer_email,
       commodity_description: form.values.commodity_description,
       marks_no: form.values.marks_no,
+      note: form.values.note || "",
       item_no: form.values.item_no,
       sub_item_no: form.values.sub_item_no,
       ref_no: form.values.ref_no,
@@ -2379,6 +2392,7 @@ function HouseCreate() {
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
       pp_cc: v.pp_cc || "Collect",
+      bl_type: v.bl_type || "",
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -2435,6 +2449,7 @@ function HouseCreate() {
       notify2_customer_email: v.notify2_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
+      note: v.note || "",
       item_no: v.item_no,
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
@@ -2491,7 +2506,7 @@ function HouseCreate() {
 
   // Generate Bill of Lading PDF preview from current form data
   // Shape must match ExportJobCreate house-card BL generator / PDF template fields.
-  const generatePDFPreview = () => {
+  const generatePDFPreview = (options?: { draft?: boolean }) => {
     try {
       setPreviewOpen(true);
       const defaultBranch = user?.branches?.find(
@@ -2499,6 +2514,7 @@ function HouseCreate() {
       ) ||
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
+      const isDraft = options?.draft === true;
       const containerDetailsForPdf =
         (location.state?.containerDetails as Record<string, unknown>[]) ||
         (location.state?.job as { container_details?: Record<string, unknown>[] })
@@ -2613,6 +2629,8 @@ function HouseCreate() {
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+        note: form.values.note || "",
+        bl_type: form.values.bl_type || "",
         pp_cc: freightPpCc,
         freight: freightPpCc,
         summary: editSummary ?? computedSummary,
@@ -2648,12 +2666,17 @@ function HouseCreate() {
         })(),
       };
       // Build job data in the same shape as ExportJobCreate BL generator
+      const houseIndex1Based =
+        editIndex != null && Number.isFinite(Number(editIndex))
+          ? Number(editIndex) + 1
+          : existingHousingDetails.length + 1;
       const jobData = {
         ...(location.state?.job || {}),
         mblDetails: location.state?.mblDetails || {},
         carrierDetails: location.state?.carrierDetails || {},
         containerDetails: containerDetailsForPdf,
         container_details: containerDetailsForPdf,
+        housing_details: existingHousingDetails,
       };
 
       const blobUrl = generateBillOfLadingPDF(
@@ -2661,17 +2684,21 @@ function HouseCreate() {
         housingData,
         defaultBranch,
         country,
+        {
+          draft: isDraft,
+          blType: form.values.bl_type || "",
+          houseIndex: houseIndex1Based,
+        },
       );
-      if (isUsBranchForBillOfLading(country, defaultBranch)) {
-        setBolPreviewRowData({
-          jobData,
-          housingData,
-          defaultBranch,
-          country,
-        });
-      } else {
-        setBolPreviewRowData(null);
-      }
+      setBolPreviewRowData({
+        jobData,
+        housingData,
+        defaultBranch,
+        country,
+        draft: isDraft,
+        blType: form.values.bl_type || "",
+        houseIndex: houseIndex1Based,
+      });
       setPreviewHasUnsavedChanges(false);
       setPdfBlob(blobUrl);
       void patchHousingPdfReleasedEvent().catch((e) =>
@@ -2693,6 +2720,19 @@ function HouseCreate() {
       rowData.housingData,
       rowData.defaultBranch,
       rowData.country,
+      {
+        draft: rowData.draft === true,
+        blType: String(
+          rowData.blType ??
+            (rowData.housingData as { bl_type?: unknown } | undefined)
+              ?.bl_type ??
+            "",
+        ),
+        houseIndex:
+          typeof rowData.houseIndex === "number"
+            ? rowData.houseIndex
+            : undefined,
+      },
     );
   };
 
@@ -2893,7 +2933,7 @@ function HouseCreate() {
                     color: "#424242",
                   },
                 }}
-                onClick={generatePDFPreview}
+                onClick={() => generatePDFPreview({ draft: true })}
               >
                 Draft Bill Of Lading
               </Menu.Item>
@@ -2932,7 +2972,7 @@ function HouseCreate() {
                     color: "#424242",
                   },
                 }}
-                onClick={generatePDFPreview}
+                onClick={() => generatePDFPreview()}
               >
                 Bill Of Lading
               </Menu.Item>
@@ -3463,6 +3503,31 @@ function HouseCreate() {
                   value={form.values.house_date}
                   onChange={(d) => form.setFieldValue("house_date", d)}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="BL Type"
+                  placeholder="Select BL Type"
+                  searchable
+                  data={[
+                    { value: "ORIGINAL", label: "ORIGINAL" },
+                    { value: "SEAWAY BILL", label: "SEAWAY BILL" },
+                    { value: "SURRENDERED", label: "SURRENDERED" },
+                  ]}
+                  {...form.getInputProps("bl_type")}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  radius="sm"
+                  {...form.getInputProps("note")}
                 />
               </Grid.Col>
             </Grid>

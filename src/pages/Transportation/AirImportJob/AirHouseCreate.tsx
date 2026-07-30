@@ -171,6 +171,7 @@ type HAWBDetailsForm = {
   notify1_customer_email: string;
   commodity_description: string;
   marks_no: string;
+  note: string;
   item_no: string;
   sub_item_no: string;
   ref_no: string;
@@ -659,6 +660,7 @@ function HouseCreate() {
         "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
+      note: (editData as { note?: string } | undefined)?.note || "",
       item_no: (editData as { item_no?: string } | undefined)?.item_no || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
@@ -1249,6 +1251,7 @@ function HouseCreate() {
           "",
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
+        note: (editData as { note?: string }).note || "",
         ref_no: (editData as { ref_no?: string }).ref_no || "",
       });
 
@@ -2401,6 +2404,7 @@ function HouseCreate() {
       notify1_customer_email: v.notify1_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
+      note: v.note || "",
       item_no: v.item_no,
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
@@ -2486,6 +2490,7 @@ function HouseCreate() {
       notify1_customer_email: currentFormValues.notify1_customer_email,
       commodity_description: currentFormValues.commodity_description,
       marks_no: currentFormValues.marks_no,
+      note: currentFormValues.note || "",
       item_no: currentFormValues.item_no,
       sub_item_no: currentFormValues.sub_item_no,
       ref_no: currentFormValues.ref_no,
@@ -2648,6 +2653,7 @@ function HouseCreate() {
         notify1_customer_email: form.values.notify1_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+        note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
@@ -3491,6 +3497,17 @@ function HouseCreate() {
                   error={form.errors.ref_no}
                 />
               </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  radius="sm"
+                  {...form.getInputProps("note")}
+                />
+              </Grid.Col>
             </Grid>
           </Box>
         </Tabs.Panel>
@@ -4063,6 +4080,7 @@ function HouseCreate() {
                 />
               </Grid.Col>
             </Grid>
+
           </Box>
         </Tabs.Panel>
 

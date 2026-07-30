@@ -100,6 +100,7 @@ import {
   housingEventsFromJobPatchData,
 } from "../../../utils/jobHousingEventsFromPatch";
 import FormTextInput from "../../../components/FormTextInput";
+import FormTextArea from "../../../components/FormTextArea";
 import RequiredLabel from "../../../components/RequiredLabel";
 import OdexTriggerModal from "../../../pages/Odex/components/OdexTriggerModal";
 import { odexJobDetailPath } from "../../../pages/Odex/odexUrls";
@@ -134,6 +135,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 type MBLDetailsForm = {
   service: string;
   pp_cc: string;
+  note: string;
   origin_agent: string; // Stores customer_code (code) for API payload
   agent_name: string;
   agent_address: string;
@@ -415,6 +417,7 @@ type HousingDetail = HouseDocumentFields & {
   notify_customer1_name?: string;
   commodity_description: string;
   marks_no: string;
+  note?: string;
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
@@ -711,6 +714,11 @@ function ImportJobCreate() {
           (jobData as { pp_cc?: unknown } | undefined)?.pp_cc ??
           (jobData as { freight?: unknown } | undefined)?.freight,
       ),
+      note: String(
+        (location.state?.mblDetails as { note?: unknown } | undefined)?.note ??
+          (jobData as { note?: unknown } | undefined)?.note ??
+          "",
+      ),
       origin_agent: "", // Stores customer_code
       agent_name: "",
       agent_address: "",
@@ -891,6 +899,12 @@ function ImportJobCreate() {
               (mblData as { freight?: unknown }).freight ??
               stateMbl.pp_cc ??
               stateMbl.freight,
+          ),
+          note: String(
+            (mblData as { note?: unknown }).note ??
+              (stateMbl as { note?: unknown }).note ??
+              (jobData as { note?: unknown } | null)?.note ??
+              "",
           ),
           origin_agent:
             mblData.agent_code ||
@@ -1165,6 +1179,9 @@ function ImportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              note: (house as { note?: unknown }).note
+                ? String((house as { note?: unknown }).note)
+                : "",
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
@@ -1852,6 +1869,7 @@ function ImportJobCreate() {
             (mblDetails as { pp_cc?: unknown })?.pp_cc ??
               (mblDetails as { freight?: unknown })?.freight,
           ),
+          note: String((mblDetails as { note?: unknown })?.note ?? ""),
           origin_agent: mblDetails.origin_agent || "",
           agent_name:
             (mblDetails as { agent_name?: string } | undefined)?.agent_name ||
@@ -2407,6 +2425,7 @@ function ImportJobCreate() {
           mblDetails: {
             service: mblDetailsForm.values.service || "",
             pp_cc: mblDetailsForm.values.pp_cc || "Collect",
+            note: mblDetailsForm.values.note || "",
             origin_agent: mblDetailsForm.values.origin_agent || "",
             agent_name: mblDetailsForm.values.agent_name || "",
             agent_address: mblDetailsForm.values.agent_address || "",
@@ -3005,6 +3024,7 @@ function ImportJobCreate() {
         service: mblDetailsForm.values.service,
         pp_cc:
           normalizeFreightPpCc(mblDetailsForm.values.pp_cc) || "Collect",
+        note: mblDetailsForm.values.note || "",
         service_type: "Import", // Based on the example payload
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
@@ -3168,6 +3188,7 @@ function ImportJobCreate() {
               .notify1_customer_email ?? "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
+          note: house.note || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
           ref_no: house.ref_no || "",
@@ -4044,6 +4065,16 @@ function ImportJobCreate() {
                     };
                   })()}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <FormTextArea
+                  label="Note/Remark"
+                  placeholder="Enter note / remark"
+                  minRows={2}
+                  size="sm"
+                  {...mblDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
             </Grid>
