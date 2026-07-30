@@ -373,14 +373,29 @@ const fetchGetEffectiveSac = async (
   }
 };
 
+type SezStatusResult = {
+  sez: boolean;
+  credit_day: number | null;
+  credit_amount: number | null;
+  sez_valid_date: string | null;
+};
+
+const EMPTY_SEZ_STATUS: SezStatusResult = {
+  sez: false,
+  credit_day: null,
+  credit_amount: null,
+  sez_valid_date: null,
+};
+
 /** India/Vietnam customer invoice: check if Bill To + address is SEZ.
  * India requires document_date; Vietnam omits it.
+ * Also returns party credit_day / credit_amount for due-date auto-fill.
  */
 const fetchCheckSezStatus = async (payload: {
   customer_code: string;
   address: string;
   document_date?: string;
-}): Promise<boolean> => {
+}): Promise<SezStatusResult> => {
   try {
     const body: {
       customer_code: string;
@@ -393,19 +408,45 @@ const fetchCheckSezStatus = async (payload: {
     if (payload.document_date) {
       body.document_date = payload.document_date;
     }
-    const response = await postAPICall(
-      URL.checkSezStatus,
-      body,
-      API_HEADER,
-    );
+    const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
     const root = response as {
       sez?: unknown;
-      data?: { sez?: unknown };
+      credit_day?: unknown;
+      credit_amount?: unknown;
+      sez_valid_date?: unknown;
+      data?: {
+        sez?: unknown;
+        credit_day?: unknown;
+        credit_amount?: unknown;
+        sez_valid_date?: unknown;
+      };
     };
-    return Boolean(root?.sez ?? root?.data?.sez);
+    const data = root?.data && typeof root.data === "object" ? root.data : root;
+    const creditRaw = data?.credit_day ?? root?.credit_day;
+    const creditDayNum =
+      creditRaw == null || creditRaw === "" ? null : Number(creditRaw);
+    const amountRaw = data?.credit_amount ?? root?.credit_amount;
+    const creditAmountNum =
+      amountRaw == null || amountRaw === "" ? null : Number(amountRaw);
+    const sezValid = data?.sez_valid_date ?? root?.sez_valid_date;
+    return {
+      sez: Boolean(data?.sez ?? root?.sez),
+      credit_day:
+        creditDayNum != null && Number.isFinite(creditDayNum)
+          ? creditDayNum
+          : null,
+      credit_amount:
+        creditAmountNum != null && Number.isFinite(creditAmountNum)
+          ? creditAmountNum
+          : null,
+      sez_valid_date:
+        sezValid != null && String(sezValid).trim() !== ""
+          ? String(sezValid)
+          : null,
+    };
   } catch (error) {
     console.error("Error checking SEZ status:", error);
-    return false;
+    return EMPTY_SEZ_STATUS;
   }
 };
 
@@ -418,6 +459,22 @@ function formatDateYYYYMMDD(date: Date | null | undefined): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
   return `${year}-${month}-${day}`;
+}
+
+/** Due date = document date + credit days; credit_day 0 keeps document date. */
+function dueDateFromDocumentAndCredit(
+  documentDate: Date,
+  creditDay: number,
+): Date {
+  const base = new Date(
+    documentDate.getFullYear(),
+    documentDate.getMonth(),
+    documentDate.getDate(),
+  );
+  const days = Number(creditDay);
+  if (!Number.isFinite(days) || days <= 0) return base;
+  base.setDate(base.getDate() + days);
+  return base;
 }
 
 type InvoiceTaxBreakup = {
@@ -1143,6 +1200,13 @@ function InvoiceCreate({
     Array<{ value: string; label: string }>
   >([]);
   const [hasSez, setHasSez] = useState(false);
+  const partyCreditDayRef = useRef<number | null>(null);
+  /**
+   * Apply due date from credit_day only when party is selected/changed
+   * (or on create when party is first resolved). Manual due-date edits are kept
+   * until document date or party changes again.
+   */
+  const pendingApplyDueDateFromCreditRef = useRef(!isEditMode && !isViewMode);
   const billToAddressesRef = useRef<
     Array<{
       id: number;
@@ -1306,10 +1370,7 @@ function InvoiceCreate({
     user?.country?.country_name,
   ]);
 
-  const isVietnamBranch = useMemo(
-    () => isVietnamBranchFromUser(user),
-    [user],
-  );
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
@@ -1476,6 +1537,7 @@ function InvoiceCreate({
 
   // India: Bill To + address + document date → check SEZ.
   // Vietnam: Bill To + address only (no document_date).
+  // Stores credit_day; applies due date only when pendingApplyDueDateFromCreditRef.
   useEffect(() => {
     if (isAgentInvoice || (!isIndiaUser && !isVietnamUser)) {
       setHasSez(false);
@@ -1490,8 +1552,27 @@ function InvoiceCreate({
 
     if (!customerCode || !addressLabel) {
       setHasSez(false);
+      partyCreditDayRef.current = null;
       return;
     }
+
+    const applyCreditDueDateIfPending = (creditDay: number | null) => {
+      partyCreditDayRef.current = creditDay;
+      if (
+        !pendingApplyDueDateFromCreditRef.current ||
+        creditDay == null ||
+        isViewMode
+      ) {
+        return;
+      }
+      const docDate = parseInvoiceDate(form.values.document_date);
+      if (!docDate) return;
+      form.setFieldValue(
+        "due_date",
+        dueDateFromDocumentAndCredit(docDate, creditDay),
+      );
+      pendingApplyDueDateFromCreditRef.current = false;
+    };
 
     if (isIndiaUser) {
       const documentDate = formatDateYYYYMMDD(form.values.document_date);
@@ -1501,12 +1582,14 @@ function InvoiceCreate({
       }
       let cancelled = false;
       void (async () => {
-        const sez = await fetchCheckSezStatus({
+        const result = await fetchCheckSezStatus({
           customer_code: customerCode,
           address: addressLabel,
           document_date: documentDate,
         });
-        if (!cancelled) setHasSez(sez);
+        if (cancelled) return;
+        setHasSez(result.sez);
+        applyCreditDueDateIfPending(result.credit_day);
       })();
       return () => {
         cancelled = true;
@@ -1515,11 +1598,13 @@ function InvoiceCreate({
 
     let cancelled = false;
     void (async () => {
-      const sez = await fetchCheckSezStatus({
+      const result = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
       });
-      if (!cancelled) setHasSez(sez);
+      if (cancelled) return;
+      setHasSez(result.sez);
+      applyCreditDueDateIfPending(result.credit_day);
     })();
 
     return () => {
@@ -1530,6 +1615,7 @@ function InvoiceCreate({
     isIndiaUser,
     isVietnamUser,
     isAgentInvoice,
+    isViewMode,
     form.values.bill_to,
     form.values.address,
     form.values.document_date,
@@ -3257,12 +3343,16 @@ function InvoiceCreate({
       billToAddressesRef.current = [];
       form.setFieldValue("address", "");
       setHasSez(false);
+      partyCreditDayRef.current = null;
       if (isGstInvoiceUser || isKenyaUser) {
         if (isGstInvoiceUser) form.setFieldValue("state", "");
         form.setFieldValue("gstn", "");
       }
       return;
     }
+
+    // Party selected/changed → apply due date from credit_day once SEZ responds
+    pendingApplyDueDateFromCreditRef.current = true;
 
     // Customer selected from search: populate address options, state and GSTN from customer response (addresses_data)
     if (
@@ -3582,11 +3672,7 @@ function InvoiceCreate({
 
           if (isVatSave) {
             const taxRate = applyVat
-              ? resolveVatTaxRate(
-                  gstBreakup,
-                  charge.charge_id,
-                  charge.tax_rate,
-                )
+              ? resolveVatTaxRate(gstBreakup, charge.charge_id, charge.tax_rate)
               : 0;
             const taxBase = charge.amount_in_local ?? headerAmount;
             const taxAmount = applyVat
@@ -4159,7 +4245,8 @@ function InvoiceCreate({
         local_total,
         Dr_Cr: baseDrCr,
         is_agent: isAgentPost,
-        has_sez: (isIndiaUser || isVietnamUser) && !isAgentPost ? hasSez : false,
+        has_sez:
+          (isIndiaUser || isVietnamUser) && !isAgentPost ? hasSez : false,
         charges: allChargesPayload,
         taxes: [],
       };
@@ -4791,9 +4878,18 @@ function InvoiceCreate({
                 value={parseInvoiceDate(form.values.document_date)}
                 onChange={(date) => {
                   form.setFieldValue("document_date", date);
+                  if (!date || isViewMode) return;
+                  const creditDay = partyCreditDayRef.current;
+                  if (creditDay != null) {
+                    // Doc date change → recompute due date from party credit days
+                    form.setFieldValue(
+                      "due_date",
+                      dueDateFromDocumentAndCredit(date, creditDay),
+                    );
+                    return;
+                  }
                   const currentDue = parseInvoiceDate(form.values.due_date);
                   if (
-                    date &&
                     currentDue &&
                     new Date(
                       currentDue.getFullYear(),
@@ -4827,7 +4923,30 @@ function InvoiceCreate({
                 label="Due Date"
                 placeholder="Select due date"
                 value={parseInvoiceDate(form.values.due_date)}
-                onChange={(date) => form.setFieldValue("due_date", date)}
+                onChange={(date) => {
+                  if (!date) {
+                    form.setFieldValue("due_date", date);
+                    return;
+                  }
+                  const docDate = parseInvoiceDate(form.values.document_date);
+                  if (
+                    docDate &&
+                    new Date(
+                      date.getFullYear(),
+                      date.getMonth(),
+                      date.getDate(),
+                    ).getTime() <
+                      new Date(
+                        docDate.getFullYear(),
+                        docDate.getMonth(),
+                        docDate.getDate(),
+                      ).getTime()
+                  ) {
+                    form.setFieldValue("due_date", docDate);
+                    return;
+                  }
+                  form.setFieldValue("due_date", date);
+                }}
                 withAsterisk
                 readOnly={isReadOnly}
                 minDate={
@@ -5026,10 +5145,7 @@ function InvoiceCreate({
                     if (isGstInvoiceUser && selected.state_id != null) {
                       form.setFieldValue("state", String(selected.state_id));
                     }
-                    if (
-                      (isGstInvoiceUser || isKenyaUser) &&
-                      selected.gst_id
-                    ) {
+                    if ((isGstInvoiceUser || isKenyaUser) && selected.gst_id) {
                       form.setFieldValue("gstn", String(selected.gst_id));
                     }
                   }}
@@ -6379,9 +6495,7 @@ function InvoiceCreate({
                     }}
                   >
                     <Grid gutter="md">
-                      <Grid.Col
-                        span={applyVat ? 6 : applyGst ? 3 : 6}
-                      >
+                      <Grid.Col span={applyVat ? 6 : applyGst ? 3 : 6}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total

@@ -511,9 +511,36 @@ export const generateUsBillOfLadingPDF = (
   jobData: any,
   housingData: any,
   defaultBranch: any,
-  options?: { templateOnly?: boolean },
+  options?: {
+    templateOnly?: boolean;
+    draft?: boolean;
+    blType?: string;
+    houseIndex?: number;
+  },
 ): string => {
   const templateOnly = options?.templateOnly === true;
+  const isDraftBol = options?.draft === true;
+  const blTypeRaw = String(
+    options?.blType ?? housingData?.bl_type ?? "",
+  ).trim();
+  // Normalize legacy values from earlier dropdown labels.
+  const blType =
+    blTypeRaw === "Original"
+      ? "ORIGINAL"
+      : blTypeRaw === "Surrender" || blTypeRaw === "SURRENDER"
+        ? "SURRENDERED"
+        : blTypeRaw;
+  const isSeawayOrSurrendered =
+    blType === "SEAWAY BILL" || blType === "SURRENDERED";
+  // Draft / SEAWAY BILL / SURRENDERED: single page. ORIGINAL: one copy (may continue if cargo overflows).
+  const isSinglePageBol = isDraftBol || isSeawayOrSurrendered;
+  // DRAFT beside company header. SEAWAY/SURRENDERED use red label in Description column.
+  const titleSuffix = isDraftBol ? "DRAFT" : "";
+  const cargoTypeLabel = isDraftBol
+    ? ""
+    : isSeawayOrSurrendered
+      ? blType
+      : "";
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -789,17 +816,31 @@ export const generateUsBillOfLadingPDF = (
   doc.setFontSize(FONT_HEADER);
   const fmcLabel = `FMC: ${US_FMC_NO}`;
   const companyNameWidth = doc.getTextWidth(companyName);
+  const titleSuffixGap = 3;
+  const titleSuffixWidth = titleSuffix
+    ? doc.getTextWidth(titleSuffix) + titleSuffixGap
+    : 0;
   doc.setFontSize(FONT_FMC);
   const fmcGap = "   ";
   const fmcLabelWidth = doc.getTextWidth(`${fmcGap}${fmcLabel}`);
-  const headerTextStartX = centerTextX - (companyNameWidth + fmcLabelWidth) / 2;
+  const headerTextStartX =
+    centerTextX -
+    (companyNameWidth + titleSuffixWidth + fmcLabelWidth) / 2;
   doc.setFontSize(FONT_HEADER);
+  doc.setTextColor(0, 0, 0);
   doc.text(companyName, headerTextStartX, headerRowY);
+  if (titleSuffix) {
+    doc.text(
+      titleSuffix,
+      headerTextStartX + companyNameWidth + titleSuffixGap,
+      headerRowY,
+    );
+  }
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_FMC);
   doc.text(
     `${fmcGap}${fmcLabel}`,
-    headerTextStartX + companyNameWidth,
+    headerTextStartX + companyNameWidth + titleSuffixWidth,
     headerRowY,
   );
 
@@ -1387,6 +1428,22 @@ export const generateUsBillOfLadingPDF = (
       }
     });
 
+    // SEAWAY BILL / SURRENDERED — red, center-aligned in Description of Goods column
+    if (isLastSegment && cargoTypeLabel) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 0, 0);
+      doc.text(
+        cargoTypeLabel,
+        col3X + col3W / 2,
+        cargoBodyBottomY - 4,
+        { align: "center" },
+      );
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(FONT_TABLE_BODY);
+    }
+
     if (isLastSegment) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(FONT_TABLE_HEAD);
@@ -1420,11 +1477,15 @@ export const generateUsBillOfLadingPDF = (
 
   const cargoSegments =
     pageBreaks.length > 0 ? pageBreaks : [cargoColumns.map(() => 0)];
-  cargoSegments.forEach((startIndices, segmentIndex) => {
+  // Draft / SEAWAY / SURRENDER stay on one page (same as India BOL variants).
+  const segmentsToDraw = isSinglePageBol
+    ? [cargoSegments[0]]
+    : cargoSegments;
+  segmentsToDraw.forEach((startIndices, segmentIndex) => {
     drawCargoPageSegment(
       segmentIndex,
       startIndices,
-      segmentIndex === cargoSegments.length - 1,
+      segmentIndex === segmentsToDraw.length - 1,
     );
   });
 

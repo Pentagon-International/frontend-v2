@@ -232,7 +232,7 @@ type SupplierInvoiceFormValues = {
 };
 
 type SupplierInvoicePrefillFromJob = {
-  source: "air-import-job";
+  source: "air-import-job" | "service-job";
   /** Job id (e.g. JB-2604-0008) used to build common shipment options */
   job_id?: string;
   charges?: Array<{
@@ -314,6 +314,100 @@ function formatDDMMYYYY(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
   return `${year}-${month}-${day}`;
+}
+
+type SezStatusResult = {
+  sez: boolean;
+  credit_day: number | null;
+  credit_amount: number | null;
+  sez_valid_date: string | null;
+};
+
+const EMPTY_SEZ_STATUS: SezStatusResult = {
+  sez: false,
+  credit_day: null,
+  credit_amount: null,
+  sez_valid_date: null,
+};
+
+const fetchCheckSezStatus = async (payload: {
+  customer_code: string;
+  address: string;
+  document_date?: string;
+}): Promise<SezStatusResult> => {
+  try {
+    const body: {
+      customer_code: string;
+      address: string;
+      document_date?: string;
+    } = {
+      customer_code: payload.customer_code,
+      address: payload.address,
+    };
+    if (payload.document_date) {
+      body.document_date = payload.document_date;
+    }
+    const response = await postAPICall(
+      URL.checkSezStatus,
+      body,
+      API_HEADER,
+    );
+    const root = response as {
+      sez?: unknown;
+      credit_day?: unknown;
+      credit_amount?: unknown;
+      sez_valid_date?: unknown;
+      data?: {
+        sez?: unknown;
+        credit_day?: unknown;
+        credit_amount?: unknown;
+        sez_valid_date?: unknown;
+      };
+    };
+    const data =
+      root?.data && typeof root.data === "object" ? root.data : root;
+    const creditRaw = data?.credit_day ?? root?.credit_day;
+    const creditDayNum =
+      creditRaw == null || creditRaw === "" ? null : Number(creditRaw);
+    const amountRaw = data?.credit_amount ?? root?.credit_amount;
+    const creditAmountNum =
+      amountRaw == null || amountRaw === "" ? null : Number(amountRaw);
+    const sezValid = data?.sez_valid_date ?? root?.sez_valid_date;
+    return {
+      sez: Boolean(data?.sez ?? root?.sez),
+      credit_day:
+        creditDayNum != null && Number.isFinite(creditDayNum)
+          ? creditDayNum
+          : null,
+      credit_amount:
+        creditAmountNum != null && Number.isFinite(creditAmountNum)
+          ? creditAmountNum
+          : null,
+      sez_valid_date:
+        sezValid != null && String(sezValid).trim() !== ""
+          ? String(sezValid)
+          : null,
+    };
+  } catch (error) {
+    console.error("Error checking SEZ status:", error);
+    return EMPTY_SEZ_STATUS;
+  }
+};
+
+/** Due date = document date + credit days; credit_day 0 keeps document date. */
+function dueDateFromDocumentAndCredit(
+  documentDate: Date,
+  creditDay: number,
+): Date {
+  const base = new Date(
+    documentDate.getFullYear(),
+    documentDate.getMonth(),
+    documentDate.getDate(),
+  );
+  const days = Number(creditDay);
+  if (!Number.isFinite(days) || days <= 0) return base;
+  base.setDate(base.getDate() + days);
+  return base;
 }
 
 function normalizeDrCr(value: unknown): "Dr" | "Cr" {
@@ -1130,23 +1224,97 @@ export default function SupplierInvoiceCreate({
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
+  const [vendorAddress, setVendorAddress] = useState("");
+  const partyCreditDayRef = useRef<number | null>(null);
+  /**
+   * Apply due date from credit_day only when vendor is selected/changed
+   * (or on create when vendor is first resolved). Manual due-date edits are kept
+   * until document date or vendor changes again.
+   */
+  const pendingApplyDueDateFromCreditRef = useRef(!isEditMode && !isViewMode);
   const isVendorSelected =
     !!String(form.values.agent_code ?? "").trim() ||
     !!String(agentDisplayName ?? "").trim();
 
+  // Vendor/Supplier + address + document date → credit_day for due date
+  useEffect(() => {
+    if (isViewMode || isReversal) return;
+
+    const customerCode = String(form.values.agent_code ?? "").trim();
+    const addressLabel = String(vendorAddress ?? "").trim();
+    if (!customerCode || !addressLabel) {
+      partyCreditDayRef.current = null;
+      return;
+    }
+
+    const docDate = normalizeDate(form.values.date);
+    const documentDateStr = docDate ? formatDDMMYYYY(docDate) : "";
+    if (!documentDateStr) return;
+
+    let cancelled = false;
+    void (async () => {
+      const result = await fetchCheckSezStatus({
+        customer_code: customerCode,
+        address: addressLabel,
+        document_date: documentDateStr,
+      });
+      if (cancelled) return;
+      partyCreditDayRef.current = result.credit_day;
+      if (
+        pendingApplyDueDateFromCreditRef.current &&
+        result.credit_day != null &&
+        docDate
+      ) {
+        form.setFieldValue(
+          "due_date",
+          dueDateFromDocumentAndCredit(docDate, result.credit_day),
+        );
+        pendingApplyDueDateFromCreditRef.current = false;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    form.values.agent_code,
+    form.values.date,
+    vendorAddress,
+    isViewMode,
+    isReversal,
+  ]);
+
   const isAirImportJobPrefillFlow =
     prefillFromJob?.source === "air-import-job" &&
     String(prefillFromJob?.job_id ?? "").trim() !== "";
+  const isServiceJobPrefillFlow =
+    prefillFromJob?.source === "service-job" &&
+    String(prefillFromJob?.job_id ?? "").trim() !== "";
+  const isJobChargesPrefillFlow =
+    isAirImportJobPrefillFlow || isServiceJobPrefillFlow;
   const prefillJobId = String(prefillFromJob?.job_id ?? "").trim();
 
   const [prefillShipmentOptions, setPrefillShipmentOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
 
-  // Fetch a common shipment options list once for this flow using job_id,
+  // Fetch / set a common shipment options list once for this flow using job_id,
   // so all Shipment No fields share the same options.
   useEffect(() => {
-    if (!isAirImportJobPrefillFlow) return;
+    if (!isJobChargesPrefillFlow || !prefillJobId) {
+      setPrefillShipmentOptions([]);
+      return;
+    }
+
+    // Accounts → Service Job: shipment no is the job id itself.
+    if (isServiceJobPrefillFlow) {
+      setPrefillShipmentOptions([
+        { value: prefillJobId, label: prefillJobId },
+      ]);
+      return;
+    }
+
     commonSearchAPI({ endpoint: URL.filterJobCreate, query: prefillJobId })
       .then((rows) => {
         const arr = Array.isArray(rows)
@@ -1156,13 +1324,26 @@ export default function SupplierInvoiceCreate({
           .map((x) => String(x?.shipment_id ?? "").trim())
           .filter(Boolean)
           .map((v) => ({ value: v, label: v }));
+        // Always include job_id so estimates rows remain selectable.
+        if (
+          prefillJobId &&
+          !opts.some((o) => o.value === prefillJobId)
+        ) {
+          opts.unshift({ value: prefillJobId, label: prefillJobId });
+        }
         setPrefillShipmentOptions(opts);
       })
-      .catch(() => setPrefillShipmentOptions([]));
+      .catch(() =>
+        setPrefillShipmentOptions(
+          prefillJobId
+            ? [{ value: prefillJobId, label: prefillJobId }]
+            : [],
+        ),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAirImportJobPrefillFlow, prefillJobId]);
+  }, [isJobChargesPrefillFlow, isServiceJobPrefillFlow, prefillJobId]);
 
-  // When charges are prefilled from Air Import Job and vendor is manually selected,
+  // When charges are prefilled from a job and vendor is manually selected,
   // auto-fetch SAC codes once shipment_no + charge_id exist.
   const prefillSacKey = form.values.charges_data
     .map((c) => `${c.shipment_no}|${c.charge_id}|${c.tax_code}`)
@@ -1170,7 +1351,12 @@ export default function SupplierInvoiceCreate({
   useEffect(() => {
     if (!isIndiaUser) return;
     if (!prefillFromJob) return;
-    if (prefillFromJob.source !== "air-import-job") return;
+    if (
+      prefillFromJob.source !== "air-import-job" &&
+      prefillFromJob.source !== "service-job"
+    ) {
+      return;
+    }
     if (!String(form.values.agent_code ?? "").trim()) return; // only after manual vendor select
     if (isViewMode || isEditMode || isReversal) return;
 
@@ -1608,7 +1794,7 @@ export default function SupplierInvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Pre-fill from Air Import Job (Estimates + House charges) → Create Supplier Invoice
+  // Pre-fill from Air Import Job / Service Job → Create Supplier Invoice
   const applyPrefillChargesForSupplier = useCallback(
     (
       supplierCodeRaw: string | null | undefined,
@@ -1616,7 +1802,12 @@ export default function SupplierInvoiceCreate({
     ) => {
       if (!prefillFromJob) return;
       if (isViewMode || isEditMode || isReversal) return;
-      if (prefillFromJob.source !== "air-import-job") return;
+      if (
+        prefillFromJob.source !== "air-import-job" &&
+        prefillFromJob.source !== "service-job"
+      ) {
+        return;
+      }
 
       const supplierCode = String(supplierCodeRaw ?? "").trim();
       const supplierName = String(supplierNameRaw ?? "").trim();
@@ -1643,8 +1834,8 @@ export default function SupplierInvoiceCreate({
 
       const mappedCharges: ChargeRow[] = filtered
         .map((c) => {
-          // Estimates rows come with shipment_no = job_id.
-          // House rows come with shipment_no = house shipment_id.
+          // Service Job / estimates: shipment_no = job_id.
+          // Air Import House rows: shipment_no = house shipment_id.
           // If caller didn't send shipment_no for some row, fall back to job_id.
           const shipmentNo =
             String(c.shipment_no ?? "").trim() ||
@@ -1696,7 +1887,12 @@ export default function SupplierInvoiceCreate({
   useEffect(() => {
     if (!prefillFromJob) return;
     if (isViewMode || isEditMode || isReversal) return;
-    if (prefillFromJob.source !== "air-import-job") return;
+    if (
+      prefillFromJob.source !== "air-import-job" &&
+      prefillFromJob.source !== "service-job"
+    ) {
+      return;
+    }
     // Intentionally do NOT set vendor or charges on navigation.
     // Charges are populated only when the user manually selects Vendor/Supplier.
   }, [prefillFromJob, isViewMode, isEditMode, isReversal]);
@@ -2455,6 +2651,8 @@ export default function SupplierInvoiceCreate({
                   if (!isReversalCreate) {
                     form.setFieldValue("agent_code", "");
                     setAgentDisplayName(null);
+                    setVendorAddress("");
+                    partyCreditDayRef.current = null;
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
                     }
@@ -2474,20 +2672,28 @@ export default function SupplierInvoiceCreate({
                 value={normalizeDate(form.values.date)}
                 onChange={(d) => {
                   form.setFieldValue("date", d);
+                  if (!d || isViewMode) return;
+                  const creditDay = partyCreditDayRef.current;
+                  if (creditDay != null) {
+                    form.setFieldValue(
+                      "due_date",
+                      dueDateFromDocumentAndCredit(d, creditDay),
+                    );
+                    return;
+                  }
                   const currentDue = normalizeDate(form.values.due_date);
                   if (
                     !currentDue ||
-                    (d &&
+                    new Date(
+                      currentDue.getFullYear(),
+                      currentDue.getMonth(),
+                      currentDue.getDate(),
+                    ).getTime() <
                       new Date(
-                        currentDue.getFullYear(),
-                        currentDue.getMonth(),
-                        currentDue.getDate(),
-                      ).getTime() <
-                        new Date(
-                          d.getFullYear(),
-                          d.getMonth(),
-                          d.getDate(),
-                        ).getTime())
+                        d.getFullYear(),
+                        d.getMonth(),
+                        d.getDate(),
+                      ).getTime()
                   ) {
                     form.setFieldValue("due_date", d);
                   }
@@ -2502,7 +2708,30 @@ export default function SupplierInvoiceCreate({
                 label="Due Date"
                 placeholder="Select due date"
                 value={normalizeDate(form.values.due_date)}
-                onChange={(d) => form.setFieldValue("due_date", d)}
+                onChange={(d) => {
+                  if (!d) {
+                    form.setFieldValue("due_date", d);
+                    return;
+                  }
+                  const docDate = normalizeDate(form.values.date);
+                  if (
+                    docDate &&
+                    new Date(
+                      d.getFullYear(),
+                      d.getMonth(),
+                      d.getDate(),
+                    ).getTime() <
+                      new Date(
+                        docDate.getFullYear(),
+                        docDate.getMonth(),
+                        docDate.getDate(),
+                      ).getTime()
+                  ) {
+                    form.setFieldValue("due_date", docDate);
+                    return;
+                  }
+                  form.setFieldValue("due_date", d);
+                }}
                 withAsterisk
                 minDate={normalizeDate(form.values.date) ?? undefined}
                 error={
@@ -2533,6 +2762,7 @@ export default function SupplierInvoiceCreate({
                   const addresses =
                     (originalData?.addresses_data as
                       | Array<{
+                          address?: string;
                           address_type?: string;
                           state_id?: number | null;
                           gst_id?: string | null;
@@ -2544,6 +2774,17 @@ export default function SupplierInvoiceCreate({
                       (a) =>
                         String(a.address_type ?? "").toUpperCase() === "PRIMARY",
                     ) ?? addresses[0];
+
+                  const isCleared =
+                    value == null ||
+                    (typeof value === "string" && value.trim() === "");
+                  if (isCleared) {
+                    setVendorAddress("");
+                    partyCreditDayRef.current = null;
+                  } else {
+                    pendingApplyDueDateFromCreditRef.current = true;
+                    setVendorAddress(String(primary?.address ?? "").trim());
+                  }
 
                   if (isIndiaUser) {
                     if (primary?.state_id != null) {
@@ -3313,7 +3554,7 @@ export default function SupplierInvoiceCreate({
                     mt={index !== 0 ? "sm" : 0}
                   >
                     <Grid.Col span={chargeColSpans.shipment}>
-                      {isAirImportJobPrefillFlow ? (
+                      {isJobChargesPrefillFlow ? (
                         <Dropdown
                           placeholder="Select shipment no"
                           data={prefillShipmentOptions}

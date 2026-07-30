@@ -371,6 +371,7 @@ export const generateBillOfLadingPDF = (
         jobData,
         housingData,
         defaultBranch,
+        options,
       );
     }
 

@@ -9,8 +9,10 @@ import {
   Group,
   Loader,
   Menu,
+  Modal,
   ScrollArea,
   Select,
+  Stack,
   Table,
   Tabs,
   Text,
@@ -23,8 +25,10 @@ import {
   IconChevronRight,
   IconChevronUp,
   IconDotsVertical,
+  IconDownload,
   IconEdit,
   IconEye,
+  IconFileAnalytics,
   IconFileInvoice,
   IconPlus,
   IconTrash,
@@ -48,15 +52,16 @@ import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDele
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import {
-  getJobMasterAddressOptions,
+  JobMasterPartyDetailsPanel,
+  type JobMasterPartyDetailsValues,
   type PartyAddressOption,
 } from "../../Transportation/JobMasterPartyDetailsPanel";
 import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
+import { apiCallProtected } from "../../../api/axios";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { toTitleCase } from "../../../utils/textFormatter";
 import { useExchangeRateRoe } from "../../../hooks/useExchangeRateRoe";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import useAuthStore from "../../../store/authStore";
@@ -84,8 +89,9 @@ import {
 } from "../../../utils/localDateTime";
 
 const JOB_DETAILS_TAB = 0;
-const CHARGES_TAB = 1;
-const ACCOUNTS_TAB = 2;
+const PARTY_DETAILS_TAB = 1;
+const CHARGES_TAB = 2;
+const ACCOUNTS_TAB = 3;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,11 +133,6 @@ type SalespersonsResponse = { data?: SalespersonData[] };
 type ServiceJobFormValues = {
   service_id: string;
   pp_cc: string;
-  customer_code: string;
-  customer_name: string;
-  customer_email: string;
-  customer_address_id: string;
-  customer_address: string;
   origin_code: string;
   origin_name: string;
   destination_code: string;
@@ -141,6 +142,24 @@ type ServiceJobFormValues = {
   awb_number: string;
   etd: Date | null;
   eta: Date | null;
+};
+
+const EMPTY_PARTY_DETAILS: JobMasterPartyDetailsValues = {
+  shipper_id: "",
+  shipper_name: "",
+  shipper_email: "",
+  shipper_address_id: "",
+  shipper_address: "",
+  consignee_id: "",
+  consignee_name: "",
+  consignee_email: "",
+  consignee_address_id: "",
+  consignee_address: "",
+  carrier_agent_id: "",
+  carrier_agent_name: "",
+  carrier_agent_email: "",
+  carrier_agent_address_id: "",
+  carrier_agent_address: "",
 };
 
 type ReverseInvoiceItem = {
@@ -394,11 +413,6 @@ const PORT_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
   label: `${item.port_name} (${item.port_code})`,
 });
 
-const CUSTOMER_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
-  value: String(item.customer_code ?? item.id ?? ""),
-  label: String(item.customer_name ?? ""),
-});
-
 const CHARGE_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
   value: String(item.id ?? ""),
   label: String(item.charge_name ?? ""),
@@ -516,6 +530,8 @@ function ServiceJobChargesSection({
   onCreateInvoice,
   showCreateSupplierInvoice = false,
   onCreateSupplierInvoice,
+  showCreatePrq = false,
+  onCreatePrq,
 }: {
   form: UseFormReturnType<{ charges: ServiceJobChargeDetail[] }>;
   transportMode: string;
@@ -525,6 +541,8 @@ function ServiceJobChargesSection({
   onCreateInvoice?: () => void;
   showCreateSupplierInvoice?: boolean;
   onCreateSupplierInvoice?: () => void;
+  showCreatePrq?: boolean;
+  onCreatePrq?: () => void;
 }) {
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -645,6 +663,16 @@ function ServiceJobChargesSection({
           Charges
         </Text>
         <Group gap="sm">
+          {showCreatePrq && onCreatePrq && (
+            <Button
+              variant="outline"
+              color="#105476"
+              size="sm"
+              onClick={onCreatePrq}
+            >
+              Create PRQ
+            </Button>
+          )}
           {showCreateSupplierInvoice && onCreateSupplierInvoice && (
             <Button
               variant="outline"
@@ -1248,6 +1276,9 @@ export default function ServiceJobCreate() {
   const [isLoadingJob, setIsLoadingJob] = useState(
     isEditMode && !stateJobFromNav,
   );
+  const [costSheetPreviewOpen, setCostSheetPreviewOpen] = useState(false);
+  const [costSheetLoading, setCostSheetLoading] = useState(false);
+  const [costSheetPdfUrl, setCostSheetPdfUrl] = useState<string | null>(null);
   const lastHydrationKeyRef = useRef<string | null>(null);
   const forceApiFetchRef = useRef(false);
 
@@ -1262,19 +1293,11 @@ export default function ServiceJobCreate() {
     id?: number;
     shipment_id?: string;
   }>({});
-  const [addressOptions, setAddressOptions] = useState<PartyAddressOption[]>(
-    [],
-  );
 
   const form = useForm<ServiceJobFormValues>({
     initialValues: {
       service_id: "",
       pp_cc: "Collect",
-      customer_code: "",
-      customer_name: "",
-      customer_email: "",
-      customer_address_id: "",
-      customer_address: "",
       origin_code: "",
       origin_name: "",
       destination_code: "",
@@ -1286,6 +1309,27 @@ export default function ServiceJobCreate() {
       eta: null,
     },
   });
+
+  const partyDetailsForm = useForm<JobMasterPartyDetailsValues>({
+    initialValues: { ...EMPTY_PARTY_DETAILS },
+  });
+  const [shipperAddressOptions, setShipperAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [carrierAgentAddressOptions, setCarrierAgentAddressOptions] = useState<
+    PartyAddressOption[]
+  >([]);
+  const [shipperAddressSearch, setShipperAddressSearch] = useState("");
+  const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
+  const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] =
+    useState("");
+  const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
+  const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
+  const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
+    useState(false);
 
   const chargesForm = useForm<{ charges: ServiceJobChargeDetail[] }>({
     initialValues: {
@@ -1410,15 +1454,6 @@ export default function ServiceJobCreate() {
           house?.pp_cc,
           house?.freight,
         ),
-        customer_code: String(
-          job.shipper_code ?? job.shipper_id ?? house?.shipper_code ?? "",
-        ),
-        customer_name: String(job.shipper_name ?? house?.shipper_name ?? ""),
-        customer_email: String(job.shipper_email ?? house?.shipper_email ?? ""),
-        customer_address_id: "",
-        customer_address: String(
-          job.shipper_address ?? house?.shipper_address ?? "",
-        ),
         origin_code: String(job.origin_code ?? house?.origin_code ?? ""),
         origin_name: String(job.origin_name ?? house?.origin_name ?? ""),
         destination_code: String(
@@ -1436,6 +1471,39 @@ export default function ServiceJobCreate() {
         eta: parseJobDateField(job.eta ?? house?.eta),
       });
 
+      partyDetailsForm.setValues({
+        shipper_id: String(
+          house?.shipper_id ?? house?.shipper_code ?? "",
+        ),
+        shipper_name: String(house?.shipper_name ?? ""),
+        shipper_email: String(house?.shipper_email ?? ""),
+        shipper_address_id: String(house?.shipper_address_id ?? ""),
+        shipper_address: String(house?.shipper_address ?? ""),
+        consignee_id: String(
+          house?.consignee_id ?? house?.consignee_code ?? "",
+        ),
+        consignee_name: String(house?.consignee_name ?? ""),
+        consignee_email: String(house?.consignee_email ?? ""),
+        consignee_address_id: String(house?.consignee_address_id ?? ""),
+        consignee_address: String(house?.consignee_address ?? ""),
+        carrier_agent_id: String(
+          house?.carrier_agent_id ?? house?.carrier_agent_code ?? "",
+        ),
+        carrier_agent_name: String(house?.carrier_agent_name ?? ""),
+        carrier_agent_email: String(house?.carrier_agent_email ?? ""),
+        carrier_agent_address_id: String(
+          house?.carrier_agent_address_id ?? "",
+        ),
+        carrier_agent_address: String(house?.carrier_agent_address ?? ""),
+      });
+      setShipperAddressCustom(Boolean(String(house?.shipper_address ?? "").trim()));
+      setConsigneeAddressCustom(
+        Boolean(String(house?.consignee_address ?? "").trim()),
+      );
+      setCarrierAgentAddressCustom(
+        Boolean(String(house?.carrier_agent_address ?? "").trim()),
+      );
+
       if (house) {
         const chargeRows = readChargesFromHouse(house, mode).map((c) =>
           mapChargeFromApi(c as Record<string, unknown>),
@@ -1445,7 +1513,7 @@ export default function ServiceJobCreate() {
         }
       }
     },
-    [serviceMasterList, chargesForm, form],
+    [serviceMasterList, chargesForm, form, partyDetailsForm],
   );
 
   useEffect(() => {
@@ -1537,13 +1605,17 @@ export default function ServiceJobCreate() {
     const masterAwbField = getMasterAwbField(mode);
     const houseAwbField = getHouseAwbField(mode);
     const chargesKey = getHousingChargesPayloadKey(mode);
-    const partyBlock = {
-      shipper_name: form.values.customer_name || "",
-      shipper_email: form.values.customer_email || "",
-      shipper_address: form.values.customer_address || "",
-      consignee_name: form.values.customer_name || "",
-      consignee_email: form.values.customer_email || "",
-      consignee_address: form.values.customer_address || "",
+    const housePartyBlock = {
+      shipper_name: partyDetailsForm.values.shipper_name || "",
+      shipper_email: partyDetailsForm.values.shipper_email || "",
+      shipper_address: partyDetailsForm.values.shipper_address || "",
+      consignee_name: partyDetailsForm.values.consignee_name || "",
+      consignee_email: partyDetailsForm.values.consignee_email || "",
+      consignee_address: partyDetailsForm.values.consignee_address || "",
+      carrier_agent_name: partyDetailsForm.values.carrier_agent_name || "",
+      carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
+      carrier_agent_address:
+        partyDetailsForm.values.carrier_agent_address || "",
     };
 
     const housingDetail: Record<string, unknown> = {
@@ -1554,7 +1626,7 @@ export default function ServiceJobCreate() {
       routed_by: form.values.routed_by || null,
       origin_code: form.values.origin_code || null,
       destination_code: form.values.destination_code || null,
-      ...partyBlock,
+      ...housePartyBlock,
       [houseAwbField]: form.values.awb_number || null,
       [chargesKey]: mapChargesForPayload(
         chargesForm.values.charges,
@@ -1572,7 +1644,13 @@ export default function ServiceJobCreate() {
       destination_code: form.values.destination_code || null,
       etd: formatJobDateForPayload(form.values.etd, mode),
       eta: formatJobDateForPayload(form.values.eta, mode),
-      ...partyBlock,
+      // Master shipper / consignee intentionally empty for service jobs
+      shipper_name: "",
+      shipper_email: "",
+      shipper_address: "",
+      consignee_name: "",
+      consignee_email: "",
+      consignee_address: "",
       [masterAwbField]: form.values.awb_number || null,
       housing_details: [housingDetail],
     };
@@ -1590,17 +1668,26 @@ export default function ServiceJobCreate() {
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
       destination_code: form.values.destination_code,
-      shipper_name: form.values.customer_name,
-      shipper_email: form.values.customer_email,
-      shipper_address: form.values.customer_address,
-      consignee_name: form.values.customer_name,
-      consignee_email: form.values.customer_email,
-      consignee_address: form.values.customer_address,
+      shipper_name: partyDetailsForm.values.shipper_name,
+      shipper_email: partyDetailsForm.values.shipper_email,
+      shipper_address: partyDetailsForm.values.shipper_address,
+      consignee_name: partyDetailsForm.values.consignee_name,
+      consignee_email: partyDetailsForm.values.consignee_email,
+      consignee_address: partyDetailsForm.values.consignee_address,
+      carrier_agent_name: partyDetailsForm.values.carrier_agent_name,
+      carrier_agent_email: partyDetailsForm.values.carrier_agent_email,
+      carrier_agent_address: partyDetailsForm.values.carrier_agent_address,
       [getHouseAwbField(transportMode)]: form.values.awb_number,
       charges: chargesForm.values.charges,
       [chargesKey]: chargesForm.values.charges,
     };
-  }, [chargesForm.values.charges, form.values, houseMeta, transportMode]);
+  }, [
+    chargesForm.values.charges,
+    form.values,
+    houseMeta,
+    partyDetailsForm.values,
+    transportMode,
+  ]);
 
   const editPath = routeId ? `/service-job/edit/${routeId}` : "/service-job";
 
@@ -1697,6 +1784,196 @@ export default function ServiceJobCreate() {
     });
   }, [chargesForm.values.charges, jobData, navigate]);
 
+  const handleCreatePrq = useCallback(() => {
+    const charges = chargesForm.values.charges ?? [];
+    const chargesFromEstimates = charges
+      .filter(
+        (e) =>
+          e.charge_id != null ||
+          (e.charge_name && e.charge_name.trim() !== ""),
+      )
+      .map((e) => ({
+        charge_id: e.charge_id,
+        charge_name: e.charge_name ?? "",
+        segment: "",
+        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+        sub_job: "",
+        cn_r: "",
+        currency: e.currency ?? "",
+        currency_id: e.currency_id ?? "",
+        roe: e.roe,
+        unit_code: e.unit_code ?? "",
+        unit_id: e.unit_id ?? "",
+        no_of_unit: e.no_of_unit,
+        amount_per_unit: e.cost_per_unit,
+        amount: e.total_cost,
+        amount_in_local:
+          e.cost_local_amount != null
+            ? e.cost_local_amount
+            : e.total_cost != null && e.roe != null
+              ? Math.round(e.total_cost * e.roe * 100) / 100
+              : e.total_cost,
+        tax_code: "",
+        tax: "false",
+      }));
+    const firstSupplier =
+      charges.find(
+        (e) =>
+          String(e.supplier_code ?? "").trim() !== "" ||
+          String(e.supplier_name ?? "").trim() !== "",
+      ) ?? null;
+
+    navigate("/payment-request/create", {
+      state: {
+        serviceType: getInvoiceServiceType(transportMode),
+        chargesFromEstimates:
+          chargesFromEstimates.length > 0 ? chargesFromEstimates : undefined,
+        supplier:
+          firstSupplier != null
+            ? {
+                supplier_code: String(firstSupplier.supplier_code ?? ""),
+                supplier_name: String(firstSupplier.supplier_name ?? ""),
+              }
+            : null,
+        job_reference_1:
+          jobData?.job_id != null
+            ? String(jobData.job_id)
+            : jobData?.id != null
+              ? String(jobData.id)
+              : "",
+        ...(jobData && { job: jobData }),
+      },
+    });
+  }, [chargesForm.values.charges, jobData, navigate, transportMode]);
+
+  const handleCloseCostSheetPreview = useCallback(() => {
+    setCostSheetPreviewOpen(false);
+    setCostSheetLoading(false);
+    if (costSheetPdfUrl) {
+      window.URL.revokeObjectURL(costSheetPdfUrl);
+    }
+    setCostSheetPdfUrl(null);
+  }, [costSheetPdfUrl]);
+
+  const handleDownloadCostSheetPdf = useCallback(() => {
+    if (!costSheetPdfUrl) return;
+    const jobId =
+      String(jobData?.job_id ?? jobData?.id ?? "job").trim() || "job";
+    const link = document.createElement("a");
+    link.href = costSheetPdfUrl;
+    link.download = `job-cost-sheet-${jobId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [costSheetPdfUrl, jobData?.job_id, jobData?.id]);
+
+  const handleJobCostSheet = useCallback(async () => {
+    const jobId = String(jobData?.job_id ?? "").trim();
+    if (!jobId) {
+      ToastNotification({
+        type: "error",
+        message: "Job ID is required to generate Job Cost Sheet.",
+      });
+      return;
+    }
+
+    setCostSheetPreviewOpen(true);
+    setCostSheetLoading(true);
+    if (costSheetPdfUrl) {
+      window.URL.revokeObjectURL(costSheetPdfUrl);
+      setCostSheetPdfUrl(null);
+    }
+
+    try {
+      const response = await apiCallProtected.post(
+        `${URL.jobLedger}`,
+        {
+          filters: {
+            job_id: jobId,
+            type: "pdf",
+          },
+        },
+        { ...API_HEADER, responseType: "blob" },
+      );
+
+      const blob =
+        response instanceof Blob
+          ? response
+          : (response as { data?: Blob })?.data instanceof Blob
+            ? (response as { data: Blob }).data
+            : null;
+
+      if (!blob || blob.size === 0) {
+        throw new Error("Empty PDF response from server");
+      }
+
+      const head = await blob.slice(0, 256).text();
+      const headTrim = head.trimStart();
+      if (headTrim.startsWith("{") || headTrim.startsWith("[")) {
+        let message = "Failed to generate Job Cost Sheet PDF";
+        try {
+          const parsed = JSON.parse(await blob.text()) as {
+            detail?: string;
+            message?: string;
+            error?: string;
+          };
+          message =
+            parsed.detail || parsed.message || parsed.error || message;
+        } catch {
+          /* keep default */
+        }
+        throw new Error(message);
+      }
+
+      setCostSheetPdfUrl(window.URL.createObjectURL(blob));
+    } catch (error: unknown) {
+      console.error("Job Cost Sheet PDF error:", error);
+      ToastNotification({
+        type: "error",
+        message:
+          (error as { message?: string })?.message ||
+          "Failed to generate Job Cost Sheet PDF",
+      });
+      setCostSheetPreviewOpen(false);
+      setCostSheetPdfUrl(null);
+    } finally {
+      setCostSheetLoading(false);
+    }
+  }, [costSheetPdfUrl, jobData?.job_id]);
+
+  useEffect(() => {
+    return () => {
+      if (costSheetPdfUrl) {
+        window.URL.revokeObjectURL(costSheetPdfUrl);
+      }
+    };
+  }, [costSheetPdfUrl]);
+
+  const handleOpenJobLedger = useCallback(() => {
+    const jobId = String(jobData?.job_id ?? "").trim();
+    if (!jobId) {
+      ToastNotification({
+        type: "error",
+        message: "Job ID is required to open Job Ledger.",
+      });
+      return;
+    }
+    navigate("/job-ledger", {
+      state: {
+        jobId,
+        service_name: selectedService?.service_name || "Service Job",
+        jobReturnTo: location.pathname,
+        jobReturnToState: location.state,
+      },
+    });
+  }, [
+    jobData?.job_id,
+    location.pathname,
+    location.state,
+    navigate,
+    selectedService?.service_name,
+  ]);
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
@@ -1746,14 +2023,129 @@ export default function ServiceJobCreate() {
             {isEditMode ? "Edit Service Job" : "Create Service Job"}
           </Text>
         </EditPageHeadingRow>
-        <Button
-          color="#105476"
-          leftSection={<IconCheck size={18} />}
-          loading={isSubmitting}
-          onClick={handleSubmit}
-        >
-          {isEditMode ? "Update" : "Create"}
-        </Button>
+        <Group gap="sm">
+          {isEditMode && String(jobData?.job_id ?? "").trim() !== "" && (
+            <Menu shadow="md" width={240} position="bottom-end">
+              <Menu.Target>
+                <ActionIcon
+                  variant="subtle"
+                  color="#105476"
+                  size="lg"
+                  aria-label="Service job actions"
+                  styles={{
+                    root: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      border: "1px solid #E9ECEF",
+                      borderRadius: "8px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                  }}
+                >
+                  <IconDotsVertical size={18} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown
+                styles={{
+                  dropdown: {
+                    border: "1px solid #E9ECEF",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                  },
+                }}
+              >
+                <Menu.Item
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileInvoice size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                  onClick={handleOpenJobLedger}
+                >
+                  Job Ledger
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconFileAnalytics size={16} color="#105476" />
+                    </Box>
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      marginBottom: "4px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                  onClick={() => void handleJobCostSheet()}
+                  disabled={costSheetLoading}
+                >
+                  Job Cost Sheet
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          )}
+          <Button
+            color="#105476"
+            leftSection={<IconCheck size={18} />}
+            loading={isSubmitting}
+            onClick={handleSubmit}
+          >
+            {isEditMode ? "Update" : "Create"}
+          </Button>
+        </Group>
       </Group>
 
       <Tabs
@@ -1777,13 +2169,28 @@ export default function ServiceJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: activeTab === 0 ? "3px solid #105476" : "none",
+              borderBottom: activeTab === JOB_DETAILS_TAB ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
-              fontWeight: activeTab === 0 ? 600 : 400,
+              fontWeight: activeTab === JOB_DETAILS_TAB ? 600 : 400,
             }}
           >
             Job Details
+          </Tabs.Tab>
+          <Tabs.Tab
+            value={String(PARTY_DETAILS_TAB)}
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom:
+                activeTab === PARTY_DETAILS_TAB ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: activeTab === PARTY_DETAILS_TAB ? 600 : 400,
+            }}
+          >
+            Party Details
           </Tabs.Tab>
           <Tabs.Tab 
             value={String(CHARGES_TAB)}
@@ -1791,10 +2198,10 @@ export default function ServiceJobCreate() {
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: activeTab === 1 ? "3px solid #105476" : "none",
+              borderBottom: activeTab === CHARGES_TAB ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
-              fontWeight: activeTab === 1 ? 600 : 400,
+              fontWeight: activeTab === CHARGES_TAB ? 600 : 400,
             }}
           >
             Charges
@@ -1806,10 +2213,10 @@ export default function ServiceJobCreate() {
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: activeTab === 2 ? "3px solid #105476" : "none",
+                borderBottom: activeTab === ACCOUNTS_TAB ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
-                fontWeight: activeTab === 2 ? 600 : 400,
+                fontWeight: activeTab === ACCOUNTS_TAB ? 600 : 400,
               }}
             >
               Accounts
@@ -1871,102 +2278,6 @@ export default function ServiceJobCreate() {
                   portKey={`destination-${portSelectKey}`}
                   additionalParams={portTransportParams}
                   onPortChange={handleDestinationPortChange}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Customer Name"
-                  placeholder="Type customer name"
-                  apiEndpoint={URL.allCustomers}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={CUSTOMER_DISPLAY_FORMAT}
-                  value={form.values.customer_code || null}
-                  displayValue={form.values.customer_name || undefined}
-                  returnOriginalData
-                  onChange={(value, selectedData, originalData) => {
-                    const addresses = getJobMasterAddressOptions(originalData);
-                    const primary = addresses[0];
-                    const name = String(
-                      (originalData as Record<string, unknown> | undefined)
-                        ?.customer_name ??
-                        selectedData?.label ??
-                        "",
-                    );
-
-                    form.setFieldValue("customer_code", value || "");
-                    form.setFieldValue("customer_name", toTitleCase(name));
-                    form.setFieldValue("customer_email", primary?.email || "");
-                    form.setFieldValue(
-                      "customer_address_id",
-                      primary?.value || "",
-                    );
-                    form.setFieldValue(
-                      "customer_address",
-                      primary?.address ? toTitleCase(primary.address) : "",
-                    );
-
-                    if (!value) {
-                      form.setFieldValue("customer_name", "");
-                      form.setFieldValue("customer_email", "");
-                      form.setFieldValue("customer_address_id", "");
-                      form.setFieldValue("customer_address", "");
-                    }
-
-                    setAddressOptions(value ? addresses : []);
-                  }}
-                />
-              </Grid.Col>
-
-              <Grid.Col span={8}>
-                {addressOptions.length > 0 ? (
-                  <Dropdown
-                    label="Address"
-                    placeholder="Select address"
-                    searchable
-                    data={addressOptions.map((item) => ({
-                      value: item.value,
-                      label: item.label,
-                    }))}
-                    value={form.values.customer_address_id || null}
-                    onChange={(value) => {
-                      const selected = addressOptions.find(
-                        (item) => item.value === value,
-                      );
-                      form.setFieldValue("customer_address_id", value || "");
-                      form.setFieldValue(
-                        "customer_address",
-                        selected?.address
-                          ? toTitleCase(selected.address)
-                          : "",
-                      );
-                      form.setFieldValue(
-                        "customer_email",
-                        selected?.email || "",
-                      );
-                    }}
-                  />
-                ) : (
-                  <FormTextInput
-                    label="Address"
-                    placeholder="Enter address"
-                    value={form.values.customer_address}
-                    onChange={(e) =>
-                      form.setFieldValue(
-                        "customer_address",
-                        toTitleCase(e.currentTarget.value),
-                      )
-                    }
-                  />
-                )}
-              </Grid.Col>
-
-              <Grid.Col span={4}>
-                <FormTextInput
-                  label="Customer Email"
-                  type="email"
-                  placeholder="Enter customer email"
-                  {...form.getInputProps("customer_email")}
                 />
               </Grid.Col>
 
@@ -2108,6 +2419,33 @@ export default function ServiceJobCreate() {
           </Box>
         </Tabs.Panel>
 
+        <Tabs.Panel value={String(PARTY_DETAILS_TAB)}>
+          <Box mt="md">
+            <JobMasterPartyDetailsPanel
+              idPrefix="service-job-party"
+              partyDetailsForm={partyDetailsForm}
+              shipperAddressOptions={shipperAddressOptions}
+              setShipperAddressOptions={setShipperAddressOptions}
+              consigneeAddressOptions={consigneeAddressOptions}
+              setConsigneeAddressOptions={setConsigneeAddressOptions}
+              carrierAgentAddressOptions={carrierAgentAddressOptions}
+              setCarrierAgentAddressOptions={setCarrierAgentAddressOptions}
+              shipperAddressSearch={shipperAddressSearch}
+              setShipperAddressSearch={setShipperAddressSearch}
+              consigneeAddressSearch={consigneeAddressSearch}
+              setConsigneeAddressSearch={setConsigneeAddressSearch}
+              carrierAgentAddressSearch={carrierAgentAddressSearch}
+              setCarrierAgentAddressSearch={setCarrierAgentAddressSearch}
+              shipperAddressCustom={shipperAddressCustom}
+              setShipperAddressCustom={setShipperAddressCustom}
+              consigneeAddressCustom={consigneeAddressCustom}
+              setConsigneeAddressCustom={setConsigneeAddressCustom}
+              carrierAgentAddressCustom={carrierAgentAddressCustom}
+              setCarrierAgentAddressCustom={setCarrierAgentAddressCustom}
+            />
+          </Box>
+        </Tabs.Panel>
+
         <Tabs.Panel value={String(CHARGES_TAB)}>
           <ServiceJobChargesSection
             form={chargesForm}
@@ -2117,6 +2455,8 @@ export default function ServiceJobCreate() {
             onCreateInvoice={handleCreateInvoice}
             showCreateSupplierInvoice={isEditMode && jobData?.id != null}
             onCreateSupplierInvoice={handleCreateSupplierInvoice}
+            showCreatePrq={isEditMode && jobData?.id != null}
+            onCreatePrq={handleCreatePrq}
           />
         </Tabs.Panel>
 
@@ -2173,6 +2513,74 @@ export default function ServiceJobCreate() {
           </Box>
         </Group>
       </Box>
+
+      <Modal
+        opened={costSheetPreviewOpen}
+        onClose={handleCloseCostSheetPreview}
+        title={
+          <Text size="lg" fw={600} c="#105476">
+            Job Cost Sheet
+          </Text>
+        }
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {costSheetLoading ? (
+            <Center style={{ flex: 1 }}>
+              <Loader color="#105476" size="lg" />
+            </Center>
+          ) : costSheetPdfUrl ? (
+            <>
+              <iframe
+                src={costSheetPdfUrl}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Job Cost Sheet PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  color="#105476"
+                  leftSection={<IconDownload size={16} />}
+                  onClick={handleDownloadCostSheetPdf}
+                >
+                  Download
+                </Button>
+                <Button color="#105476" onClick={handleCloseCostSheetPreview}>
+                  Close
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center style={{ flex: 1 }}>
+              <Text c="dimmed">No PDF available</Text>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }
