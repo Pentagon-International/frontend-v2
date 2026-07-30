@@ -534,7 +534,7 @@ export const generateUsBillOfLadingPDF = (
     blType === "SEAWAY BILL" || blType === "SURRENDERED";
   // Draft / SEAWAY BILL / SURRENDERED: single page. ORIGINAL: one copy (may continue if cargo overflows).
   const isSinglePageBol = isDraftBol || isSeawayOrSurrendered;
-  // DRAFT beside company header. SEAWAY/SURRENDERED use red label in Description column.
+  // DRAFT after FMC number. SEAWAY/SURRENDERED use red label in Description column.
   const titleSuffix = isDraftBol ? "DRAFT" : "";
   const cargoTypeLabel = isDraftBol
     ? ""
@@ -816,33 +816,29 @@ export const generateUsBillOfLadingPDF = (
   doc.setFontSize(FONT_HEADER);
   const fmcLabel = `FMC: ${US_FMC_NO}`;
   const companyNameWidth = doc.getTextWidth(companyName);
-  const titleSuffixGap = 3;
-  const titleSuffixWidth = titleSuffix
-    ? doc.getTextWidth(titleSuffix) + titleSuffixGap
-    : 0;
   doc.setFontSize(FONT_FMC);
   const fmcGap = "   ";
   const fmcLabelWidth = doc.getTextWidth(`${fmcGap}${fmcLabel}`);
   const headerTextStartX =
-    centerTextX -
-    (companyNameWidth + titleSuffixWidth + fmcLabelWidth) / 2;
+    centerTextX - (companyNameWidth + fmcLabelWidth) / 2;
   doc.setFontSize(FONT_HEADER);
   doc.setTextColor(0, 0, 0);
   doc.text(companyName, headerTextStartX, headerRowY);
-  if (titleSuffix) {
-    doc.text(
-      titleSuffix,
-      headerTextStartX + companyNameWidth + titleSuffixGap,
-      headerRowY,
-    );
-  }
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_FMC);
   doc.text(
     `${fmcGap}${fmcLabel}`,
-    headerTextStartX + companyNameWidth + titleSuffixWidth,
+    headerTextStartX + companyNameWidth,
     headerRowY,
   );
+  // DRAFT right-aligned at the right margin of the header band
+  if (titleSuffix) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_HEADER);
+    doc.text(titleSuffix, contentRightX - boxPadding, headerRowY, {
+      align: "right",
+    });
+  }
 
   // B/L No. on its own line, just above the top table (not on the logo/company row)
   const blLabel = "B/L No:";

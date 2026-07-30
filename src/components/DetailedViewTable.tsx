@@ -42,8 +42,8 @@ const PIPELINE_REPORT_DRILL2_COL_WIDTH: Record<string, number> = {
   service: 100,
   trade: 90,
   service_type: 105,
-  origin_port_name: 135,
-  destination_port_name: 135,
+  origin_port_name: 175,
+  destination_port_name: 175,
   carrier_name: 115,
   quote_currency: 85,
   valid_upto: 100,
@@ -1265,6 +1265,36 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
                 </Text>
               );
             }
+
+            // Wider origin/destination columns: one-line ellipsis + Mantine hover tooltip
+            if (
+              key === "origin_port_name" ||
+              key === "destination_port_name"
+            ) {
+              const portLabel =
+                cellValue == null || cellValue === ""
+                  ? "—"
+                  : String(cellValue);
+              return (
+                <Tooltip
+                  label={portLabel}
+                  disabled={!portLabel || portLabel === "—"}
+                  withArrow
+                  position="top"
+                  maw={360}
+                  zIndex={1000}
+                >
+                  <Text
+                    size="sm"
+                    lineClamp={1}
+                    style={{ cursor: "default", maxWidth: "100%" }}
+                  >
+                    {portLabel}
+                  </Text>
+                </Tooltip>
+              );
+            }
+
             const order = columns.map((col) =>
               col.accessorKey ? String(col.accessorKey) : (col.id as string)
             );
