@@ -70,8 +70,12 @@ const resolveCanCfsNames = (
   hawbData: Record<string, unknown>,
 ): string => {
   const masterContainers = [
-    ...(Array.isArray(jobData?.container_details) ? jobData.container_details : []),
-    ...(Array.isArray(jobData?.containerDetails) ? jobData.containerDetails : []),
+    ...(Array.isArray(jobData?.container_details)
+      ? jobData.container_details
+      : []),
+    ...(Array.isArray(jobData?.containerDetails)
+      ? jobData.containerDetails
+      : []),
   ] as Array<Record<string, unknown>>;
 
   const houseCargo = Array.isArray(hawbData?.cargo_details)
@@ -85,7 +89,9 @@ const resolveCanCfsNames = (
       const containerId = String(record.container_id ?? "").trim();
       const match = masterContainers.find((container) => {
         const masterNo = String(container.container_no ?? "").trim();
-        const masterId = String(container.id ?? container.container_id ?? "").trim();
+        const masterId = String(
+          container.id ?? container.container_id ?? "",
+        ).trim();
         return (
           (containerNo && masterNo && containerNo === masterNo) ||
           (containerId && masterId && containerId === masterId)
@@ -98,10 +104,168 @@ const resolveCanCfsNames = (
   return [...new Set(cfsNames)].join(", ");
 };
 
-const formatCanVslVoy = (
-  vesselName: string,
-  voyageNumber: string,
-): string => {
+/** Normalize job/house notes into plain strings for numbered CAN list rendering. */
+const normalizeCanDisplayNotes = (raw: unknown): string[] => {
+  const items: unknown[] = Array.isArray(raw)
+    ? raw
+    : typeof raw === "string" && raw.trim()
+      ? [raw]
+      : raw && typeof raw === "object"
+        ? [raw]
+        : [];
+
+  const stripLeadingBullet = (text: string): string =>
+    text
+      .replace(/^[\u2022\u25CF\u25E6\u25AA\u25B8\u2043•●○▪►‣*]+\s*/, "")
+      .replace(/^[-–—]\s+/, "")
+      .replace(/^\d+[.)]\s+/, "")
+      .trim();
+
+  const extractNoteText = (note: unknown): string => {
+    if (note == null) return "";
+    if (typeof note === "string") return note.trim();
+    if (typeof note === "number" || typeof note === "boolean") {
+      return String(note).trim();
+    }
+    if (typeof note === "object") {
+      const record = note as Record<string, unknown>;
+      return pickCanField(
+        record.note,
+        record.notes,
+        record.text,
+        record.description,
+        record.value,
+        record.content,
+        record.message,
+      );
+    }
+    const text = String(note).trim();
+    return text === "[object Object]" ? "" : text;
+  };
+
+  const out: string[] = [];
+  items.forEach((item) => {
+    const text = extractNoteText(item);
+    if (!text) return;
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length > 1) {
+      lines.forEach((line) => {
+        const cleaned = stripLeadingBullet(line);
+        if (cleaned) out.push(cleaned);
+      });
+      return;
+    }
+    const cleaned = stripLeadingBullet(text);
+    if (cleaned) out.push(cleaned);
+  });
+  return out;
+};
+
+const pickCanNotesSource = (...candidates: unknown[]): unknown => {
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length > 0) return candidate;
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+  return [];
+};
+
+const toCanDisplayValue = (value: unknown): string => {
+  if (value == null) return "";
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (obj.value != null) return toCanDisplayValue(obj.value);
+    if (obj.weight != null) return toCanDisplayValue(obj.weight);
+  }
+  const text = String(value).trim();
+  if (!text || text === "null" || text === "undefined") return "";
+  return text;
+};
+
+type CanContainerDetailRow = {
+  containerNo: string;
+  containerType: string;
+  sealNumber: string;
+  noOfPieces: string;
+  grossWeight: string;
+  volume: string;
+};
+
+/** Match MBL container_details with HBL cargo_details (same keys as CFS resolution). */
+const resolveCanContainerDetailRows = (
+  jobData: Record<string, unknown>,
+  hawbData: Record<string, unknown>,
+): CanContainerDetailRow[] => {
+  const masterContainers = [
+    ...(Array.isArray(jobData?.container_details)
+      ? jobData.container_details
+      : []),
+    ...(Array.isArray(jobData?.containerDetails)
+      ? jobData.containerDetails
+      : []),
+  ] as Array<Record<string, unknown>>;
+
+  const houseCargo = Array.isArray(hawbData?.cargo_details)
+    ? hawbData.cargo_details
+    : [];
+
+  if (masterContainers.length === 0 || houseCargo.length === 0) {
+    return [];
+  }
+
+  const rows: CanContainerDetailRow[] = [];
+
+  houseCargo.forEach((cargo) => {
+    const record = cargo as Record<string, unknown>;
+    const containerNo = String(record.container_no ?? "").trim();
+    const containerId = String(record.container_id ?? "").trim();
+    const match = masterContainers.find((container) => {
+      const masterNo = String(container.container_no ?? "").trim();
+      const masterId = String(
+        container.id ?? container.container_id ?? "",
+      ).trim();
+      return (
+        (containerNo && masterNo && containerNo === masterNo) ||
+        (containerId && masterId && containerId === masterId)
+      );
+    });
+    if (!match) return;
+
+    const typeDetails = match.container_type_details as
+      Record<string, unknown> | undefined;
+
+    rows.push({
+      containerNo: pickCanField(record.container_no, match.container_no),
+      containerType: pickCanField(
+        record.container_type_name,
+        typeDetails?.container_type_name,
+        match.container_type_name,
+        match.container_type,
+      ),
+      sealNumber: pickCanField(
+        record.actual_seal_no,
+        record.seal_no,
+        match.actual_seal_no,
+        match.seal_no,
+        match.seal_number,
+      ),
+      noOfPieces: toCanDisplayValue(
+        record.no_of_packages ?? record.packages ?? record.no_of_pcs,
+      ),
+      grossWeight: toCanDisplayValue(record.gross_weight),
+      volume: toCanDisplayValue(record.volume ?? record.volume_weight),
+    });
+  });
+
+  return rows;
+};
+
+const formatCanVslVoy = (vesselName: string, voyageNumber: string): string => {
   if (vesselName && voyageNumber) return `${vesselName} - ${voyageNumber}`;
   return vesselName || voyageNumber || "";
 };
@@ -114,8 +278,7 @@ const isNumericId = (value: unknown): boolean => {
 // Prefer currency code from details; ocean API may store numeric ID in charge.currency
 const getChargeCurrencyCode = (charge: Record<string, unknown>): string => {
   const currencyDetails = charge.currency_details as
-    | { currency_code?: string; code?: string }
-    | undefined;
+    { currency_code?: string; code?: string } | undefined;
 
   const codeFromDetails =
     currencyDetails?.currency_code ||
@@ -147,7 +310,9 @@ const getChargeDisplayAmount = (charge: Record<string, unknown>): string => {
 };
 
 const normalizePpCcForCan = (value: unknown): string => {
-  const raw = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return String(value ?? "").trim();
@@ -167,7 +332,9 @@ const formatCanTaxChargeName = (row: CanSacWiseTotal): string => {
 };
 
 const normalizeCanChargeNameForTaxMatch = (name: unknown): string =>
-  String(name ?? "").trim().toLowerCase();
+  String(name ?? "")
+    .trim()
+    .toLowerCase();
 
 /** Union of base charge names referenced in calculate-gst-breakup sac_wise_totals. */
 const buildCanTaxableChargeNamesSet = (
@@ -280,7 +447,7 @@ const drawCenteredTableHeader = (
   text: string,
   x: number,
   colWidth: number,
-  y: number
+  y: number,
 ) => {
   doc.text(text, x + colWidth / 2, y, { align: "center" });
 };
@@ -291,7 +458,7 @@ const drawCenteredTableCell = (
   x: number,
   colWidth: number,
   y: number,
-  cellPadX: number
+  cellPadX: number,
 ) => {
   const lines = doc.splitTextToSize(text || "", colWidth - 2 * cellPadX);
   doc.text(lines.length > 0 ? lines : [""], x + colWidth / 2, y, {
@@ -325,13 +492,13 @@ const getCanKeyValueColumnLayout = (
   margin: number,
   boxPadding: number,
   rightHalfStart: number,
-  keyLabels: string[]
+  keyLabels: string[],
 ): CanKeyValueColumnLayout => {
   const keyStartX = rightHalfStart + boxPadding;
   const rightColumnEndX = pageWidth - margin - boxPadding;
   const maxKeyWidth = keyLabels.reduce(
     (max, label) => Math.max(max, doc.getTextWidth(label)),
-    0
+    0,
   );
   const valueStartX = keyStartX + maxKeyWidth + 1.5;
   const valueMaxWidth = Math.max(8, rightColumnEndX - valueStartX);
@@ -344,7 +511,7 @@ const drawCanKeyValueRow = (
   key: string,
   valueLines: string | string[],
   layout: CanKeyValueColumnLayout,
-  y: number
+  y: number,
 ): number => {
   const lines = Array.isArray(valueLines)
     ? valueLines
@@ -443,18 +610,11 @@ const getBranchInfo = (defaultBranch: any, country?: any) => {
   }
 
   // Kenya/USA use the same reporting_* flow; keep larger header fonts for those countries
-  const useLargerHeaderFonts =
-    isKenyaCountry(country) || isUSACountry(country);
+  const useLargerHeaderFonts = isKenyaCountry(country) || isUSACountry(country);
 
   return {
-    name:
-      defaultBranch?.reporting_name ||
-      defaultBranch?.branch_title ||
-      "",
-    address:
-      defaultBranch?.reporting_address ||
-      defaultBranch?.address ||
-      "",
+    name: defaultBranch?.reporting_name || defaultBranch?.branch_title || "",
+    address: defaultBranch?.reporting_address || defaultBranch?.address || "",
     tel: defaultBranch?.tel || "",
     email: defaultBranch?.email || "",
     pan: defaultBranch?.pan || "",
@@ -470,7 +630,7 @@ const drawBox = (
   y: number,
   width: number,
   height: number,
-  lineWidth: number = 0.3
+  lineWidth: number = 0.3,
 ) => {
   doc.setLineWidth(lineWidth);
   doc.setDrawColor(0, 0, 0);
@@ -482,7 +642,7 @@ const needsNewPage = (
   currentY: number,
   requiredSpace: number,
   fixedBoxEndY: number,
-  bottomBorderPadding: number
+  bottomBorderPadding: number,
 ): boolean => {
   return currentY + requiredSpace > fixedBoxEndY - bottomBorderPadding;
 };
@@ -493,8 +653,9 @@ const drawPageBorder = (
   boxX: number,
   boxStartY: number,
   boxEndY: number,
-  boxWidth: number
+  boxWidth: number,
 ) => {
+  doc.setDrawColor(0, 0, 0);
   doc.rect(boxX, boxStartY, boxWidth, boxEndY - boxStartY);
 };
 
@@ -508,7 +669,7 @@ const addFooter = (
   leftColumnX: number,
   referenceText: string,
   currentPage: number,
-  totalPages: number
+  totalPages: number,
 ) => {
   const footerY = pageHeight - 10;
   doc.setFontSize(6);
@@ -520,7 +681,7 @@ const addFooter = (
     `Page ${currentPage} of ${totalPages}`,
     pageWidth - margin - boxPadding,
     footerY,
-    { align: "right" }
+    { align: "right" },
   );
 };
 
@@ -531,7 +692,7 @@ const drawCanHeaderSection = (
   margin: number,
   boxPadding: number,
   branchInfo: any,
-  logoImage: string | null
+  logoImage: string | null,
 ): number => {
   const headerStartY = 5;
   const headerHeight = 25;
@@ -553,12 +714,15 @@ const drawCanHeaderSection = (
         logoWidth,
         logoHeight,
         undefined,
-        "FAST"
+        "FAST",
       );
       companyInfoX = logoX + logoWidth + logoTextGap;
       companyY = logoY + 5;
     } catch (error) {
-      console.warn("Could not load logo image, continuing without logo:", error);
+      console.warn(
+        "Could not load logo image, continuing without logo:",
+        error,
+      );
     }
   }
 
@@ -573,7 +737,7 @@ const drawCanHeaderSection = (
   doc.setFont("helvetica", "bold");
   const companyNameLines = doc.splitTextToSize(
     branchInfo.name || "",
-    companyTextWidth
+    companyTextWidth,
   );
   doc.text(companyNameLines, companyInfoX, companyY, { align: "left" });
   companyY += companyNameLines.length * companyNameLineHeight;
@@ -582,7 +746,7 @@ const drawCanHeaderSection = (
   doc.setFontSize(companyAddressFontSize);
   const companyAddressLines = doc.splitTextToSize(
     branchInfo.address || "",
-    companyTextWidth
+    companyTextWidth,
   );
   doc.text(companyAddressLines, companyInfoX, companyY, { align: "left" });
   companyY += companyAddressLines.length * companyAddressLineHeight;
@@ -633,7 +797,11 @@ const setupCanPageLayout = (
   footerHeight: number,
   branchInfo: any,
   logoImage: string | null,
-  options?: { includeTitle?: boolean; includeBorder?: boolean; contentAtBoxTop?: boolean }
+  options?: {
+    includeTitle?: boolean;
+    includeBorder?: boolean;
+    contentAtBoxTop?: boolean;
+  },
 ): CanPageLayout => {
   const includeTitle = options?.includeTitle !== false;
   const includeBorder = options?.includeBorder !== false;
@@ -644,8 +812,8 @@ const setupCanPageLayout = (
     pageWidth,
     margin,
     boxPadding,
-    branchInfo, 
-    logoImage
+    branchInfo,
+    logoImage,
   );
 
   let yPos = headerEndY;
@@ -654,8 +822,12 @@ const setupCanPageLayout = (
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.text(CAN_DOCUMENT_TITLE, pageWidth / 2, yPos, { align: "center" });
-    yPos += 8;
+    yPos += 4;
   }
+
+  // Restore body font so continuation content (e.g. notes) is not left bold
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(CAN_BODY_FONT_SIZE);
 
   const boxX = margin;
   const boxWidth = pageWidth - 2 * margin;
@@ -689,7 +861,7 @@ const addHeaderToExistingPage = (
   margin: number,
   boxPadding: number,
   branchInfo: any,
-  logoImage: string | null
+  logoImage: string | null,
 ): number => {
   const pageHeight = doc.internal.pageSize.getHeight();
   const layout = setupCanPageLayout(
@@ -700,7 +872,7 @@ const addHeaderToExistingPage = (
     boxPadding,
     15,
     branchInfo,
-    logoImage
+    logoImage,
   );
   return layout.contentY;
 };
@@ -712,7 +884,7 @@ const createNewPage = (
   margin: number,
   boxPadding: number,
   branchInfo: any,
-  logoImage: string | null
+  logoImage: string | null,
 ): { yPos: number; boxStartY: number; boxX: number; boxWidth: number } => {
   doc.addPage();
 
@@ -725,7 +897,7 @@ const createNewPage = (
     boxPadding,
     15,
     branchInfo,
-    logoImage
+    logoImage,
   );
 
   return {
@@ -768,15 +940,24 @@ export const generateCargoArrivalNoticePDF = (
     const mawbDetails = jobData?.mawbDetails || jobData?.mblDetails || {};
     const carrierDetails = jobData?.carrierDetails || {};
     const jobInfo = jobData || {};
-    
+
     // Check if this is an Air Import job or Ocean Import job
-    const isAirImport = (jobInfo?.service === "AIR" || jobData?.service === "AIR") && 
-                        (jobInfo?.service_type === "Import" || jobData?.service_type === "Import");
-    const isOceanImport = (jobInfo?.service === "FCL" || jobInfo?.service === "LCL" || jobData?.service === "FCL" || jobData?.service === "LCL") && 
-                          (jobInfo?.service_type === "Import" || jobData?.service_type === "Import");
-    const isInlandImport = (jobInfo?.service === "INLAND" || jobData?.service === "INLAND") &&
-                           (jobInfo?.service_type === "Import" || jobData?.service_type === "Import");
-    
+    const isAirImport =
+      (jobInfo?.service === "AIR" || jobData?.service === "AIR") &&
+      (jobInfo?.service_type === "Import" ||
+        jobData?.service_type === "Import");
+    const isOceanImport =
+      (jobInfo?.service === "FCL" ||
+        jobInfo?.service === "LCL" ||
+        jobData?.service === "FCL" ||
+        jobData?.service === "LCL") &&
+      (jobInfo?.service_type === "Import" ||
+        jobData?.service_type === "Import");
+    const isInlandImport =
+      (jobInfo?.service === "INLAND" || jobData?.service === "INLAND") &&
+      (jobInfo?.service_type === "Import" ||
+        jobData?.service_type === "Import");
+
     // Consignee details - from housing_details
     const consigneeName = pickCanField(hawbData?.consignee_name);
     const consigneeAddress = pickCanField(hawbData?.consignee_address);
@@ -786,13 +967,12 @@ export const generateCargoArrivalNoticePDF = (
     );
     const consigneeGst = pickCanField(hawbData?.consignee_gst_id);
     const consigneeStateDetails = hawbData?.consignee_state_details as
-      | { state_code?: string }
-      | undefined;
+      { state_code?: string } | undefined;
     const consigneeStateCode = pickCanField(
       hawbData?.consignee_state_code,
       consigneeStateDetails?.state_code,
     );
-    
+
     // Notify Party details - API uses notify1_customer_* keys
     const notifyName = pickCanField(
       hawbData?.notify1_customer_name,
@@ -802,11 +982,11 @@ export const generateCargoArrivalNoticePDF = (
       hawbData?.notify1_customer_address,
       hawbData?.notify_customer1_address,
     );
-    
+
     // Shipper details
     const shipperName = pickCanField(hawbData?.shipper_name);
     const shipperAddress = pickCanField(hawbData?.shipper_address);
-    
+
     // Invoice/Job Details - Support both Air (MAWB/HAWB) and Ocean (MBL/HBL)
     const mawbNumber = pickCanField(
       carrierDetails?.mawb_number,
@@ -858,9 +1038,12 @@ export const generateCargoArrivalNoticePDF = (
     const vslVoyDisplay = isFclOrLcl
       ? formatCanVslVoy(vesselName, voyageNumber)
       : "";
-    
+
     // Shipment Details
-    const carrierName = pickCanField(carrierDetails?.carrier_name, jobInfo?.carrier_name);
+    const carrierName = pickCanField(
+      carrierDetails?.carrier_name,
+      jobInfo?.carrier_name,
+    );
     const originName = pickCanField(
       mawbDetails?.origin_name,
       jobInfo?.origin_name,
@@ -879,13 +1062,19 @@ export const generateCargoArrivalNoticePDF = (
       jobInfo?.mbl_date,
       jobInfo?.mawb_date,
     );
-    const mawbCreatedAt = mawbDateSource ? formatDateForDisplay(mawbDateSource) : "";
+    const mawbCreatedAt = mawbDateSource
+      ? formatDateForDisplay(mawbDateSource)
+      : "";
     const bookingNo = formatCanBookingNo(jobInfo);
     const flightNumber = isAirImport
       ? pickCanField(carrierDetails?.flight_voyage_number, jobInfo?.flightno)
       : "";
     const truckNumber = isInlandImport
-      ? pickCanField(carrierDetails?.truck_no, carrierDetails?.flight_voyage_number, jobInfo?.truck_no)
+      ? pickCanField(
+          carrierDetails?.truck_no,
+          carrierDetails?.flight_voyage_number,
+          jobInfo?.truck_no,
+        )
       : "";
     const cargoLocation = pickCanField(jobInfo?.cargo_location);
 
@@ -910,7 +1099,7 @@ export const generateCargoArrivalNoticePDF = (
       footerHeight,
       branchInfo,
       logoImage,
-      { contentAtBoxTop: true }
+      { contentAtBoxTop: true },
     );
     const fixedBoxEndY = firstPageLayout.fixedBoxEndY;
     let boxX = firstPageLayout.boxX;
@@ -928,27 +1117,40 @@ export const generateCargoArrivalNoticePDF = (
     // Calculate heights for left column sections
     doc.setFontSize(CAN_BODY_FONT_SIZE);
     doc.setFont("helvetica", "normal");
-    
-    const notifyNameLines = doc.splitTextToSize(notifyName || "", leftHalfWidth - 2 * boxPadding);
-    const notifyAddressLines = doc.splitTextToSize(notifyAddress || "", leftHalfWidth - 2 * boxPadding);
-    
-    const consigneeNameLines = doc.splitTextToSize(consigneeName || "", leftHalfWidth - 2 * boxPadding);
-    const consigneeAddressLines = doc.splitTextToSize(consigneeAddress || "", leftHalfWidth - 2 * boxPadding);
-    
-    const shipperNameLines = doc.splitTextToSize(shipperName || "", leftHalfWidth - 2 * boxPadding);
-    const shipperAddressLines = doc.splitTextToSize(shipperAddress || "", leftHalfWidth - 2 * boxPadding);
-    
+
+    const notifyNameLines = doc.splitTextToSize(
+      notifyName || "",
+      leftHalfWidth - 2 * boxPadding,
+    );
+    const notifyAddressLines = doc.splitTextToSize(
+      notifyAddress || "",
+      leftHalfWidth - 2 * boxPadding,
+    );
+
+    const consigneeNameLines = doc.splitTextToSize(
+      consigneeName || "",
+      leftHalfWidth - 2 * boxPadding,
+    );
+    const consigneeAddressLines = doc.splitTextToSize(
+      consigneeAddress || "",
+      leftHalfWidth - 2 * boxPadding,
+    );
+
+    const shipperNameLines = doc.splitTextToSize(
+      shipperName || "",
+      leftHalfWidth - 2 * boxPadding,
+    );
+    const shipperAddressLines = doc.splitTextToSize(
+      shipperAddress || "",
+      leftHalfWidth - 2 * boxPadding,
+    );
+
     const lineSpacing = CAN_LINE_SPACING;
-    const leftColumnTopOffset = boxPadding + 3;
+    const leftColumnTopOffset = boxPadding;
 
     const houseBillLabel = isOceanImport ? "HBL:" : "HAWB:";
     const masterBillLabel = isOceanImport ? "MBL:" : "MAWB:";
-    const invoiceKeyLabels = [
-      "Job Ref No:",
-      "Date:",
-      "Invoice Ref:",
-      "From:",
-    ];
+    const invoiceKeyLabels = ["Job Ref No:", "Date:", "Invoice Ref:", "From:"];
     const shipmentKeyLabels = [
       houseBillLabel,
       masterBillLabel,
@@ -991,30 +1193,81 @@ export const generateCargoArrivalNoticePDF = (
       hawbNumber && houseDate
         ? `${hawbNumber}/${houseDate}`
         : hawbNumber || houseDate || "";
-    const mawbInfo = mawbNumber && mawbCreatedAt ? `${mawbNumber}/${mawbCreatedAt}` : (mawbNumber || mawbCreatedAt || "");
+    const mawbInfo =
+      mawbNumber && mawbCreatedAt
+        ? `${mawbNumber}/${mawbCreatedAt}`
+        : mawbNumber || mawbCreatedAt || "";
 
     // Calculate heights for right column sections (wrap within right margin)
-    const jobRefNoLines = doc.splitTextToSize(jobRefNo || "", invoiceValueMaxWidth);
-    const invoiceRefLines = doc.splitTextToSize(invoiceRef || "", invoiceValueMaxWidth);
-    const dateLines = doc.splitTextToSize(formatDateForDisplay(createdAt) || "", invoiceValueMaxWidth);
-    const fromLines = doc.splitTextToSize(createdBy || "", invoiceValueMaxWidth);
+    const jobRefNoLines = doc.splitTextToSize(
+      jobRefNo || "",
+      invoiceValueMaxWidth,
+    );
+    const invoiceRefLines = doc.splitTextToSize(
+      invoiceRef || "",
+      invoiceValueMaxWidth,
+    );
+    const dateLines = doc.splitTextToSize(
+      formatDateForDisplay(createdAt) || "",
+      invoiceValueMaxWidth,
+    );
+    const fromLines = doc.splitTextToSize(
+      createdBy || "",
+      invoiceValueMaxWidth,
+    );
     const igmNoLines = doc.splitTextToSize(igmNo || "", shipmentValueMaxWidth);
     const hawbInfoLines = doc.splitTextToSize(hawbInfo, shipmentValueMaxWidth);
     const mawbInfoLines = doc.splitTextToSize(mawbInfo, shipmentValueMaxWidth);
-    const bookingNoLines = doc.splitTextToSize(bookingNo || "", shipmentValueMaxWidth);
-    const carrierNameLines = doc.splitTextToSize(carrierName || "", shipmentValueMaxWidth);
-    const flightNumberLines = doc.splitTextToSize(flightNumber || "", shipmentValueMaxWidth);
-    const truckNumberLines = doc.splitTextToSize(truckNumber || "", shipmentValueMaxWidth);
-    const originNameLines = doc.splitTextToSize(originName || "", shipmentValueMaxWidth);
-    const destinationNameLines = doc.splitTextToSize(destinationName || "", shipmentValueMaxWidth);
+    const bookingNoLines = doc.splitTextToSize(
+      bookingNo || "",
+      shipmentValueMaxWidth,
+    );
+    const carrierNameLines = doc.splitTextToSize(
+      carrierName || "",
+      shipmentValueMaxWidth,
+    );
+    const flightNumberLines = doc.splitTextToSize(
+      flightNumber || "",
+      shipmentValueMaxWidth,
+    );
+    const truckNumberLines = doc.splitTextToSize(
+      truckNumber || "",
+      shipmentValueMaxWidth,
+    );
+    const originNameLines = doc.splitTextToSize(
+      originName || "",
+      shipmentValueMaxWidth,
+    );
+    const destinationNameLines = doc.splitTextToSize(
+      destinationName || "",
+      shipmentValueMaxWidth,
+    );
     const etaLines = doc.splitTextToSize(eta || "", shipmentValueMaxWidth);
-    const itemNoLines = doc.splitTextToSize(itemNo || "", shipmentValueMaxWidth);
-    const subItemNoLines = doc.splitTextToSize(subItemNo || "", shipmentValueMaxWidth);
-    const cfsNameLines = doc.splitTextToSize(cfsNameDisplay || "", shipmentValueMaxWidth);
-    const serviceLines = doc.splitTextToSize(serviceType || "", shipmentValueMaxWidth);
-    const vslVoyLines = doc.splitTextToSize(vslVoyDisplay || "", shipmentValueMaxWidth);
-    const cargoLocationLines = doc.splitTextToSize(cargoLocation || "", shipmentValueMaxWidth);
-    
+    const itemNoLines = doc.splitTextToSize(
+      itemNo || "",
+      shipmentValueMaxWidth,
+    );
+    const subItemNoLines = doc.splitTextToSize(
+      subItemNo || "",
+      shipmentValueMaxWidth,
+    );
+    const cfsNameLines = doc.splitTextToSize(
+      cfsNameDisplay || "",
+      shipmentValueMaxWidth,
+    );
+    const serviceLines = doc.splitTextToSize(
+      serviceType || "",
+      shipmentValueMaxWidth,
+    );
+    const vslVoyLines = doc.splitTextToSize(
+      vslVoyDisplay || "",
+      shipmentValueMaxWidth,
+    );
+    const cargoLocationLines = doc.splitTextToSize(
+      cargoLocation || "",
+      shipmentValueMaxWidth,
+    );
+
     let rightColumnHeight = 4; // Top padding (matches drawing: sectionStartY + boxPadding ≈ +3)
     // Invoice/Job Details section
     rightColumnHeight += 4; // Title space
@@ -1051,23 +1304,32 @@ export const generateCargoArrivalNoticePDF = (
       rightColumnHeight += Math.max(1, vslVoyLines.length) * lineSpacing;
     }
     rightColumnHeight += Math.max(1, cargoLocationLines.length) * lineSpacing;
-    rightColumnHeight += 2; // Bottom padding
+    rightColumnHeight -=18; // Bottom padding
 
     const minLeftSectionHeight = 18;
     let twoColumnSectionHeight = Math.max(
       rightColumnHeight + boxPadding,
       leftColumnTopOffset + 3 * minLeftSectionHeight,
-      50
     );
-    twoColumnSectionHeight = Math.max(twoColumnSectionHeight, rightColumnHeight + boxPadding);
-    const leftSectionHeight = (twoColumnSectionHeight - leftColumnTopOffset) / 3;
+    twoColumnSectionHeight = Math.max(
+      twoColumnSectionHeight,
+      rightColumnHeight + boxPadding,
+    );
+    const leftSectionHeight =
+      (twoColumnSectionHeight - leftColumnTopOffset) / 3;
     const leftColumnHeight = leftColumnTopOffset + 3 * leftSectionHeight;
     // Support both Air (mawb_charges) and Ocean (mbl_charges)
     const cargoDetails = hawbData?.cargo_details || [];
 
     const cargoRowSpacing = 4.5; // Match charges table row spacing
-    const charges = hawbData?.charges || hawbData?.mawb_charges || hawbData?.mbl_charges || [];
-    const baseDisplayableCharges = (Array.isArray(charges) ? charges : []).filter(
+    const charges =
+      hawbData?.charges ||
+      hawbData?.mawb_charges ||
+      hawbData?.mbl_charges ||
+      [];
+    const baseDisplayableCharges = (
+      Array.isArray(charges) ? charges : []
+    ).filter(
       (charge: Record<string, unknown>) =>
         isDisplayableCanCharge(charge) && isCollectCanCharge(charge),
     );
@@ -1075,35 +1337,51 @@ export const generateCargoArrivalNoticePDF = (
       (charge) => isDisplayableCanCharge(charge),
     );
     const displayableCharges = [...baseDisplayableCharges, ...taxCharges];
-    const taxableChargeNames = buildCanTaxableChargeNamesSet(indiaSacWiseTotals);
+    const taxableChargeNames =
+      buildCanTaxableChargeNamesSet(indiaSacWiseTotals);
 
-    const notes = jobInfo?.notes || [];
+    const displayableNotes = normalizeCanDisplayNotes(
+      pickCanNotesSource(jobInfo?.notes, hawbData?.notes),
+    );
+    const containerDetailRows = resolveCanContainerDetailRows(
+      jobData,
+      hawbData,
+    );
     const rowHeight = 5;
-    
+
     // Calculate cargo table height
     const cargoTableHeaderHeight = 6;
-    const cargoTableRowsHeight = cargoDetails.length > 0 ? cargoDetails.length * rowHeight : rowHeight;
+    const cargoTableRowsHeight =
+      cargoDetails.length > 0 ? cargoDetails.length * rowHeight : rowHeight;
     const cargoTableHeight = cargoTableHeaderHeight + cargoTableRowsHeight + 2;
-    
+
     // Calculate charges table height
     // Reduced row spacing for charges (4.5 units per row)
     const chargesRowSpacing = 4.5;
     const chargesTableHeaderHeight = 8; // Header + line + spacing
-    const chargesTableRowsHeight = displayableCharges.length > 0 ? displayableCharges.length * chargesRowSpacing : chargesRowSpacing;
-    const chargesTableHeight = chargesTableHeaderHeight + chargesTableRowsHeight + 2;
-    
+    const chargesTableRowsHeight =
+      displayableCharges.length > 0
+        ? displayableCharges.length * chargesRowSpacing
+        : chargesRowSpacing;
+    const chargesTableHeight =
+      chargesTableHeaderHeight + chargesTableRowsHeight + 2;
+
     // Draw vertical center line (only for two-column section, not cargo/charges)
-    twoColumnSectionHeight = Math.max(twoColumnSectionHeight, leftColumnHeight, rightColumnHeight);
+    twoColumnSectionHeight = Math.max(
+      twoColumnSectionHeight,
+      leftColumnHeight,
+      rightColumnHeight,
+    );
     doc.line(
       midLine,
       sectionStartY,
       midLine,
-      sectionStartY + twoColumnSectionHeight
+      sectionStartY + twoColumnSectionHeight,
     );
 
     const LEFT_SECTION_FIRST_TITLE_PADDING = 2;
     const LEFT_SECTION_TITLE_PADDING_AFTER_LINE = 6;
-    const LEFT_SECTION_TITLE_TO_CONTENT_GAP = 6;
+    const LEFT_SECTION_TITLE_TO_CONTENT_GAP = 5;
 
     const drawLeftPartySection = (
       title: string,
@@ -1135,10 +1413,7 @@ export const generateCargoArrivalNoticePDF = (
       const drawFieldLines = (lines: string[]) => {
         if (!lines.length || !lines[0] || contentY > maxContentY) return;
         const availableHeight = maxContentY - contentY + lineSpacing;
-        const maxLines = Math.max(
-          1,
-          Math.floor(availableHeight / lineSpacing),
-        );
+        const maxLines = Math.max(1, Math.floor(availableHeight / lineSpacing));
         const visibleLines = lines.slice(0, maxLines);
         doc.text(visibleLines, textX, contentY);
         contentY += visibleLines.length * lineSpacing;
@@ -1167,14 +1442,8 @@ export const generateCargoArrivalNoticePDF = (
         if (contentY <= maxContentY) {
           let footerX = textX;
           footerX =
-            drawFooterPart("PAN: ", consigneeFooter.pan, footerX, contentY) +
-            6;
-          drawFooterPart(
-            "GST No: ",
-            consigneeFooter.gst,
-            footerX,
-            contentY,
-          );
+            drawFooterPart("PAN: ", consigneeFooter.pan, footerX, contentY) + 6;
+          drawFooterPart("GST No: ", consigneeFooter.gst, footerX, contentY);
           contentY += CAN_TO_FOOTER_LINE_SPACING;
         }
         if (contentY <= maxContentY) {
@@ -1198,8 +1467,8 @@ export const generateCargoArrivalNoticePDF = (
     // ===== LEFT COLUMN CONTENT (equal-height To / Notify / Shipper) =====
     const leftContentStartY = sectionStartY + leftColumnTopOffset;
     const toSectionTopY = leftContentStartY;
-    const notifySectionTopY = toSectionTopY + leftSectionHeight;
-    const shipperSectionTopY = notifySectionTopY + leftSectionHeight;
+    const notifySectionTopY = toSectionTopY + leftSectionHeight - 1;
+    const shipperSectionTopY = notifySectionTopY + leftSectionHeight - 1;
 
     drawLeftPartySection(
       "To:",
@@ -1233,13 +1502,13 @@ export const generateCargoArrivalNoticePDF = (
 
     // ===== RIGHT COLUMN CONTENT =====
     let rightYPos = sectionStartY + boxPadding;
-    
+
     // Invoice/Job Details section
     doc.setFont("helvetica", "bold");
     doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
     // doc.text("Invoice/Job Details:", rightHalfStart + boxPadding, rightYPos);
-    rightYPos += 4;
-    
+    rightYPos += 2;
+
     doc.setFont("helvetica", "normal");
     doc.setFontSize(CAN_BODY_FONT_SIZE);
 
@@ -1248,28 +1517,40 @@ export const generateCargoArrivalNoticePDF = (
       "Job Ref No:",
       jobRefNoLines,
       invoiceColumnLayout,
-      rightYPos
+      rightYPos,
     );
-    rightYPos += drawCanKeyValueRow(doc, "Date:", dateLines, invoiceColumnLayout, rightYPos);
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "Date:",
+      dateLines,
+      invoiceColumnLayout,
+      rightYPos,
+    );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Invoice Ref:",
       invoiceRefLines,
       invoiceColumnLayout,
-      rightYPos
+      rightYPos,
     );
-    rightYPos += drawCanKeyValueRow(doc, "From:", fromLines, invoiceColumnLayout, rightYPos);
-    
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "From:",
+      fromLines,
+      invoiceColumnLayout,
+      rightYPos,
+    );
+
     // Draw horizontal line after Invoice/Job Details
-    rightYPos += 1;
+    rightYPos -= 2;
     doc.line(midLine, rightYPos, pageWidth - margin, rightYPos);
     rightYPos += 5;
-    
+
     // Shipment Details section
     doc.setFont("helvetica", "bold");
     doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
     doc.text("Shipment Details:", rightHalfStart + boxPadding, rightYPos);
-    rightYPos += 4 + CAN_SECTION_TITLE_TO_CONTENT_GAP;
+    rightYPos += 2 + CAN_SECTION_TITLE_TO_CONTENT_GAP;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(CAN_BODY_FONT_SIZE);
@@ -1279,28 +1560,28 @@ export const generateCargoArrivalNoticePDF = (
       houseBillLabel,
       hawbInfoLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       masterBillLabel,
       mawbInfoLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Booking No:",
       bookingNoLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Carrier:",
       carrierNameLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     if (isAirImport) {
       rightYPos += drawCanKeyValueRow(
@@ -1308,7 +1589,7 @@ export const generateCargoArrivalNoticePDF = (
         "Flight No:",
         flightNumberLines,
         shipmentColumnLayout,
-        rightYPos
+        rightYPos,
       );
     }
     if (isInlandImport) {
@@ -1317,52 +1598,64 @@ export const generateCargoArrivalNoticePDF = (
         "Truck No:",
         truckNumberLines,
         shipmentColumnLayout,
-        rightYPos
+        rightYPos,
       );
     }
-    rightYPos += drawCanKeyValueRow(doc, "POL:", originNameLines, shipmentColumnLayout, rightYPos);
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "POL:",
+      originNameLines,
+      shipmentColumnLayout,
+      rightYPos,
+    );
     rightYPos += drawCanKeyValueRow(
       doc,
       "POD:",
       destinationNameLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Final Dest:",
       destinationNameLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Arrival date:",
       etaLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
-    rightYPos += drawCanKeyValueRow(doc, "FDC ETA:", etaLines, shipmentColumnLayout, rightYPos);
+    rightYPos += drawCanKeyValueRow(
+      doc,
+      "FDC ETA:",
+      etaLines,
+      shipmentColumnLayout,
+      rightYPos,
+    );
     rightYPos += drawCanKeyValueRow(
       doc,
       "IGM No:",
       igmNoLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Item No:",
       itemNoLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     rightYPos += drawCanKeyValueRow(
       doc,
       "Sub Item No:",
       subItemNoLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     if (isFclOrLcl) {
       rightYPos += drawCanKeyValueRow(
@@ -1370,7 +1663,7 @@ export const generateCargoArrivalNoticePDF = (
         "CFS Name:",
         cfsNameLines,
         shipmentColumnLayout,
-        rightYPos
+        rightYPos,
       );
     }
     rightYPos += drawCanKeyValueRow(
@@ -1378,7 +1671,7 @@ export const generateCargoArrivalNoticePDF = (
       "Service:",
       serviceLines,
       shipmentColumnLayout,
-      rightYPos
+      rightYPos,
     );
     if (isFclOrLcl && vslVoyDisplay) {
       rightYPos += drawCanKeyValueRow(
@@ -1386,14 +1679,14 @@ export const generateCargoArrivalNoticePDF = (
         "Vsl/Voy:",
         vslVoyLines,
         shipmentColumnLayout,
-        rightYPos
+        rightYPos,
       );
     }
 
     // Cargo Location:
     // doc.text("Cargo Location:", rightHalfStart + boxPadding, rightYPos);
     // doc.text(cargoLocationLines, shipmentValueStartX, rightYPos);
-    rightYPos += Math.max(1, cargoLocationLines.length) * 4.5;
+    rightYPos += Math.max(1, cargoLocationLines.length) * 3;
 
     // Draw horizontal line separating two-column section from cargo section
     yPos = sectionStartY + twoColumnSectionHeight;
@@ -1403,23 +1696,47 @@ export const generateCargoArrivalNoticePDF = (
     // ===== CARGO DETAILS SECTION (integrated with main box) =====
     // Only check for enough space to draw the section header (title + col header); rows handle their own page breaks
     const estimatedCargoHeight = 20;
-    if (needsNewPage(yPos, estimatedCargoHeight, fixedBoxEndY, bottomBorderPadding)) {
+    if (
+      needsNewPage(
+        yPos,
+        estimatedCargoHeight,
+        fixedBoxEndY,
+        bottomBorderPadding,
+      )
+    ) {
       // Add footer for current page
       const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
-      addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
-      
+      addFooter(
+        doc,
+        pageWidth,
+        pageHeight,
+        margin,
+        boxPadding,
+        margin + boxPadding,
+        referenceText,
+        currentPage,
+        totalPages,
+      );
+
       // Create new page
       currentPage++;
       totalPages++;
-      const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
+      const newPageInfo = createNewPage(
+        doc,
+        pageWidth,
+        margin,
+        boxPadding,
+        branchInfo,
+        logoImage,
+      );
       yPos = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
       boxWidth = newPageInfo.boxWidth;
     }
-    
+
     sectionY = yPos;
-    
+
     // Cargo table setup
     doc.setFontSize(CAN_BODY_FONT_SIZE);
     const cargoHeaders = [
@@ -1450,7 +1767,11 @@ export const generateCargoArrivalNoticePDF = (
     doc.setFont("helvetica", "bold");
     doc.setFontSize(CAN_BODY_FONT_SIZE);
     doc.setTextColor(30, 30, 30);
-    doc.text("CARGO DETAILS", cargoTableX + cellPadX, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
+    doc.text(
+      "CARGO DETAILS",
+      cargoTableX + cellPadX,
+      sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+    );
     doc.setTextColor(0, 0, 0);
     sectionY += cargoHeaderH;
 
@@ -1464,7 +1785,13 @@ export const generateCargoArrivalNoticePDF = (
     doc.setTextColor(40, 40, 40);
     cargoHeaders.forEach((header, index) => {
       const w = cargoColWidths[index];
-      drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
+      drawCenteredTableHeader(
+        doc,
+        header,
+        xPos,
+        w,
+        sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+      );
       if (index < cargoHeaders.length - 1) {
         doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoHeaderH);
       }
@@ -1477,7 +1804,7 @@ export const generateCargoArrivalNoticePDF = (
     // Table rows with actual data
     doc.setFont("helvetica", "normal");
     const commodityDescription = hawbData?.commodity_description || "";
-    
+
     if (cargoDetails.length > 0) {
       // Compute totals across all cargo rows
       const totalNoOfPcs = cargoDetails.reduce((sum: number, c: any) => {
@@ -1499,8 +1826,12 @@ export const generateCargoArrivalNoticePDF = (
       const grossWeight = totalGrossWeight > 0 ? String(totalGrossWeight) : "";
 
       // Split commodity into wrapped lines constrained to the column width
-      const allCommodityLines: string[] = doc.splitTextToSize(commodity || "", cargoColWidths[0] - 2 * cellPadX);
-      const safeCommodityLines: string[] = allCommodityLines.length > 0 ? allCommodityLines : [""];
+      const allCommodityLines: string[] = doc.splitTextToSize(
+        commodity || "",
+        cargoColWidths[0] - 2 * cellPadX,
+      );
+      const safeCommodityLines: string[] =
+        allCommodityLines.length > 0 ? allCommodityLines : [""];
       let lineIdx = 0;
       let isFirstSegment = true;
 
@@ -1508,27 +1839,56 @@ export const generateCargoArrivalNoticePDF = (
       while (lineIdx < safeCommodityLines.length) {
         // How many commodity lines fit in remaining space on this page?
         // Row height for N lines = N * lineHeight + padding
-        const pageSpaceAvailable = fixedBoxEndY - bottomBorderPadding - sectionY;
+        const pageSpaceAvailable =
+          fixedBoxEndY - bottomBorderPadding - sectionY;
         let maxLinesHere = Math.max(
           1,
-          Math.floor(
-            (pageSpaceAvailable - 1.5) / CAN_COMMODITY_LINE_HEIGHT
-          )
+          Math.floor((pageSpaceAvailable - 1.5) / CAN_COMMODITY_LINE_HEIGHT),
         );
-        let linesThisRow = Math.min(maxLinesHere, safeCommodityLines.length - lineIdx);
-        let segmentLines = safeCommodityLines.slice(lineIdx, lineIdx + linesThisRow);
+        let linesThisRow = Math.min(
+          maxLinesHere,
+          safeCommodityLines.length - lineIdx,
+        );
+        let segmentLines = safeCommodityLines.slice(
+          lineIdx,
+          lineIdx + linesThisRow,
+        );
         let segmentRowH = Math.max(
           cargoRowH,
-          Math.ceil(linesThisRow * CAN_COMMODITY_LINE_HEIGHT + 1.5)
+          Math.ceil(linesThisRow * CAN_COMMODITY_LINE_HEIGHT + 1.5),
         );
 
         // If this segment does not fit, break to a new page
-        if (needsNewPage(sectionY, segmentRowH + 2, fixedBoxEndY, bottomBorderPadding)) {
+        if (
+          needsNewPage(
+            sectionY,
+            segmentRowH + 2,
+            fixedBoxEndY,
+            bottomBorderPadding,
+          )
+        ) {
           const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
-          addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
+          addFooter(
+            doc,
+            pageWidth,
+            pageHeight,
+            margin,
+            boxPadding,
+            margin + boxPadding,
+            referenceText,
+            currentPage,
+            totalPages,
+          );
           currentPage++;
           totalPages++;
-          const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
+          const newPageInfo = createNewPage(
+            doc,
+            pageWidth,
+            margin,
+            boxPadding,
+            branchInfo,
+            logoImage,
+          );
           sectionY = newPageInfo.yPos;
           boxStartY = newPageInfo.boxStartY;
           boxX = newPageInfo.boxX;
@@ -1544,7 +1904,13 @@ export const generateCargoArrivalNoticePDF = (
           doc.setTextColor(40, 40, 40);
           cargoHeaders.forEach((header, index) => {
             const w = cargoColWidths[index];
-            drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
+            drawCenteredTableHeader(
+              doc,
+              header,
+              xPos,
+              w,
+              sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+            );
             if (index < cargoHeaders.length - 1) {
               doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoHeaderH);
             }
@@ -1558,13 +1924,19 @@ export const generateCargoArrivalNoticePDF = (
           const newPageSpace = fixedBoxEndY - bottomBorderPadding - sectionY;
           maxLinesHere = Math.max(
             1,
-            Math.floor((newPageSpace - 1.5) / CAN_COMMODITY_LINE_HEIGHT)
+            Math.floor((newPageSpace - 1.5) / CAN_COMMODITY_LINE_HEIGHT),
           );
-          linesThisRow = Math.min(maxLinesHere, safeCommodityLines.length - lineIdx);
-          segmentLines = safeCommodityLines.slice(lineIdx, lineIdx + linesThisRow);
+          linesThisRow = Math.min(
+            maxLinesHere,
+            safeCommodityLines.length - lineIdx,
+          );
+          segmentLines = safeCommodityLines.slice(
+            lineIdx,
+            lineIdx + linesThisRow,
+          );
           segmentRowH = Math.max(
             cargoRowH,
-            Math.ceil(linesThisRow * CAN_COMMODITY_LINE_HEIGHT + 1.5)
+            Math.ceil(linesThisRow * CAN_COMMODITY_LINE_HEIGHT + 1.5),
           );
         }
 
@@ -1574,19 +1946,29 @@ export const generateCargoArrivalNoticePDF = (
         doc.rect(cargoTableX, sectionY, cargoTableW, segmentRowH, "FD");
 
         // Commodity text — center-aligned within column
-        doc.text(segmentLines, cargoTableX + cargoColWidths[0] / 2, sectionY + CAN_TABLE_CELL_Y_OFFSET, {
-          align: "center",
-        });
+        doc.text(
+          segmentLines,
+          cargoTableX + cargoColWidths[0] / 2,
+          sectionY + CAN_TABLE_CELL_Y_OFFSET,
+          {
+            align: "center",
+          },
+        );
 
         // Column separator after commodity column
-        doc.line(cargoTableX + cargoColWidths[0], sectionY, cargoTableX + cargoColWidths[0], sectionY + segmentRowH);
+        doc.line(
+          cargoTableX + cargoColWidths[0],
+          sectionY,
+          cargoTableX + cargoColWidths[0],
+          sectionY + segmentRowH,
+        );
 
         // Numeric values (No of Pcs, Char. Weight, Gr.Wt) — only on the first segment row, vertically centred
         if (isFirstSegment) {
           const numericY = sectionY + segmentRowH / 2 + 1;
           let numX = cargoTableX + cargoColWidths[0];
           [
-            { val: noOfPcs,    w: cargoColWidths[1] },
+            { val: noOfPcs, w: cargoColWidths[1] },
             { val: charWeight, w: cargoColWidths[2] },
             { val: grossWeight, w: cargoColWidths[3] },
           ].forEach(({ val, w }, i, arr) => {
@@ -1615,157 +1997,463 @@ export const generateCargoArrivalNoticePDF = (
       doc.setDrawColor(220, 220, 220);
       doc.rect(cargoTableX, sectionY, cargoTableW, cargoRowH, "FD");
       xPos = cargoTableX;
-      const placeholderRow = [
-        commodityDescription || "",
-        "",
-        "",
-        "",
-      ];
+      const placeholderRow = [commodityDescription || "", "", "", ""];
       placeholderRow.forEach((cell, index) => {
         const w = cargoColWidths[index];
-        drawCenteredTableCell(doc, String(cell), xPos, w, sectionY + CAN_TABLE_CELL_Y_OFFSET, cellPadX);
+        drawCenteredTableCell(
+          doc,
+          String(cell),
+          xPos,
+          w,
+          sectionY + CAN_TABLE_CELL_Y_OFFSET,
+          cellPadX,
+        );
         if (index < placeholderRow.length - 1) {
-          doc.line(
-            xPos + w,
-            sectionY,
-            xPos + w,
-            sectionY + cargoRowH,
-          );
+          doc.line(xPos + w, sectionY, xPos + w, sectionY + cargoRowH);
         }
         xPos += w;
       });
       sectionY += cargoRowH;
     }
 
-    sectionY += 1;
+    sectionY += 3;
     // doc.line(margin + boxPadding, sectionY - 1, pageWidth - margin - boxPadding, sectionY - 1);
 
-    const hasCharges = displayableCharges.length > 0;
+    // ===== CONTAINER DETAILS SECTION (after cargo; only when matched rows exist) =====
+    const hasContainerDetails = containerDetailRows.length > 0;
+    if (hasContainerDetails) {
+      sectionY += 1;
+      doc.line(margin, sectionY, pageWidth - margin, sectionY);
+      sectionY += 4;
 
-    if (hasCharges) {
-    // Draw horizontal line separating cargo section from charges section
-    sectionY += 1;
-    doc.line(margin, sectionY, pageWidth - margin, sectionY);
-    sectionY += 4;
-
-    // ===== CHARGES SECTION (integrated with main box) =====
-    // Only check for enough space to draw the section header (title + col header); rows handle their own page breaks
-    const estimatedChargesHeight = 20;
-    if (needsNewPage(sectionY, estimatedChargesHeight, fixedBoxEndY, bottomBorderPadding)) {
-      // Add footer for current page
-      const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
-      addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
-      
-      // Create new page
-      currentPage++;
-      totalPages++;
-      const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
-      sectionY = newPageInfo.yPos;
-      boxStartY = newPageInfo.boxStartY;
-      boxX = newPageInfo.boxX;
-      boxWidth = newPageInfo.boxWidth;
-    }
-
-    // Charges table setup
-    doc.setFontSize(CAN_BODY_FONT_SIZE);
-    const chargesHeaders = getCanChargesHeaders(includeCanTaxColumn);
-    const chargesTableX = margin + boxPadding;
-    const chargesTableW = pageWidth - 2 * margin - 2 * boxPadding;
-    const chargesColWidths = buildCanChargesColumnWidths(
-      chargesTableW,
-      includeCanTaxColumn,
-    );
-    const chargesHeaderH = CAN_TABLE_HEADER_H;
-    const chargesRowH = CAN_TABLE_ROW_H;
-
-    // Section title strip (absolute position — rect starts at sectionY)
-    doc.setFillColor(215, 215, 215);
-    doc.setDrawColor(170, 170, 170);
-    doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(CAN_BODY_FONT_SIZE);
-    doc.setTextColor(30, 30, 30);
-    doc.text("CHARGES", chargesTableX + cellPadX, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
-    doc.setTextColor(0, 0, 0);
-    sectionY += chargesHeaderH;
-
-    // Column header background + border (absolute position)
-    doc.setFillColor(235, 235, 235);
-    doc.setDrawColor(170, 170, 170);
-    doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
-
-    xPos = chargesTableX;
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(40, 40, 40);
-    chargesHeaders.forEach((header, index) => {
-      const w = chargesColWidths[index];
-      drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
-      if (index < chargesHeaders.length - 1) {
-        doc.line(
-          xPos + w,
+      const estimatedContainerHeight = 20;
+      if (
+        needsNewPage(
           sectionY,
-          xPos + w,
-          sectionY + chargesHeaderH,
+          estimatedContainerHeight,
+          fixedBoxEndY,
+          bottomBorderPadding,
+        )
+      ) {
+        const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
+        addFooter(
+          doc,
+          pageWidth,
+          pageHeight,
+          margin,
+          boxPadding,
+          margin + boxPadding,
+          referenceText,
+          currentPage,
+          totalPages,
         );
+        currentPage++;
+        totalPages++;
+        const newPageInfo = createNewPage(
+          doc,
+          pageWidth,
+          margin,
+          boxPadding,
+          branchInfo,
+          logoImage,
+        );
+        sectionY = newPageInfo.yPos;
+        boxStartY = newPageInfo.boxStartY;
+        boxX = newPageInfo.boxX;
+        boxWidth = newPageInfo.boxWidth;
       }
-      xPos += w;
-    });
-    doc.setTextColor(0, 0, 0);
 
-    sectionY += chargesHeaderH;
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
+      const containerHeaders = [
+        "Container No",
+        "Container Type",
+        "Seal Number",
+        "No of Pieces",
+        "Gross Weight",
+        "Volume",
+      ];
+      const containerTableX = margin + boxPadding;
+      const containerTableW = pageWidth - 2 * margin - 2 * boxPadding;
+      const containerColWidths = [
+        Math.round(containerTableW * 0.18),
+        Math.round(containerTableW * 0.16),
+        Math.round(containerTableW * 0.16),
+        Math.round(containerTableW * 0.14),
+        Math.round(containerTableW * 0.18),
+        containerTableW -
+          (Math.round(containerTableW * 0.18) +
+            Math.round(containerTableW * 0.16) +
+            Math.round(containerTableW * 0.16) +
+            Math.round(containerTableW * 0.14) +
+            Math.round(containerTableW * 0.18)),
+      ];
+      const containerHeaderH = CAN_TABLE_HEADER_H;
+      const containerRowH = CAN_TABLE_ROW_H;
 
-    // Charges table rows with actual data
-    doc.setFont("helvetica", "normal");
+      doc.setFillColor(215, 215, 215);
+      doc.setDrawColor(170, 170, 170);
+      doc.rect(
+        containerTableX,
+        sectionY,
+        containerTableW,
+        containerHeaderH,
+        "FD",
+      );
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
+      doc.setTextColor(30, 30, 30);
+      doc.text(
+        "CONTAINER DETAILS",
+        containerTableX + cellPadX,
+        sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+      );
+      doc.setTextColor(0, 0, 0);
+      sectionY += containerHeaderH;
 
-    displayableCharges.forEach((charge: any, rowIdx: number) => {
-        // Pre-calculate row data and dynamic height before the page-break check
-        const chargeName = charge.charge_name || "";
-        const currency = getChargeCurrencyCode(charge);
-        const units = charge.no_of_unit !== null && charge.no_of_unit !== undefined ? String(charge.no_of_unit) : "";
-        const perUnit = charge.amount_per_unit !== null && charge.amount_per_unit !== undefined ? String(charge.amount_per_unit) : "";
-        const roe = charge.roe !== null && charge.roe !== undefined ? String(charge.roe) : "";
-        const amount = getChargeDisplayAmount(charge as Record<string, unknown>);
-        const chargeNameCellText = doc.splitTextToSize(chargeName || "", chargesColWidths[0] - 2 * cellPadX);
-        const numChargeNameLines = Math.max(1, chargeNameCellText.length);
-        // Row expands to fit all wrapped charge name lines (3 mm per line + 2 mm padding)
-        const dynamicChargesRowH = Math.max(
-          chargesRowH,
-          numChargeNameLines * CAN_COMMODITY_LINE_HEIGHT + 2
+      doc.setFillColor(235, 235, 235);
+      doc.setDrawColor(170, 170, 170);
+      doc.rect(
+        containerTableX,
+        sectionY,
+        containerTableW,
+        containerHeaderH,
+        "FD",
+      );
+      xPos = containerTableX;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      containerHeaders.forEach((header, index) => {
+        const w = containerColWidths[index];
+        drawCenteredTableHeader(
+          doc,
+          header,
+          xPos,
+          w,
+          sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
         );
+        if (index < containerHeaders.length - 1) {
+          doc.line(xPos + w, sectionY, xPos + w, sectionY + containerHeaderH);
+        }
+        xPos += w;
+      });
+      doc.setTextColor(0, 0, 0);
+      sectionY += containerHeaderH;
 
-        // Check if we need a new page for each row
-        if (needsNewPage(sectionY, dynamicChargesRowH + 2, fixedBoxEndY, bottomBorderPadding)) {
-          // Add footer for current page
+      doc.setFont("helvetica", "normal");
+      containerDetailRows.forEach((row, rowIdx) => {
+        if (
+          needsNewPage(
+            sectionY,
+            containerRowH + 2,
+            fixedBoxEndY,
+            bottomBorderPadding,
+          )
+        ) {
           const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
-          addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
-          
-          // Create new page
+          addFooter(
+            doc,
+            pageWidth,
+            pageHeight,
+            margin,
+            boxPadding,
+            margin + boxPadding,
+            referenceText,
+            currentPage,
+            totalPages,
+          );
           currentPage++;
           totalPages++;
-          const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
+          const newPageInfo = createNewPage(
+            doc,
+            pageWidth,
+            margin,
+            boxPadding,
+            branchInfo,
+            logoImage,
+          );
           sectionY = newPageInfo.yPos;
           boxStartY = newPageInfo.boxStartY;
           boxX = newPageInfo.boxX;
           boxWidth = newPageInfo.boxWidth;
-          
+
+          doc.setFontSize(CAN_BODY_FONT_SIZE);
+          doc.setFillColor(235, 235, 235);
+          doc.setDrawColor(170, 170, 170);
+          doc.rect(
+            containerTableX,
+            sectionY,
+            containerTableW,
+            containerHeaderH,
+            "FD",
+          );
+          xPos = containerTableX;
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(40, 40, 40);
+          containerHeaders.forEach((header, index) => {
+            const w = containerColWidths[index];
+            drawCenteredTableHeader(
+              doc,
+              header,
+              xPos,
+              w,
+              sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+            );
+            if (index < containerHeaders.length - 1) {
+              doc.line(
+                xPos + w,
+                sectionY,
+                xPos + w,
+                sectionY + containerHeaderH,
+              );
+            }
+            xPos += w;
+          });
+          doc.setTextColor(0, 0, 0);
+          sectionY += containerHeaderH;
+          doc.setFont("helvetica", "normal");
+        }
+
+        const fill = rowIdx % 2 === 0 ? 255 : 244;
+        doc.setFillColor(fill, fill, fill);
+        doc.setDrawColor(190, 190, 190);
+        doc.rect(
+          containerTableX,
+          sectionY,
+          containerTableW,
+          containerRowH,
+          "FD",
+        );
+
+        xPos = containerTableX;
+        const rowData = [
+          row.containerNo,
+          row.containerType,
+          row.sealNumber,
+          row.noOfPieces,
+          row.grossWeight,
+          row.volume,
+        ];
+        rowData.forEach((cell, index) => {
+          const w = containerColWidths[index];
+          drawCenteredTableCell(
+            doc,
+            String(cell ?? ""),
+            xPos,
+            w,
+            sectionY + CAN_TABLE_CELL_Y_OFFSET,
+            cellPadX,
+          );
+          if (index < rowData.length - 1) {
+            doc.line(xPos + w, sectionY, xPos + w, sectionY + containerRowH);
+          }
+          xPos += w;
+        });
+        sectionY += containerRowH;
+      });
+      sectionY += 3;
+    }
+
+    const hasCharges = displayableCharges.length > 0;
+
+    if (hasCharges) {
+      // Draw horizontal line separating cargo section from charges section
+      sectionY += 1;
+      doc.line(margin, sectionY, pageWidth - margin, sectionY);
+      sectionY += 4;
+
+      // ===== CHARGES SECTION (integrated with main box) =====
+      // Only check for enough space to draw the section header (title + col header); rows handle their own page breaks
+      const estimatedChargesHeight = 20;
+      if (
+        needsNewPage(
+          sectionY,
+          estimatedChargesHeight,
+          fixedBoxEndY,
+          bottomBorderPadding,
+        )
+      ) {
+        // Add footer for current page
+        const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
+        addFooter(
+          doc,
+          pageWidth,
+          pageHeight,
+          margin,
+          boxPadding,
+          margin + boxPadding,
+          referenceText,
+          currentPage,
+          totalPages,
+        );
+
+        // Create new page
+        currentPage++;
+        totalPages++;
+        const newPageInfo = createNewPage(
+          doc,
+          pageWidth,
+          margin,
+          boxPadding,
+          branchInfo,
+          logoImage,
+        );
+        sectionY = newPageInfo.yPos;
+        boxStartY = newPageInfo.boxStartY;
+        boxX = newPageInfo.boxX;
+        boxWidth = newPageInfo.boxWidth;
+      }
+
+      // Charges table setup
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
+      const chargesHeaders = getCanChargesHeaders(includeCanTaxColumn);
+      const chargesTableX = margin + boxPadding;
+      const chargesTableW = pageWidth - 2 * margin - 2 * boxPadding;
+      const chargesColWidths = buildCanChargesColumnWidths(
+        chargesTableW,
+        includeCanTaxColumn,
+      );
+      const chargesHeaderH = CAN_TABLE_HEADER_H;
+      const chargesRowH = CAN_TABLE_ROW_H;
+
+      // Section title strip (absolute position — rect starts at sectionY)
+      doc.setFillColor(215, 215, 215);
+      doc.setDrawColor(170, 170, 170);
+      doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
+      doc.setTextColor(30, 30, 30);
+      doc.text(
+        "CHARGES",
+        chargesTableX + cellPadX,
+        sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+      );
+      doc.setTextColor(0, 0, 0);
+      sectionY += chargesHeaderH;
+
+      // Column header background + border (absolute position)
+      doc.setFillColor(235, 235, 235);
+      doc.setDrawColor(170, 170, 170);
+      doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
+
+      xPos = chargesTableX;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(40, 40, 40);
+      chargesHeaders.forEach((header, index) => {
+        const w = chargesColWidths[index];
+        drawCenteredTableHeader(
+          doc,
+          header,
+          xPos,
+          w,
+          sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+        );
+        if (index < chargesHeaders.length - 1) {
+          doc.line(xPos + w, sectionY, xPos + w, sectionY + chargesHeaderH);
+        }
+        xPos += w;
+      });
+      doc.setTextColor(0, 0, 0);
+
+      sectionY += chargesHeaderH;
+
+      // Charges table rows with actual data
+      doc.setFont("helvetica", "normal");
+
+      displayableCharges.forEach((charge: any, rowIdx: number) => {
+        // Pre-calculate row data and dynamic height before the page-break check
+        const chargeName = charge.charge_name || "";
+        const currency = getChargeCurrencyCode(charge);
+        const units =
+          charge.no_of_unit !== null && charge.no_of_unit !== undefined
+            ? String(charge.no_of_unit)
+            : "";
+        const perUnit =
+          charge.amount_per_unit !== null &&
+          charge.amount_per_unit !== undefined
+            ? String(charge.amount_per_unit)
+            : "";
+        const roe =
+          charge.roe !== null && charge.roe !== undefined
+            ? String(charge.roe)
+            : "";
+        const amount = getChargeDisplayAmount(
+          charge as Record<string, unknown>,
+        );
+        const chargeNameCellText = doc.splitTextToSize(
+          chargeName || "",
+          chargesColWidths[0] - 2 * cellPadX,
+        );
+        const numChargeNameLines = Math.max(1, chargeNameCellText.length);
+        // Row expands to fit all wrapped charge name lines (3 mm per line + 2 mm padding)
+        const dynamicChargesRowH = Math.max(
+          chargesRowH,
+          numChargeNameLines * CAN_COMMODITY_LINE_HEIGHT + 2,
+        );
+
+        // Check if we need a new page for each row
+        if (
+          needsNewPage(
+            sectionY,
+            dynamicChargesRowH + 2,
+            fixedBoxEndY,
+            bottomBorderPadding,
+          )
+        ) {
+          // Add footer for current page
+          const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
+          addFooter(
+            doc,
+            pageWidth,
+            pageHeight,
+            margin,
+            boxPadding,
+            margin + boxPadding,
+            referenceText,
+            currentPage,
+            totalPages,
+          );
+
+          // Create new page
+          currentPage++;
+          totalPages++;
+          const newPageInfo = createNewPage(
+            doc,
+            pageWidth,
+            margin,
+            boxPadding,
+            branchInfo,
+            logoImage,
+          );
+          sectionY = newPageInfo.yPos;
+          boxStartY = newPageInfo.boxStartY;
+          boxX = newPageInfo.boxX;
+          boxWidth = newPageInfo.boxWidth;
+
           // Redraw table header on new page (absolute position)
           doc.setFontSize(CAN_BODY_FONT_SIZE);
           doc.setFillColor(235, 235, 235);
           doc.setDrawColor(170, 170, 170);
-          doc.rect(chargesTableX, sectionY, chargesTableW, chargesHeaderH, "FD");
+          doc.rect(
+            chargesTableX,
+            sectionY,
+            chargesTableW,
+            chargesHeaderH,
+            "FD",
+          );
           xPos = chargesTableX;
           doc.setFont("helvetica", "bold");
           doc.setTextColor(40, 40, 40);
           chargesHeaders.forEach((header, index) => {
             const w = chargesColWidths[index];
-            drawCenteredTableHeader(doc, header, xPos, w, sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET);
+            drawCenteredTableHeader(
+              doc,
+              header,
+              xPos,
+              w,
+              sectionY + CAN_TABLE_HEADER_TEXT_Y_OFFSET,
+            );
             if (index < chargesHeaders.length - 1) {
-              doc.line(
-                xPos + w,
-                sectionY,
-                xPos + w,
-                sectionY + chargesHeaderH,
-              );
+              doc.line(xPos + w, sectionY, xPos + w, sectionY + chargesHeaderH);
             }
             xPos += w;
           });
@@ -1773,12 +2461,18 @@ export const generateCargoArrivalNoticePDF = (
           sectionY += chargesHeaderH;
           doc.setFont("helvetica", "normal");
         }
-        
+
         // Zebra row fill — dynamic height so all charge name lines are visible
         const fill = rowIdx % 2 === 0 ? 255 : 244;
         doc.setFillColor(fill, fill, fill);
         doc.setDrawColor(190, 190, 190);
-        doc.rect(chargesTableX, sectionY, chargesTableW, dynamicChargesRowH, "FD");
+        doc.rect(
+          chargesTableX,
+          sectionY,
+          chargesTableW,
+          dynamicChargesRowH,
+          "FD",
+        );
 
         xPos = chargesTableX;
         const showTaxTick =
@@ -1819,12 +2513,12 @@ export const generateCargoArrivalNoticePDF = (
         });
         sectionY += dynamicChargesRowH;
       });
-    doc.line(margin, sectionY, pageWidth - margin, sectionY);
+      doc.line(margin, sectionY + 4, pageWidth - margin, sectionY + 4);
 
-    sectionY += 10;
+      sectionY += 14;
     } else {
       // Keep the same gap before Notes when the charges table is omitted
-      sectionY += 1;
+      sectionY += 4;
       doc.line(margin, sectionY, pageWidth - margin, sectionY);
       sectionY += 10;
     }
@@ -1832,66 +2526,173 @@ export const generateCargoArrivalNoticePDF = (
     // Update yPos for next section after the combined box
     yPos = sectionY;
 
-    // ===== NOTES SECTION (separate from boxes) =====
-    // Check if we need a new page before notes
-    const notesLineSpacing = CAN_NOTES_LINE_SPACING;
-    const notesWidth = pageWidth - 2 * margin - 2 * boxPadding;
-    const estimatedNotesHeight = 30;
-    
-    if (needsNewPage(yPos, estimatedNotesHeight, fixedBoxEndY, bottomBorderPadding)) {
-      // Add footer for current page
-      const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
-      addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
-      
-      // Create new page
-      currentPage++;
-      totalPages++;
-      const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
-      yPos = newPageInfo.yPos;
-      boxStartY = newPageInfo.boxStartY;
-      boxX = newPageInfo.boxX;
-      boxWidth = newPageInfo.boxWidth;
-    }
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
-    doc.text("Note:", margin + boxPadding, yPos);
-    yPos += 10;
+    // ===== NOTES SECTION (separate from boxes; only when note values exist) =====
+    if (displayableNotes.length > 0) {
+      const notesLineSpacing = CAN_NOTES_LINE_SPACING;
+      const notesWidth = pageWidth - 2 * margin - 2 * boxPadding;
+      const estimatedNotesHeight = 30;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(CAN_BODY_FONT_SIZE);
-    
-    if (notes.length > 0) {
-      notes.forEach((note: string) => {
-        if (note) {
-          // Split each note to handle overflow
-          const noteLines = doc.splitTextToSize(note, notesWidth);
-          noteLines.forEach((line: string) => {
-            // Check if we need a new page for each line
-            if (needsNewPage(yPos, notesLineSpacing, fixedBoxEndY, bottomBorderPadding)) {
-              // Add footer for current page
-              const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
-              addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, currentPage, totalPages);
-              
-              // Create new page
-              currentPage++;
-              totalPages++;
-              const newPageInfo = createNewPage(doc, pageWidth, margin, boxPadding, branchInfo, logoImage);
-              yPos = newPageInfo.yPos;
-              boxStartY = newPageInfo.boxStartY;
-              boxX = newPageInfo.boxX;
-              boxWidth = newPageInfo.boxWidth;
-            }
-            doc.text(line, margin + boxPadding, yPos);
-            yPos += notesLineSpacing;
-          });
+      if (
+        needsNewPage(
+          yPos,
+          estimatedNotesHeight,
+          fixedBoxEndY,
+          bottomBorderPadding,
+        )
+      ) {
+        const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
+        addFooter(
+          doc,
+          pageWidth,
+          pageHeight,
+          margin,
+          boxPadding,
+          margin + boxPadding,
+          referenceText,
+          currentPage,
+          totalPages,
+        );
+
+        currentPage++;
+        totalPages++;
+        const newPageInfo = createNewPage(
+          doc,
+          pageWidth,
+          margin,
+          boxPadding,
+          branchInfo,
+          logoImage,
+        );
+        yPos = newPageInfo.yPos + 10;
+        boxStartY = newPageInfo.boxStartY;
+        boxX = newPageInfo.boxX;
+        boxWidth = newPageInfo.boxWidth;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(CAN_SECTION_TITLE_FONT_SIZE);
+      doc.text("Note:", margin + boxPadding, yPos);
+      yPos += CAN_SECTION_TITLE_TO_CONTENT_GAP + 2;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(CAN_BODY_FONT_SIZE);
+
+      // Hanging indent: number at left, all text lines share one text column
+      const notesListIndent = 4;
+      const notesStartX = margin + boxPadding + notesListIndent;
+      const bulletColumnWidth = Math.max(
+        doc.getTextWidth(`${displayableNotes.length}. `),
+        doc.getTextWidth("9. "),
+      );
+      const noteTextX = notesStartX + bulletColumnWidth;
+      const noteTextWidth = Math.max(
+        8,
+        notesWidth - notesListIndent - bulletColumnWidth,
+      );
+
+      displayableNotes.forEach((note: string, noteIndex: number) => {
+        const bullet = `${noteIndex + 1}. `;
+        const noteLines = doc.splitTextToSize(note, noteTextWidth);
+        const safeNoteLines: string[] =
+          noteLines.length > 0 ? noteLines : [""];
+        const noteBlockHeight = safeNoteLines.length * notesLineSpacing;
+
+        // Keep each numbered point intact: if it won't fully fit here, move it
+        // to the next page (skip when already at page top to avoid a blank page).
+        const alreadyAtPageTop =
+          yPos <= boxStartY + boxPadding + notesLineSpacing;
+        if (
+          !alreadyAtPageTop &&
+          needsNewPage(
+            yPos,
+            noteBlockHeight,
+            fixedBoxEndY,
+            bottomBorderPadding,
+          )
+        ) {
+          const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
+          addFooter(
+            doc,
+            pageWidth,
+            pageHeight,
+            margin,
+            boxPadding,
+            margin + boxPadding,
+            referenceText,
+            currentPage,
+            totalPages,
+          );
+
+          currentPage++;
+          totalPages++;
+          const newPageInfo = createNewPage(
+            doc,
+            pageWidth,
+            margin,
+            boxPadding,
+            branchInfo,
+            logoImage,
+          );
+          yPos = newPageInfo.yPos + 4;
+          boxStartY = newPageInfo.boxStartY;
+          boxX = newPageInfo.boxX;
+          boxWidth = newPageInfo.boxWidth;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(CAN_BODY_FONT_SIZE);
         }
+
+        safeNoteLines.forEach((line: string, lineIndex: number) => {
+          // Last resort only: a single point taller than one full page
+          if (
+            needsNewPage(
+              yPos,
+              notesLineSpacing,
+              fixedBoxEndY,
+              bottomBorderPadding,
+            )
+          ) {
+            const referenceText = `Reference: ${jobRefNo || ""} on ${formatDateForDisplay(createdAt) || ""} by ${createdBy || ""}`;
+            addFooter(
+              doc,
+              pageWidth,
+              pageHeight,
+              margin,
+              boxPadding,
+              margin + boxPadding,
+              referenceText,
+              currentPage,
+              totalPages,
+            );
+
+            currentPage++;
+            totalPages++;
+            const newPageInfo = createNewPage(
+              doc,
+              pageWidth,
+              margin,
+              boxPadding,
+              branchInfo,
+              logoImage,
+            );
+            yPos = newPageInfo.yPos;
+            boxStartY = newPageInfo.boxStartY;
+            boxX = newPageInfo.boxX;
+            boxWidth = newPageInfo.boxWidth;
+          }
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(CAN_BODY_FONT_SIZE);
+          if (lineIndex === 0) {
+            doc.text(bullet, notesStartX, yPos);
+          }
+          doc.text(line, noteTextX, yPos);
+          yPos += notesLineSpacing;
+        });
       });
     }
 
     // ===== FREIGHT CERTIFICATE SECTION (Only for Air Import) =====
     // Note: Ocean Import doesn't have freight certificate
-    
+
     // Always start certificate on a new page (same logo + company header as other pages)
     doc.addPage();
     currentPage++;
@@ -1905,14 +2706,16 @@ export const generateCargoArrivalNoticePDF = (
       footerHeight,
       branchInfo,
       logoImage,
-      { includeTitle: false, includeBorder: false }
+      { includeTitle: false, includeBorder: false },
     );
     yPos = certPageLayout.contentY;
 
     // "TO WHOM SO EVER IT MAY CONCERN"
     doc.setFont("helvetica", "normal");
     doc.setFontSize(CAN_BODY_FONT_SIZE);
-    doc.text("TO WHOM SO EVER IT MAY CONCERN", pageWidth / 2, yPos, { align: "center" });
+    doc.text("TO WHOM SO EVER IT MAY CONCERN", pageWidth / 2, yPos, {
+      align: "center",
+    });
     yPos += 8;
 
     // "FREIGHT CERTIFICATE" title
@@ -1924,14 +2727,15 @@ export const generateCargoArrivalNoticePDF = (
     // Certificate body text
     doc.setFont("helvetica", "normal");
     doc.setFontSize(CAN_BODY_FONT_SIZE);
-    
+
     // Get HAWB/HBL number (for air import only - supports both Air and Ocean terminology)
-    const hawbForCert = hawbData?.hawb_no || hawbData?.hawb_number || hawbData?.hbl_number || "";
-    
+    const hawbForCert =
+      hawbData?.hawb_no || hawbData?.hawb_number || hawbData?.hbl_number || "";
+
     // Get today's date
     const today = new Date();
     const todayFormatted = formatDate(today.toISOString());
-    
+
     // Find Freight charges and Ex Works charges (case-insensitive)
     const freightCharge = charges.find((charge: any) => {
       const chargeName = (charge.charge_name || "").toLowerCase();
@@ -1941,20 +2745,30 @@ export const generateCargoArrivalNoticePDF = (
       const chargeName = (charge.charge_name || "").toLowerCase();
       return chargeName.includes("ex") && chargeName.includes("works");
     });
-    
+
     // Get FRT value
     let frtValue = "";
     if (freightCharge) {
-      const currency = getChargeCurrencyCode(freightCharge as Record<string, unknown>);
-      const amount = freightCharge.amount !== null && freightCharge.amount !== undefined ? String(freightCharge.amount) : "";
+      const currency = getChargeCurrencyCode(
+        freightCharge as Record<string, unknown>,
+      );
+      const amount =
+        freightCharge.amount !== null && freightCharge.amount !== undefined
+          ? String(freightCharge.amount)
+          : "";
       frtValue = currency && amount ? `${currency} ${amount}` : "";
     }
-    
+
     // Get EXW value
     let exwValue = "";
     if (exWorksCharge) {
-      const currency = getChargeCurrencyCode(exWorksCharge as Record<string, unknown>);
-      const amount = exWorksCharge.amount !== null && exWorksCharge.amount !== undefined ? String(exWorksCharge.amount) : "";
+      const currency = getChargeCurrencyCode(
+        exWorksCharge as Record<string, unknown>,
+      );
+      const amount =
+        exWorksCharge.amount !== null && exWorksCharge.amount !== undefined
+          ? String(exWorksCharge.amount)
+          : "";
       exwValue = currency && amount ? `${currency} ${amount}` : "";
     }
 
@@ -1963,22 +2777,22 @@ export const generateCargoArrivalNoticePDF = (
     doc.text(certText1, margin, yPos);
     yPos += 6;
 
-    const certText2 = `Shippment moved under ${isAirImport ? "HAWB" : "HBL"} ${hawbForCert} is`;
+    const certText2 = `Shipment moved under ${isAirImport ? "HAWB" : "HBL"} ${hawbForCert} is`;
     doc.text(certText2, margin, yPos);
     yPos += 6;
 
     const certText3 = `Dtd : ${todayFormatted} is`;
-    doc.text(certText3, margin, yPos+2);
+    doc.text(certText3, margin, yPos + 2);
     yPos += 12;
 
     // if (frtValue) {
-      doc.text(`FRT: ${frtValue}`, margin, yPos);
-      yPos += 10;
+    doc.text(`FRT: ${frtValue}`, margin, yPos);
+    yPos += 10;
     // }
 
     // if (exwValue) {
-      doc.text(`EXW: ${exwValue}`, margin, yPos);
-      yPos += 10;
+    doc.text(`EXW: ${exwValue}`, margin, yPos);
+    yPos += 10;
     // }
 
     // Company name and "Operation Team" on the right side
@@ -1986,15 +2800,19 @@ export const generateCargoArrivalNoticePDF = (
     const rightSideX = pageWidth - margin - 5;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(CAN_BODY_FONT_SIZE);
-    
+
     // Get company name without the branch suffix in parentheses for cleaner display
-    const companyNameForCert = branchInfo.name.replace(/\s*\([^)]*\)\s*$/, "").trim();
-    const companyNameLinesSignArea = doc.splitTextToSize(companyNameForCert, 60);
+    const companyNameForCert = branchInfo.name
+      .replace(/\s*\([^)]*\)\s*$/, "")
+      .trim();
+    const companyNameLinesSignArea = doc.splitTextToSize(
+      companyNameForCert,
+      60,
+    );
     doc.text(companyNameLinesSignArea, rightSideX, yPos, { align: "right" });
     yPos += companyNameLinesSignArea.length * 4 + 3;
-    
+
     doc.text("Operation Team", rightSideX, yPos, { align: "right" });
-  
 
     // Update total pages count
     totalPages = doc.getNumberOfPages();
@@ -2007,9 +2825,19 @@ export const generateCargoArrivalNoticePDF = (
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       doc.setPage(pageNum);
       // Ensure footer is on all pages
-      addFooter(doc, pageWidth, pageHeight, margin, boxPadding, margin + boxPadding, referenceText, pageNum, totalPages);
+      addFooter(
+        doc,
+        pageWidth,
+        pageHeight,
+        margin,
+        boxPadding,
+        margin + boxPadding,
+        referenceText,
+        pageNum,
+        totalPages,
+      );
     }
-    
+
     // Set back to last page
     doc.setPage(currentPage);
 
@@ -2023,4 +2851,3 @@ export const generateCargoArrivalNoticePDF = (
     throw error;
   }
 };
-

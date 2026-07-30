@@ -32,6 +32,12 @@ import { getAPICall } from "../../service/getApiCall";
 import { postAPICall } from "../../service/postApiCall";
 import { API_HEADER } from "../../store/storeKeys";
 import {
+  isOtherServiceInland,
+  resolveEffectiveServiceType,
+  usesAirCargoStructure,
+  type OtherServiceOption,
+} from "../../utils/otherServiceType";
+import {
   directQuoteCustomerSchema,
   serviceFormSchema,
 } from "./enquiryFormSchemas";
@@ -124,11 +130,15 @@ type CargoRow = {
 type DirectServiceRow = {
   service?: string;
   trade?: string;
+  service_code?: string;
+  service_name?: string;
   origin_code?: string;
   origin_name?: string;
   destination_code?: string;
   destination_name?: string;
   shipment_terms_code?: string;
+  pickup?: string | boolean;
+  delivery?: string | boolean;
   cargo_details?: CargoRow[];
 };
 
@@ -151,6 +161,10 @@ const fetchTermsofShipment = async () => {
 
 const fetchContainerType = async () => {
   return getAPICall(`${URL.containerType}`, API_HEADER);
+};
+
+const fetchOtherServices = async () => {
+  return getAPICall(`${URL.serviceMaster}?filter=other_services`, API_HEADER);
 };
 
 function transportModeForService(service: string): "SEA" | "AIR" | null {
@@ -225,6 +239,46 @@ export default function DirectQuoteEnquiryFields({
       staleTime: Infinity,
     });
 
+  const { data: rawOtherServicesData = [] } = useQuery({
+    queryKey: ["otherServices"],
+    queryFn: fetchOtherServices,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+
+  const otherServicesData = useMemo((): OtherServiceOption[] => {
+    if (!Array.isArray(rawOtherServicesData) || !rawOtherServicesData.length) {
+      return [];
+    }
+    return rawOtherServicesData.map(
+      (item: {
+        service_code?: string;
+        service_name?: string;
+        transport_mode?: string;
+        full_groupage?: string;
+      }) => ({
+        value: item.service_code ? String(item.service_code) : "",
+        label: item.service_name || "",
+        transport_mode: item.transport_mode || "",
+        full_groupage: item.full_groupage || "",
+      }),
+    );
+  }, [rawOtherServicesData]);
+
+  const getEffectiveServiceType = useCallback(
+    (service: string, serviceCode?: string | null) =>
+      resolveEffectiveServiceType(service, serviceCode, otherServicesData),
+    [otherServicesData],
+  );
+
+  const isInlandOtherService = useCallback(
+    (serviceCode?: string | null) =>
+      isOtherServiceInland(serviceCode, otherServicesData),
+    [otherServicesData],
+  );
+
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
     return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
@@ -293,11 +347,14 @@ export default function DirectQuoteEnquiryFields({
     const rows =
       (serviceForm.values.service_details as unknown as DirectServiceRow[]) || [];
     rows.forEach((s, idx) => {
-      const serviceType = String(s?.service || "").toUpperCase();
+      const effectiveType = getEffectiveServiceType(
+        String(s?.service || ""),
+        s?.service_code,
+      );
       const cargo = s?.cargo_details?.[0];
-      if (!cargo || !serviceType) return;
+      if (!cargo || !effectiveType) return;
 
-      if (serviceType === "AIR") {
+      if (usesAirCargoStructure(effectiveType)) {
         const chargeable = calculateChargeableWeight(
           Number(cargo.gross_weight) || null,
           Number(cargo.volume_weight) || null,
@@ -308,7 +365,7 @@ export default function DirectQuoteEnquiryFields({
             chargeable || null,
           );
         }
-      } else if (serviceType === "LCL") {
+      } else if (effectiveType === "LCL") {
         const chargeable = calculateChargeableVolume(
           Number(cargo.gross_weight) || null,
           Number(cargo.volume) || null,
@@ -325,6 +382,7 @@ export default function DirectQuoteEnquiryFields({
     serviceForm.values.service_details,
     calculateChargeableWeight,
     calculateChargeableVolume,
+    getEffectiveServiceType,
     serviceForm,
   ]);
 
@@ -333,12 +391,34 @@ export default function DirectQuoteEnquiryFields({
     validateEnquiryRef.current = () => {
       const customerResult = customerForm.validate();
       const serviceResult = serviceForm.validate();
-      return !customerResult.hasErrors && !serviceResult.hasErrors;
+
+      let hasCustomErrors = false;
+      (
+        serviceForm.values.service_details as unknown as DirectServiceRow[]
+      ).forEach((serviceDetail, serviceIndex) => {
+        if (
+          serviceDetail.service === "OTHERS" &&
+          isInlandOtherService(serviceDetail.service_code) &&
+          !serviceDetail.trade
+        ) {
+          serviceForm.setFieldError(
+            `service_details.${serviceIndex}.trade`,
+            "Trade is required",
+          );
+          hasCustomErrors = true;
+        }
+      });
+
+      return (
+        !customerResult.hasErrors &&
+        !serviceResult.hasErrors &&
+        !hasCustomErrors
+      );
     };
     return () => {
       validateEnquiryRef.current = null;
     };
-  }, [validateEnquiryRef, customerForm, serviceForm]);
+  }, [validateEnquiryRef, customerForm, serviceForm, isInlandOtherService]);
 
   useEffect(() => {
     if (!onEnquiryDataSync) return;
@@ -350,20 +430,24 @@ export default function DirectQuoteEnquiryFields({
       enquiry_received_date: dayjs().format("YYYY-MM-DD"),
       sales_person: customerForm.values.sales_person,
       services: serviceForm.values.service_details.map(
-        (service: Record<string, unknown>, index: number) => ({
-          ...service,
-          id: service.id ?? index + 1,
-          origin_code_read: service.origin_code,
-          destination_code_read: service.destination_code,
-          shipment_terms_code_read: service.shipment_terms_code,
-          pickup: false,
-          delivery: false,
-          hazardous_cargo:
-            Array.isArray(service.cargo_details) &&
-            service.cargo_details[0] &&
-            (service.cargo_details[0] as { hazardous_cargo?: string })
-              .hazardous_cargo === "Yes",
-        }),
+        (service: Record<string, unknown>, index: number) => {
+          const pickup = service.pickup;
+          const delivery = service.delivery;
+          return {
+            ...service,
+            id: service.id ?? index + 1,
+            origin_code_read: service.origin_code,
+            destination_code_read: service.destination_code,
+            shipment_terms_code_read: service.shipment_terms_code,
+            pickup: pickup === "true" || pickup === true,
+            delivery: delivery === "true" || delivery === true,
+            hazardous_cargo:
+              Array.isArray(service.cargo_details) &&
+              service.cargo_details[0] &&
+              (service.cargo_details[0] as { hazardous_cargo?: string })
+                .hazardous_cargo === "Yes",
+          };
+        },
       ),
     });
   }, [
@@ -382,6 +466,11 @@ export default function DirectQuoteEnquiryFields({
     serviceForm.setFieldValue(`service_details.${idx}.destination_code`, "");
     serviceForm.setFieldValue(`service_details.${idx}.destination_name`, "");
     serviceForm.setFieldValue(`service_details.${idx}.shipment_terms_code`, "");
+    serviceForm.setFieldValue(
+      `service_details.${idx}.dimension_unit`,
+      "Centimeter",
+    );
+    serviceForm.setFieldValue(`service_details.${idx}.diemensions`, []);
   };
 
   return (
@@ -431,11 +520,22 @@ export default function DirectQuoteEnquiryFields({
             {(serviceForm.values.service_details as unknown as DirectServiceRow[]).map(
               (s, serviceIndex) => {
               const serviceType = String(s?.service || "");
+              const effectiveServiceType = getEffectiveServiceType(
+                serviceType,
+                s?.service_code,
+              );
+              const showInlandTrade =
+                serviceType === "OTHERS" &&
+                isInlandOtherService(s?.service_code);
+              const showStandardTrade = serviceType !== "OTHERS";
               const isHazardous =
                 s?.cargo_details?.[0]?.hazardous_cargo === "Yes";
               const cargoDetails = Array.isArray(s?.cargo_details)
                 ? s.cargo_details
                 : [];
+              const showCargo =
+                Boolean(serviceType) &&
+                (serviceType !== "OTHERS" || Boolean(s?.service_code));
 
               return (
                 <Box
@@ -487,7 +587,7 @@ export default function DirectQuoteEnquiryFields({
                         withAsterisk
                         placeholder="Select Service"
                         searchable
-                        data={["AIR", "FCL", "LCL"]}
+                        data={["AIR", "FCL", "LCL", "OTHERS"]}
                         styles={FIELD_STYLES}
                         value={serviceType}
                         onChange={(value) => {
@@ -495,6 +595,21 @@ export default function DirectQuoteEnquiryFields({
                             `service_details.${serviceIndex}.service`,
                             value || "",
                           );
+                          if (value !== "OTHERS") {
+                            serviceForm.setFieldValue(
+                              `service_details.${serviceIndex}.service_code`,
+                              "",
+                            );
+                            serviceForm.setFieldValue(
+                              `service_details.${serviceIndex}.service_name`,
+                              "",
+                            );
+                          } else {
+                            serviceForm.setFieldValue(
+                              `service_details.${serviceIndex}.trade`,
+                              "",
+                            );
+                          }
                           if (value) resetServiceAfterTypeChange(serviceIndex);
                         }}
                         error={
@@ -504,18 +619,60 @@ export default function DirectQuoteEnquiryFields({
                         }
                       />
                     </Grid.Col>
-                    <Grid.Col span={{ base: 12, md: 2 }}>
-                      <Dropdown
-                        label="Trade"
-                        withAsterisk
-                        placeholder="Select Trade"
-                        data={["Export", "Import"]}
-                        styles={FIELD_STYLES}
-                        {...serviceForm.getInputProps(
-                          `service_details.${serviceIndex}.trade`,
-                        )}
-                      />
-                    </Grid.Col>
+                    {serviceType === "OTHERS" ? (
+                      <Grid.Col span={{ base: 12, md: 2 }}>
+                        <Dropdown
+                          label="Service Name"
+                          withAsterisk
+                          placeholder="Select Service Name"
+                          searchable
+                          data={otherServicesData}
+                          styles={FIELD_STYLES}
+                          value={s?.service_code || ""}
+                          onChange={(value) => {
+                            const selectedService = otherServicesData.find(
+                              (item) => item.value === value,
+                            );
+                            serviceForm.setFieldValue(
+                              `service_details.${serviceIndex}.service_code`,
+                              value || "",
+                            );
+                            serviceForm.setFieldValue(
+                              `service_details.${serviceIndex}.service_name`,
+                              selectedService?.label || "",
+                            );
+                            if (
+                              (selectedService?.transport_mode || "") !== "NA"
+                            ) {
+                              serviceForm.setFieldValue(
+                                `service_details.${serviceIndex}.trade`,
+                                "",
+                              );
+                            }
+                            resetServiceAfterTypeChange(serviceIndex);
+                          }}
+                          error={
+                            serviceForm.errors[
+                              `service_details.${serviceIndex}.service_code`
+                            ] as string
+                          }
+                        />
+                      </Grid.Col>
+                    ) : null}
+                    {(showStandardTrade || showInlandTrade) && (
+                      <Grid.Col span={{ base: 12, md: 2 }}>
+                        <Dropdown
+                          label="Trade"
+                          withAsterisk
+                          placeholder="Select Trade"
+                          data={["Export", "Import"]}
+                          styles={FIELD_STYLES}
+                          {...serviceForm.getInputProps(
+                            `service_details.${serviceIndex}.trade`,
+                          )}
+                        />
+                      </Grid.Col>
+                    )}
                     <Grid.Col span={{ base: 12, md: 2 }}>
                       <SearchableSelect
                         label="Origin"
@@ -531,7 +688,9 @@ export default function DirectQuoteEnquiryFields({
                             ? `${s.origin_name} (${s.origin_code})`
                             : s?.origin_code
                         }
-                        additionalParams={portAdditionalParamsForService(serviceType)}
+                        additionalParams={portAdditionalParamsForService(
+                          effectiveServiceType,
+                        )}
                         onChange={(value, selectedData) => {
                           serviceForm.setFieldValue(
                             `service_details.${serviceIndex}.origin_code`,
@@ -565,7 +724,9 @@ export default function DirectQuoteEnquiryFields({
                             ? `${s.destination_name} (${s.destination_code})`
                             : s?.destination_code
                         }
-                        additionalParams={portAdditionalParamsForService(serviceType)}
+                        additionalParams={portAdditionalParamsForService(
+                          effectiveServiceType,
+                        )}
                         onChange={(value, selectedData) => {
                           serviceForm.setFieldValue(
                             `service_details.${serviceIndex}.destination_code`,
@@ -668,13 +829,13 @@ export default function DirectQuoteEnquiryFields({
                     )}
                   </Grid>
 
-                  {serviceType && (
+                  {showCargo && (
                     <Box mt="sm">
                       <Text fw={600} c="#105476" mb="xs" size="sm">
                         Cargo Details
                       </Text>
 
-                      {serviceType === "AIR" && (
+                      {usesAirCargoStructure(effectiveServiceType) && (
                         <Grid gutter="sm">
                           <Grid.Col span={{ base: 12, md: 3 }}>
                             <FormNumberInput
@@ -735,7 +896,7 @@ export default function DirectQuoteEnquiryFields({
                         </Grid>
                       )}
 
-                      {serviceType === "LCL" && (
+                      {effectiveServiceType === "LCL" && (
                         <Grid gutter="sm">
                           <Grid.Col span={{ base: 12, md: 3 }}>
                             <FormNumberInput
@@ -796,7 +957,7 @@ export default function DirectQuoteEnquiryFields({
                         </Grid>
                       )}
 
-                      {serviceType === "FCL" && (
+                      {effectiveServiceType === "FCL" && (
                         <Stack gap="xs">
                           {cargoDetails.map((_, cargoIndex: number) => (
                             <Grid

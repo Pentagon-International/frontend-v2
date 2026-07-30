@@ -6458,13 +6458,12 @@ function HouseCreate() {
         opened={previewOpen}
         onClose={handleClosePreview}
         title={`Cargo Arrival Notice - ${form.values.hbl_number || "HBL"}`}
-        size="xl"
+        size="90%"
         overlayProps={{
           backgroundOpacity: 0.55,
           blur: 3,
         }}
         centered
-        fullScreen
         transitionProps={{ transition: "fade", duration: 200 }}
       >
         <Stack h="82vh">
