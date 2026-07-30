@@ -94,6 +94,7 @@ import {
   isVietnamBranchFromUser,
 } from "../../utils/nonDecimalMoneyAmount";
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
+import { buildEnquiryServicePayload } from "../../utils/buildEnquiryServicePayload";
 import {
   getBookingCreatePath,
   type OtherServiceOption,
@@ -868,8 +869,13 @@ function QuotationCreate({
     const isNonEmpty = (v: any) => String(v ?? "").trim().length > 0;
 
     for (const s of srv) {
+      const serviceType = String(s?.service || "").toUpperCase();
       if (!isNonEmpty(s?.service)) return false;
-      if (!isNonEmpty(s?.trade)) return false;
+      if (serviceType === "OTHERS") {
+        if (!isNonEmpty(s?.service_code)) return false;
+      } else if (!isNonEmpty(s?.trade)) {
+        return false;
+      }
       if (!isNonEmpty(s?.origin_code_read ?? s?.origin_code)) return false;
       if (!isNonEmpty(s?.destination_code_read ?? s?.destination_code))
         return false;
@@ -886,7 +892,6 @@ function QuotationCreate({
           if (!isNonEmpty(c?.pkg_group)) return false;
         }
 
-        const serviceType = String(s?.service || "").toUpperCase();
         if (serviceType === "AIR") {
           if (!isNonEmpty(c?.no_of_packages)) return false;
           if (!isNonEmpty(c?.gross_weight)) return false;
@@ -899,6 +904,20 @@ function QuotationCreate({
           if (!isNonEmpty(c?.container_type_code)) return false;
           if (!isNonEmpty(c?.no_of_containers)) return false;
           if (!isNonEmpty(c?.gross_weight)) return false;
+        } else if (serviceType === "OTHERS") {
+          const hasAirLike =
+            isNonEmpty(c?.no_of_packages) &&
+            isNonEmpty(c?.gross_weight) &&
+            isNonEmpty(c?.volume_weight);
+          const hasLclLike =
+            isNonEmpty(c?.no_of_packages) &&
+            isNonEmpty(c?.gross_weight) &&
+            isNonEmpty(c?.volume);
+          const hasFclLike =
+            isNonEmpty(c?.container_type_code) &&
+            isNonEmpty(c?.no_of_containers) &&
+            isNonEmpty(c?.gross_weight);
+          if (!hasAirLike && !hasLclLike && !hasFclLike) return false;
         }
       }
     }
@@ -2458,103 +2477,16 @@ function QuotationCreate({
 
           console.log("Services data before mapping:", services);
 
-          // Prepare enquiry payload in the correct format
+          // Prepare enquiry payload matching EnquiryCreate.getEnquiryPayload
           const enquiryPayload = {
             customer_code: actualEnquiryData?.customer_code,
             enquiry_received_date: actualEnquiryData?.enquiry_received_date,
             sales_person: actualEnquiryData?.sales_person,
             sales_coordinator: actualEnquiryData?.sales_coordinator || null,
             customer_services: actualEnquiryData?.customer_services || null,
-            services: services.map((serviceDetail: any) => {
-              console.log("Processing service detail:", serviceDetail);
-              console.log("FCL details:", serviceDetail.fcl_details);
-              console.log("Cargo details:", serviceDetail.cargo_details);
-              const servicePayload: any = {
-                service: serviceDetail.service,
-                trade: serviceDetail.trade || "Export",
-                origin_code:
-                  serviceDetail.origin_code || serviceDetail.origin_code_read,
-                destination_code:
-                  serviceDetail.destination_code ||
-                  serviceDetail.destination_code_read,
-                pickup:
-                  serviceDetail.pickup === "true" ||
-                  serviceDetail.pickup === true,
-                delivery:
-                  serviceDetail.delivery === "true" ||
-                  serviceDetail.delivery === true,
-                pickup_location: serviceDetail.pickup_location || "",
-                delivery_location: serviceDetail.delivery_location || "",
-                hazardous_cargo:
-                  serviceDetail.hazardous_cargo === "Yes" ||
-                  serviceDetail.hazardous_cargo === true,
-                shipment_terms_code:
-                  serviceDetail.shipment_terms_code ||
-                  serviceDetail.shipment_terms_code_read ||
-                  "",
-              };
-
-              // Add service-specific cargo details
-              if (serviceDetail.service === "FCL") {
-                // Check for both fcl_details and cargo_details
-                const fclData =
-                  serviceDetail.fcl_details || serviceDetail.cargo_details;
-
-                console.log("FCL Data found:", fclData);
-
-                if (fclData && Array.isArray(fclData)) {
-                  servicePayload.fcl_details = fclData.map((cargo: any) => ({
-                    container_type:
-                      cargo.container_type || cargo.container_type_code,
-                    no_of_containers: Number(cargo.no_of_containers) || 0,
-                    gross_weight: cargo.gross_weight
-                      ? Number(cargo.gross_weight).toFixed(3)
-                      : "0.000",
-                  }));
-                  console.log(
-                    "Mapped FCL details:",
-                    servicePayload.fcl_details,
-                  );
-                } else {
-                  console.log("⚠️ No FCL data found for FCL service!");
-                }
-              } else if (
-                serviceDetail.service === "AIR" &&
-                serviceDetail.cargo_details
-              ) {
-                const cargo = serviceDetail.cargo_details[0];
-                servicePayload.no_of_packages =
-                  Number(cargo.no_of_packages) || 0;
-                servicePayload.gross_weight = cargo.gross_weight
-                  ? Number(cargo.gross_weight).toFixed(3)
-                  : "0.000";
-                servicePayload.volume_weight = cargo.volume_weight
-                  ? Number(cargo.volume_weight).toFixed(3)
-                  : "0.000";
-                servicePayload.chargeable_weight = cargo.chargable_weight
-                  ? Number(cargo.chargable_weight).toFixed(3)
-                  : "0.000";
-              } else if (
-                serviceDetail.service === "LCL" &&
-                serviceDetail.cargo_details
-              ) {
-                const cargo = serviceDetail.cargo_details[0];
-                servicePayload.no_of_packages =
-                  Number(cargo.no_of_packages) || 0;
-                servicePayload.gross_weight = cargo.gross_weight
-                  ? Number(cargo.gross_weight).toFixed(3)
-                  : "0.000";
-                servicePayload.volume = cargo.volume
-                  ? Number(cargo.volume).toFixed(3)
-                  : "0.000";
-                servicePayload.chargeable_volume = cargo.chargable_volume
-                  ? Number(cargo.chargable_volume).toFixed(3)
-                  : "0.000";
-              }
-
-              console.log("Final service payload:", servicePayload);
-              return servicePayload;
-            }),
+            services: services.map((serviceDetail: any) =>
+              buildEnquiryServicePayload(serviceDetail, otherServicesData),
+            ),
           };
 
           console.log(

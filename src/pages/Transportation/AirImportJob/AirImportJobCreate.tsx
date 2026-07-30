@@ -2541,6 +2541,7 @@ function AirImportJobCreate() {
           mawb_number: carrierDetailsForm.values.mawb_number,
           mawb_date: carrierDetailsForm.values.mawb_date,
         },
+        notes: jobData?.notes || [],
       };
 
       const blobUrl = await previewCargoArrivalNoticePDF(
