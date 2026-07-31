@@ -2833,10 +2833,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         form.values.service,
         form.values.cargo_details,
         unitOptions,
+        {
+          preserveExistingNoOfUnits:
+            Boolean(quotationId) || isFromQuotationFlow,
+        },
       );
       return updated ?? prev;
     });
-  }, [cargoNoOfUnitsSyncKey, form.values.service, unitOptions]);
+  }, [
+    cargoNoOfUnitsSyncKey,
+    form.values.service,
+    unitOptions,
+    quotationId,
+    isFromQuotationFlow,
+  ]);
 
   const handleSubmit = async () => {
     try {

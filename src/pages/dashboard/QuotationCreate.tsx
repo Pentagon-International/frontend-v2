@@ -89,6 +89,7 @@ import {
 } from "../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
+  clampMoneyAmountBound,
   formatMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
@@ -99,6 +100,11 @@ import {
   getBookingCreatePath,
   type OtherServiceOption,
 } from "../../utils/otherServiceType";
+
+/** Round monetary amounts (2 dp, or whole numbers for Vietnam — see nonDecimalMoneyAmount). */
+function clampAmount(value: number | null | undefined): number | null {
+  return clampMoneyAmountBound(value);
+}
 
 /** Form money string → NumberInput value (empty stays undefined). */
 function moneyFormValueToNumber(
@@ -115,6 +121,22 @@ function moneyNumberInputToFormString(value: string | number): string {
   const n = typeof value === "number" ? value : parseFloat(String(value));
   if (!Number.isFinite(n)) return "";
   return formatMoneyAmountBound(n);
+}
+
+/** API/rate value → form money string (respects Vietnam whole-number mode). Empty stays empty. */
+function moneyApiValueToFormString(value: unknown): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmountBound(n);
+}
+
+/** Form money string/number → clamped number for API payload (0 when empty/invalid). */
+function parseMoneyForPayload(value: unknown): number {
+  if (value === "" || value === null || value === undefined) return 0;
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return 0;
+  return clampAmount(n) ?? 0;
 }
 
 function formatHistoryMoney(raw: unknown): string {
@@ -1277,15 +1299,11 @@ function QuotationCreate({
           roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
-          sell_per_unit:
-            charge.sell_per_unit != null ? String(charge.sell_per_unit) : "",
-          min_sell: charge.min_sell != null ? String(charge.min_sell) : "",
-          cost_per_unit:
-            charge.cost_per_unit != null ? String(charge.cost_per_unit) : "",
-          total_cost:
-            charge.total_cost != null ? String(charge.total_cost) : "",
-          total_sell:
-            charge.total_sell != null ? String(charge.total_sell) : "",
+          sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
+          min_sell: moneyApiValueToFormString(charge.min_sell),
+          cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
+          total_cost: moneyApiValueToFormString(charge.total_cost),
+          total_sell: moneyApiValueToFormString(charge.total_sell),
         }));
 
         dynamicForm.setValues({ charges: formattedCharges });
@@ -1619,22 +1637,12 @@ function QuotationCreate({
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
                   ),
-                  sell_per_unit:
-                    charge.sell_per_unit != null
-                      ? String(charge.sell_per_unit)
-                      : "",
-                  min_sell:
-                    charge.min_sell != null ? String(charge.min_sell) : "",
-                  cost_per_unit:
-                    charge.cost_per_unit != null
-                      ? String(charge.cost_per_unit)
-                      : "",
-                  min_cost:
-                    charge.min_cost != null ? String(charge.min_cost) : "",
-                  total_sell:
-                    charge.total_sell != null ? String(charge.total_sell) : "",
-                  total_cost:
-                    charge.total_cost != null ? String(charge.total_cost) : "",
+                  sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
+                  min_sell: moneyApiValueToFormString(charge.min_sell),
+                  cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
+                  min_cost: moneyApiValueToFormString(charge.min_cost),
+                  total_sell: moneyApiValueToFormString(charge.total_sell),
+                  total_cost: moneyApiValueToFormString(charge.total_cost),
                   // preserve existing quotation charge id (fallbacks)
                   id:
                     charge.id ?? charge.charge_id ?? charge.quotation_charge_id,
@@ -1711,13 +1719,13 @@ function QuotationCreate({
           roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
-          sell_per_unit: charge.sell_per_unit?.toString() ?? "",
-          min_sell: charge.min_sell?.toString() ?? "",
-          cost_per_unit: charge.cost_per_unit?.toString() ?? "",
+          sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
+          min_sell: moneyApiValueToFormString(charge.min_sell),
+          cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
           ...computeChargeLineTotals({
             no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
-            sell_per_unit: charge.sell_per_unit?.toString() ?? "",
-            cost_per_unit: charge.cost_per_unit?.toString() ?? "",
+            sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
+            cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
             roe: parseRoeForPayload(charge.roe) ?? 1,
           }),
           // preserve existing quotation charge id (fallbacks)
@@ -1800,8 +1808,8 @@ function QuotationCreate({
           roe: roe,
           unit: unit,
           no_of_units: calculatedNoOfUnits,
-          sell_per_unit: isLCL ? rate.toString() : "",
-          cost_per_unit: isLCL ? "" : rate.toString(),
+          sell_per_unit: isLCL ? moneyApiValueToFormString(rate) : "",
+          cost_per_unit: isLCL ? "" : moneyApiValueToFormString(rate),
           min_sell: "",
           toBeDisabled: false,
         };
@@ -1885,7 +1893,7 @@ function QuotationCreate({
         const mappedCharges = quotationData.charges.map((charge: any) => {
           const noOfContainers =
             quotationData.no_of_containers?.toString() || "1";
-          const rate = charge.rate?.toString() || "0";
+          const rate = moneyApiValueToFormString(charge.rate ?? 0) || "0";
 
           const mappedCharge = {
             charge_name: charge.charge_name || "",
@@ -2076,19 +2084,19 @@ function QuotationCreate({
               : "1",
           // sell_per_unit: isLCL ? rate.toString() : charge.sell_per_unit || "0",
           sell_per_unit: isLCL
-            ? charge.sell_per_unit != null
-              ? charge.sell_per_unit
-              : ""
+            ? moneyApiValueToFormString(charge.sell_per_unit)
             : "",
-          min_sell: charge.min_sell != null ? charge.min_sell : null,
+          min_sell: moneyApiValueToFormString(charge.min_sell),
           // cost_per_unit: isLCL ? charge.cost_per_unit || "0" : rate.toString(),
           cost_per_unit: isLCL
             ? ""
-            : charge.sell_per_unit != null
-              ? charge.sell_per_unit
-              : "",
-          total_cost: charge.total_cost != null ? charge.total_cost : "0",
-          total_sell: charge.total_sell != null ? charge.total_sell : "0",
+            : moneyApiValueToFormString(charge.sell_per_unit),
+          total_cost: moneyApiValueToFormString(
+            charge.total_cost != null ? charge.total_cost : 0,
+          ),
+          total_sell: moneyApiValueToFormString(
+            charge.total_sell != null ? charge.total_sell : 0,
+          ),
         };
       });
 
@@ -2763,18 +2771,18 @@ function QuotationCreate({
   };
 
   const submitQuotation = async () => {
-    // Calculate totals from charges
+    // Calculate totals from charges (clamped like InvoiceCreate money payload)
     const charges = dynamicForm.values.charges || [];
-    const netCost = charges.reduce((sum, item) => {
-      const cost = parseFloat(item.total_cost || "0");
-      return sum + (isNaN(cost) ? 0 : cost);
-    }, 0);
+    const netCost =
+      clampAmount(
+        charges.reduce((sum, item) => sum + parseMoneyForPayload(item.total_cost), 0),
+      ) ?? 0;
 
-    const netSell = charges.reduce((sum, item) => {
-      const sell = parseFloat(item.total_sell || "0");
-      return sum + (isNaN(sell) ? 0 : sell);
-    }, 0);
-    const profit = netSell - netCost;
+    const netSell =
+      clampAmount(
+        charges.reduce((sum, item) => sum + parseMoneyForPayload(item.total_sell), 0),
+      ) ?? 0;
+    const profit = clampAmount(netSell - netCost) ?? 0;
 
     // Transform charges for CURRENT service to API format
     const transformedCharges = charges.map((charge: any) => {
@@ -2788,12 +2796,12 @@ function QuotationCreate({
         roe: parseRoeForPayload(charge.roe) ?? 1,
         unit: charge.unit,
         no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
-        sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
-        min_sell: parseFloat(charge.min_sell) || 0.0,
-        cost_per_unit: parseFloat(charge.cost_per_unit) || 0.0,
-        total_sell: parseFloat(charge.total_sell || "0") || 0.0,
-        total_cost: parseFloat(charge.total_cost || "0") || 0.0,
-        // min_cost: parseFloat(charge.min_cost) || 0.0,
+        sell_per_unit: parseMoneyForPayload(charge.sell_per_unit),
+        min_sell: parseMoneyForPayload(charge.min_sell),
+        cost_per_unit: parseMoneyForPayload(charge.cost_per_unit),
+        total_sell: parseMoneyForPayload(charge.total_sell),
+        total_cost: parseMoneyForPayload(charge.total_cost),
+        // min_cost: parseMoneyForPayload(charge.min_cost),
       };
       // Include the quotation charge line id only for existing charges
       if (charge.id !== undefined && charge.id !== null) base.id = charge.id;
@@ -2873,21 +2881,23 @@ function QuotationCreate({
     const quotationServicesData = Object.entries(allServiceData).map(
       ([originalServiceId, data]) => {
         const serviceCharges = data.dynamicForm.charges || [];
-        const serviceNetCost = serviceCharges.reduce(
-          (sum: number, item: any) => {
-            const cost = parseFloat(item.total_cost || "0");
-            return sum + (isNaN(cost) ? 0 : cost);
-          },
-          0,
-        );
-        const serviceNetSell = serviceCharges.reduce(
-          (sum: number, item: any) => {
-            const sell = parseFloat(item.total_sell || "0");
-            return sum + (isNaN(sell) ? 0 : sell);
-          },
-          0,
-        );
-        const serviceProfit = serviceNetSell - serviceNetCost;
+        const serviceNetCost =
+          clampAmount(
+            serviceCharges.reduce(
+              (sum: number, item: any) =>
+                sum + parseMoneyForPayload(item.total_cost),
+              0,
+            ),
+          ) ?? 0;
+        const serviceNetSell =
+          clampAmount(
+            serviceCharges.reduce(
+              (sum: number, item: any) =>
+                sum + parseMoneyForPayload(item.total_sell),
+              0,
+            ),
+          ) ?? 0;
+        const serviceProfit = clampAmount(serviceNetSell - serviceNetCost) ?? 0;
 
         // For destination or direct quotation-list create flow, use service_id from enquiry response
         let finalServiceId = parseInt(originalServiceId);
@@ -2954,11 +2964,11 @@ function QuotationCreate({
               roe: parseRoeForPayload(charge.roe) ?? 1,
               unit: charge.unit,
               no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
-              sell_per_unit: parseFloat(charge.sell_per_unit) || 0.0,
-              min_sell: parseFloat(charge.min_sell) || 0.0,
-              cost_per_unit: parseFloat(charge.cost_per_unit) || 0.0,
-              total_sell: parseFloat(charge.total_sell ?? "0") || 0.0,
-              total_cost: parseFloat(charge.total_cost ?? "0") || 0.0,
+              sell_per_unit: parseMoneyForPayload(charge.sell_per_unit),
+              min_sell: parseMoneyForPayload(charge.min_sell),
+              cost_per_unit: parseMoneyForPayload(charge.cost_per_unit),
+              total_sell: parseMoneyForPayload(charge.total_sell),
+              total_cost: parseMoneyForPayload(charge.total_cost),
               // min_cost: parseFloat(charge.min_cost) || 0.0,
             };
             // Include the quotation charge line id when present (existing charge)
@@ -3469,20 +3479,11 @@ function QuotationCreate({
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
                   ),
-                  sell_per_unit:
-                    charge.sell_per_unit != null
-                      ? String(charge.sell_per_unit)
-                      : "",
-                  min_sell:
-                    charge.min_sell != null ? String(charge.min_sell) : "",
-                  cost_per_unit:
-                    charge.cost_per_unit != null
-                      ? String(charge.cost_per_unit)
-                      : "",
-                  total_cost:
-                    charge.total_cost != null ? String(charge.total_cost) : "",
-                  total_sell:
-                    charge.total_sell != null ? String(charge.total_sell) : "",
+                  sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
+                  min_sell: moneyApiValueToFormString(charge.min_sell),
+                  cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
+                  total_cost: moneyApiValueToFormString(charge.total_cost),
+                  total_sell: moneyApiValueToFormString(charge.total_sell),
                   // preserve charge line id from API
                   id:
                     charge.id ?? charge.charge_id ?? charge.quotation_charge_id,

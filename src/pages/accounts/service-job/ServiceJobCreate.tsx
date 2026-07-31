@@ -74,6 +74,7 @@ import {
   clampMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
+  roundMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { buildJobUnitOptions } from "../../../utils/houseCargoChargeableWeight";
@@ -312,15 +313,15 @@ function mapChargesForPayload(
     no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
     currency_id: charge.currency_id ? String(charge.currency_id) : "",
     roe: roundRoeForPayload(charge.roe) ?? null,
-    amount_per_unit: roundToDecimals(charge.amount_per_unit) ?? null,
-    amount: roundToDecimals(charge.amount) ?? null,
+    amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+    amount: roundMoneyToDecimals(charge.amount) ?? null,
     sell_local_amount:
-      roundToDecimals(charge.local_amount) ??
-      roundToDecimals(charge.amount) ??
+      roundMoneyToDecimals(charge.local_amount) ??
+      roundMoneyToDecimals(charge.amount) ??
       null,
-    unit_cost: roundToDecimals(charge.cost_per_unit) ?? null,
-    total_cost: roundToDecimals(charge.total_cost) ?? null,
-    cost_local_amount: roundToDecimals(charge.cost_local_amount) ?? null,
+    unit_cost: roundMoneyToDecimals(charge.cost_per_unit) ?? null,
+    total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
+    cost_local_amount: roundMoneyToDecimals(charge.cost_local_amount) ?? null,
   }));
 }
 

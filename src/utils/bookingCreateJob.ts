@@ -4,6 +4,7 @@ import { apiCallProtected } from "../api/axios";
 import { URL } from "../api/serverUrls";
 import { getAPICall } from "../service/getApiCall";
 import { API_HEADER } from "../store/storeKeys";
+import useAuthStore from "../store/authStore";
 import { ToastNotification } from "../components";
 import {
   costLocalAmountForPayload,
@@ -13,6 +14,11 @@ import {
   buildDocumentIdsPayloadField,
   parseJobDocumentsFromApi,
 } from "./jobDocuments";
+import {
+  bindMoneyWholeNumberMode,
+  isVietnamBranchFromUser,
+  roundMoneyToDecimals,
+} from "./nonDecimalMoneyAmount";
 
 export type BookingCreateJobMode =
   | "air-export"
@@ -30,6 +36,34 @@ const JOB_EDIT_PATH: Record<BookingCreateJobMode, string> = {
   "ocean-export": "/SeaExport/export-job/edit",
   "ocean-import": "/SeaExport/import-job/edit",
 };
+
+/** Ensure Vietnam whole-number money mode matches the logged-in branch. */
+function syncBookingJobMoneyMode(): void {
+  bindMoneyWholeNumberMode(
+    isVietnamBranchFromUser(useAuthStore.getState().user),
+  );
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const n = parseFloat(String(value));
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Monetary number for job payload (whole numbers for Vietnam, else 2 dp). */
+function toMoneyOrNull(value: unknown): number | null {
+  const n = toNumberOrNull(value);
+  if (n == null) return null;
+  const rounded = roundMoneyToDecimals(n);
+  return rounded == null || rounded === undefined ? null : rounded;
+}
+
+function toMoneyFormValue(value: unknown): string | number | "" {
+  if (value == null || value === "") return "";
+  const n = toMoneyOrNull(value);
+  return n == null ? "" : n;
+}
 
 function formatRoutingDate(value: unknown): string | null {
   if (!value) return null;
@@ -345,13 +379,6 @@ function normalizePpCc(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function toNumberOrNull(value: unknown): number | null {
-  if (value == null || value === "") return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const n = parseFloat(String(value));
-  return Number.isNaN(n) ? null : n;
-}
-
 function resolveJobUnitFromBookingRow(row: Record<string, unknown>): {
   unit_id: number | null;
   unit_code: string;
@@ -392,13 +419,12 @@ function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
             : null,
       roe: toNumberOrNull(row.roe) ?? 1,
       cost_per_unit:
-        toNumberOrNull(row.cost_per_unit) ??
-        toNumberOrNull(row.sell_per_unit),
+        toMoneyOrNull(row.cost_per_unit) ?? toMoneyOrNull(row.sell_per_unit),
       total_cost:
-        toNumberOrNull(row.total_cost) ??
-        toNumberOrNull(row.min_sell) ??
-        toNumberOrNull(row.total_sell) ??
-        toNumberOrNull(row.sell_amount_total),
+        toMoneyOrNull(row.total_cost) ??
+        toMoneyOrNull(row.min_sell) ??
+        toMoneyOrNull(row.total_sell) ??
+        toMoneyOrNull(row.sell_amount_total),
     };
   });
 }
@@ -459,11 +485,13 @@ function mapHouseChargesFromBooking(
   return rates.map((c) => {
     const row = c as Record<string, unknown>;
     const noOfUnit = row.no_of_units || row.no_of_unit || "";
-    const amountPerUnit = row.sell_per_unit || "";
-    const amount =
-      row.min_sell || row.total_sell || row.sell_amount_total || "";
+    const amountPerUnit = toMoneyFormValue(row.sell_per_unit);
+    const amount = toMoneyFormValue(
+      row.min_sell || row.total_sell || row.sell_amount_total || "",
+    );
     const roe = row.roe ?? "";
-    const totalCost = includeCost ? row.total_cost || "" : "";
+    const totalCost = includeCost ? toMoneyFormValue(row.total_cost) : "";
+    const unitCost = includeCost ? toMoneyFormValue(row.cost_per_unit) : "";
     return {
       charge_id: row.charge_id || "",
       supplier_code: "",
@@ -481,7 +509,7 @@ function mapHouseChargesFromBooking(
         amountPerUnit,
       ),
       total_cost: totalCost,
-      unit_cost: includeCost ? row.cost_per_unit || "" : "",
+      unit_cost: unitCost,
       cost_local_amount: includeCost
         ? costLocalAmountForPayload(totalCost, roe)
         : "",
@@ -674,6 +702,7 @@ export function buildJobCreatePayloadFromBooking(
   booking: Record<string, unknown>,
   mode: BookingCreateJobMode,
 ): Record<string, unknown> {
+  syncBookingJobMoneyMode();
   const isInlandExport = mode === "inland-export";
   const isInlandImport = mode === "inland-import";
   const isInland = isInlandExport || isInlandImport;

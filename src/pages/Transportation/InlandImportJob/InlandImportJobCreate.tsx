@@ -2795,7 +2795,7 @@ function InlandImportJobCreate() {
             no_of_unit: roundToDecimals(e.no_of_unit) ?? null,
             currency_id: e.currency_id ? Number(e.currency_id) : null,
             roe: roundRoeForPayload(e.roe) ?? null,
-            cost_per_unit: roundToDecimals(e.cost_per_unit) ?? null,
+            cost_per_unit: roundMoneyToDecimals(e.cost_per_unit) ?? null,
             total_cost: roundMoneyToDecimals(e.total_cost) ?? null,
           }));
         })(),

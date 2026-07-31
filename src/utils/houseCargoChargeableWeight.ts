@@ -1129,7 +1129,11 @@ function recalcBookingChargeLineTotals<T extends BookingChargeForNoOfUnitsSync>(
   };
 }
 
-/** Keep charge rows in sync when cargo-derived units change (KG, W/M, CBM, CBM(S), FCL containers). */
+/** Keep charge rows in sync when cargo-derived units change (KG, W/M, CBM, CBM(S), FCL containers).
+ * Does not overwrite an already-configured no_of_units for shipment/DOC units (e.g. quotation SHPT=1951).
+ * When `preserveExistingNoOfUnits` is true (quotation → booking), never overwrite any non-empty no_of_units;
+ * defaults still apply when the user manually changes the unit via applyBookingChargeUnitChange.
+ */
 export function syncBookingChargesWithCargoNoOfUnits<
   T extends BookingChargeForNoOfUnitsSync,
 >(
@@ -1137,27 +1141,48 @@ export function syncBookingChargesWithCargoNoOfUnits<
   service: string,
   cargoDetails: BookingCargoForNoOfUnits[],
   unitOptions: Array<{ value: string; label: string }>,
+  options?: { preserveExistingNoOfUnits?: boolean },
 ): T[] | null {
+  const preserveExisting = Boolean(options?.preserveExistingNoOfUnits);
   let hasChanges = false;
   const updated = charges.map((charge) => {
     if (!charge.unit) return charge;
     const unitCode = resolveBookingUnitCode(charge.unit, unitOptions);
     const unitOpt = unitOptions.find((option) => option.value === unitCode);
+    let next = charge;
+    if (unitCode !== charge.unit) {
+      hasChanges = true;
+      next = { ...charge, unit: unitCode };
+    }
+
+    const hasConfiguredNoOfUnits = !isBookingChargeNoOfUnitsEmpty(
+      next.no_of_units,
+    );
+
+    // Quotation/configured values: keep existing no_of_units until user changes unit manually
+    if (preserveExisting && hasConfiguredNoOfUnits) {
+      return next;
+    }
+
+    // SHPT/DOC always resolve to 1 — never stomp a user/quotation value already on the row
+    if (
+      hasConfiguredNoOfUnits &&
+      isShipmentOrDocChargeUnit(unitCode, unitOpt?.label)
+    ) {
+      return next;
+    }
+
     const nextNoOfUnits = resolveBookingChargeNoOfUnits(
       unitCode,
       unitOpt?.label,
       service,
       cargoDetails,
     );
-    if (unitCode !== charge.unit) {
-      hasChanges = true;
-      charge = { ...charge, unit: unitCode };
-    }
-    if (nextNoOfUnits === null) return charge;
-    if (noOfUnitValuesEqual(charge.no_of_units, nextNoOfUnits)) return charge;
+    if (nextNoOfUnits === null) return next;
+    if (noOfUnitValuesEqual(next.no_of_units, nextNoOfUnits)) return next;
     hasChanges = true;
     return recalcBookingChargeLineTotals({
-      ...charge,
+      ...next,
       no_of_units: nextNoOfUnits,
     });
   });

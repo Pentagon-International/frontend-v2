@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } 
 import { ToastNotification } from "../components";
 import { useExchangeRateRoe } from "./useExchangeRateRoe";
 import { formatRoeAsString } from "../utils/exchangeRateRoe";
+import { formatMoneyAmountBound } from "../utils/nonDecimalMoneyAmount";
 
 export type BookingChargeRoeRow = {
   currency_country_code?: string;
@@ -39,8 +40,8 @@ export const recalcBookingChargeTotals = <T extends BookingChargeRoeRow>(
   const sellPerUnit = parseFloat(String(next.sell_per_unit)) || 0;
   const costPerUnit = parseFloat(String(next.cost_per_unit)) || 0;
   const roe = parseFloat(String(next.roe)) || 1;
-  next.total_sell = (noOfUnits * sellPerUnit * roe).toFixed(2);
-  next.total_cost = (noOfUnits * costPerUnit * roe).toFixed(2);
+  next.total_sell = formatMoneyAmountBound(noOfUnits * sellPerUnit * roe);
+  next.total_cost = formatMoneyAmountBound(noOfUnits * costPerUnit * roe);
   return next;
 };
 
