@@ -69,11 +69,14 @@ function rowHasDocumentContent(row: JobDocumentModalRow): boolean {
   );
 }
 
+/** Existing saved docs (have id) only need a name; new uploads need name + doc type + file. */
 function rowIsCompleteUpload(row: JobDocumentModalRow): boolean {
+  const hasName = Boolean(row.documentName.trim());
+  if (row.id != null && hasName) return true;
   return Boolean(
-    row.documentName.trim() &&
+    hasName &&
       String(row.doc_code ?? "").trim() &&
-      (row.id != null || row.file != null),
+      row.file != null,
   );
 }
 
@@ -85,10 +88,31 @@ export type DocumentModalValidationResult = {
   allowEmptyClose?: boolean;
 };
 
+/** Doc type is required only when uploading a new file (not for already-saved docs). */
 function rowNeedsDocCode(row: JobDocumentModalRow): boolean {
   return Boolean(
-    row.documentName.trim() && (row.id != null || row.file != null),
+    row.documentName.trim() && row.file != null && row.id == null,
   );
+}
+
+/** Build committed display list from whatever rows remain in the modal. */
+export function buildDisplayListFromModalRows(
+  rows: JobDocumentModalRow[],
+): JobDocumentDisplayItem[] {
+  return rows
+    .filter(
+      (row) =>
+        row.id != null &&
+        Number.isFinite(Number(row.id)) &&
+        Boolean(String(row.documentName ?? "").trim()),
+    )
+    .map((row) => ({
+      id: Number(row.id),
+      documentName: String(row.documentName ?? "").trim(),
+      doc_code: row.doc_code?.trim() || undefined,
+      userFileName: row.userFileName ?? row.file?.name ?? "",
+      document_url: row.document_url,
+    }));
 }
 
 export function validateDocumentModalRows(
@@ -287,35 +311,56 @@ export function parseJobDocumentsFromApi(
       [])
     : [];
 
-  const document_ids = Array.isArray(data?.document_ids)
-    ? (data.document_ids as number[]).map((id) => Number(id))
-    : documents
-        .map((doc) => (doc.id != null ? Number(doc.id) : null))
-        .filter((id): id is number => id !== null);
+  const existingDisplay = Array.isArray(data?.document_display_list)
+    ? (data.document_display_list as JobDocumentDisplayItem[])
+    : [];
 
-  const document_display_list: JobDocumentDisplayItem[] = documents.map(
-    (doc) => ({
-      id: Number(doc.id),
-      documentName: String(doc.document_name ?? ""),
-      doc_code: doc.doc_code != null ? String(doc.doc_code) : undefined,
-      userFileName: String(doc.user_file_name ?? ""),
-      document_url: resolveJobDocumentUrl(
-        doc.document_url != null ? String(doc.document_url) : undefined,
-      ),
-    }),
-  );
+  let document_display_list: JobDocumentDisplayItem[];
+  if (documents.length > 0) {
+    document_display_list = documents
+      .filter((doc) => doc.id != null)
+      .map((doc) => ({
+        id: Number(doc.id),
+        documentName: String(doc.document_name ?? ""),
+        doc_code: doc.doc_code != null ? String(doc.doc_code) : undefined,
+        userFileName: String(doc.user_file_name ?? ""),
+        document_url: resolveJobDocumentUrl(
+          doc.document_url != null ? String(doc.document_url) : undefined,
+        ),
+      }));
+  } else if (existingDisplay.length > 0) {
+    document_display_list = existingDisplay
+      .filter((doc) => doc.id != null && Number.isFinite(Number(doc.id)))
+      .map((doc) => ({
+        id: Number(doc.id),
+        documentName: String(doc.documentName ?? ""),
+        doc_code: doc.doc_code != null ? String(doc.doc_code) : undefined,
+        userFileName: String(doc.userFileName ?? ""),
+        document_url: resolveJobDocumentUrl(doc.document_url),
+      }));
+  } else {
+    document_display_list = [];
+  }
+
+  // Display list is the source of truth for attached docs (keeps ids aligned after deletes).
+  const document_ids =
+    document_display_list.length > 0
+      ? document_display_list.map((d) => d.id)
+      : Array.isArray(data?.document_ids)
+        ? (data.document_ids as number[])
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id))
+        : [];
 
   const document_modal_rows: JobDocumentModalRow[] =
-    documents.length > 0
-      ? documents.map((doc) => ({
-          id: doc.id != null ? Number(doc.id) : undefined,
-          documentName: String(doc.document_name ?? ""),
-          doc_code: doc.doc_code != null ? String(doc.doc_code) : "",
+    document_display_list.length > 0
+      ? document_display_list.map((doc) => ({
+          id: doc.id,
+          documentName: doc.documentName,
+          doc_code: doc.doc_code ?? "",
           file: null,
-          userFileName: String(doc.user_file_name ?? ""),
-          document_url: resolveJobDocumentUrl(
-            doc.document_url != null ? String(doc.document_url) : undefined,
-          ),
+          userFileName: doc.userFileName ?? "",
+          document_url: doc.document_url,
         }))
       : [{ ...EMPTY_JOB_DOCUMENT_MODAL_ROW }];
 
@@ -344,10 +389,15 @@ export function extractHouseDocumentFields(
 export function buildDocumentIdsPayloadField(
   document_ids: number[] | undefined | null,
 ): { document_ids: number[] } | Record<string, never> {
-  if (!Array.isArray(document_ids) || document_ids.length === 0) {
+  // Omit only when unset; send [] when explicitly cleared so updates drop removed docs.
+  if (document_ids === undefined || document_ids === null) {
     return {};
   }
-  return { document_ids };
+  return {
+    document_ids: Array.isArray(document_ids)
+      ? document_ids.map((id) => Number(id)).filter((id) => Number.isFinite(id))
+      : [],
+  };
 }
 
 export function pickHouseDocumentFields(

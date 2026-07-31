@@ -11,7 +11,6 @@ import {
   sellLocalAmountForPayload,
 } from "./houseChargeAmounts";
 import {
-  buildDocumentIdsPayloadField,
   parseJobDocumentsFromApi,
 } from "./jobDocuments";
 import {
@@ -563,7 +562,9 @@ function mapBookingDocumentsForHousingPayload(
   booking: Record<string, unknown>,
 ): { document_ids: number[] } | Record<string, never> {
   const { document_ids } = parseJobDocumentsFromApi(booking);
-  return buildDocumentIdsPayloadField(document_ids);
+  // Only attach when booking already has documents (omit empty on job create-from-booking)
+  if (document_ids.length === 0) return {};
+  return { document_ids };
 }
 
 async function resolveBookingRecordForJobCreate(
