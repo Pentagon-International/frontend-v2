@@ -1265,6 +1265,7 @@ import {
           (isCreate && isReversal ? "UNPOSTED" : values.status ?? "UNPOSTED"),
         Dr_Cr: values.Dr_Cr,
         charges_data: chargesPayload,
+        ...buildSupplierInvoiceDocumentIdsPayload(values, isCreate),
       };
     };
   
@@ -1283,13 +1284,21 @@ import {
       return docs.map((doc) => {
         const downloadUrl =
           doc.document_url ??
+          doc.document_download_url ??
           doc.url ??
+          (typeof doc.document === "string" ? doc.document : "") ??
           "";
+        // Document row PK only — never object_id / content_type / invoice id
+        const rawId = doc.id ?? doc.document_id ?? doc.pk;
+        const documentId =
+          rawId != null && Number.isFinite(Number(rawId))
+            ? Number(rawId)
+            : undefined;
         return {
           name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
           file: null,
           document_url: downloadUrl,
-          document_id: doc.id ?? undefined,
+          document_id: documentId,
           original_document_name:
             doc.original_document_name ??
             doc.document_name ??
@@ -1298,28 +1307,42 @@ import {
         };
       });
     };
-  
+
+    /**
+     * Edit: send PKs of existing docs still on the form (not deleted).
+     * New uploads go in FormData only — without document_id.
+     */
+    const buildSupplierInvoiceDocumentIdsPayload = (
+      values: SupplierInvoiceFormValues,
+      isCreate: boolean,
+    ): { document_ids: number[] } | Record<string, never> => {
+      if (isCreate) return {};
+
+      const remainingDocumentIds = values.supporting_documents
+        .map((d) => d.document_id)
+        .filter((id): id is number => id != null && Number.isFinite(Number(id)))
+        .map((id) => Number(id));
+
+      return { document_ids: remainingDocumentIds };
+    };
+
     const buildSupplierInvoiceFormData = (
       payload: Record<string, unknown>,
       formKey: "supplier_invoice" | "reverse_supplier_invoice",
     ): FormData => {
       const fd = new FormData();
       fd.append(formKey, JSON.stringify(payload));
-  
+
+      // New documents only — create without document_id
       let fileIndex = 0;
       form.values.supporting_documents.forEach((doc) => {
         if (!doc.file) return;
-  
-        // Backend expects `document_names[i]` whenever `document[i]` exists.
+
         fd.append(`document_names[${fileIndex}]`, (doc.name ?? "").toString());
         fd.append(`document[${fileIndex}]`, doc.file);
-        if (doc.document_id != null) {
-          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
-        }
-  
         fileIndex++;
       });
-  
+
       return fd;
     };
   
