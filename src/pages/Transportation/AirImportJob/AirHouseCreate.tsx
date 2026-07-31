@@ -127,6 +127,7 @@ import {
   spreadMasterDocumentsNavState,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
+import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
@@ -186,6 +187,7 @@ type HAWBDetailsForm = {
 // Type definitions for cargo details
 type CargoDetail = {
   // container_number removed for Air HAWB
+  package_type: string;
   no_of_packages: number | null;
   gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
@@ -395,6 +397,7 @@ function HouseCreate() {
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
     {
+      package_type: "",
       no_of_packages: null,
       gross_weight: null,
       volume: null,
@@ -1026,6 +1029,7 @@ function HouseCreate() {
             rb.chargeable_weight,
         );
         return {
+          package_type: String(c.package_type ?? ""),
           no_of_packages,
           gross_weight,
           volume: volumeFromRow,
@@ -1037,6 +1041,7 @@ function HouseCreate() {
     } else {
       // Top-level cargo fields when cargo_details array absent
       const row = {
+        package_type: String(rb.package_type ?? ""),
         no_of_packages: toNum(rb.no_of_packages),
         gross_weight: importHouseCargoWeightFromApi(rb.gross_weight),
         volume: importHouseCargoWeightFromApi(rb.volume ?? rb.volume_weight),
@@ -1316,6 +1321,9 @@ function HouseCreate() {
                   ? String(cargo.haz)
                   : "";
           const row = {
+            package_type: cargo.package_type
+              ? String(cargo.package_type)
+              : "",
             no_of_packages,
             gross_weight,
             volume: volume_weight_final,
@@ -2655,6 +2663,7 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
+          package_type: cargo.package_type || null,
           no_of_packages: cargo.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
@@ -4130,22 +4139,25 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2.2}>
+                <Grid.Col span={2}>
+                  <RequiredLabel label="Package Type" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.8}>
                   <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2.2}>
+                <Grid.Col span={1.8}>
                   <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2.2}>
+                <Grid.Col span={1.8}>
                   <RequiredLabel label="Volume (KG)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2.2}>
+                <Grid.Col span={1.8}>
                   <RequiredLabel
                     label="Chargeable Weight (KG)"
                     required={false}
                   />
                 </Grid.Col>
-                <Grid.Col span={2.2}>
+                <Grid.Col span={1.8}>
                   <RequiredLabel label="Haz" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1}>
@@ -4157,7 +4169,24 @@ function HouseCreate() {
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={2}>
+                    <Dropdown
+                      placeholder="Package Type"
+                      searchable
+                      data={PACKAGE_TYPE_OPTIONS}
+                      value={cargo.package_type || null}
+                      onChange={(value) => {
+                        const updated = [...cargoDetails];
+                        updated[index] = {
+                          ...updated[index],
+                          package_type: value || "",
+                        };
+                        setCargoDetails(updated);
+                      }}
+                      clearable
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.8}>
                     <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
@@ -4185,7 +4214,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.no_of_packages}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={1.8}>
                     <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
@@ -4238,7 +4267,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.gross_weight}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={1.8}>
                     <FormNumberInput
                       placeholder="Enter Volume Weight"
                       min={0}
@@ -4291,7 +4320,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.volume}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={1.8}>
                     <FormTextInput
                       placeholder=""
                       format="normal"
@@ -4304,7 +4333,7 @@ function HouseCreate() {
                       disabled
                     />
                   </Grid.Col>
-                  <Grid.Col span={2.2}>
+                  <Grid.Col span={1.8}>
                     <Dropdown
                       placeholder="Select Haz"
                       searchable
@@ -4351,6 +4380,7 @@ function HouseCreate() {
                             setCargoDetails([
                               ...cargoDetails,
                               {
+                                package_type: "",
                                 no_of_packages: null,
                                 gross_weight: null,
                                 volume: null,

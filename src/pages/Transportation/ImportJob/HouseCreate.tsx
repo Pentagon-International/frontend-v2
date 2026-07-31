@@ -130,6 +130,7 @@ import {
   spreadMasterDocumentsNavState,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
+import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
@@ -211,57 +212,6 @@ const ITEM_TYPE_OPTIONS = [
   { value: "GC - Govt. Cargo", label: "GC - Govt. Cargo" },
   { value: "OT - Other Cargo", label: "OT - Other Cargo" },
   { value: "UB - Un-accompanied Baggage", label: "UB - Un-accompanied Baggage" },
-];
-
-/** Label and value are the same `{code - name}` string. */
-const PACKAGE_TYPE_OPTIONS = [
-  { value: "BDL - Bundles", label: "BDL - Bundles" },
-  { value: "BGS - Bags", label: "BGS - Bags" },
-  { value: "BLK - Bulk", label: "BLK - Bulk" },
-  { value: "BLO - Blocks", label: "BLO - Blocks" },
-  { value: "BLS - Bales", label: "BLS - Bales" },
-  { value: "BOX - Boxes", label: "BOX - Boxes" },
-  { value: "BRL - Barrel", label: "BRL - Barrel" },
-  { value: "CAN - Cans", label: "CAN - Cans" },
-  { value: "CAS - Cases", label: "CAS - Cases" },
-  { value: "CBY - Carboys", label: "CBY - Carboys" },
-  { value: "CHT - Chest", label: "CHT - Chest" },
-  { value: "CLS - Coils", label: "CLS - Coils" },
-  { value: "COL - Collies", label: "COL - Collies" },
-  { value: "CON - Container", label: "CON - Container" },
-  { value: "CRT - Crates", label: "CRT - Crates" },
-  { value: "CSK - Cask", label: "CSK - Cask" },
-  { value: "CTN - Cartons", label: "CTN - Cartons" },
-  { value: "CYL - Cylinder", label: "CYL - Cylinder" },
-  { value: "DRM - Drums", label: "DRM - Drums" },
-  { value: "ENV - Envelopes", label: "ENV - Envelopes" },
-  { value: "FLK - Flask", label: "FLK - Flask" },
-  { value: "FUT - Futs", label: "FUT - Futs" },
-  { value: "HBK - Habbuck", label: "HBK - Habbuck" },
-  { value: "JAL - Jumble Bale", label: "JAL - Jumble Bale" },
-  { value: "JTA - Jotta", label: "JTA - Jotta" },
-  { value: "KEG - Keggs", label: "KEG - Keggs" },
-  { value: "LFT - Lift", label: "LFT - Lift" },
-  { value: "LOG - Logs", label: "LOG - Logs" },
-  { value: "LOS - Loose", label: "LOS - Loose" },
-  { value: "LTR - Liters", label: "LTR - Liters" },
-  { value: "MTS - Metric Ton", label: "MTS - Metric Ton" },
-  { value: "NGT - Ingot", label: "NGT - Ingot" },
-  { value: "PAL - Pails", label: "PAL - Pails" },
-  { value: "PCS - Piece", label: "PCS - Piece" },
-  { value: "PKG - Packages", label: "PKG - Packages" },
-  { value: "PLT - Pallets", label: "PLT - Pallets" },
-  { value: "QDS - Quads", label: "QDS - Quads" },
-  { value: "REL - Reels", label: "REL - Reels" },
-  { value: "RLS - Rolls", label: "RLS - Rolls" },
-  { value: "SHT - Sheet", label: "SHT - Sheet" },
-  { value: "SKD - Skid & Skidded Pkgs", label: "SKD - Skid & Skidded Pkgs" },
-  { value: "SLB - Slabs", label: "SLB - Slabs" },
-  { value: "TBL - Table", label: "TBL - Table" },
-  { value: "TIN - Tins", label: "TIN - Tins" },
-  { value: "TRK - Trunk", label: "TRK - Trunk" },
-  { value: "TRY - Trays", label: "TRY - Trays" },
-  { value: "UNT - Units", label: "UNT - Units" },
 ];
 
 // Type definitions for charges (charge_id, unit_id, currency_id for payload; id for update)

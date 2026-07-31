@@ -113,6 +113,7 @@ import {
 } from "../../../utils/houseChargeAmounts";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
+import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
 
 const BolPdfEditor = lazy(() =>
   import("../../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
@@ -206,6 +207,7 @@ type CargoDetail = {
   id?: number | string; // ID from backend when editing
   container_number: string; // UI field - used to select container
   container_id?: number | string; // Container ID for edit mode (from container_details)
+  package_type: string;
   no_of_packages: number | null;
   gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
@@ -449,6 +451,7 @@ function HouseCreate() {
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
     {
       container_number: "",
+      package_type: "",
       no_of_packages: null,
       gross_weight: null,
       volume: null,
@@ -860,6 +863,9 @@ function HouseCreate() {
                 : undefined,
               container_number: containerNumber,
               container_id: containerId,
+              package_type: cargo.package_type
+                ? String(cargo.package_type)
+                : "",
               no_of_packages: cargo.no_of_packages as number | null,
               gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
               volume: importHouseCargoWeightFromApi(cargo.volume),
@@ -2135,6 +2141,7 @@ function HouseCreate() {
         container_number, // UI field selected by user
         container_id, // maybe pre-populated in edit mode
         id, // cargo id (only present in editData)
+        package_type,
         no_of_packages,
         gross_weight,
         volume,
@@ -2169,6 +2176,7 @@ function HouseCreate() {
           "ocean",
         ),
         haz: hazValue,
+        package_type: package_type || null,
       };
 
       // Include id only when editing and id exists
@@ -4335,35 +4343,38 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2}>
+                <Grid.Col span={1.5}>
                   <RequiredLabel label="Container Number" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.6}>
+                  <RequiredLabel label="Package Type" required={false} />
+                </Grid.Col>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1.6}>
                   <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1.6}>
                   <RequiredLabel label="Volume (CBM)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={2}>
+                <Grid.Col span={1.6}>
                   <RequiredLabel
                     label="Chargeable Weight (CBM)"
                     required={false}
                   />
                 </Grid.Col>
-                <Grid.Col span={1.5}>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="Haz" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Actions" required={false} />
                 </Grid.Col>
               </Grid>
 
               {cargoDetails.map((cargo, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.5}>
                     <Dropdown
                       placeholder={
                         containerNumberOptions.length > 0
@@ -4412,7 +4423,24 @@ function HouseCreate() {
                       error={cargoErrors[index]?.container_number}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1.6}>
+                    <Dropdown
+                      placeholder="Package Type"
+                      searchable
+                      data={PACKAGE_TYPE_OPTIONS}
+                      value={cargo.package_type || null}
+                      onChange={(value) => {
+                        const updated = [...cargoDetails];
+                        updated[index] = {
+                          ...updated[index],
+                          package_type: value || "",
+                        };
+                        setCargoDetails(updated);
+                      }}
+                      clearable
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={1.2}>
                     <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
@@ -4440,7 +4468,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.no_of_packages}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.6}>
                     <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
@@ -4493,7 +4521,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.gross_weight}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.6}>
                     <FormNumberInput
                       placeholder="Enter Volume"
                       min={0}
@@ -4546,7 +4574,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.volume}
                     />
                   </Grid.Col>
-                  <Grid.Col span={2}>
+                  <Grid.Col span={1.6}>
                     <FormTextInput
                       placeholder=""
                       format="normal"
@@ -4559,7 +4587,7 @@ function HouseCreate() {
                       disabled
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={1.2}>
                     <Dropdown
                       placeholder="Select Haz"
                       searchable
@@ -4584,7 +4612,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1}>
+                  <Grid.Col span={0.7}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
@@ -4613,6 +4641,7 @@ function HouseCreate() {
                               ...cargoDetails,
                               {
                                 container_number: "",
+                                package_type: "",
                                 no_of_packages: null,
                                 gross_weight: null,
                                 volume: null,

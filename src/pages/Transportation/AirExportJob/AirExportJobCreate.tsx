@@ -243,6 +243,8 @@ type HAWBDetail = HouseDocumentFields & {
   ref_no?: string;
   shipment_terms_code?: string;
   cargo_details?: Array<{
+    id?: number;
+    package_type?: string;
     no_of_packages: number | null;
     gross_weight: HouseCargoWeightValue;
     volume: HouseCargoWeightValue;
@@ -1209,6 +1211,9 @@ function AirExportJobCreate() {
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
                       (cargo: Record<string, unknown>) => ({
+                        package_type: cargo.package_type
+                          ? String(cargo.package_type)
+                          : "",
                         no_of_packages: cargo.no_of_packages as number | null,
                         gross_weight: importHouseCargoWeightFromApi(
                           cargo.gross_weight,
@@ -2995,6 +3000,7 @@ function AirExportJobCreate() {
             : [],
           cargo_details: (hawb.cargo_details || []).map((c) => ({
             ...(c.id != null && { id: Number(c.id) }),
+            package_type: c.package_type || null,
             no_of_packages: c.no_of_packages ?? 0,
             gross_weight:
               formatHouseCargoWeightForPayload(c.gross_weight) ?? "",

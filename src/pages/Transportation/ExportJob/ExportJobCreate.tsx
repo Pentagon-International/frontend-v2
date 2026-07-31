@@ -452,6 +452,7 @@ type HousingDetail = HouseDocumentFields & {
     id?: number | string;
     container_no?: number | string;
     container_id?: number | null;
+    package_type?: string;
     no_of_packages: number | null;
     gross_weight: HouseCargoWeightValue;
     volume: HouseCargoWeightValue;
@@ -1317,6 +1318,9 @@ function ExportJobCreate() {
                             : Number(cargo.container_id)
                           : undefined,
                         no_of_packages: cargo.no_of_packages as number | null,
+                        package_type: cargo.package_type
+                          ? String(cargo.package_type)
+                          : "",
                         gross_weight: importHouseCargoWeightFromApi(
                           cargo.gross_weight,
                         ),
@@ -3427,6 +3431,7 @@ function ExportJobCreate() {
             ...(cargo.container_no && { container_no: cargo.container_no }),
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
+            package_type: cargo.package_type || null,
             gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
             volume: formatHouseCargoWeightForPayload(cargo.volume),
             chargeable_weight: formatHouseCargoChargeableForPayload(
