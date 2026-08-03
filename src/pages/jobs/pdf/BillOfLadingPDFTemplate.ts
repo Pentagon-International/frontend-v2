@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { resolvePackageTypeFromHousing } from "../../../utils/packageTypeOptions";
 import { generateUsBillOfLadingPDF } from "./BillOfLadingPDFTemplateUS";
 
 // Helper function for date formatting (DD-MMM-YY)
@@ -1288,9 +1289,12 @@ export const generateBillOfLadingPDF = (
     const totalNoOfPackages = summary?.total_no_of_packages || "";
     const totalGrossWeight = summary?.total_gross_weight || "";
     const totalVolume = summary?.total_volume || "";
+    const packageType = resolvePackageTypeFromHousing(housingData, "PACKAGE(S)");
     
     // Prepare summary text values (single values for columns 2-5)
-    const packagesText = totalNoOfPackages ? `${totalNoOfPackages} PACKAGE(S)` : "";
+    const packagesText = totalNoOfPackages
+      ? `${totalNoOfPackages} ${packageType}`
+      : "";
     const grossWeightText = totalGrossWeight ? `${totalGrossWeight} KGS` : "";
     const volumeText = totalVolume ? `${totalVolume} CBM` : "";
     const marksNo = housingData?.marks_no || "";
@@ -1327,7 +1331,13 @@ export const generateBillOfLadingPDF = (
       if (cargo?.volume !== undefined && cargo?.volume !== null && cargo?.volume !== "") {
         lines.push(`Volume: ${cargo.volume} CBM`);
       }
-      if (cargo?.no_of_packages) lines.push(`Pkgs: ${cargo.no_of_packages} PACKAGE(S)`);
+      if (cargo?.no_of_packages) {
+        const cargoPackageType = resolvePackageTypeFromHousing(
+          { package_type: cargo.package_type, cargo_details: [cargo] },
+          packageType,
+        );
+        lines.push(`Pkgs: ${cargo.no_of_packages} ${cargoPackageType}`);
+      }
       const height = lines.length * 3.5 + 2; // 2 units spacing between entries
       containerEntries.push({ cargo, lines, height });
     });

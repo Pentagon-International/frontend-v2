@@ -60,6 +60,8 @@ export type CustomerPanApprovalRow = {
   customer_types?: unknown[];
   addresses_data?: CustomerPanApprovalAddress[];
   documents_list?: CustomerDocumentListItem[];
+  tds_section_data?: Array<Record<string, unknown>>;
+  bank_details_data?: Array<Record<string, unknown>>;
   /** Derived summaries for list display */
   address_count?: number;
   gstin_count?: number;
@@ -71,6 +73,8 @@ export type CustomerPanApprovalFilters = {
   term_code?: string;
   status?: string;
   assigned_to?: string;
+  /** `"customer"` | `"vendor"` — scopes verification list */
+  customer_type?: "customer" | "vendor";
 };
 
 export type RelatedCustomer = {
@@ -180,11 +184,13 @@ function buildCustomerPanApprovalFiltersPayload(
   const termCode = String(filters?.term_code ?? "").trim();
   const status = String(filters?.status ?? "").trim();
   const assignedTo = String(filters?.assigned_to ?? "").trim();
+  const customerType = String(filters?.customer_type ?? "").trim();
 
   if (customerName) payload.customer_name = customerName;
   if (termCode) payload.term_code = termCode;
   if (status) payload.status = status;
   if (assignedTo) payload.assigned_to = assignedTo;
+  if (customerType) payload.customer_type = customerType;
 
   return payload;
 }

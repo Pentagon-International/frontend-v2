@@ -72,6 +72,7 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import * as yup from "yup";
@@ -1211,9 +1212,7 @@ function AirExportJobCreate() {
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
                       (cargo: Record<string, unknown>) => ({
-                        package_type: cargo.package_type
-                          ? String(cargo.package_type)
-                          : "",
+                        package_type: pickPackageTypeCodeFromCargo(cargo),
                         no_of_packages: cargo.no_of_packages as number | null,
                         gross_weight: importHouseCargoWeightFromApi(
                           cargo.gross_weight,
@@ -3000,7 +2999,9 @@ function AirExportJobCreate() {
             : [],
           cargo_details: (hawb.cargo_details || []).map((c) => ({
             ...(c.id != null && { id: Number(c.id) }),
-            package_type: c.package_type || null,
+            package_type_code:
+              pickPackageTypeCodeFromCargo(c as Record<string, unknown>) ||
+              null,
             no_of_packages: c.no_of_packages ?? 0,
             gross_weight:
               formatHouseCargoWeightForPayload(c.gross_weight) ?? "",

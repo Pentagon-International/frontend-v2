@@ -112,7 +112,8 @@ import {
 } from "../../../components/HousePageDocumentsAttach";
 import { pickHouseDocumentFields, spreadMasterDocumentsNavState } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
+import { normalizePackageTypeCode, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
@@ -740,6 +741,7 @@ function HouseCreate() {
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
+  const packageTypeOptions = usePackageTypeOptions();
 
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
@@ -1036,7 +1038,9 @@ function HouseCreate() {
     if (editData.cargo_details && Array.isArray(editData.cargo_details)) {
       const loadedCargoDetails = editData.cargo_details.map(
         (cargo: Record<string, unknown>) => ({
-          package_type: cargo.package_type ? String(cargo.package_type) : "",
+          package_type: pickPackageTypeCodeFromCargo(
+            cargo as Record<string, unknown>,
+          ),
           no_of_packages: cargo.no_of_packages as number | null,
           gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
           volume: importHouseCargoWeightFromApi(cargo.volume),
@@ -2433,7 +2437,8 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
-          package_type: cargo.package_type || null,
+          package_type: normalizePackageTypeCode(cargo.package_type) || "",
+          package_type_code: normalizePackageTypeCode(cargo.package_type) || null,
           no_of_packages: cargo.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
@@ -4107,7 +4112,7 @@ function HouseCreate() {
                     <Dropdown
                       placeholder="Package Type"
                       searchable
-                      data={PACKAGE_TYPE_OPTIONS}
+                      data={packageTypeOptions}
                       value={cargo.package_type || null}
                       onChange={(value) => {
                         const updated = [...cargoDetails];

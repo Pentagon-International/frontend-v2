@@ -89,6 +89,12 @@ import CustomerServiceDashboard from "./CustomerServiceDashboard";
 import AccountsDashboard from "./AccountsDashboard";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { useLayoutStore } from "../../../store/useLayoutStore";
+import {
+  getDefaultBranchCountryCode,
+  getDefaultBranchCurrencyCode,
+  getOutstandingAmountCurrencySymbol,
+  resolveOutstandingDisplayCurrency,
+} from "../../../utils/userNumberFormat";
 
 interface AggregatedData {
   totalOutstanding: number;
@@ -173,13 +179,14 @@ const DASH_LEADERSHIP_CARD_BORDER = "#E5E7EB";
 const DASHBOARD_DATE_FILTER_STORAGE_KEY =
   "dashboard.master.customerInteractionDateRange";
 
-function dashFormatInrAdaptive(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "₹—";
+function dashFormatInrAdaptive(n: number, currencySymbol = "₹"): string {
+  const symbol = currencySymbol || "₹";
+  if (!Number.isFinite(n) || n <= 0) return `${symbol}—`;
   const crores = n / 1e7;
   const lakhs = n / 1e5;
-  if (crores >= 0.005) return `₹${crores.toFixed(2)} Cr`;
-  if (lakhs >= 0.05) return `₹${lakhs.toFixed(2)} L`;
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  if (crores >= 0.005) return `${symbol}${crores.toFixed(2)} Cr`;
+  if (lakhs >= 0.05) return `${symbol}${lakhs.toFixed(2)} L`;
+  return `${symbol}${Math.round(n).toLocaleString("en-IN")}`;
 }
 
 type DashLeadershipSparkKind = "greenUp" | "blueUp" | "redDown" | "redUp";
@@ -7601,6 +7608,17 @@ const Dashboard = () => {
 
   const salesLeadershipKpiItems = useMemo(() => {
     const e = enquiryConversionAggregatedData;
+    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+    const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+    const overdueDisplayCurrency = resolveOutstandingDisplayCurrency(
+      undefined,
+      branchCurrencyCode,
+      branchCountryCode,
+    );
+    const overdueCurrencySymbol = getOutstandingAmountCurrencySymbol(
+      overdueDisplayCurrency,
+      branchCountryCode,
+    );
     const pipelineN = extractNumericValue(
       (contextTotals as any).outstanding ?? (contextTotals as any).total_outstanding
     );
@@ -7698,7 +7716,7 @@ const Dashboard = () => {
       {
         key: "overdue-ar",
         label: "Overdue AR",
-        value: dashFormatInrAdaptive(overdueN),
+        value: dashFormatInrAdaptive(overdueN, overdueCurrencySymbol),
         trend: undefined,
         spark: "redUp" as DashLeadershipSparkKind,
       },
@@ -7713,6 +7731,7 @@ const Dashboard = () => {
     contextTotals.overdue,
     budgetAggregatedData.totalActualBudget,
     budgetAggregatedData.totalSalesBudget,
+    user?.branches,
   ]);
 
   return (

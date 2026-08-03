@@ -479,11 +479,11 @@ export default function VendorMaster() {
   });
 
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes"],
+    queryKey: ["customerTypes", "vendor", "vendor=True"],
     queryFn: async () => {
       try {
         const response = (await getAPICall(
-          `${URL.customerType}`,
+          `${URL.customerType}?vendor=True`,
           API_HEADER,
         )) as
           | { success: boolean; data: CustomerTypeData[] }

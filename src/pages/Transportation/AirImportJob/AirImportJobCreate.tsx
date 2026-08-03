@@ -71,6 +71,7 @@ import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMe
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
+import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -1296,9 +1297,7 @@ function AirImportJobCreate() {
                                   : "";
                           return {
                             ...(cargo.id != null && { id: Number(cargo.id) }),
-                            package_type: cargo.package_type
-                              ? String(cargo.package_type)
-                              : "",
+                            package_type: pickPackageTypeCodeFromCargo(cargo),
                             no_of_packages:
                               cargo.no_of_packages != null &&
                               !Number.isNaN(Number(cargo.no_of_packages))
@@ -2984,7 +2983,9 @@ function AirImportJobCreate() {
             : [],
           cargo_details: (hawb.cargo_details || []).map((c) => ({
             ...(c.id != null && { id: Number(c.id) }),
-            package_type: c.package_type || null,
+            package_type_code:
+              pickPackageTypeCodeFromCargo(c as Record<string, unknown>) ||
+              null,
             no_of_packages: c.no_of_packages ?? 0,
             gross_weight:
               formatHouseCargoWeightForPayload(c.gross_weight) ?? "",

@@ -24,6 +24,7 @@ import {
   IconWorld,
   IconCalculator,
   IconTruck,
+  IconPackage,
 } from "@tabler/icons-react";
 import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -42,8 +43,11 @@ export default function MastersPage() {
 
   const formatRoute = (label: string) => {
     if (label === "Customer for Approval") return "create-customer";
+    if (label === "Vendor for Approval") return "create-vendor";
     if (label === "Create Customer-PAN") return "create-customer-pan";
+    if (label === "Create Vendor-PAN") return "create-vendor-pan";
     if (label === "Customer Approval Status") return "customer-approval-status";
+    if (label === "Vendor Approval Status") return "vendor-approval-status";
     if (label === "Maker & Checker Mapping") return "maker-checker-mapping";
     return label.toLowerCase().replace(/\s+/g, "-");
   };
@@ -134,6 +138,10 @@ export default function MastersPage() {
             label: "Container Type",
           },
           {
+            icon: <IconPackage size={28} color="#105476" />,
+            label: "Package Type",
+          },
+          {
             icon: <IconFileStack size={28} color="#105476" />,
             label: "Terms of Shipment",
           },
@@ -161,8 +169,16 @@ export default function MastersPage() {
                   label: "Create Customer-PAN",
                 },
                 {
+                  icon: <IconTruck size={28} color="#105476" />,
+                  label: "Create Vendor-PAN",
+                },
+                {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
                   label: "Customer Approval Status",
+                },
+                {
+                  icon: <IconClipboardCheck size={28} color="#105476" />,
+                  label: "Vendor Approval Status",
                 },
               ]
             : [
@@ -170,12 +186,20 @@ export default function MastersPage() {
                   icon: <IconFileStack size={28} color="#105476" />,
                   label: "Customer for Approval",
                 },
+                {
+                  icon: <IconTruck size={28} color="#105476" />,
+                  label: "Vendor for Approval",
+                },
               ]),
           ...(showApproveCustomers
             ? [
                 {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
                   label: "Approve Customers",
+                },
+                {
+                  icon: <IconClipboardCheck size={28} color="#105476" />,
+                  label: "Approve Vendors",
                 },
               ]
             : []),

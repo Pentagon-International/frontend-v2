@@ -113,7 +113,8 @@ import {
 } from "../../../utils/houseChargeAmounts";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
-import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
+import { normalizePackageTypeCode, resolvePackageTypeName, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 
 const BolPdfEditor = lazy(() =>
   import("../../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
@@ -511,6 +512,7 @@ function HouseCreate() {
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
+  const packageTypeOptions = usePackageTypeOptions();
 
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
@@ -863,9 +865,9 @@ function HouseCreate() {
                 : undefined,
               container_number: containerNumber,
               container_id: containerId,
-              package_type: cargo.package_type
-                ? String(cargo.package_type)
-                : "",
+              package_type: pickPackageTypeCodeFromCargo(
+                cargo as Record<string, unknown>,
+              ),
               no_of_packages: cargo.no_of_packages as number | null,
               gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
               volume: importHouseCargoWeightFromApi(cargo.volume),
@@ -2176,7 +2178,9 @@ function HouseCreate() {
           "ocean",
         ),
         haz: hazValue,
-        package_type: package_type || null,
+        // Keep package_type for in-memory Job Create state; API uses package_type_code
+        package_type: normalizePackageTypeCode(package_type) || "",
+        package_type_code: normalizePackageTypeCode(package_type) || null,
       };
 
       // Include id only when editing and id exists
@@ -2548,8 +2552,13 @@ function HouseCreate() {
             String(container.container_no ?? "") ===
             String(c.container_number ?? ""),
         );
+        const packageTypeDisplay = resolvePackageTypeName(
+          c.package_type,
+          packageTypeOptions,
+        );
         return {
           no_of_packages: c.no_of_packages,
+          package_type: packageTypeDisplay || c.package_type || "",
           gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),
           volume: formatHouseCargoWeightForPayload(c.volume),
           chargeable_weight: formatHouseCargoChargeableForPayload(
@@ -2572,6 +2581,10 @@ function HouseCreate() {
             "",
         };
       });
+      const housingPackageType =
+        cargoDetailsForPdf
+          .map((c) => c.package_type)
+          .find((pt) => Boolean(pt && String(pt).trim())) || "";
       const computedSummary = {
         total_no_of_packages: cargoDetailsForPdf.reduce(
           (sum, cargo) => sum + (Number(cargo.no_of_packages) || 0),
@@ -2641,6 +2654,7 @@ function HouseCreate() {
         bl_type: form.values.bl_type || "",
         pp_cc: freightPpCc,
         freight: freightPpCc,
+        package_type: housingPackageType,
         summary: editSummary ?? computedSummary,
         cargo_details: cargoDetailsForPdf,
         mbl_charges: (() => {
@@ -4427,7 +4441,7 @@ function HouseCreate() {
                     <Dropdown
                       placeholder="Package Type"
                       searchable
-                      data={PACKAGE_TYPE_OPTIONS}
+                      data={packageTypeOptions}
                       value={cargo.package_type || null}
                       onChange={(value) => {
                         const updated = [...cargoDetails];

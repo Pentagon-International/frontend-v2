@@ -156,6 +156,8 @@ export const URL = {
   gstSacMasterFilter: "filter/gst-sac-master/",
   vatMaster: "vat-master/",
   vatMasterFilter: "filter/vat-master/",
+  packageTypeMaster: "package-type-master/",
+  packageTypeMasterFilter: "filter/package-type-master/",
   vatChargeMapping: "vat-charge-mapping/",
   vatChargeMappingFilter: "filter/vat-charge-mapping/",
   invoice: "invoice/",

@@ -1,5 +1,9 @@
 import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import {
+  formatPackageTypeNameForBol,
+  resolvePackageTypeFromHousing,
+} from "../../../utils/packageTypeOptions";
 
 const US_COMPANY_FALLBACK = "PENTAGON PRIME AMERICAS INC";
 const US_FORWARDING_AGENT_NAME = "PENTAGON PRIME AMERICAS INC";
@@ -743,8 +747,9 @@ export const generateUsBillOfLadingPDF = (
     sumCargoField(cargoDetailsFromHousing, "volume") ||
     "";
 
+  const packageTypeFromCargo = resolvePackageTypeFromHousing(housingData, "");
   const packageType =
-    housingData?.package_type ||
+    packageTypeFromCargo ||
     (Array.isArray(summary?.container_type) && summary.container_type[0]) ||
     (templateOnly ? "" : "PACKAGE(S)");
   const packagesText = totalNoOfPackages
@@ -1191,8 +1196,11 @@ export const generateUsBillOfLadingPDF = (
     ) {
       entryLines.push(`Volume: ${cargo.volume} CBM`);
     }
-    if (cargo?.no_of_packages)
-      entryLines.push(`Pkgs: ${cargo.no_of_packages} PACKAGE(S)`);
+    if (cargo?.no_of_packages) {
+      const cargoPackageType =
+        formatPackageTypeNameForBol(cargo.package_type) || packageType || "PACKAGE(S)";
+      entryLines.push(`Pkgs: ${cargo.no_of_packages} ${cargoPackageType}`);
+    }
     marksRawLines.push(...entryLines);
     if (entryLines.length > 0 && index < enrichedCargoDetails.length - 1) {
       marksRawLines.push("");

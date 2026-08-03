@@ -130,7 +130,8 @@ import {
   spreadMasterDocumentsNavState,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
+import { normalizePackageTypeCode, pickPackageTypeCodeFromCargo, resolvePackageTypeName } from "../../../utils/packageTypeOptions";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
@@ -485,6 +486,7 @@ function HouseCreate() {
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
+  const packageTypeOptions = usePackageTypeOptions();
 
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
@@ -701,20 +703,12 @@ function HouseCreate() {
                 : undefined,
               container_number: containerNumber,
               container_id: containerId,
-              package_type: cargo.package_type
-                ? String(cargo.package_type)
+              package_type: pickPackageTypeCodeFromCargo(
+                cargo as Record<string, unknown>,
+              ),
+              package_type_name: cargo.package_type_name
+                ? String(cargo.package_type_name).trim()
                 : "",
-              package_type_name: (() => {
-                const explicit = cargo.package_type_name
-                  ? String(cargo.package_type_name).trim()
-                  : "";
-                if (explicit) return explicit;
-                const raw = cargo.package_type
-                  ? String(cargo.package_type).trim()
-                  : "";
-                const dashIdx = raw.indexOf(" - ");
-                return dashIdx >= 0 ? raw.slice(dashIdx + 3).trim() : "";
-              })(),
               no_of_packages: cargo.no_of_packages as number | null,
               gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
               volume: importHouseCargoWeightFromApi(cargo.volume),
@@ -1376,7 +1370,10 @@ function HouseCreate() {
         if (nested.length === 0) return [];
         return nested.map((cn) => ({
           container_number: String(cn.container_no ?? ""),
-          package_type: String(cn.package_type ?? c.package_type ?? ""),
+          package_type: pickPackageTypeCodeFromCargo({
+            package_type_code: cn.package_type_code ?? c.package_type_code,
+            package_type: cn.package_type ?? c.package_type,
+          }),
           no_of_packages: toNum(
             cn.no_of_packages ??
               c.no_of_packages ??
@@ -1411,7 +1408,9 @@ function HouseCreate() {
               container_number: String(
                 c.container_no ?? c.container_number ?? "",
               ),
-              package_type: String(c.package_type ?? ""),
+              package_type: pickPackageTypeCodeFromCargo(
+                c as Record<string, unknown>,
+              ),
               // FCL API uses no_of_containers; map to No of Packages
               no_of_packages: toNum(
                 c.no_of_containers ?? c.no_of_packages ?? rb.no_of_packages,
@@ -1441,7 +1440,10 @@ function HouseCreate() {
         if (nested.length === 0) return [];
         return nested.map((cn) => ({
           container_number: String(cn.container_no ?? ""),
-          package_type: String(cn.package_type ?? c.package_type ?? ""),
+          package_type: pickPackageTypeCodeFromCargo({
+            package_type_code: cn.package_type_code ?? c.package_type_code,
+            package_type: cn.package_type ?? c.package_type,
+          }),
           no_of_packages: toNum(
             cn.no_of_packages ?? c.no_of_packages ?? rb.no_of_packages,
           ),
@@ -1471,7 +1473,9 @@ function HouseCreate() {
               container_number: String(
                 c.container_no ?? c.container_number ?? "",
               ),
-              package_type: String(c.package_type ?? ""),
+              package_type: pickPackageTypeCodeFromCargo(
+                c as Record<string, unknown>,
+              ),
               no_of_packages: toNum(
                 c.no_of_packages ?? c.no_of_containers ?? rb.no_of_packages,
               ),
@@ -2362,7 +2366,9 @@ function HouseCreate() {
           "ocean",
         ),
         haz: hazValue,
-        package_type: package_type || null,
+        // Keep package_type for in-memory Job Create state; API uses package_type_code
+        package_type: normalizePackageTypeCode(package_type) || "",
+        package_type_code: normalizePackageTypeCode(package_type) || null,
       };
 
       // Include id only when editing and id exists
@@ -3095,18 +3101,25 @@ function HouseCreate() {
               cargo.gross_weight != null ||
               cargo.volume != null,
           )
-          .map((cargo) => ({
-            container_no: cargo.container_number,
-            container_number: cargo.container_number,
-            container_id: cargo.container_id,
-            no_of_packages: cargo.no_of_packages,
-            package_type: cargo.package_type,
-            package_type_name: cargo.package_type_name,
-            gross_weight: cargo.gross_weight,
-            volume: cargo.volume,
-            chargeable_weight: cargo.chargeable_weight,
-            haz: cargo.haz,
-          })),
+          .map((cargo) => {
+            const packageTypeName =
+              resolvePackageTypeName(
+                cargo.package_type,
+                packageTypeOptions,
+              ) || String(cargo.package_type_name ?? "").trim();
+            return {
+              container_no: cargo.container_number,
+              container_number: cargo.container_number,
+              container_id: cargo.container_id,
+              no_of_packages: cargo.no_of_packages,
+              package_type: cargo.package_type,
+              package_type_name: packageTypeName,
+              gross_weight: cargo.gross_weight,
+              volume: cargo.volume,
+              chargeable_weight: cargo.chargeable_weight,
+              haz: cargo.haz,
+            };
+          }),
         attention_to: resolveDoAttentionTo(type),
         please_deliver_to: resolveDoDeliverTo(deliverTo),
         do_heading:
@@ -4680,19 +4693,17 @@ function HouseCreate() {
                     <Dropdown
                       placeholder="Package Type"
                       searchable
-                      data={PACKAGE_TYPE_OPTIONS}
+                      data={packageTypeOptions}
                       value={cargo.package_type || null}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
                         const next = value || "";
-                        const dashIdx = next.indexOf(" - ");
                         updated[index] = {
                           ...updated[index],
                           package_type: next,
                           package_type_name:
-                            dashIdx >= 0
-                              ? next.slice(dashIdx + 3).trim()
-                              : next,
+                            resolvePackageTypeName(next, packageTypeOptions) ||
+                            "",
                         };
                         setCargoDetails(updated);
                       }}

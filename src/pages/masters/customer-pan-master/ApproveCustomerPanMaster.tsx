@@ -104,6 +104,12 @@ function cloneApprovalRow(row: CustomerPanApprovalRow): CustomerPanApprovalRow {
     addresses_data: (row.addresses_data ?? []).map((address) => ({
       ...address,
     })),
+    tds_section_data: (row.tds_section_data ?? []).map((item) => ({
+      ...item,
+    })),
+    bank_details_data: (row.bank_details_data ?? []).map((item) => ({
+      ...item,
+    })),
   };
 }
 
@@ -136,6 +142,12 @@ function buildCustomerVerificationPayload(
       sez_valid_date: address.sez ? (address.sez_valid_date ?? null) : null,
       msme_no: address.msme ? (address.msme_no ?? "") : "",
     })),
+    ...(Array.isArray(row.tds_section_data)
+      ? { tds_section_data: row.tds_section_data }
+      : {}),
+    ...(Array.isArray(row.bank_details_data)
+      ? { bank_details_data: row.bank_details_data }
+      : {}),
   };
 }
 
@@ -237,16 +249,24 @@ function DetailSection({
   );
 }
 
+export type ApprovalPartyType = "customer" | "vendor";
+
 export function CustomerPanApprovalDetails({
   row,
   editable = false,
   onChange,
+  partyType = "customer",
 }: {
   row: CustomerPanApprovalRow;
   editable?: boolean;
   onChange?: (next: CustomerPanApprovalRow) => void;
+  partyType?: ApprovalPartyType;
 }) {
   const addresses = row.addresses_data ?? [];
+  const isVendor = partyType === "vendor";
+  const entityLabel = isVendor ? "Vendor" : "Customer";
+  const tdsSections = row.tds_section_data ?? [];
+  const bankDetails = row.bank_details_data ?? [];
 
   const updateRow = (patch: Partial<CustomerPanApprovalRow>) => {
     onChange?.({ ...row, ...patch });
@@ -262,6 +282,20 @@ export function CustomerPanApprovalDetails({
     onChange?.({ ...row, addresses_data: nextAddresses });
   };
 
+  const updateTdsRow = (index: number, patch: Record<string, unknown>) => {
+    const next = tdsSections.map((item, i) =>
+      i === index ? { ...item, ...patch } : item,
+    );
+    updateRow({ tds_section_data: next });
+  };
+
+  const updateBankRow = (index: number, patch: Record<string, unknown>) => {
+    const next = bankDetails.map((item, i) =>
+      i === index ? { ...item, ...patch } : item,
+    );
+    updateRow({ bank_details_data: next });
+  };
+
   if (!editable) {
     return (
       <Stack gap="md">
@@ -269,7 +303,7 @@ export function CustomerPanApprovalDetails({
           <Stack gap="md">
             <Box>
               <Text size="xs" c="dimmed" fw={500} mb={4}>
-                Customer Name
+                {entityLabel} Name
               </Text>
               <Text size="md" fw={600} c="#105476" style={{ lineHeight: 1.4 }}>
                 {row.customer_name || "—"}
@@ -282,7 +316,7 @@ export function CustomerPanApprovalDetails({
                 { label: "Term Code", value: row.term_code },
                 { label: "TDS Type", value: row.tds_type },
                 { label: "Own Office", value: row.own_office },
-                { label: "Customer Status", value: row.status },
+                { label: `${entityLabel} Status`, value: row.status },
                 { label: "Assign To", value: row.created_by },
                 { label: "Network", value: row.network_name },
               ]}
@@ -326,6 +360,74 @@ export function CustomerPanApprovalDetails({
           </Text>
         )}
 
+        {isVendor && tdsSections.length > 0 && (
+          <Card withBorder padding="md" radius="md" bg="#fafbfc">
+            <Text size="sm" fw={600} c="#105476" mb="sm">
+              TDS Section Details
+            </Text>
+            <Stack gap="sm">
+              {tdsSections.map((item, index) => (
+                <DetailSection
+                  key={`tds-view-${index}`}
+                  title={`TDS Section ${index + 1}`}
+                  fields={[
+                    {
+                      label: "Section ID",
+                      value: item.section_id ?? item.tds_section_code,
+                    },
+                    {
+                      label: "Section Name",
+                      value: item.tds_section_name ?? item.section_name,
+                    },
+                    { label: "Exemption TDS", value: item.exemption_tds },
+                    {
+                      label: "Exemption Certificate No",
+                      value: item.exemption_certificate_no,
+                    },
+                    {
+                      label: "TDS %",
+                      value: item.tds_percentage ?? item.tds_percent,
+                    },
+                    { label: "Valid From", value: item.valid_from },
+                    { label: "Valid To", value: item.valid_to },
+                    { label: "TDS Lower Limit", value: item.tds_lower_limit },
+                  ]}
+                />
+              ))}
+            </Stack>
+          </Card>
+        )}
+
+        {isVendor && bankDetails.length > 0 && (
+          <Card withBorder padding="md" radius="md" bg="#fafbfc">
+            <Text size="sm" fw={600} c="#105476" mb="sm">
+              Bank Details
+            </Text>
+            <Stack gap="sm">
+              {bankDetails.map((item, index) => (
+                <DetailSection
+                  key={`bank-view-${index}`}
+                  title={`Bank ${index + 1}`}
+                  fields={[
+                    { label: "Currency", value: item.currency },
+                    { label: "Account No", value: item.account_no },
+                    { label: "Account Name", value: item.account_name },
+                    { label: "Bank Name", value: item.bank_name },
+                    { label: "IFSC", value: item.ifsc_code },
+                    { label: "IBAN", value: item.iban_no },
+                    { label: "SWIFT", value: item.swift_no },
+                    {
+                      label: "Bank Address",
+                      value: item.bank_address,
+                      fullWidth: true,
+                    },
+                  ]}
+                />
+              ))}
+            </Stack>
+          </Card>
+        )}
+
         {row.documents_list && row.documents_list.length > 0 && (
           <Card withBorder padding="md" radius="md" bg="#fafbfc">
             <CustomerDocumentsList documents={row.documents_list} />
@@ -341,7 +443,7 @@ export function CustomerPanApprovalDetails({
         <Stack gap="md">
           <Box>
             <Text size="xs" c="dimmed" fw={500} mb={4}>
-              Customer Name
+              {entityLabel} Name
             </Text>
             <Text size="md" fw={600} c="#105476" style={{ lineHeight: 1.4 }}>
               {row.customer_name || "—"}
@@ -383,7 +485,7 @@ export function CustomerPanApprovalDetails({
               clearable
             />
             <TextInput
-              label="Customer Status"
+              label={`${entityLabel} Status`}
               value={row.status ?? ""}
               onChange={(e) => updateRow({ status: e.target.value })}
             />
@@ -416,6 +518,18 @@ export function CustomerPanApprovalDetails({
               dropdownZIndex={1000}
               minSearchLength={1}
             />
+            {isVendor && (
+              <Select
+                label="TDS Type"
+                data={[
+                  { value: "Individual", label: "Individual" },
+                  { value: "Company", label: "Company" },
+                ]}
+                value={row.tds_type || null}
+                onChange={(value) => updateRow({ tds_type: value ?? null })}
+                clearable
+              />
+            )}
           </SimpleGrid>
 
           <Text size="xs" fw={700} c="#105476" tt="uppercase">
@@ -482,6 +596,232 @@ export function CustomerPanApprovalDetails({
         <Text size="sm" c="dimmed" ta="center" py="sm">
           No address details available.
         </Text>
+      )}
+
+      {isVendor && (
+        <Card withBorder padding="md" radius="md" bg="#fafbfc">
+          <Group justify="space-between" mb="sm">
+            <Text size="sm" fw={600} c="#105476">
+              TDS Section Details
+            </Text>
+            <Button
+              size="xs"
+              variant="light"
+              color="#105476"
+              onClick={() =>
+                updateRow({
+                  tds_section_data: [
+                    ...tdsSections,
+                    {
+                      section_id: null,
+                      exemption_tds: false,
+                      exemption_certificate_no: "",
+                      tds_percentage: "",
+                      valid_from: null,
+                      valid_to: null,
+                      tds_lower_limit: "",
+                    },
+                  ],
+                })
+              }
+            >
+              Add TDS
+            </Button>
+          </Group>
+          <Stack gap="sm">
+            {(tdsSections.length > 0 ? tdsSections : [{}]).map((item, index) => (
+              <Card key={`tds-edit-${index}`} withBorder padding="sm" radius="md">
+                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                  <TextInput
+                    label="Section ID"
+                    value={
+                      item.section_id == null ? "" : String(item.section_id)
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "");
+                      updateTdsRow(index, {
+                        section_id: v === "" ? null : Number(v),
+                      });
+                    }}
+                  />
+                  <Select
+                    label="Exemption TDS"
+                    data={[
+                      { value: "true", label: "Yes" },
+                      { value: "false", label: "No" },
+                    ]}
+                    value={item.exemption_tds ? "true" : "false"}
+                    onChange={(value) =>
+                      updateTdsRow(index, {
+                        exemption_tds: value === "true",
+                      })
+                    }
+                  />
+                  <TextInput
+                    label="Exemption Certificate No"
+                    value={String(item.exemption_certificate_no ?? "")}
+                    onChange={(e) =>
+                      updateTdsRow(index, {
+                        exemption_certificate_no: e.target.value,
+                      })
+                    }
+                  />
+                  <TextInput
+                    label="TDS %"
+                    value={String(
+                      item.tds_percentage ?? item.tds_percent ?? "",
+                    )}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === "" || TWO_DECIMAL_INPUT_REGEX.test(next)) {
+                        updateTdsRow(index, { tds_percentage: next });
+                      }
+                    }}
+                  />
+                  <SingleDateInput
+                    label="Valid From"
+                    value={parseDateYYYYMMDD(
+                      item.valid_from != null
+                        ? String(item.valid_from)
+                        : null,
+                    )}
+                    onChange={(date) =>
+                      updateTdsRow(index, {
+                        valid_from: formatDateYYYYMMDD(date),
+                      })
+                    }
+                  />
+                  <SingleDateInput
+                    label="Valid To"
+                    value={parseDateYYYYMMDD(
+                      item.valid_to != null ? String(item.valid_to) : null,
+                    )}
+                    onChange={(date) =>
+                      updateTdsRow(index, {
+                        valid_to: formatDateYYYYMMDD(date),
+                      })
+                    }
+                  />
+                  <TextInput
+                    label="TDS Lower Limit"
+                    value={String(item.tds_lower_limit ?? "")}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === "" || TWO_DECIMAL_INPUT_REGEX.test(next)) {
+                        updateTdsRow(index, { tds_lower_limit: next });
+                      }
+                    }}
+                  />
+                </SimpleGrid>
+              </Card>
+            ))}
+          </Stack>
+        </Card>
+      )}
+
+      {isVendor && (
+        <Card withBorder padding="md" radius="md" bg="#fafbfc">
+          <Group justify="space-between" mb="sm">
+            <Text size="sm" fw={600} c="#105476">
+              Bank Details
+            </Text>
+            <Button
+              size="xs"
+              variant="light"
+              color="#105476"
+              onClick={() =>
+                updateRow({
+                  bank_details_data: [
+                    ...bankDetails,
+                    {
+                      currency: "",
+                      account_no: "",
+                      account_name: "",
+                      bank_name: "",
+                      iban_no: "",
+                      swift_no: "",
+                      bank_address: "",
+                      ifsc_code: "",
+                    },
+                  ],
+                })
+              }
+            >
+              Add Bank
+            </Button>
+          </Group>
+          <Stack gap="sm">
+            {(bankDetails.length > 0 ? bankDetails : [{}]).map(
+              (item, index) => (
+                <Card
+                  key={`bank-edit-${index}`}
+                  withBorder
+                  padding="sm"
+                  radius="md"
+                >
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                    <TextInput
+                      label="Currency"
+                      value={String(item.currency ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { currency: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="Account No"
+                      value={String(item.account_no ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { account_no: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="Account Name"
+                      value={String(item.account_name ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { account_name: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="Bank Name"
+                      value={String(item.bank_name ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { bank_name: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="IFSC"
+                      value={String(item.ifsc_code ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { ifsc_code: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="IBAN"
+                      value={String(item.iban_no ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { iban_no: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="SWIFT"
+                      value={String(item.swift_no ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { swift_no: e.target.value })
+                      }
+                    />
+                    <TextInput
+                      label="Bank Address"
+                      value={String(item.bank_address ?? "")}
+                      onChange={(e) =>
+                        updateBankRow(index, { bank_address: e.target.value })
+                      }
+                    />
+                  </SimpleGrid>
+                </Card>
+              ),
+            )}
+          </Stack>
+        </Card>
       )}
 
       {row.documents_list && row.documents_list.length > 0 && (
@@ -860,7 +1200,11 @@ function CustomerPanAddressDetails({
   );
 }
 
-export default function ApproveCustomerPanMaster() {
+export default function ApproveCustomerPanMaster({
+  partyType = "customer",
+}: {
+  partyType?: ApprovalPartyType;
+} = {}) {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
@@ -868,6 +1212,9 @@ export default function ApproveCustomerPanMaster() {
     user?.screen_permissions?.customer_approval_screen,
   );
   const canAccessApproval = hasCustomerApprovalScreen || !isIndiaUser;
+  const isVendor = partyType === "vendor";
+  const entityLabel = isVendor ? "Vendor" : "Customer";
+  const entityLabelLower = isVendor ? "vendor" : "customer";
 
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = useState(0);
@@ -897,8 +1244,9 @@ export default function ApproveCustomerPanMaster() {
     () => ({
       customer_name: appliedFilters.customer_name.trim() || undefined,
       status: appliedFilters.status.trim() || undefined,
+      customer_type: partyType,
     }),
-    [appliedFilters],
+    [appliedFilters, partyType],
   );
 
   const {
@@ -909,6 +1257,7 @@ export default function ApproveCustomerPanMaster() {
   } = useQuery({
     queryKey: [
       "customerPanPending",
+      partyType,
       pageIndex,
       pageSize,
       apiFilters.customer_name,
@@ -1002,13 +1351,13 @@ export default function ApproveCustomerPanMaster() {
         await approveCustomerPan(pendingAction.row.id);
         ToastNotification({
           type: "success",
-          message: "Customer approved successfully.",
+          message: `${entityLabel} approved successfully.`,
         });
       } else {
         await rejectCustomerPan(pendingAction.row.id);
         ToastNotification({
           type: "success",
-          message: "Customer rejected successfully.",
+          message: `${entityLabel} rejected successfully.`,
         });
       }
       setPendingAction(null);
@@ -1036,7 +1385,7 @@ export default function ApproveCustomerPanMaster() {
       );
       ToastNotification({
         type: "success",
-        message: "Customer updated successfully.",
+        message: `${entityLabel} updated successfully.`,
       });
       await refreshList();
     } catch (error) {
@@ -1062,7 +1411,7 @@ export default function ApproveCustomerPanMaster() {
       },
       {
         accessorKey: "customer_name",
-        header: "Customer Name",
+        header: `${entityLabel} Name`,
         size: 300,
         Cell: ({ row }) => {
           const customerName = row.original.customer_name;
@@ -1078,12 +1427,15 @@ export default function ApproveCustomerPanMaster() {
                 {customerName || "—"}
               </Text>
               {customerName && (
-                <Tooltip label="Show similar customers" withArrow>
+                <Tooltip
+                  label={`Show similar ${entityLabelLower}s`}
+                  withArrow
+                >
                   <ActionIcon
                     variant="subtle"
                     color="#105476"
                     size="sm"
-                    aria-label="Show similar customers"
+                    aria-label={`Show similar ${entityLabelLower}s`}
                     onClick={(event) => {
                       event.stopPropagation();
                       handleShowSimilarCustomers(customerName);
@@ -1168,7 +1520,7 @@ export default function ApproveCustomerPanMaster() {
                     >
                       <Group gap="sm">
                         <IconEye size={16} style={{ color: "#105476" }} />
-                        <Text size="sm">View Customer</Text>
+                        <Text size="sm">View {entityLabel}</Text>
                       </Group>
                     </UnstyledButton>
                   </Box>
@@ -1211,7 +1563,7 @@ export default function ApproveCustomerPanMaster() {
         },
       },
     ],
-    [handleShowSimilarCustomers],
+    [entityLabel, entityLabelLower, handleShowSimilarCustomers],
   );
 
   const table = useMantineReactTable<TableRow>({
@@ -1289,10 +1641,11 @@ export default function ApproveCustomerPanMaster() {
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
           <Box>
             <Text size="md" fw={600} c="#105476">
-              Approve Customers
+              Approve {isVendor ? "Vendors" : "Customers"}
             </Text>
             <Text size="xs" c="dimmed" mt={4}>
-              Review and approve pending customer verification requests
+              Review and approve pending {entityLabelLower} verification
+              requests
             </Text>
           </Box>
 
@@ -1326,8 +1679,8 @@ export default function ApproveCustomerPanMaster() {
             <Grid>
               <Grid.Col span={{ base: 12, sm: 6 }}>
                 <TextInput
-                  label="Customer Name"
-                  placeholder="Enter customer name"
+                  label={`${entityLabel} Name`}
+                  placeholder={`Enter ${entityLabelLower} name`}
                   size="xs"
                   value={draftFilters.customer_name}
                   onChange={(event) =>
@@ -1398,7 +1751,7 @@ export default function ApproveCustomerPanMaster() {
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed">
-                Loading pending customer verification records...
+                Loading pending {entityLabelLower} verification records...
               </Text>
             </Stack>
           </Center>
@@ -1480,10 +1833,10 @@ export default function ApproveCustomerPanMaster() {
         }}
         title={
           pendingAction?.type === "approve"
-            ? "Approve Customer"
+            ? `Approve ${entityLabel}`
             : pendingAction?.type === "reject"
-              ? "Reject Customer"
-              : "View Customer"
+              ? `Reject ${entityLabel}`
+              : `View ${entityLabel}`
         }
         centered
         size="xl"
@@ -1510,10 +1863,10 @@ export default function ApproveCustomerPanMaster() {
           >
             <Text size="sm" fw={500}>
               {pendingAction?.type === "approve"
-                ? "Review and edit customer details. Use Update to save changes, or Approve to approve."
+                ? `Review and edit ${entityLabelLower} details. Use Update to save changes, or Approve to approve.`
                 : pendingAction?.type === "reject"
-                  ? "Please review all customer and address details before rejecting."
-                  : "Customer details are shown in view-only mode."}
+                  ? `Please review all ${entityLabelLower} and address details before rejecting.`
+                  : `${entityLabel} details are shown in view-only mode.`}
             </Text>
           </Box>
           {pendingAction?.row && (
@@ -1530,6 +1883,7 @@ export default function ApproveCustomerPanMaster() {
                     ? setEditableApprovalRow
                     : undefined
                 }
+                partyType={partyType}
               />
             </ScrollArea.Autosize>
           )}
@@ -1577,7 +1931,7 @@ export default function ApproveCustomerPanMaster() {
       <Modal
         opened={similarModalOpen}
         onClose={() => !similarLoading && setSimilarModalOpen(false)}
-        title="Similar Customers"
+        title={`Similar ${isVendor ? "Vendors" : "Customers"}`}
         centered
         size="lg"
       >
@@ -1586,7 +1940,7 @@ export default function ApproveCustomerPanMaster() {
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed" size="sm">
-                Finding similar customers...
+                Finding similar {entityLabelLower}s...
               </Text>
             </Stack>
           </Center>
@@ -1627,7 +1981,7 @@ export default function ApproveCustomerPanMaster() {
               </ScrollArea.Autosize>
             ) : (
               <Text size="sm" c="dimmed" ta="center" py="md">
-                No similar customers found.
+                No similar {entityLabelLower}s found.
               </Text>
             )}
           </Stack>

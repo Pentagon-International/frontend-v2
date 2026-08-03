@@ -127,7 +127,8 @@ import {
   spreadMasterDocumentsNavState,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
+import { normalizePackageTypeCode, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
@@ -690,6 +691,7 @@ function HouseCreate() {
     refetchOnReconnect: false,
     refetchOnMount: false,
   });
+  const packageTypeOptions = usePackageTypeOptions();
 
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
@@ -1029,7 +1031,9 @@ function HouseCreate() {
             rb.chargeable_weight,
         );
         return {
-          package_type: String(c.package_type ?? ""),
+          package_type: pickPackageTypeCodeFromCargo(
+            c as Record<string, unknown>,
+          ),
           no_of_packages,
           gross_weight,
           volume: volumeFromRow,
@@ -1041,7 +1045,9 @@ function HouseCreate() {
     } else {
       // Top-level cargo fields when cargo_details array absent
       const row = {
-        package_type: String(rb.package_type ?? ""),
+        package_type: pickPackageTypeCodeFromCargo(
+          rb as Record<string, unknown>,
+        ),
         no_of_packages: toNum(rb.no_of_packages),
         gross_weight: importHouseCargoWeightFromApi(rb.gross_weight),
         volume: importHouseCargoWeightFromApi(rb.volume ?? rb.volume_weight),
@@ -1321,9 +1327,9 @@ function HouseCreate() {
                   ? String(cargo.haz)
                   : "";
           const row = {
-            package_type: cargo.package_type
-              ? String(cargo.package_type)
-              : "",
+            package_type: pickPackageTypeCodeFromCargo(
+              cargo as Record<string, unknown>,
+            ),
             no_of_packages,
             gross_weight,
             volume: volume_weight_final,
@@ -2663,7 +2669,8 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
-          package_type: cargo.package_type || null,
+          package_type: normalizePackageTypeCode(cargo.package_type) || "",
+          package_type_code: normalizePackageTypeCode(cargo.package_type) || null,
           no_of_packages: cargo.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
@@ -4173,7 +4180,7 @@ function HouseCreate() {
                     <Dropdown
                       placeholder="Package Type"
                       searchable
-                      data={PACKAGE_TYPE_OPTIONS}
+                      data={packageTypeOptions}
                       value={cargo.package_type || null}
                       onChange={(value) => {
                         const updated = [...cargoDetails];

@@ -1,6 +1,7 @@
 import { type EditableFieldDef } from "./quotationFieldRegistry";
 import { PDF_DEFAULT_LINE_HEIGHT_MM } from "./utils/fieldRectConstraints";
 import { setByPath } from "./utils/setByPath";
+import { resolvePackageTypeFromHousing, formatPackageTypeNameForBol } from "../../utils/packageTypeOptions";
 
 type BolPreviewRowData = Record<string, unknown>;
 
@@ -192,9 +193,10 @@ function getPackageType(data: BolPreviewRowData): string {
   const summary = getSummary(data);
   const housing = getHousing(data);
   const marksType = resolveContainerTypeName(data, 0);
+  const fromHousing = resolvePackageTypeFromHousing(housing, "");
+  if (fromHousing) return fromHousing;
   return String(
-    housing.package_type ||
-      marksType ||
+    marksType ||
       (Array.isArray(summary.container_type)
         ? summary.container_type[0]
         : summary.package_type) ||
@@ -892,15 +894,17 @@ function buildUsBolFieldRegistry(
             columnWidthRatio: COL.marks,
             getDisplayValue: (data) => {
               const pkgs = getCargoAt(data, index).no_of_packages;
-              return pkgs !== undefined && pkgs !== null && pkgs !== ""
-                ? `Pkgs: ${pkgs} PACKAGE(S)`
-                : "";
+              if (pkgs === undefined || pkgs === null || pkgs === "") return "";
+              const cargoPackageType =
+                formatPackageTypeNameForBol(
+                  getCargoAt(data, index).package_type as string | undefined,
+                ) || getPackageType(data);
+              return `Pkgs: ${pkgs} ${cargoPackageType}`;
             },
             parseInput: (raw) => {
-              const cleaned = stripPrefix(raw, /^Pkgs:\s*/i).replace(
-                /\s*PACKAGE\(S\)\s*$/i,
-                "",
-              );
+              const cleaned = stripPrefix(raw, /^Pkgs:\s*/i)
+                .replace(/^\s*(\d+(?:\.\d+)?)\b.*$/, "$1")
+                .trim();
               const num = parseFloat(cleaned);
               return Number.isFinite(num) ? num : cleaned.trim();
             },
@@ -1428,13 +1432,17 @@ function buildIndiaBolFieldRegistry(
             columnWidthRatio: INDIA_COL.container,
             getDisplayValue: (data) => {
               const pkgs = getCargoAt(data, index).no_of_packages;
-              return pkgs ? `Pkgs: ${pkgs} PACKAGE(S)` : "";
+              if (!pkgs) return "";
+              const cargoPackageType =
+                formatPackageTypeNameForBol(
+                  getCargoAt(data, index).package_type as string | undefined,
+                ) || getPackageType(data);
+              return `Pkgs: ${pkgs} ${cargoPackageType}`;
             },
             parseInput: (raw) => {
-              const cleaned = stripPrefix(raw, /^Pkgs:\s*/i).replace(
-                /\s*PACKAGE\(S\)\s*$/i,
-                "",
-              );
+              const cleaned = stripPrefix(raw, /^Pkgs:\s*/i)
+                .replace(/^\s*(\d+(?:\.\d+)?)\b.*$/, "$1")
+                .trim();
               const num = parseFloat(cleaned);
               return Number.isFinite(num) ? num : cleaned.trim();
             },
@@ -1451,10 +1459,13 @@ function buildIndiaBolFieldRegistry(
       getDisplayValue: (data) => {
         const total = getSummary(data).total_no_of_packages;
         if (total === "" || total == null) return "";
-        return `${total} PACKAGE(S)`;
+        const packageType = getPackageType(data);
+        return `${total} ${packageType}`;
       },
       parseInput: (raw) => {
-        const cleaned = raw.replace(/\s*PACKAGE\(S\)\s*$/i, "").trim();
+        const cleaned = raw
+          .replace(/^\s*(\d+(?:\.\d+)?)\b.*$/, "$1")
+          .trim();
         const num = parseFloat(cleaned);
         return Number.isFinite(num) ? num : cleaned;
       },

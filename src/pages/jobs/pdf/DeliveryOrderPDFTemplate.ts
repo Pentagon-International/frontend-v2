@@ -5,7 +5,9 @@ import {
   getCctBranchInfoFromLogin,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
-import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
+import {
+  formatPackageTypeNameForBol,
+} from "../../../utils/packageTypeOptions";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -34,31 +36,6 @@ const formatDate = (dateString: any) => {
   } catch {
     return "";
   }
-};
-
-/**
- * Display label for the package type selected on the house cargo line.
- * Uses API `package_type_name` when present; otherwise resolves the selected
- * `package_type` (e.g. "PLT - Pallets" → "Pallets"). Never uses a fixed default.
- */
-const resolvePackageTypeName = (
-  cargo: Record<string, unknown> | null | undefined,
-): string => {
-  const fromApi = String(cargo?.package_type_name ?? "").trim();
-  if (fromApi) return fromApi;
-
-  const selected = String(cargo?.package_type ?? "").trim();
-  if (!selected) return "";
-
-  const option = PACKAGE_TYPE_OPTIONS.find(
-    (o) => o.value === selected || o.label === selected,
-  );
-  const label = (option?.label || selected).trim();
-  const dashIdx = label.indexOf(" - ");
-  if (dashIdx >= 0) {
-    return label.slice(dashIdx + 3).trim();
-  }
-  return label;
 };
 
 // Helper function to format date for display (DD-MMM-YY)
@@ -846,8 +823,12 @@ export const generateDeliveryOrderPDF = (
           cargo.no_of_packages != null && cargo.no_of_packages !== ""
             ? String(cargo.no_of_packages)
             : "";
-        // Selected house package type only (Bags / Pallets / Cartons / etc.)
-        const pkgTypeName = resolvePackageTypeName(cargo);
+        // Prefer package name; fall back to parsing code/legacy "CODE - Name"
+        const pkgTypeName =
+          String(cargo.package_type_name ?? "").trim() ||
+          formatPackageTypeNameForBol(
+            cargo.package_type ?? cargo.package_type_code,
+          );
         const packagesDisplay = [pkgCount, pkgTypeName].filter(Boolean).join(" ");
 
         return [

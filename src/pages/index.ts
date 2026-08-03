@@ -34,6 +34,11 @@ import CustomerPanMaster from "../pages/masters/customer-pan-master/CustomerPanM
 import ApproveCustomerPanMaster from "../pages/masters/customer-pan-master/ApproveCustomerPanMaster";
 import CustomerApprovalStatusMaster from "../pages/masters/customer-pan-master/CustomerApprovalStatusMaster";
 
+// Create Vendor-PAN Master
+import VendorPanMaster from "../pages/masters/vendor-pan-master/VendorPanMaster";
+import ApproveVendorPanMaster from "../pages/masters/vendor-pan-master/ApproveVendorPanMaster";
+import VendorApprovalStatusMaster from "../pages/masters/vendor-pan-master/VendorApprovalStatusMaster";
+
 import MastersPage from "./masters/MastersPage";
 
 import CompanyMaster from "./masters/company/CompanyMaster";
@@ -181,6 +186,8 @@ import VatChargeMappingMaster from "./masters/vat-charge-mapping/VatChargeMappin
 import VatChargeMappingCreate from "./masters/vat-charge-mapping/VatChargeMappingCreate";
 import VatMasterMaster from "./masters/vat-master/VatMasterMaster";
 import VatMasterCreate from "./masters/vat-master/VatMasterCreate";
+import PackageTypeMaster from "./masters/package-type-master/PackageTypeMaster";
+import PackageTypeCreate from "./masters/package-type-master/PackageTypeCreate";
 import ExchangeRateMaster from "./masters/exchange-rate-master/ExchangeRateMaster";
 import ExchangeRateMasterCreate from "./masters/exchange-rate-master/ExchangeRateMasterCreate";
 import CFSMaster from "./masters/cfs/CFSMaster";
@@ -229,6 +236,9 @@ export {
   CustomerPanMaster,
   ApproveCustomerPanMaster,
   CustomerApprovalStatusMaster,
+  VendorPanMaster,
+  ApproveVendorPanMaster,
+  VendorApprovalStatusMaster,
   TermsOfShipment,
   NewTermsOfShipment,
   EditTermsOfShipment,
@@ -291,6 +301,8 @@ export {
   VatChargeMappingCreate,
   VatMasterMaster,
   VatMasterCreate,
+  PackageTypeMaster,
+  PackageTypeCreate,
   ExchangeRateMaster,
   ExchangeRateMasterCreate,
   CFSMaster,

@@ -1808,11 +1808,15 @@ function CustomerCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const isVendorVerificationRoute =
+    location.pathname === "/master/create-vendor";
   const isVerificationCreateRoute =
-    location.pathname === "/master/create-customer";
+    location.pathname === "/master/create-customer" ||
+    isVendorVerificationRoute;
   const customerData = location.state?.customerData as
     CustomerDetailRecord | undefined;
-  const isVendorMasterRoute = location.pathname.includes("/master/vendor");
+  const isVendorMasterRoute =
+    location.pathname.includes("/master/vendor") || isVendorVerificationRoute;
   const baseMasterPath = isVerificationCreateRoute
     ? "/master"
     : isVendorMasterRoute
@@ -1978,12 +1982,17 @@ function CustomerCreate() {
   });
 
   // Fetch customer types data
+  // Customer Master / Customer for Approval: ?vendor=False
+  // Vendor Master create/edit: ?vendor=True
+  const customerTypeEndpoint = isVendorMasterRoute
+    ? `${URL.customerType}?vendor=True`
+    : `${URL.customerType}?vendor=False`;
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes"],
+    queryKey: ["customerTypes", isVendorMasterRoute ? "vendor" : "customer"],
     queryFn: async () => {
       try {
         const response = (await getAPICall(
-          `${URL.customerType}`,
+          customerTypeEndpoint,
           API_HEADER,
         )) as CustomerTypeApiResponse;
 
@@ -2317,9 +2326,19 @@ function CustomerCreate() {
 
   useEffect(() => {
     if (isVerificationCreateRoute && isIndiaUser) {
-      navigate("/master/create-customer-pan", { replace: true });
+      navigate(
+        isVendorVerificationRoute
+          ? "/master/create-vendor-pan"
+          : "/master/create-customer-pan",
+        { replace: true },
+      );
     }
-  }, [isVerificationCreateRoute, isIndiaUser, navigate]);
+  }, [
+    isVerificationCreateRoute,
+    isVendorVerificationRoute,
+    isIndiaUser,
+    navigate,
+  ]);
 
   // Re-resolve Assign To once salesperson options load (initial load only — do not overwrite user edits)
   useEffect(() => {
@@ -2960,7 +2979,10 @@ function CustomerCreate() {
         ToastNotification({
           type: "success",
           message:
-            apiMessage ?? "Customer verification submitted successfully.",
+            apiMessage ??
+            (isVendorVerificationRoute
+              ? "Vendor verification submitted successfully."
+              : "Customer verification submitted successfully."),
         });
         navigate("/master");
         return;

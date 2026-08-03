@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
+  Box,
   Button,
   Card,
   Checkbox,
@@ -11,12 +13,14 @@ import {
   ScrollArea,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
+  Textarea,
   Badge,
 } from "@mantine/core";
-import { IconPaperclip, IconSearch } from "@tabler/icons-react";
+import { IconPaperclip, IconPlus, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -75,6 +79,43 @@ type SalespersonsResponse = {
   data?: SalespersonRow[];
 };
 
+type TdsSectionMasterItem = {
+  id?: number;
+  tds_section_code?: string;
+  tds_section_name?: string;
+  status?: string;
+};
+
+type CurrencyMasterItem = {
+  id?: number;
+  code?: string;
+  currency_code?: string;
+  currency_name?: string;
+};
+
+type TdsSectionRow = {
+  section_id: number | null;
+  section_code: string;
+  section_name: string;
+  exemption_tds: boolean;
+  exemption_certificate_no: string;
+  tds_percent: string;
+  valid_from: Date | null;
+  valid_to: Date | null;
+  tds_lower_limit: string;
+};
+
+type BankDetailRow = {
+  currency: string;
+  account_no: string;
+  account_name: string;
+  bank_name: string;
+  iban_no: string;
+  swift_no: string;
+  bank_address: string;
+  ifsc_code: string;
+};
+
 type AdditionalDetailsForm = {
   customer_type_code: string[];
   term_code: string;
@@ -84,6 +125,7 @@ type AdditionalDetailsForm = {
   credit_amount: string;
   credit_day: string;
   assigned_to: string;
+  tds_type: string;
   phone_no: string;
   mobile_no: string;
   email: string;
@@ -100,7 +142,33 @@ type AdditionalDetailsForm = {
 
 type AdditionalDetailsErrors = Partial<
   Record<keyof AdditionalDetailsForm, string>
->;
+> & {
+  tds_sections?: string;
+  bank_details?: string;
+};
+
+const emptyTdsSectionRow = (): TdsSectionRow => ({
+  section_id: null,
+  section_code: "",
+  section_name: "",
+  exemption_tds: false,
+  exemption_certificate_no: "",
+  tds_percent: "",
+  valid_from: null,
+  valid_to: null,
+  tds_lower_limit: "",
+});
+
+const emptyBankDetailRow = (): BankDetailRow => ({
+  currency: "",
+  account_no: "",
+  account_name: "",
+  bank_name: "",
+  iban_no: "",
+  swift_no: "",
+  bank_address: "",
+  ifsc_code: "",
+});
 
 const EMPTY_ADDITIONAL_DETAILS: AdditionalDetailsForm = {
   customer_type_code: [],
@@ -111,6 +179,7 @@ const EMPTY_ADDITIONAL_DETAILS: AdditionalDetailsForm = {
   credit_amount: "",
   credit_day: "",
   assigned_to: "",
+  tds_type: "",
   phone_no: "",
   mobile_no: "",
   email: "",
@@ -125,16 +194,16 @@ const EMPTY_ADDITIONAL_DETAILS: AdditionalDetailsForm = {
   msme_no: "",
 };
 
-function resolveCustomerTypeCode(types: CustomerTypeRow[]): string {
-  const match = types.find(
-    (t) =>
-      String(t.customer_type_name ?? "").trim().toLowerCase() === "customer",
-  );
-  if (match?.customer_type_code) return match.customer_type_code;
-  const loose = types.find((t) =>
-    String(t.customer_type_name ?? "").toLowerCase().includes("customer"),
-  );
-  return loose?.customer_type_code ?? "customer";
+function resolveVendorTypeCode(types: CustomerTypeRow[]): string {
+  const preferred = ["supplier", "carrier", "transporter"];
+  for (const name of preferred) {
+    const match = types.find(
+      (t) =>
+        String(t.customer_type_name ?? "").trim().toLowerCase() === name,
+    );
+    if (match?.customer_type_code) return match.customer_type_code;
+  }
+  return types[0]?.customer_type_code ?? "";
 }
 
 function resolveLoggedInAssignTo(
@@ -193,8 +262,31 @@ function parseOptionalNumber(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeTwoDecimalString(value: string): string {
+  const v = value.trim();
+  if (!v) return "";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return v;
+  return n.toFixed(2);
+}
+
+function isBankDetailRowTouched(row: BankDetailRow): boolean {
+  return [
+    row.currency,
+    row.account_no,
+    row.account_name,
+    row.bank_name,
+    row.iban_no,
+    row.swift_no,
+    row.bank_address,
+    row.ifsc_code,
+  ].some((value) => String(value ?? "").trim() !== "");
+}
+
 function validateAdditionalDetails(
   form: AdditionalDetailsForm,
+  tdsSections: TdsSectionRow[],
+  bankDetails: BankDetailRow[],
 ): AdditionalDetailsErrors {
   const errors: AdditionalDetailsErrors = {};
 
@@ -231,6 +323,49 @@ function validateAdditionalDetails(
   }
   if (form.msme && !form.msme_no.trim()) {
     errors.msme_no = "MSME number is required";
+  }
+
+  const hasValidTdsSection = tdsSections.some((r) => r.section_id != null);
+  if (!hasValidTdsSection) {
+    errors.tds_sections = "At least one TDS section is required";
+  } else {
+    for (const row of tdsSections) {
+      if (row.section_id == null) continue;
+      if (!row.exemption_tds) continue;
+      if (!row.exemption_certificate_no.trim()) {
+        errors.tds_sections = "Exemption certificate number is required";
+        break;
+      }
+      if (!row.tds_percent.trim() || !/^\d+(\.\d{1,2})?$/.test(row.tds_percent.trim())) {
+        errors.tds_sections = "Enter a valid TDS %";
+        break;
+      }
+      if (!row.valid_from || !row.valid_to) {
+        errors.tds_sections = "Valid from and valid to are required for exemption";
+        break;
+      }
+      if (
+        !row.tds_lower_limit.trim() ||
+        !/^\d+(\.\d{1,2})?$/.test(row.tds_lower_limit.trim())
+      ) {
+        errors.tds_sections = "Enter a valid TDS lower limit";
+        break;
+      }
+    }
+  }
+
+  for (const row of bankDetails) {
+    if (!isBankDetailRowTouched(row)) continue;
+    if (
+      !row.account_no.trim() ||
+      !row.account_name.trim() ||
+      !row.bank_name.trim() ||
+      !row.ifsc_code.trim()
+    ) {
+      errors.bank_details =
+        "Account number, account name, bank name and IFSC are required for filled bank rows";
+      break;
+    }
   }
 
   return errors;
@@ -275,16 +410,58 @@ function buildAddressEntry(
   };
 }
 
-function buildCustomerPayload(
+function buildTdsSectionPayload(rows: TdsSectionRow[]) {
+  return rows
+    .filter((r) => r.section_id != null)
+    .map((r) => ({
+      section_id: Number(r.section_id),
+      exemption_tds: Boolean(r.exemption_tds),
+      exemption_certificate_no: r.exemption_tds
+        ? r.exemption_certificate_no.trim() || null
+        : null,
+      tds_percentage: r.exemption_tds
+        ? (() => {
+            const v = normalizeTwoDecimalString(r.tds_percent || "");
+            return v ? v : null;
+          })()
+        : null,
+      valid_from: r.exemption_tds ? formatDateYYYYMMDD(r.valid_from) : null,
+      valid_to: r.exemption_tds ? formatDateYYYYMMDD(r.valid_to) : null,
+      tds_lower_limit: r.exemption_tds
+        ? (() => {
+            const v = normalizeTwoDecimalString(r.tds_lower_limit || "");
+            return v ? v : null;
+          })()
+        : null,
+    }));
+}
+
+function buildBankDetailsPayload(rows: BankDetailRow[]) {
+  return rows.filter(isBankDetailRowTouched).map((row) => ({
+    currency: row.currency || "",
+    account_no: row.account_no || "",
+    account_name: row.account_name || "",
+    bank_name: row.bank_name || "",
+    iban_no: row.iban_no || null,
+    swift_no: row.swift_no || null,
+    bank_address: row.bank_address || "",
+    ifsc_code: row.ifsc_code || "",
+  }));
+}
+
+function buildVendorPayload(
   records: AttestrGstinRecord[],
   pan: string,
   details: AdditionalDetailsForm,
+  tdsSections: TdsSectionRow[],
+  bankDetails: BankDetailRow[],
 ) {
   const primary = records[0];
   return {
     customer_name: primary.legalName || primary.tradeName || "",
     customer_type_code: details.customer_type_code,
     term_code: details.term_code,
+    tds_type: details.tds_type || null,
     own_office: details.own_office === "true",
     status: "ACTIVE",
     assigned_to: details.assigned_to,
@@ -299,29 +476,32 @@ function buildCustomerPayload(
         details,
       ),
     ),
+    bank_details_data: buildBankDetailsPayload(bankDetails),
+    tds_section_data: buildTdsSectionPayload(tdsSections),
   };
 }
 
-function formatCustomerCreateError(message: string): string {
+function formatVendorCreateError(message: string): string {
   const lower = message.toLowerCase();
   if (
     lower.includes("already exist") ||
     lower.includes("already exists") ||
-    lower.includes("customer exist")
+    lower.includes("customer exist") ||
+    lower.includes("vendor exist")
   ) {
-    return "This customer already exists.";
+    return "This vendor already exists.";
   }
   return message;
 }
 
-export default function CustomerPanMaster() {
+export default function VendorPanMaster() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
 
   useEffect(() => {
     if (!isIndiaUser) {
-      navigate("/master/create-customer", { replace: true });
+      navigate("/master/vendor", { replace: true });
     }
   }, [isIndiaUser, navigate]);
 
@@ -347,12 +527,18 @@ export default function CustomerPanMaster() {
   const [detailsErrors, setDetailsErrors] = useState<AdditionalDetailsErrors>(
     {},
   );
+  const [tdsSections, setTdsSections] = useState<TdsSectionRow[]>([
+    emptyTdsSectionRow(),
+  ]);
+  const [bankDetails, setBankDetails] = useState<BankDetailRow[]>([
+    emptyBankDetailRow(),
+  ]);
 
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", "pan-master", "vendor=False"],
+    queryKey: ["customerTypes", "vendor-pan-master", "vendor=True"],
     queryFn: async () => {
       const response = (await getAPICall(
-        `${URL.customerType}?vendor=False`,
+        `${URL.customerType}?vendor=True`,
         API_HEADER,
       )) as
         | { success?: boolean; data?: CustomerTypeRow[] }
@@ -369,7 +555,7 @@ export default function CustomerPanMaster() {
   });
 
   const { data: salespersons = [] } = useQuery({
-    queryKey: ["salespersons", "pan-master"],
+    queryKey: ["salespersons", "vendor-pan-master"],
     queryFn: async () => {
       const response = (await postAPICall(
         URL.salespersons,
@@ -381,8 +567,37 @@ export default function CustomerPanMaster() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const customerTypeCode = useMemo(
-    () => resolveCustomerTypeCode(customerTypes),
+  const { data: tdsSectionMaster = [] } = useQuery({
+    queryKey: ["tdsSectionMaster", "vendor-pan-master"],
+    queryFn: async () => {
+      try {
+        const response = await getAPICall(`${URL.tdsSectionMaster}`, API_HEADER);
+        return (response as { data?: unknown[] })?.data ?? response ?? [];
+      } catch (error) {
+        console.error("Error fetching TDS section master:", error);
+        return [];
+      }
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: currencyMasterData = [] } = useQuery({
+    queryKey: ["currencyMaster", "vendor-pan-master"],
+    queryFn: async () => {
+      try {
+        const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
+        const raw = (response as { data?: unknown[] })?.data ?? response;
+        return Array.isArray(raw) ? (raw as CurrencyMasterItem[]) : [];
+      } catch (error) {
+        console.error("Error fetching currency master:", error);
+        return [];
+      }
+    },
+    staleTime: Infinity,
+  });
+
+  const vendorTypeCode = useMemo(
+    () => resolveVendorTypeCode(customerTypes),
     [customerTypes],
   );
 
@@ -408,6 +623,30 @@ export default function CustomerPanMaster() {
         .map((person) => ({ value: person, label: person })),
     [salespersons],
   );
+
+  const tdsSectionOptions = useMemo(() => {
+    const rows = (tdsSectionMaster ?? []) as TdsSectionMasterItem[];
+    return rows
+      .filter((r) =>
+        r.status ? String(r.status).toUpperCase() === "ACTIVE" : true,
+      )
+      .filter((r) => r.tds_section_code && r.tds_section_name)
+      .map((r) => ({
+        value: String(r.id ?? ""),
+        label: String(r.tds_section_name),
+        section_code: String(r.tds_section_code),
+      }));
+  }, [tdsSectionMaster]);
+
+  const currencyOptions = useMemo(() => {
+    return currencyMasterData
+      .map((c) => {
+        const code = String(c.currency_code ?? c.code ?? "").trim();
+        if (!code) return null;
+        return { value: code, label: code };
+      })
+      .filter(Boolean) as { value: string; label: string }[];
+  }, [currencyMasterData]);
 
   const allSelected =
     records.length > 0 && selectedGstins.size === records.length;
@@ -442,6 +681,44 @@ export default function CustomerPanMaster() {
         if (!prev[key]) return prev;
         const next = { ...prev };
         delete next[key];
+        return next;
+      });
+    },
+    [],
+  );
+
+  const updateTdsSection = useCallback(
+    <K extends keyof TdsSectionRow>(
+      index: number,
+      key: K,
+      value: TdsSectionRow[K],
+    ) => {
+      setTdsSections((prev) =>
+        prev.map((row, i) => (i === index ? { ...row, [key]: value } : row)),
+      );
+      setDetailsErrors((prev) => {
+        if (!prev.tds_sections) return prev;
+        const next = { ...prev };
+        delete next.tds_sections;
+        return next;
+      });
+    },
+    [],
+  );
+
+  const updateBankDetail = useCallback(
+    <K extends keyof BankDetailRow>(
+      index: number,
+      key: K,
+      value: BankDetailRow[K],
+    ) => {
+      setBankDetails((prev) =>
+        prev.map((row, i) => (i === index ? { ...row, [key]: value } : row)),
+      );
+      setDetailsErrors((prev) => {
+        if (!prev.bank_details) return prev;
+        const next = { ...prev };
+        delete next.bank_details;
         return next;
       });
     },
@@ -515,37 +792,43 @@ export default function CustomerPanMaster() {
       ToastNotification({
         type: "error",
         message:
-          "Please select at least one GST registration to create a customer",
+          "Please select at least one GST registration to create a vendor",
       });
       return;
     }
 
     setAdditionalDetails({
       ...EMPTY_ADDITIONAL_DETAILS,
-      customer_type_code: customerTypeCode ? [customerTypeCode] : [],
+      customer_type_code: vendorTypeCode ? [vendorTypeCode] : [],
       assigned_to: assignedTo,
     });
+    setTdsSections([emptyTdsSectionRow()]);
+    setBankDetails([emptyBankDetailRow()]);
     setDetailsErrors({});
     openDetailsModal();
   };
 
-  const handleCreateCustomers = async () => {
+  const handleCreateVendors = async () => {
     const selected = records.filter((r) => selectedGstins.has(r.gstin));
     if (!selected.length) {
       ToastNotification({
         type: "error",
         message:
-          "Please select at least one GST registration to create a customer",
+          "Please select at least one GST registration to create a vendor",
       });
       return;
     }
 
-    const errors = validateAdditionalDetails(additionalDetails);
+    const errors = validateAdditionalDetails(
+      additionalDetails,
+      tdsSections,
+      bankDetails,
+    );
     if (Object.keys(errors).length > 0) {
       setDetailsErrors(errors);
       ToastNotification({
         type: "error",
-        message: "Please fill the required customer details",
+        message: "Please fill the required vendor details",
       });
       return;
     }
@@ -559,10 +842,12 @@ export default function CustomerPanMaster() {
         return;
       }
 
-      const payload = buildCustomerPayload(
+      const payload = buildVendorPayload(
         selected,
         panNumber.trim().toUpperCase(),
         additionalDetails,
+        tdsSections,
+        bankDetails,
       );
       const response = (await submitCustomerVerification(
         payload,
@@ -582,8 +867,8 @@ export default function CustomerPanMaster() {
         message:
           apiMessage ??
           (selected.length === 1
-            ? "Customer verification submitted successfully."
-            : `Customer verification submitted with ${selected.length} addresses.`),
+            ? "Vendor verification submitted successfully."
+            : `Vendor verification submitted with ${selected.length} addresses.`),
       });
       closeDetailsModal();
       setPanNumber("");
@@ -592,12 +877,14 @@ export default function CustomerPanMaster() {
       setSearchMessage("");
       setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
       setAdditionalDetails({ ...EMPTY_ADDITIONAL_DETAILS });
+      setTdsSections([emptyTdsSectionRow()]);
+      setBankDetails([emptyBankDetailRow()]);
       setDetailsErrors({});
-      navigate("/master/create-customer-pan", { replace: true });
+      navigate("/master/create-vendor-pan", { replace: true });
     } catch (error) {
       ToastNotification({
         type: "error",
-        message: formatCustomerCreateError(extractApiErrorMessage(error)),
+        message: formatVendorCreateError(extractApiErrorMessage(error)),
       });
     } finally {
       setIsCreating(false);
@@ -612,7 +899,7 @@ export default function CustomerPanMaster() {
     <Card shadow="sm" padding="lg" radius="md">
       <Group justify="space-between" mb="md">
         <Text size="md" fw={600}>
-          Create Customer from PAN
+          Create Vendor from PAN
         </Text>
       </Group>
 
@@ -646,9 +933,7 @@ export default function CustomerPanMaster() {
 
       {records.length > 0 && (
         <Group gap="md" mt="md">
-          <Text size="xs" c="dimmed">
-            {/* Assign To: <strong>{assignedTo || "—"}</strong> */}
-          </Text>
+          <Text size="xs" c="dimmed" />
           {searchMessage && (
             <Text size="xs" c="dimmed">
               {searchMessage}
@@ -766,7 +1051,7 @@ export default function CustomerPanMaster() {
             onClick={handleOpenDetailsModal}
             disabled={selectedGstins.size === 0}
           >
-            Create Customer
+            Create Vendor
             {selectedGstins.size > 0 ? ` (${selectedGstins.size})` : ""}
           </Button>
         </Group>
@@ -783,13 +1068,13 @@ export default function CustomerPanMaster() {
       <Modal
         opened={detailsModalOpened}
         onClose={() => !isCreating && closeDetailsModal()}
-        title="Additional Customer Details"
+        title="Additional Vendor Details"
         centered
         size="xl"
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Fill India customer details that are not fetched from GSTIN search.
+            Fill India vendor details that are not fetched from GSTIN search.
             These values will be included in the create payload.
           </Text>
 
@@ -797,7 +1082,7 @@ export default function CustomerPanMaster() {
             <Stack gap="lg">
               <div>
                 <Text size="sm" fw={600} c="#105476" mb="sm">
-                  Customer details
+                  Vendor details
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 6 }}>
@@ -910,7 +1195,418 @@ export default function CustomerPanMaster() {
                       dropdownZIndex={1000}
                     />
                   </Grid.Col>
+                  <Grid.Col span={{ base: 12, sm: 6 }}>
+                    <Select
+                      label="TDS Type"
+                      placeholder="Select TDS type"
+                      data={[
+                        { value: "Company", label: "Company" },
+                        { value: "Individual", label: "Individual" },
+                        { value: "Partnership", label: "Partnership" },
+                      ]}
+                      value={additionalDetails.tds_type || null}
+                      onChange={(value) =>
+                        updateAdditionalDetails("tds_type", value ?? "")
+                      }
+                      clearable
+                    />
+                  </Grid.Col>
                 </Grid>
+              </div>
+
+              <Divider />
+
+              <div>
+                <Group justify="space-between" mb="sm">
+                  <Text size="sm" fw={600} c="#105476">
+                    TDS Section details
+                  </Text>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    onClick={() =>
+                      setTdsSections((prev) => [...prev, emptyTdsSectionRow()])
+                    }
+                    color="#105476"
+                  >
+                    Add
+                  </Button>
+                </Group>
+                {detailsErrors.tds_sections && (
+                  <Text size="xs" c="red" mb="xs">
+                    {detailsErrors.tds_sections}
+                  </Text>
+                )}
+                <Stack gap="md">
+                  {tdsSections.map((row, index) => (
+                    <Card key={index} withBorder padding="md" radius="md" bg="#fafafa">
+                      <Group justify="space-between" align="center" mb="sm">
+                        <Text size="sm" fw={600} c="#105476">
+                          TDS Section {index + 1}
+                        </Text>
+                        {tdsSections.length > 1 && (
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            onClick={() =>
+                              setTdsSections((prev) =>
+                                prev.filter((_, i) => i !== index),
+                              )
+                            }
+                            aria-label="Remove TDS section"
+                          >
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        )}
+                      </Group>
+                      <Grid gutter="sm">
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <Select
+                            label="Section Name"
+                            placeholder="Select section name"
+                            searchable
+                            data={tdsSectionOptions}
+                            value={
+                              row.section_id != null ? String(row.section_id) : ""
+                            }
+                            onChange={(value) => {
+                              const selected = tdsSectionOptions.find(
+                                (o) => o.value === value,
+                              );
+                              const sectionId =
+                                value != null && value !== ""
+                                  ? Number(value)
+                                  : null;
+                              setTdsSections((prev) =>
+                                prev.map((r, i) =>
+                                  i === index
+                                    ? {
+                                        ...r,
+                                        section_id: sectionId,
+                                        section_code:
+                                          selected?.section_code || "",
+                                        section_name: selected?.label || "",
+                                      }
+                                    : r,
+                                ),
+                              );
+                              setDetailsErrors((prev) => {
+                                if (!prev.tds_sections) return prev;
+                                const next = { ...prev };
+                                delete next.tds_sections;
+                                return next;
+                              });
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <TextInput
+                            label="Section Code"
+                            placeholder="Section code"
+                            disabled
+                            value={row.section_code}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <Box pt={28}>
+                            <Switch
+                              label="Exemption TDS"
+                              description={row.exemption_tds ? "Yes" : "No"}
+                              checked={row.exemption_tds}
+                              onChange={(e) => {
+                                const checked = e.currentTarget.checked;
+                                setTdsSections((prev) =>
+                                  prev.map((r, i) =>
+                                    i === index
+                                      ? {
+                                          ...r,
+                                          exemption_tds: checked,
+                                          ...(checked
+                                            ? {}
+                                            : {
+                                                exemption_certificate_no: "",
+                                                tds_percent: "",
+                                                valid_from: null,
+                                                valid_to: null,
+                                                tds_lower_limit: "",
+                                              }),
+                                        }
+                                      : r,
+                                  ),
+                                );
+                              }}
+                            />
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <TextInput
+                            label="Exemption Certificate No"
+                            placeholder="Certificate number"
+                            disabled={!row.exemption_tds}
+                            withAsterisk={row.exemption_tds}
+                            value={row.exemption_certificate_no}
+                            onChange={(e) =>
+                              updateTdsSection(
+                                index,
+                                "exemption_certificate_no",
+                                e.target.value,
+                              )
+                            }
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <TextInput
+                            label="TDS %"
+                            placeholder="TDS %"
+                            disabled={!row.exemption_tds}
+                            withAsterisk={row.exemption_tds}
+                            inputMode="decimal"
+                            value={row.tds_percent}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              if (
+                                next === "" ||
+                                TWO_DECIMAL_INPUT_REGEX.test(next)
+                              ) {
+                                updateTdsSection(index, "tds_percent", next);
+                              }
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <TextInput
+                            label="TDS Lower Limit"
+                            placeholder="Lower limit"
+                            disabled={!row.exemption_tds}
+                            withAsterisk={row.exemption_tds}
+                            inputMode="decimal"
+                            value={row.tds_lower_limit}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              if (
+                                next === "" ||
+                                TWO_DECIMAL_INPUT_REGEX.test(next)
+                              ) {
+                                updateTdsSection(
+                                  index,
+                                  "tds_lower_limit",
+                                  next,
+                                );
+                              }
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <SingleDateInput
+                            label="Valid From"
+                            placeholder="Select date"
+                            disabled={!row.exemption_tds}
+                            withAsterisk={row.exemption_tds}
+                            value={row.valid_from}
+                            onChange={(value) =>
+                              updateTdsSection(index, "valid_from", value)
+                            }
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={{ base: 12, sm: 4 }}>
+                          <SingleDateInput
+                            label="Valid To"
+                            placeholder="Select date"
+                            disabled={!row.exemption_tds}
+                            withAsterisk={row.exemption_tds}
+                            value={row.valid_to}
+                            onChange={(value) =>
+                              updateTdsSection(index, "valid_to", value)
+                            }
+                          />
+                        </Grid.Col>
+                      </Grid>
+                    </Card>
+                  ))}
+                </Stack>
+              </div>
+
+              <Divider />
+
+              <div>
+                <Group justify="space-between" mb="sm">
+                  <Text size="sm" fw={600} c="#105476">
+                    Bank Details
+                  </Text>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    onClick={() =>
+                      setBankDetails((prev) => [...prev, emptyBankDetailRow()])
+                    }
+                    color="#105476"
+                  >
+                    Add
+                  </Button>
+                </Group>
+                {detailsErrors.bank_details && (
+                  <Text size="xs" c="red" mb="xs">
+                    {detailsErrors.bank_details}
+                  </Text>
+                )}
+                <Stack gap="md">
+                  {bankDetails.map((row, index) => {
+                    const rowTouched = isBankDetailRowTouched(row);
+                    return (
+                      <Card
+                        key={index}
+                        withBorder
+                        padding="md"
+                        radius="md"
+                        bg="#fafafa"
+                      >
+                        <Group justify="space-between" align="center" mb="sm">
+                          <Text size="sm" fw={600} c="#105476">
+                            Bank Detail {index + 1}
+                          </Text>
+                          {bankDetails.length > 1 && (
+                            <ActionIcon
+                              variant="light"
+                              color="red"
+                              onClick={() =>
+                                setBankDetails((prev) =>
+                                  prev.filter((_, i) => i !== index),
+                                )
+                              }
+                              aria-label="Remove bank detail"
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          )}
+                        </Group>
+                        <Grid gutter="sm">
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <Select
+                              label="Currency"
+                              placeholder="Select currency"
+                              searchable
+                              data={currencyOptions}
+                              value={row.currency || null}
+                              onChange={(value) =>
+                                updateBankDetail(
+                                  index,
+                                  "currency",
+                                  value ?? "",
+                                )
+                              }
+                              clearable
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <TextInput
+                              label="Account No"
+                              placeholder="Enter account number"
+                              withAsterisk={rowTouched}
+                              value={row.account_no}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "account_no",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <TextInput
+                              label="Account Name"
+                              placeholder="Enter account name"
+                              withAsterisk={rowTouched}
+                              value={row.account_name}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "account_name",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <TextInput
+                              label="Bank Name"
+                              placeholder="Enter bank name"
+                              withAsterisk={rowTouched}
+                              value={row.bank_name}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "bank_name",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <TextInput
+                              label="IBAN No"
+                              placeholder="Enter IBAN number"
+                              value={row.iban_no}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "iban_no",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <TextInput
+                              label="SWIFT No"
+                              placeholder="Enter SWIFT code"
+                              value={row.swift_no}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "swift_no",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 4 }}>
+                            <TextInput
+                              label="IFSC Code"
+                              placeholder="Enter IFSC code"
+                              withAsterisk={rowTouched}
+                              value={row.ifsc_code}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "ifsc_code",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={{ base: 12, sm: 8 }}>
+                            <Textarea
+                              label="Bank Address"
+                              placeholder="Enter bank address"
+                              minRows={2}
+                              value={row.bank_address}
+                              onChange={(e) =>
+                                updateBankDetail(
+                                  index,
+                                  "bank_address",
+                                  e.target.value,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                        </Grid>
+                      </Card>
+                    );
+                  })}
+                </Stack>
               </div>
 
               <Divider />
@@ -1120,7 +1816,7 @@ export default function CustomerPanMaster() {
             </Button>
             <Button
               color="#105476"
-              onClick={handleCreateCustomers}
+              onClick={handleCreateVendors}
               loading={isCreating}
             >
               Submit for Approval

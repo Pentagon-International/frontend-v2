@@ -69,6 +69,8 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { resolvePackageTypeName, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -453,6 +455,7 @@ type HousingDetail = HouseDocumentFields & {
     container_no?: number | string;
     container_id?: number | null;
     package_type?: string;
+    package_type_code?: string;
     no_of_packages: number | null;
     gross_weight: HouseCargoWeightValue;
     volume: HouseCargoWeightValue;
@@ -720,6 +723,7 @@ function ExportJobCreate() {
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
+  const packageTypeOptions = usePackageTypeOptions();
 
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
@@ -1318,9 +1322,9 @@ function ExportJobCreate() {
                             : Number(cargo.container_id)
                           : undefined,
                         no_of_packages: cargo.no_of_packages as number | null,
-                        package_type: cargo.package_type
-                          ? String(cargo.package_type)
-                          : "",
+                        package_type: pickPackageTypeCodeFromCargo(
+                          cargo as Record<string, unknown>,
+                        ),
                         gross_weight: importHouseCargoWeightFromApi(
                           cargo.gross_weight,
                         ),
@@ -2444,6 +2448,28 @@ function ExportJobCreate() {
               "",
           ).trim() || "",
         summary: housing.summary ?? housingFromJob?.summary,
+        cargo_details: (housing.cargo_details || []).map((cargo) => ({
+          ...cargo,
+          package_type:
+            resolvePackageTypeName(
+              cargo.package_type_code || cargo.package_type,
+              packageTypeOptions,
+            ) ||
+            cargo.package_type_code ||
+            cargo.package_type ||
+            "",
+        })),
+        package_type:
+          resolvePackageTypeName(
+            housing.cargo_details?.find(
+              (c) => c.package_type_code || c.package_type,
+            )?.package_type_code ||
+              housing.cargo_details?.find((c) => c.package_type)?.package_type ||
+              (housing as { package_type?: string }).package_type,
+            packageTypeOptions,
+          ) ||
+          (housing as { package_type?: string }).package_type ||
+          "",
       };
 
       const houseIndex = housingDetails.findIndex(
@@ -3431,7 +3457,10 @@ function ExportJobCreate() {
             ...(cargo.container_no && { container_no: cargo.container_no }),
             ...(cargo.container_id && { container_id: cargo.container_id }),
             no_of_packages: cargo.no_of_packages,
-            package_type: cargo.package_type || null,
+            package_type_code:
+              pickPackageTypeCodeFromCargo(
+                cargo as Record<string, unknown>,
+              ) || null,
             gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
             volume: formatHouseCargoWeightForPayload(cargo.volume),
             chargeable_weight: formatHouseCargoChargeableForPayload(

@@ -10,6 +10,9 @@ import {
   CustomerPanMaster,
   ApproveCustomerPanMaster,
   CustomerApprovalStatusMaster,
+  VendorPanMaster,
+  ApproveVendorPanMaster,
+  VendorApprovalStatusMaster,
   Dashboard,
   EnquiryConversionPage,
   GroupCompany,
@@ -99,6 +102,8 @@ import {
   VatChargeMappingCreate,
   VatMasterMaster,
   VatMasterCreate,
+  PackageTypeMaster,
+  PackageTypeCreate,
   ExchangeRateMaster,
   ExchangeRateMasterCreate,
   CFSMaster,
@@ -1058,15 +1063,22 @@ const NavigationRoutes = () => {
           <Route path="callmode-master-edit" element={<CallModeEdit />} />
           <Route path="callmode-master-view" element={<CallModeView />} />
           <Route path="create-customer-pan" element={<CustomerPanMaster />} />
+          <Route path="create-vendor-pan" element={<VendorPanMaster />} />
           <Route
             path="customer-approval-status"
             element={<CustomerApprovalStatusMaster />}
           />
+          <Route
+            path="vendor-approval-status"
+            element={<VendorApprovalStatusMaster />}
+          />
           <Route path="create-customer" element={<CustomerCreate />} />
+          <Route path="create-vendor" element={<CustomerCreate />} />
           <Route
             path="approve-customers"
             element={<ApproveCustomerPanMaster />}
           />
+          <Route path="approve-vendors" element={<ApproveVendorPanMaster />} />
           <Route path="terms-of-shipment" element={<TermsOfShipment />} />
           <Route
             path="terms-of-shipment-new"
@@ -1243,6 +1255,12 @@ const NavigationRoutes = () => {
             <Route index element={<VatMasterMaster />} />
             <Route path="create" element={<VatMasterCreate />} />
             <Route path="edit" element={<VatMasterCreate />} />
+          </Route>
+
+          <Route path="package-type">
+            <Route index element={<PackageTypeMaster />} />
+            <Route path="create" element={<PackageTypeCreate />} />
+            <Route path="edit" element={<PackageTypeCreate />} />
           </Route>
 
           <Route path="exchange-rate-master">

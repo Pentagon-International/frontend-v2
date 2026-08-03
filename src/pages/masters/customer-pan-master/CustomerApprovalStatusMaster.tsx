@@ -40,6 +40,7 @@ import {
 import {
   CustomerPanApprovalDetails,
   getStatusBadgeColor,
+  type ApprovalPartyType,
 } from "./ApproveCustomerPanMaster";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
@@ -69,11 +70,18 @@ function resolveUserEmail(
   return String(user?.email ?? user?.user_identifier ?? "").trim();
 }
 
-export default function CustomerApprovalStatusMaster() {
+export default function CustomerApprovalStatusMaster({
+  partyType = "customer",
+}: {
+  partyType?: ApprovalPartyType;
+} = {}) {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
   const assignedToEmail = useMemo(() => resolveUserEmail(user), [user]);
+  const isVendor = partyType === "vendor";
+  const entityLabel = isVendor ? "Vendor" : "Customer";
+  const entityLabelLower = isVendor ? "vendor" : "customer";
 
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -91,8 +99,9 @@ export default function CustomerApprovalStatusMaster() {
       assigned_to: assignedToEmail || undefined,
       customer_name: appliedFilters.customer_name.trim() || undefined,
       status: appliedFilters.status.trim() || undefined,
+      customer_type: partyType,
     }),
-    [assignedToEmail, appliedFilters],
+    [assignedToEmail, appliedFilters, partyType],
   );
 
   const {
@@ -102,6 +111,7 @@ export default function CustomerApprovalStatusMaster() {
   } = useQuery({
     queryKey: [
       "customerPanSubmittedByUser",
+      partyType,
       pageIndex,
       pageSize,
       apiFilters.assigned_to,
@@ -162,7 +172,7 @@ export default function CustomerApprovalStatusMaster() {
       },
       {
         accessorKey: "customer_name",
-        header: "Customer Name",
+        header: `${entityLabel} Name`,
         size: 280,
         Cell: ({ cell }) => (
           <Text size="sm" fw={600} c="#105476" lineClamp={2}>
@@ -211,7 +221,7 @@ export default function CustomerApprovalStatusMaster() {
         Cell: ({ row }) => (
           <UnstyledButton
             onClick={() => setViewRow(row.original)}
-            aria-label="View customer"
+            aria-label={`View ${entityLabelLower}`}
           >
             <Group gap={4} wrap="nowrap">
               <IconEye size={16} style={{ color: "#105476" }} />
@@ -223,7 +233,7 @@ export default function CustomerApprovalStatusMaster() {
         ),
       },
     ],
-    [],
+    [entityLabel, entityLabelLower],
   );
 
   const table = useMantineReactTable<TableRow>({
@@ -266,7 +276,7 @@ export default function CustomerApprovalStatusMaster() {
       <Card shadow="sm" padding="lg" radius="md" withBorder>
         <Group justify="space-between" align="center" mb="md" wrap="nowrap">
           <Text size="md" fw={600} c="#105476">
-            Customer Approval Status
+            {entityLabel} Approval Status
           </Text>
 
           <Button
@@ -291,7 +301,7 @@ export default function CustomerApprovalStatusMaster() {
           >
             <Group align="flex-end" gap="md" wrap="wrap">
               <TextInput
-                label="Customer Name"
+                label={`${entityLabel} Name`}
                 placeholder="Search by name"
                 value={draftFilters.customer_name}
                 onChange={(e) =>
@@ -343,7 +353,9 @@ export default function CustomerApprovalStatusMaster() {
           <Center py="xl">
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
-              <Text c="dimmed">Loading customer approval records...</Text>
+              <Text c="dimmed">
+                Loading {entityLabelLower} approval records...
+              </Text>
             </Stack>
           </Center>
         ) : (
@@ -419,14 +431,18 @@ export default function CustomerApprovalStatusMaster() {
       <Modal
         opened={viewRow !== null}
         onClose={() => setViewRow(null)}
-        title="View Customer"
+        title={`View ${entityLabel}`}
         centered
         size="xl"
       >
         <Stack gap="md">
           {viewRow && (
             <ScrollArea.Autosize mah="60vh" offsetScrollbars type="auto">
-              <CustomerPanApprovalDetails row={viewRow} editable={false} />
+              <CustomerPanApprovalDetails
+                row={viewRow}
+                editable={false}
+                partyType={partyType}
+              />
             </ScrollArea.Autosize>
           )}
           <Divider />

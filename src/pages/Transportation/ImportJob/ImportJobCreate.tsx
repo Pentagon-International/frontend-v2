@@ -83,6 +83,8 @@ import {
   getInvoiceDocumentNo,
 } from "../../../utils/invoiceDocumentNumber";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { pickPackageTypeCodeFromCargo, resolvePackageTypeName } from "../../../utils/packageTypeOptions";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import {
   getMeaningfulHouseCharges,
   hasMeaningfulHouseChargeData,
@@ -1258,22 +1260,12 @@ function ImportJobCreate() {
                                 cargo.haz === true ||
                                 String(cargo.haz).toLowerCase() === "yes"
                             : null,
-                        package_type: cargo.package_type
-                          ? String(cargo.package_type)
+                        package_type: pickPackageTypeCodeFromCargo(
+                          cargo as Record<string, unknown>,
+                        ),
+                        package_type_name: cargo.package_type_name
+                          ? String(cargo.package_type_name).trim()
                           : "",
-                        package_type_name: (() => {
-                          const explicit = cargo.package_type_name
-                            ? String(cargo.package_type_name).trim()
-                            : "";
-                          if (explicit) return explicit;
-                          const raw = cargo.package_type
-                            ? String(cargo.package_type).trim()
-                            : "";
-                          const dashIdx = raw.indexOf(" - ");
-                          return dashIdx >= 0
-                            ? raw.slice(dashIdx + 3).trim()
-                            : "";
-                        })(),
                       }),
                     )
                   : [],
@@ -2370,6 +2362,8 @@ function ImportJobCreate() {
     }));
   }, [rawContainerData]);
 
+  const packageTypeOptions = usePackageTypeOptions();
+
   // Backfill container_type_name from master when only the code is present (e.g. after load)
   useEffect(() => {
     if (!containerTypeData.length) return;
@@ -2971,12 +2965,19 @@ function ImportJobCreate() {
         ...housing,
         house_date: housing.house_date,
         cargo_details: Array.isArray(housing.cargo_details)
-          ? housing.cargo_details.map((cargo) => ({
-              ...cargo,
-              package_type: cargo.package_type || "",
-              package_type_name: cargo.package_type_name || "",
-              no_of_packages: cargo.no_of_packages,
-            }))
+          ? housing.cargo_details.map((cargo) => {
+              const packageTypeName =
+                resolvePackageTypeName(
+                  cargo.package_type,
+                  packageTypeOptions,
+                ) || String(cargo.package_type_name ?? "").trim();
+              return {
+                ...cargo,
+                package_type: cargo.package_type || "",
+                package_type_name: packageTypeName,
+                no_of_packages: cargo.no_of_packages,
+              };
+            })
           : [],
         attention_to: resolveDoAttentionTo(type, housing),
         please_deliver_to: resolveDoDeliverTo(housing, deliverTo),
@@ -3314,7 +3315,10 @@ function ImportJobCreate() {
                     cargo.haz === true ||
                     String(cargo.haz).toLowerCase() === "yes"
                 : null,
-            package_type: cargo.package_type || null,
+            package_type_code:
+              pickPackageTypeCodeFromCargo(
+                cargo as Record<string, unknown>,
+              ) || null,
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (() => {
