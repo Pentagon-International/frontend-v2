@@ -156,33 +156,41 @@ const calcTaxAmountFromRate = (
   return clampAmount(base * (rate / 100)) ?? 0;
 };
 
-const getVatBreakupRows = (breakup: InvoiceTaxBreakup | null) => [
-  ...(breakup?.charges ?? []),
-  ...(breakup?.percentage_wise_totals ?? []),
-];
-
-const getVatRateFromBreakup = (
-  breakup: InvoiceTaxBreakup | null,
-  chargeId: number | null | undefined,
-): number | null => {
-  if (chargeId == null) return null;
-  const match = getVatBreakupRows(breakup).find(
-    (r) => r.charge_id === chargeId,
-  );
-  if (!match) return null;
-  const rate = match.tax_rate ?? match.rate;
-  if (rate == null) return null;
-  const parsed = Number(rate);
-  return Number.isFinite(parsed) ? parsed : null;
+const resolveVatTaxRate = (
+  _breakup: InvoiceTaxBreakup | null,
+  _chargeId: number | null | undefined,
+  chargeTaxRate: number | string | null | undefined,
+): number => {
+  // Per-row only: empty/null or 0 means no VAT for that charge.
+  // Never inherit another row's rate via shared charge_id.
+  if (chargeTaxRate == null || chargeTaxRate === "") return 0;
+  const parsed = Number(chargeTaxRate);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const resolveVatTaxRate = (
-  breakup: InvoiceTaxBreakup | null,
-  chargeId: number | null | undefined,
-  chargeTaxRate: number | null | undefined,
+/** Live VAT total from each charge's own rate × local/header amount (Cr − Dr). */
+const calcVatTotalFromCharges = (
+  charges: Array<{
+    dr_cr?: string | null;
+    Dr_Cr?: string | null;
+    amount_in_local?: number | null;
+    header_amount?: number | null;
+    tax_rate?: number | string | null;
+    is_tax_row?: boolean;
+    charge_id?: number | null;
+  }>,
 ): number => {
-  if (chargeTaxRate != null && chargeTaxRate > 0) return chargeTaxRate;
-  return getVatRateFromBreakup(breakup, chargeId) ?? 0;
+  let cr = 0;
+  let dr = 0;
+  for (const charge of charges) {
+    if (charge.is_tax_row === true) continue;
+    const rate = resolveVatTaxRate(null, charge.charge_id, charge.tax_rate);
+    const taxBase = charge.amount_in_local ?? charge.header_amount;
+    const amount = calcTaxAmountFromRate(taxBase, rate);
+    if (resolveChargeDrCr(charge) === "Dr") dr += amount;
+    else cr += amount;
+  }
+  return clampAmount(cr - dr) ?? 0;
 };
 const fetchCurrencyMaster = async () => {
   try {
@@ -2939,21 +2947,6 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
 
-  // Sync VAT % on charge rows from calculate-gst-breakup (no gst-rates-by-state-sac for VAT)
-  useEffect(() => {
-    if (!applyVat || !gstBreakup) return;
-    const rows = getVatBreakupRows(gstBreakup);
-    if (rows.length === 0) return;
-    form.values.charges.forEach((charge, idx) => {
-      if (charge.is_tax_row === true || charge.charge_id == null) return;
-      const rate = getVatRateFromBreakup(gstBreakup, charge.charge_id);
-      if (rate != null && rate !== charge.tax_rate) {
-        form.setFieldValue(`charges.${idx}.tax_rate`, rate);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gstBreakup, applyVat]);
-
   // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
   useEffect(() => {
     if (!applyGst) {
@@ -4549,6 +4542,11 @@ function InvoiceCreate({
     [form.values.charges],
   );
 
+  const vatSectionTotal = useMemo(
+    () => calcVatTotalFromCharges(form.values.charges),
+    [form.values.charges],
+  );
+
   const gstSectionTotals = useMemo(
     () => calcGstTotalsByDrCr(form.values.charges, gstRatesByChargeIndex),
     [form.values.charges, gstRatesByChargeIndex],
@@ -6119,14 +6117,25 @@ function InvoiceCreate({
                           readOnly={isReadOnly || charge.is_tax_row === true}
                           value={(() => {
                             if (charge.is_tax_row === true) return undefined;
-                            const rate = resolveVatTaxRate(
-                              gstBreakup,
-                              charge.charge_id,
-                              charge.tax_rate,
-                            );
-                            return rate > 0 ? rate : undefined;
+                            // Empty stays empty; only this row's rate (incl. 0).
+                            if (charge.tax_rate == null) return undefined;
+                            const rate = Number(charge.tax_rate);
+                            return Number.isFinite(rate) ? rate : undefined;
                           })()}
                           onChange={(value) => {
+                            // Cleared field → null (no VAT); do not coerce to 0
+                            // and do not inherit another charge's rate.
+                            if (
+                              value === "" ||
+                              value === null ||
+                              value === undefined
+                            ) {
+                              form.setFieldValue(
+                                `charges.${index}.tax_rate`,
+                                null,
+                              );
+                              return;
+                            }
                             const parsed = clampMoneyAmount(
                               value as number | null,
                               false,
@@ -6514,24 +6523,7 @@ function InvoiceCreate({
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmountBound(
-                                gstBreakup?.vat_total != null
-                                  ? Number(gstBreakup.vat_total)
-                                  : form.values.charges.reduce((sum, c) => {
-                                      if (c.is_tax_row === true) return sum;
-                                      const rate = resolveVatTaxRate(
-                                        gstBreakup,
-                                        c.charge_id,
-                                        c.tax_rate,
-                                      );
-                                      const taxBase =
-                                        c.amount_in_local ?? c.header_amount;
-                                      return (
-                                        sum +
-                                        calcTaxAmountFromRate(taxBase, rate)
-                                      );
-                                    }, 0),
-                              )}
+                              {formatMoneyAmountBound(vatSectionTotal)}
                             </Text>
                           </Box>
                         </Grid.Col>
