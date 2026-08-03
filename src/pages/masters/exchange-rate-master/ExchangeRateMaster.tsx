@@ -36,7 +36,6 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { SearchableSelect } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import { getActiveBranch } from "../../../utils/branchOdexCredentials";
 
@@ -84,7 +83,6 @@ function getBranchCountryCode(
 }
 
 export default function ExchangeRateMasterList() {
-  const isAdmin = useIsAdminUser();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
@@ -500,30 +498,28 @@ export default function ExchangeRateMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    color: "#FFFFFF",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    "&:hover": { backgroundColor: "#105476" },
-                  },
-                }}
-                onClick={() => {
-                  setStoreFilters(LIST_KEY, appliedFilters);
-                  setStoreSearch(LIST_KEY, search);
-                  setShouldRestore(LIST_KEY, true);
-                  navigate("/master/exchange-rate-master/create");
-                }}
-              >
-                Create New
-              </Button>
-            )}
+            <Button
+              leftSection={<IconPlus size={16} />}
+              size="sm"
+              styles={{
+                root: {
+                  backgroundColor: "#105476",
+                  borderRadius: "4px",
+                  color: "#FFFFFF",
+                  fontSize: "14px",
+                  fontFamily: "Inter",
+                  "&:hover": { backgroundColor: "#105476" },
+                },
+              }}
+              onClick={() => {
+                setStoreFilters(LIST_KEY, appliedFilters);
+                setStoreSearch(LIST_KEY, search);
+                setShouldRestore(LIST_KEY, true);
+                navigate("/master/exchange-rate-master/create");
+              }}
+            >
+              Create New
+            </Button>
           </Group>
         </Group>
       </Box>

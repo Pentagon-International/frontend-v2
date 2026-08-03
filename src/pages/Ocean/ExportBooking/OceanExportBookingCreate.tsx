@@ -42,6 +42,10 @@ function OceanExportBookingCreate() {
 
   // Get booking data from quotation if available (for create mode)
   const bookingData = location.state?.bookingData;
+  const duplicateBooking =
+    location.state?.prefillFromLastBookings && location.state?.duplicateBooking
+      ? (location.state.duplicateBooking as Record<string, unknown>)
+      : undefined;
 
   console.log("=== AirExportGenerationCreate Debug ===");
   console.log("location.state:", location.state);
@@ -869,7 +873,9 @@ function OceanExportBookingCreate() {
             <OceanExportBookingStepper
               onStepChange={handleStepChange}
               onComplete={handleComplete}
-              initialData={isEditMode ? jobData : mappedBookingData}
+              initialData={
+                isEditMode ? jobData : (duplicateBooking ?? mappedBookingData)
+              }
               isEditMode={isEditMode}
               jobData={jobData}
               active={active}

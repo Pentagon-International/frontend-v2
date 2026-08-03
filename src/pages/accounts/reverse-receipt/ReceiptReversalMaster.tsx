@@ -79,6 +79,7 @@ type ReceiptRow = Record<string, unknown> & {
   day_book_name?: string;
   receipt_no?: string;
   reverse_receipt_no?: string;
+  original_doc_no?: string;
   type?: string;
   status?: string;
   amount?: number | string;
@@ -113,6 +114,7 @@ type ReceiptReversalFilters = {
   day_book_id: string;
   day_book_name: string;
   receipt_no: string;
+  original_doc_no: string;
   date_from: Date | null;
   date_to: Date | null;
   type: string;
@@ -124,6 +126,7 @@ type ReceiptReversalColumnVisibility = {
   sno: boolean;
   day_book_name: boolean;
   reverse_receipt_no: boolean;
+  original_doc_no: boolean;
   date: boolean;
   type: boolean;
   amount: boolean;
@@ -134,6 +137,7 @@ const receiptReversalColumnDefault: ReceiptReversalColumnVisibility = {
   sno: true,
   day_book_name: true,
   reverse_receipt_no: true,
+  original_doc_no: true,
   date: true,
   type: true,
   amount: true,
@@ -144,6 +148,7 @@ const receiptReversalColumnLabels: Record<keyof ReceiptReversalColumnVisibility,
   sno: "S.No",
   day_book_name: "Day Book",
   reverse_receipt_no: "Reverse Receipt No",
+  original_doc_no: "Receipt No",
   date: "Date",
   type: "Type",
   amount: "Amount",
@@ -177,6 +182,7 @@ export default function ReceiptReversalMaster() {
     day_book_id: "",
     day_book_name: "",
     receipt_no: "",
+    original_doc_no: "",
     date_from: defaultDateFrom,
     date_to: defaultDateTo,
     type: "",
@@ -542,6 +548,32 @@ export default function ReceiptReversalMaster() {
               />
             )}
           />
+        ),
+      },
+      {
+        accessorKey: "original_doc_no",
+        header: "Receipt No",
+        size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Receipt No"
+            value={appliedFilters.original_doc_no}
+            displayValue={appliedFilters.original_doc_no}
+            theme={erpTheme}
+            placeholder="Filter Receipt No"
+            isEditing={editingHeaderId === "original_doc_no"}
+            onStartEdit={() => openHeaderEditor("original_doc_no")}
+            onStopEdit={() => collapseHeaderEditor("original_doc_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                original_doc_no: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ cell }) => (
+          <Text size="sm">{cell.getValue<string>() || "-"}</Text>
         ),
       },
       {
@@ -1087,6 +1119,24 @@ export default function ReceiptReversalMaster() {
                       searchFields={["reverse_receipt_no"]}
                       size="xs"
                       classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      label="Receipt No"
+                      placeholder="Type Receipt No"
+                      value={draftFilters.original_doc_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          original_doc_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={filterFieldStyles}
                     />
                   </Box>

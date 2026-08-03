@@ -78,6 +78,7 @@ type SupplierInvoiceReversalRow = Record<string, unknown> & {
   crj_number?: string;
   Inv_Crn_no?: string;
   reverse_invoice_no?: string;
+  original_doc_no?: string;
   agent_name?: string;
   job_id?: string;
   service_code?: string;
@@ -119,6 +120,7 @@ const LIST_KEY = "SUPPLIER_INVOICE_REVERSAL_MASTER";
 
 type SupplierInvoiceReversalFilters = {
   invoice_no: string;
+  original_doc_no: string;
   agent_name: string;
   job_id: string;
   shipment_id: string;
@@ -130,6 +132,7 @@ type SupplierInvoiceReversalFilters = {
 type SupplierInvoiceReversalColumnVisibility = {
   sno: boolean;
   invoice_no: boolean;
+  original_doc_no: boolean;
   agent_name: boolean;
   job_id: boolean;
   shipment_ids: boolean;
@@ -142,6 +145,7 @@ type SupplierInvoiceReversalColumnVisibility = {
 const supplierInvoiceReversalColumnDefault: SupplierInvoiceReversalColumnVisibility = {
   sno: true,
   invoice_no: true,
+  original_doc_no: true,
   agent_name: true,
   job_id: true,
   shipment_ids: true,
@@ -156,7 +160,8 @@ const supplierInvoiceReversalColumnLabels: Record<
   string
 > = {
   sno: "S.No",
-  invoice_no: "Invoice No",
+  invoice_no: "Reverse Invoice No",
+  original_doc_no: "Invoice No",
   agent_name: "Agent / Supplier",
   job_id: "Job Id",
   shipment_ids: "Shipment Id",
@@ -194,6 +199,7 @@ function SupplierInvoiceReversalMaster() {
 
   const DEFAULT_FILTERS: SupplierInvoiceReversalFilters = {
     invoice_no: "",
+    original_doc_no: "",
     agent_name: "",
     job_id: "",
     shipment_id: "",
@@ -528,17 +534,17 @@ function SupplierInvoiceReversalMaster() {
       },
       {
         id: "invoice_no",
-        header: "Invoice No",
+        header: "Reverse Invoice No",
         size: 160,
         accessorFn: (row) =>
           String(row.reverse_crj_number ?? row.crj_number ?? row.reverse_invoice_no ?? ""),
         Header: () => (
           <ERPListColumnHeaderFilter
-            label="Invoice No"
+            label="Reverse Invoice No"
             value={appliedFilters.invoice_no}
             displayValue={appliedFilters.invoice_no}
             theme={erpTheme}
-            placeholder="Filter Invoice No"
+            placeholder="Filter Reverse Invoice No"
             isEditing={editingHeaderId === "invoice_no"}
             onStartEdit={() => openHeaderEditor("invoice_no")}
             onStopEdit={() => collapseHeaderEditor("invoice_no")}
@@ -546,6 +552,34 @@ function SupplierInvoiceReversalMaster() {
               commitHeaderFilters((prev) => ({ ...prev, invoice_no: next }))
             }
           />
+        ),
+      },
+      {
+        accessorKey: "original_doc_no",
+        header: "Invoice No",
+        size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Invoice No"
+            value={appliedFilters.original_doc_no}
+            displayValue={appliedFilters.original_doc_no}
+            theme={erpTheme}
+            placeholder="Filter Invoice No"
+            isEditing={editingHeaderId === "original_doc_no"}
+            onStartEdit={() => openHeaderEditor("original_doc_no")}
+            onStopEdit={() => collapseHeaderEditor("original_doc_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                original_doc_no: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+            {cell.getValue<string>() || "-"}
+          </Text>
         ),
       },
       {
@@ -1115,13 +1149,31 @@ function SupplierInvoiceReversalMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
-                      label="Invoice No"
-                      placeholder="Type Invoice No"
+                      label="Reverse Invoice No"
+                      placeholder="Type Reverse Invoice No"
                       value={draftFilters.invoice_no}
                       onChange={(e) =>
                         setDraftFilters((prev) => ({
                           ...prev,
                           invoice_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Invoice No"
+                      placeholder="Type Invoice No"
+                      value={draftFilters.original_doc_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          original_doc_no: e.currentTarget.value,
                         }))
                       }
                       size="xs"

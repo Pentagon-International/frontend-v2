@@ -5,6 +5,7 @@ import {
   getCctBranchInfoFromLogin,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
+import { PACKAGE_TYPE_OPTIONS } from "../../../utils/packageTypeOptions";
 
 // Helper function for date formatting (DD-MMM-YY)
 const formatDate = (dateString: any) => {
@@ -33,6 +34,31 @@ const formatDate = (dateString: any) => {
   } catch {
     return "";
   }
+};
+
+/**
+ * Display label for the package type selected on the house cargo line.
+ * Uses API `package_type_name` when present; otherwise resolves the selected
+ * `package_type` (e.g. "PLT - Pallets" → "Pallets"). Never uses a fixed default.
+ */
+const resolvePackageTypeName = (
+  cargo: Record<string, unknown> | null | undefined,
+): string => {
+  const fromApi = String(cargo?.package_type_name ?? "").trim();
+  if (fromApi) return fromApi;
+
+  const selected = String(cargo?.package_type ?? "").trim();
+  if (!selected) return "";
+
+  const option = PACKAGE_TYPE_OPTIONS.find(
+    (o) => o.value === selected || o.label === selected,
+  );
+  const label = (option?.label || selected).trim();
+  const dashIdx = label.indexOf(" - ");
+  if (dashIdx >= 0) {
+    return label.slice(dashIdx + 3).trim();
+  }
+  return label;
 };
 
 // Helper function to format date for display (DD-MMM-YY)
@@ -544,8 +570,17 @@ export const generateDeliveryOrderPDF = (
     doc.setDrawColor(0, 0, 0);
 
     // Calculate column positions (needed for footer and content)
+    // Reserve a fixed right meta column for DO No / Date so left address cannot overlap it
+    const doMetaColumnWidth = 58;
     const leftColumnX = margin + boxPadding;
-    const rightColumnX = pageWidth - margin - boxPadding - 50;
+    const rightColumnX =
+      pageWidth - margin - boxPadding - doMetaColumnWidth;
+    const attentionLabelGap = 22;
+    const attentionTextX = leftColumnX + attentionLabelGap;
+    const attentionMaxWidth = Math.max(
+      40,
+      rightColumnX - attentionTextX - 6,
+    );
 
     // Create page layout (header, title, border, footer) - returns layout info
     const pageLayout = createPageLayout(
@@ -570,34 +605,44 @@ export const generateDeliveryOrderPDF = (
     let boxWidth = pageLayout.boxWidth;
 
     // ===== TOP SECTION OF BOX: Attention to (left) and DO No/Date (right) =====
-    // leftColumnX and rightColumnX already defined above
+    const attentionSectionTopY = boxContentY;
 
-    // Attention to
     doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "bold");
-    doc.text("Attention to:", leftColumnX, boxContentY);
+    doc.text("Attention to:", leftColumnX, attentionSectionTopY);
     doc.setFont("helvetica", "normal");
     const attentionToLines = doc.splitTextToSize(
       attentionTo || "",
-      rightColumnX - leftColumnX - 5,
+      attentionMaxWidth,
     );
     if (attentionToLines.length > 0) {
-      doc.text(attentionToLines, leftColumnX + 20, boxContentY);
+      doc.text(attentionToLines, attentionTextX, attentionSectionTopY);
     }
-    boxContentY += Math.max(attentionToLines.length * DO_INNER_TEXT_LINE_HEIGHT, 12);
 
-    // DO No and Date (right side)
+    // DO No and Date stay in the reserved right column at the top of this section
     doc.setFont("helvetica", "bold");
-    doc.text("DO No:", rightColumnX, boxContentY - 10);
+    doc.text("DO No:", rightColumnX, attentionSectionTopY);
     doc.setFont("helvetica", "normal");
-    doc.text(doNumber || "", rightColumnX + 20, boxContentY - 10);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Date:", rightColumnX, boxContentY - 5);
-    doc.setFont("helvetica", "normal");
-    doc.text(todayDate, rightColumnX + 20, boxContentY - 5);
+    const doNoLines = doc.splitTextToSize(
+      doNumber || "",
+      doMetaColumnWidth - 20,
+    );
+    doc.text(doNoLines, rightColumnX + 18, attentionSectionTopY);
 
-    boxContentY += 5;
+    const dateRowY =
+      attentionSectionTopY +
+      Math.max(doNoLines.length, 1) * DO_INNER_TEXT_LINE_HEIGHT;
+    doc.setFont("helvetica", "bold");
+    doc.text("Date:", rightColumnX, dateRowY);
+    doc.setFont("helvetica", "normal");
+    doc.text(todayDate, rightColumnX + 18, dateRowY);
+
+    const attentionBlockHeight = Math.max(
+      attentionToLines.length * DO_INNER_TEXT_LINE_HEIGHT,
+      dateRowY - attentionSectionTopY + DO_INNER_TEXT_LINE_HEIGHT,
+      12,
+    );
+    boxContentY = attentionSectionTopY + attentionBlockHeight + 5;
 
     // ===== KEY-VALUE PAIRS SECTION =====
     const labelWidth = 45;
@@ -753,18 +798,36 @@ export const generateDeliveryOrderPDF = (
     
     if (cargoDetails.length > 0) {
       const tableBody = cargoDetails.map((cargo: any) => {
-        const containerNo = cargo.container_no || cargo.container_number || "";
+        const containerNo = String(
+          cargo.container_no || cargo.container_number || "",
+        ).trim();
         const matched = findContainerForCargo(cargo);
+        // Prefer human-readable name only — never fall back to type code
+        const containerType = String(
+          matched?.container_type_details?.container_type_name ||
+            matched?.container_type_name ||
+            cargo?.container_type_details?.container_type_name ||
+            cargo?.container_type_name ||
+            "",
+        ).trim();
+        // e.g. "20' High Container KMTU9532620"
+        const containerDisplay = [containerType, containerNo]
+          .filter(Boolean)
+          .join(" ");
 
         // LCL / FCL logic
         let lclFcl = service || "";
         if (!lclFcl && matched) {
-          const type =
-            matched?.container_type_details?.container_type_name ||
-            matched?.container_type ||
-            "";
+          const typeForLclFcl =
+            containerType ||
+            String(
+              matched?.container_type_details?.container_type_code ||
+                matched?.container_type ||
+                "",
+            );
           lclFcl =
-            String(type).includes("20") || String(type).includes("40")
+            String(typeForLclFcl).includes("20") ||
+            String(typeForLclFcl).includes("40")
               ? "FCL"
               : "LCL";
         }
@@ -779,11 +842,19 @@ export const generateDeliveryOrderPDF = (
           ? formatDateForDisplay(unloadingDateRaw)
           : "";
 
+        const pkgCount =
+          cargo.no_of_packages != null && cargo.no_of_packages !== ""
+            ? String(cargo.no_of_packages)
+            : "";
+        // Selected house package type only (Bags / Pallets / Cartons / etc.)
+        const pkgTypeName = resolvePackageTypeName(cargo);
+        const packagesDisplay = [pkgCount, pkgTypeName].filter(Boolean).join(" ");
+
         return [
-          containerNo,
+          containerDisplay,
           lclFcl,
           unstuffDt,
-          cargo.no_of_packages ?? "",
+          packagesDisplay,
           cargo.gross_weight ?? "",
           cargo.volume ?? "",
         ];
@@ -819,22 +890,28 @@ export const generateDeliveryOrderPDF = (
           textColor: 0,
           lineWidth:0.3,
           lineColor: [0,0,0],
+          overflow: "linebreak",
+          valign: "top",
         },
       
         headStyles: {
           fontStyle: "bold",
           lineWidth:0.3,
           lineColor: [0,0,0],
+          overflow: "linebreak",
+          valign: "middle",
         },
     
       
         columnStyles: {
-          0: { cellWidth: 45 },
-          1: { cellWidth: 25 },
-          2: { cellWidth: 35 },
-          3: { cellWidth: 25 },
-          4: { cellWidth: 25 },
-          5: { cellWidth: 25 },
+          // Wider + wrap so type+number (e.g. "20' High Container KMTU9532620") stays in-cell
+          0: { cellWidth: 56, overflow: "linebreak" },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 28 },
+          // Room for "{count} {selected package type}" without colliding with weight/volume
+          3: { cellWidth: 32, overflow: "linebreak" },
+          4: { cellWidth: 22 },
+          5: { cellWidth: 22 },
         },
       
         margin: { 

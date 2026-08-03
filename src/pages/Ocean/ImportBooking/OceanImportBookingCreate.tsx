@@ -42,6 +42,10 @@ function OceanImportBookingCreate() {
 
   // Get booking data from quotation if available (for create mode)
   const bookingData = location.state?.bookingData;
+  const duplicateBooking =
+    location.state?.prefillFromLastBookings && location.state?.duplicateBooking
+      ? (location.state.duplicateBooking as Record<string, unknown>)
+      : undefined;
 
   // Map booking data to stepper format
   const mapBookingDataToStepperFormat = (data: Record<string, unknown>) => {
@@ -900,7 +904,9 @@ function OceanImportBookingCreate() {
             <OceanImportBookingStepper
               onStepChange={handleStepChange}
               onComplete={handleComplete}
-              initialData={isEditMode ? jobData : mappedBookingData}
+              initialData={
+                isEditMode ? jobData : (duplicateBooking ?? mappedBookingData)
+              }
               isEditMode={isEditMode}
               jobData={jobData}
               active={active}

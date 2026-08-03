@@ -11,6 +11,7 @@ import {
   Modal,
   Tooltip,
   Select,
+  Drawer,
   MantineProvider,
 } from "@mantine/core";
 import {
@@ -26,6 +27,7 @@ import {
   IconStack2,
   IconScale,
   IconCircleX,
+  IconCopy,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -53,6 +55,7 @@ import {
   erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   BookingCreateJobLoader,
+  LastBookingsList,
   DEFAULT_ERP_LIST_THEME,
   type BookingMasterHeaderRenderers,
   type BookingMasterTableRowModel,
@@ -65,11 +68,12 @@ import { apiCallProtected } from "./../../../api/axios";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
+import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 
 const LIST_KEY = "OCEAN_IMPORT_BOOKING_MASTER";
 
@@ -119,6 +123,7 @@ type ImportShipmentData = {
   service: string;
   customer_name: string;
   customer_code_read: string;
+  customer_code?: string;
   origin_name: string;
   origin_code_read: string;
   destination_name: string;
@@ -391,6 +396,29 @@ function OceanImportBookingMaster() {
     null,
   );
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isDuplicatingBooking, setIsDuplicatingBooking] = useState(false);
+  const [duplicateCustomerCode, setDuplicateCustomerCode] = useState<
+    string | null
+  >(null);
+  const [
+    lastBookingsDrawerOpened,
+    { open: openLastBookingsDrawer, close: closeLastBookingsDrawer },
+  ] = useDisclosure(false);
+
+  const openDuplicateForRow = useCallback(
+    (row: ImportShipmentData) => {
+      const customerCode =
+        (row.customer_code_read || row.customer_code || "").trim() || null;
+      setDuplicateCustomerCode(customerCode);
+      openLastBookingsDrawer();
+    },
+    [openLastBookingsDrawer],
+  );
+
+  const handleCloseLastBookingsDrawer = useCallback(() => {
+    closeLastBookingsDrawer();
+    setDuplicateCustomerCode(null);
+  }, [closeLastBookingsDrawer]);
 
   const filterForm = useForm<FilterState>({
     initialValues: {
@@ -1097,6 +1125,13 @@ function OceanImportBookingMaster() {
                 Edit
               </Menu.Item>
             </Tooltip>
+            <Menu.Item
+              leftSection={<IconCopy size={14} />}
+              disabled={isDuplicatingBooking}
+              onClick={() => openDuplicateForRow(row)}
+            >
+              Duplicate
+            </Menu.Item>
             {isBooked && (
               <Menu.Item
                 leftSection={<IconPlus size={14} />}
@@ -1127,7 +1162,14 @@ function OceanImportBookingMaster() {
         </Menu>
       );
     },
-    [navigate, persistListState, createJobBookingId, handleCreateJob],
+    [
+      navigate,
+      persistListState,
+      createJobBookingId,
+      handleCreateJob,
+      isDuplicatingBooking,
+      openDuplicateForRow,
+    ],
   );
 
   const border = DEFAULT_ERP_LIST_THEME.border;
@@ -1816,7 +1858,46 @@ function OceanImportBookingMaster() {
             </Button>
           </Group>
         </Modal>
-        <BookingCreateJobLoader active={createJobBookingId != null} />
+        <Drawer
+          opened={lastBookingsDrawerOpened}
+          onClose={handleCloseLastBookingsDrawer}
+          position="right"
+          size="70%"
+          title="Last Bookings"
+          titleProps={{ style: { fontWeight: "bold" } }}
+        >
+          <LastBookingsList
+            service={["FCL", "LCL"]}
+            serviceType="IMPORT"
+            customerCode={duplicateCustomerCode}
+            onRowSelect={(row) => {
+              const bookingId = row.id as string | number | undefined;
+              if (bookingId == null) {
+                ToastNotification({
+                  type: "error",
+                  message: "Selected booking has no id.",
+                });
+                return;
+              }
+              handleCloseLastBookingsDrawer();
+              void navigateBookingDuplicate({
+                bookingId,
+                navigate,
+                persistListState,
+                onStart: () => setIsDuplicatingBooking(true),
+                onEnd: () => setIsDuplicatingBooking(false),
+              });
+            }}
+          />
+        </Drawer>
+        <BookingCreateJobLoader
+          active={createJobBookingId != null || isDuplicatingBooking}
+          message={
+            isDuplicatingBooking
+              ? "Preparing duplicate booking…"
+              : undefined
+          }
+        />
         <Outlet />
       </Box>
     </MantineProvider>

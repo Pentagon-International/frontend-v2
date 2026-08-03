@@ -203,6 +203,8 @@ type RoutingDetail = {
 type ContainerDetail = {
   id?: number | string;
   container_type: string;
+  /** Display name from master / API (`container_type_details.container_type_name`) */
+  container_type_name?: string;
   container_no: string;
   actual_seal_no: string;
   customs_seal_no: string;
@@ -437,6 +439,7 @@ type HousingDetail = HouseDocumentFields & {
     chargeable_weight: HouseCargoWeightValue;
     haz: boolean | null;
     package_type?: string;
+    package_type_name?: string;
   }>;
   charges?: Array<{
     id?: number | string; // ID from backend when editing
@@ -818,6 +821,7 @@ function ImportJobCreate() {
       containers: [
         {
           container_type: "",
+          container_type_name: "",
           container_no: "",
           actual_seal_no: "",
           customs_seal_no: "",
@@ -1257,6 +1261,19 @@ function ImportJobCreate() {
                         package_type: cargo.package_type
                           ? String(cargo.package_type)
                           : "",
+                        package_type_name: (() => {
+                          const explicit = cargo.package_type_name
+                            ? String(cargo.package_type_name).trim()
+                            : "";
+                          if (explicit) return explicit;
+                          const raw = cargo.package_type
+                            ? String(cargo.package_type).trim()
+                            : "";
+                          const dashIdx = raw.indexOf(" - ");
+                          return dashIdx >= 0
+                            ? raw.slice(dashIdx + 3).trim()
+                            : "";
+                        })(),
                       }),
                     )
                   : [],
@@ -1664,6 +1681,12 @@ function ImportJobCreate() {
                     : container.container_type
                       ? String(container.container_type)
                       : "";
+              const containerTypeName =
+                containerTypeDetails?.container_type_name
+                  ? String(containerTypeDetails.container_type_name)
+                  : container.container_type_name
+                    ? String(container.container_type_name)
+                    : "";
 
               // Map uploading_date to unloading_date (API uses uploading_date, form uses unloading_date)
               const unloadingDate =
@@ -1676,6 +1699,7 @@ function ImportJobCreate() {
                     : Number(container.id)
                   : undefined,
                 container_type: containerTypeCode,
+                container_type_name: containerTypeName,
                 container_no: container.container_no
                   ? String(container.container_no)
                   : "",
@@ -2039,6 +2063,7 @@ function ImportJobCreate() {
   const addContainer = () => {
     containerDetailsForm.insertListItem("containers", {
       container_type: "",
+      container_type_name: "",
       container_no: "",
       actual_seal_no: "",
       customs_seal_no: "",
@@ -2344,6 +2369,28 @@ function ImportJobCreate() {
       label: item.container_name ? String(item.container_name) : "",
     }));
   }, [rawContainerData]);
+
+  // Backfill container_type_name from master when only the code is present (e.g. after load)
+  useEffect(() => {
+    if (!containerTypeData.length) return;
+    const containers = containerDetailsForm.values.containers;
+    if (!containers?.length) return;
+
+    let changed = false;
+    const next = containers.map((c) => {
+      if (c.container_type_name?.trim() || !c.container_type?.trim()) return c;
+      const label =
+        containerTypeData.find((o) => o.value === c.container_type)?.label ||
+        "";
+      if (!label) return c;
+      changed = true;
+      return { ...c, container_type_name: label };
+    });
+    if (changed) {
+      containerDetailsForm.setValues({ containers: next });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync names when master options arrive
+  }, [containerTypeData]);
 
   // Memoize additionalParams to prevent SearchableSelect from recreating fetchData on every render
   // This prevents infinite API calls
@@ -2893,19 +2940,44 @@ function ImportJobCreate() {
           mbl_date: carrierDetailsForm.values.mbl_date,
         },
         // Prefer live form containers (cfs_name, unloading_date) over stale job payload
-        containerDetails:
-          containerDetailsForm.values.containers?.length > 0
-            ? containerDetailsForm.values.containers
-            : (jobData as { containerDetails?: unknown[] } | undefined)
-                ?.containerDetails ||
-              (jobData as { container_details?: unknown[] } | undefined)
-                ?.container_details ||
-              [],
+        containerDetails: (() => {
+          const source =
+            containerDetailsForm.values.containers?.length > 0
+              ? containerDetailsForm.values.containers
+              : (jobData as { containerDetails?: unknown[] } | undefined)
+                  ?.containerDetails ||
+                (jobData as { container_details?: unknown[] } | undefined)
+                  ?.container_details ||
+                [];
+          return (source as Array<Record<string, unknown>>).map((c) => {
+            const code = String(c.container_type ?? "").trim();
+            const nameFromRow = String(c.container_type_name ?? "").trim();
+            const nameFromDetails = String(
+              (c.container_type_details as { container_type_name?: string } | undefined)
+                ?.container_type_name ?? "",
+            ).trim();
+            const nameFromMaster =
+              containerTypeData.find((o) => o.value === code)?.label || "";
+            return {
+              ...c,
+              container_type_name:
+                nameFromRow || nameFromDetails || nameFromMaster || "",
+            };
+          });
+        })(),
       };
 
       const housingDataForDo = {
         ...housing,
         house_date: housing.house_date,
+        cargo_details: Array.isArray(housing.cargo_details)
+          ? housing.cargo_details.map((cargo) => ({
+              ...cargo,
+              package_type: cargo.package_type || "",
+              package_type_name: cargo.package_type_name || "",
+              no_of_packages: cargo.no_of_packages,
+            }))
+          : [],
         attention_to: resolveDoAttentionTo(type, housing),
         please_deliver_to: resolveDoDeliverTo(housing, deliverTo),
         do_heading:
@@ -5322,9 +5394,24 @@ function ImportJobCreate() {
                       searchable
                       data={containerTypeData}
                       nothingFoundMessage="No container types found"
-                      {...containerDetailsForm.getInputProps(
-                        `containers.${index}.container_type`,
-                      )}
+                      value={
+                        containerDetailsForm.values.containers[index]
+                          ?.container_type || null
+                      }
+                      onChange={(val) => {
+                        const next = val || "";
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.container_type`,
+                          next,
+                        );
+                        const label =
+                          containerTypeData.find((o) => o.value === next)
+                            ?.label || "";
+                        containerDetailsForm.setFieldValue(
+                          `containers.${index}.container_type_name`,
+                          label,
+                        );
+                      }}
                       disabled={isReadOnly}
                       error={
                         containerDetailsForm.errors[

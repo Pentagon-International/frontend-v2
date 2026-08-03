@@ -201,6 +201,7 @@ type CargoDetail = {
   container_number: string; // UI field - used to select container
   container_id?: number | string; // Container ID for edit mode (from container_details)
   package_type: string;
+  package_type_name?: string;
   no_of_packages: number | null;
   gross_weight: HouseCargoWeightValue;
   volume: HouseCargoWeightValue;
@@ -703,6 +704,17 @@ function HouseCreate() {
               package_type: cargo.package_type
                 ? String(cargo.package_type)
                 : "",
+              package_type_name: (() => {
+                const explicit = cargo.package_type_name
+                  ? String(cargo.package_type_name).trim()
+                  : "";
+                if (explicit) return explicit;
+                const raw = cargo.package_type
+                  ? String(cargo.package_type).trim()
+                  : "";
+                const dashIdx = raw.indexOf(" - ");
+                return dashIdx >= 0 ? raw.slice(dashIdx + 3).trim() : "";
+              })(),
               no_of_packages: cargo.no_of_packages as number | null,
               gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
               volume: importHouseCargoWeightFromApi(cargo.volume),
@@ -3040,7 +3052,35 @@ function HouseCreate() {
           "",
         mawbDetails: mblDetails,
         carrierDetails,
-        containerDetails: location.state?.containerDetails || [],
+        containerDetails: (() => {
+          const formContainers = (location.state?.containerDetails ||
+            []) as Array<Record<string, unknown>>;
+          const apiContainers = (location.state?.job?.container_details ||
+            location.state?.job?.containerDetails ||
+            []) as Array<Record<string, unknown>>;
+          return formContainers.map((c) => {
+            const no = String(c.container_no ?? "").trim();
+            const id = String(c.id ?? "").trim();
+            const apiMatch = apiContainers.find((a) => {
+              const aNo = String(a.container_no ?? "").trim();
+              const aId = String(a.id ?? "").trim();
+              return (no && aNo === no) || (id && aId === id);
+            });
+            const details = apiMatch?.container_type_details as
+              | { container_type_name?: string }
+              | undefined;
+            const name = String(
+              c.container_type_name ||
+                details?.container_type_name ||
+                apiMatch?.container_type_name ||
+                "",
+            ).trim();
+            return {
+              ...c,
+              container_type_name: name,
+            };
+          });
+        })(),
       };
 
       // cargo_details lives in UI state, not form.values (same source as house-card DO)
@@ -3060,6 +3100,8 @@ function HouseCreate() {
             container_number: cargo.container_number,
             container_id: cargo.container_id,
             no_of_packages: cargo.no_of_packages,
+            package_type: cargo.package_type,
+            package_type_name: cargo.package_type_name,
             gross_weight: cargo.gross_weight,
             volume: cargo.volume,
             chargeable_weight: cargo.chargeable_weight,
@@ -4642,9 +4684,15 @@ function HouseCreate() {
                       value={cargo.package_type || null}
                       onChange={(value) => {
                         const updated = [...cargoDetails];
+                        const next = value || "";
+                        const dashIdx = next.indexOf(" - ");
                         updated[index] = {
                           ...updated[index],
-                          package_type: value || "",
+                          package_type: next,
+                          package_type_name:
+                            dashIdx >= 0
+                              ? next.slice(dashIdx + 3).trim()
+                              : next,
                         };
                         setCargoDetails(updated);
                       }}

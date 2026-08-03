@@ -223,3 +223,5 @@ export type {
   BookingMilestoneRow,
 } from "./BookingMasterListTable";
 export { BookingCreateJobLoader } from "./BookingCreateJobLoader";
+export { default as LastBookingsList } from "./LastBookingsList";
+export type { BookingRow as LastBookingRow } from "./LastBookingsList";

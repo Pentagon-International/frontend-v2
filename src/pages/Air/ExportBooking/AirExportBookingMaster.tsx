@@ -51,6 +51,7 @@ import {
   IconMapPin,
   IconSearch,
   IconX,
+  IconCopy,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,15 +75,17 @@ import {
   erpToolbarSelectStyles,
   BookingCreateJobLoader,
   getBookingRowAirVolume,
+  LastBookingsList,
   type ErpListTheme,
 } from "../../../components";
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
+import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import dayjs from "dayjs";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
@@ -203,6 +206,7 @@ type ExportShipmentData = {
   origin_code?: string;
   destination_code?: string;
   is_hazardous?: boolean;
+  customer_code?: string;
   customer_code_read?: string;
   origin_code_read?: string;
   destination_code_read?: string;
@@ -1065,6 +1069,29 @@ function AirExportBookingMaster() {
   const [createJobBookingId, setCreateJobBookingId] = useState<number | null>(
     null,
   );
+  const [isDuplicatingBooking, setIsDuplicatingBooking] = useState(false);
+  const [duplicateCustomerCode, setDuplicateCustomerCode] = useState<
+    string | null
+  >(null);
+  const [
+    lastBookingsDrawerOpened,
+    { open: openLastBookingsDrawer, close: closeLastBookingsDrawer },
+  ] = useDisclosure(false);
+
+  const openDuplicateForRow = useCallback(
+    (row: ExportShipmentData) => {
+      const customerCode =
+        (row.customer_code_read || row.customer_code || "").trim() || null;
+      setDuplicateCustomerCode(customerCode);
+      openLastBookingsDrawer();
+    },
+    [openLastBookingsDrawer],
+  );
+
+  const handleCloseLastBookingsDrawer = useCallback(() => {
+    closeLastBookingsDrawer();
+    setDuplicateCustomerCode(null);
+  }, [closeLastBookingsDrawer]);
 
   // ---- filter form ----
   const filterForm = useForm<FilterState>({
@@ -1707,10 +1734,13 @@ function AirExportBookingMaster() {
           >
             Edit Booking
           </Menu.Item>
-          {/* <Menu.Item leftSection={<IconCopy size={14} />}
-            onClick={() => ToastNotification({ type: "info", message: "Duplicate not available yet" })}>
+          <Menu.Item
+            leftSection={<IconCopy size={14} />}
+            disabled={isDuplicatingBooking}
+            onClick={() => openDuplicateForRow(row)}
+          >
             Duplicate
-          </Menu.Item> */}
+          </Menu.Item>
           <Menu.Divider />
           {/* <Menu.Item leftSection={<IconFileText size={14} />}
             onClick={() => ToastNotification({ type: "info", message: "Generate AWB coming soon" })}>
@@ -3148,7 +3178,49 @@ function AirExportBookingMaster() {
           </Group>
         </Modal>
 
-        <BookingCreateJobLoader active={createJobBookingId != null} />
+        <Drawer
+          opened={lastBookingsDrawerOpened}
+          onClose={handleCloseLastBookingsDrawer}
+          position="right"
+          size="70%"
+          title="Last Bookings"
+          titleProps={{ style: { fontWeight: "bold" } }}
+          classNames={v0ModalClassNames}
+          styles={v0ModalStyles}
+        >
+          <LastBookingsList
+            service="AIR"
+            serviceType="EXPORT"
+            customerCode={duplicateCustomerCode}
+            onRowSelect={(row) => {
+              const bookingId = row.id as string | number | undefined;
+              if (bookingId == null) {
+                ToastNotification({
+                  type: "error",
+                  message: "Selected booking has no id.",
+                });
+                return;
+              }
+              handleCloseLastBookingsDrawer();
+              void navigateBookingDuplicate({
+                bookingId,
+                navigate,
+                persistListState,
+                onStart: () => setIsDuplicatingBooking(true),
+                onEnd: () => setIsDuplicatingBooking(false),
+              });
+            }}
+          />
+        </Drawer>
+
+        <BookingCreateJobLoader
+          active={createJobBookingId != null || isDuplicatingBooking}
+          message={
+            isDuplicatingBooking
+              ? "Preparing duplicate booking…"
+              : undefined
+          }
+        />
         <Outlet />
       </Box>
     </MantineProvider>

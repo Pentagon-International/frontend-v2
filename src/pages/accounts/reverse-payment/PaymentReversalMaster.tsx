@@ -78,6 +78,7 @@ type PaymentReversalRow = Record<string, unknown> & {
   day_book_name?: string;
   payment_no?: string;
   reverse_payment_no?: string;
+  original_doc_no?: string;
   type?: string;
   status?: string;
   amount?: number | string;
@@ -112,6 +113,7 @@ type PaymentReversalFilters = {
   day_book_id: string;
   day_book_name: string;
   reverse_payment_no: string;
+  original_doc_no: string;
   date_from: Date | null;
   date_to: Date | null;
   type: string;
@@ -123,6 +125,7 @@ type PaymentReversalColumnVisibility = {
   sno: boolean;
   day_book_name: boolean;
   reverse_payment_no: boolean;
+  original_doc_no: boolean;
   date: boolean;
   type: boolean;
   amount: boolean;
@@ -133,6 +136,7 @@ const paymentReversalColumnDefault: PaymentReversalColumnVisibility = {
   sno: true,
   day_book_name: true,
   reverse_payment_no: true,
+  original_doc_no: true,
   date: true,
   type: true,
   amount: true,
@@ -143,6 +147,7 @@ const paymentReversalColumnLabels: Record<keyof PaymentReversalColumnVisibility,
   sno: "S.No",
   day_book_name: "Day Book",
   reverse_payment_no: "Reverse Payment No",
+  original_doc_no: "Payment No",
   date: "Date",
   type: "Type",
   amount: "Amount",
@@ -176,6 +181,7 @@ export default function PaymentReversalMaster() {
     day_book_id: "",
     day_book_name: "",
     reverse_payment_no: "",
+    original_doc_no: "",
     date_from: defaultDateFrom,
     date_to: defaultDateTo,
     type: "",
@@ -545,6 +551,32 @@ export default function PaymentReversalMaster() {
               />
             )}
           />
+        ),
+      },
+      {
+        accessorKey: "original_doc_no",
+        header: "Payment No",
+        size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Payment No"
+            value={appliedFilters.original_doc_no}
+            displayValue={appliedFilters.original_doc_no}
+            theme={erpTheme}
+            placeholder="Filter Payment No"
+            isEditing={editingHeaderId === "original_doc_no"}
+            onStartEdit={() => openHeaderEditor("original_doc_no")}
+            onStopEdit={() => collapseHeaderEditor("original_doc_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                original_doc_no: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ cell }) => (
+          <Text size="sm">{cell.getValue<string>() || "-"}</Text>
         ),
       },
       {
@@ -1077,6 +1109,24 @@ export default function PaymentReversalMaster() {
                       searchFields={["reverse_payment_no"]}
                       size="xs"
                       classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      label="Payment No"
+                      placeholder="Type Payment No"
+                      value={draftFilters.original_doc_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          original_doc_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={filterFieldStyles}
                     />
                   </Box>

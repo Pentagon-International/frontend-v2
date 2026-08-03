@@ -1001,6 +1001,7 @@ export default function SupplierInvoiceCreate({
         isIndiaUser && !v ? "State is required" : null,
       Inv_Crn_no: (v) =>
         !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
+      Inv_Crn_note: (v) => (!v ? "Inv/Crn Date is required" : null),
     },
   });
 
@@ -2990,8 +2991,17 @@ export default function SupplierInvoiceCreate({
               <SingleDateInput
                 label="Inv/Crn Date"
                 placeholder="Select Inv/Crn Date"
+                withAsterisk
                 value={normalizeDate(form.values.Inv_Crn_note)}
-                onChange={(d) => form.setFieldValue("Inv_Crn_note", d)}
+                onChange={(d) => {
+                  form.setFieldValue("Inv_Crn_note", d);
+                  if (d) form.clearFieldError("Inv_Crn_note");
+                }}
+                error={
+                  form.errors.Inv_Crn_note
+                    ? String(form.errors.Inv_Crn_note)
+                    : undefined
+                }
                 disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
               />
             </Grid.Col>

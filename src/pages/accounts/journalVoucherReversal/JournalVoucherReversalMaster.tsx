@@ -76,6 +76,7 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 type JVRecord = {
   id?: number;
   document_no?: string;
+  original_doc_no?: string;
   account_name?: string;
   narration?: string;
   journal_date?: string;
@@ -132,6 +133,7 @@ const LIST_KEY = "JOURNAL_VOUCHER_REVERSAL_MASTER";
 
 type JVReversalFilters = {
   document_no: string;
+  original_doc_no: string;
   account_name: string;
   journal_date_from: Date | null;
   journal_date_to: Date | null;
@@ -155,6 +157,7 @@ function statusColor(status?: string): string {
 type JVReversalColumnVisibility = {
   sno: boolean;
   document_no: boolean;
+  original_doc_no: boolean;
   journal_date: boolean;
   account_name: boolean;
   narration: boolean;
@@ -168,6 +171,7 @@ type JVReversalColumnVisibility = {
 const jvReversalColumnDefault: JVReversalColumnVisibility = {
   sno: true,
   document_no: true,
+  original_doc_no: true,
   journal_date: true,
   account_name: true,
   narration: true,
@@ -181,6 +185,7 @@ const jvReversalColumnDefault: JVReversalColumnVisibility = {
 const jvReversalColumnLabels: Record<keyof JVReversalColumnVisibility, string> = {
   sno: "S.No",
   document_no: "Document No",
+  original_doc_no: "Journal Voucher No",
   journal_date: "Journal Date",
   account_name: "Account Name",
   narration: "Narration",
@@ -218,6 +223,7 @@ function JournalVoucherReversalMaster() {
 
   const DEFAULT_FILTERS: JVReversalFilters = {
     document_no: "",
+    original_doc_no: "",
     account_name: "",
     journal_date_from: defaultDateFrom,
     journal_date_to: defaultDateTo,
@@ -558,6 +564,34 @@ function JournalVoucherReversalMaster() {
         ),
         Cell: ({ cell }) => (
           <Text size="sm" fw={600} c={primary} style={{ fontFamily: erpTheme.fontSans }}>
+            {cell.getValue<string>() || "-"}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "original_doc_no",
+        header: "Journal Voucher No",
+        size: 160,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Journal Voucher No"
+            value={appliedFilters.original_doc_no}
+            displayValue={appliedFilters.original_doc_no}
+            theme={erpTheme}
+            placeholder="Filter Journal Voucher No"
+            isEditing={editingHeaderId === "original_doc_no"}
+            onStartEdit={() => openHeaderEditor("original_doc_no")}
+            onStopEdit={() => collapseHeaderEditor("original_doc_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                original_doc_no: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ cell }) => (
+          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() || "-"}
           </Text>
         ),
@@ -1132,6 +1166,24 @@ function JournalVoucherReversalMaster() {
                         setDraftFilters((prev) => ({
                           ...prev,
                           document_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      label="Journal Voucher No"
+                      placeholder="Type Journal Voucher No"
+                      value={draftFilters.original_doc_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          original_doc_no: e.currentTarget.value,
                         }))
                       }
                       size="xs"

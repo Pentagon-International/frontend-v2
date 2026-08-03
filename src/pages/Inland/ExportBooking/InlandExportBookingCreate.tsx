@@ -42,6 +42,10 @@ function InlandExportBookingCreate() {
 
   // Get booking data from quotation if available (for create mode)
   const bookingData = location.state?.bookingData;
+  const duplicateBooking =
+    location.state?.prefillFromLastBookings && location.state?.duplicateBooking
+      ? (location.state.duplicateBooking as Record<string, unknown>)
+      : undefined;
   console.log("bookignData-------------------------", bookingData);
 
   console.log("=== AirExportGenerationCreate Debug ===");
@@ -49,6 +53,7 @@ function InlandExportBookingCreate() {
   console.log("bookingData:", bookingData);
   console.log("typeof bookingData:", typeof bookingData);
   console.log("bookingData exists:", !!bookingData);
+  console.log("duplicateBooking:", duplicateBooking);
 
   // Map booking data to stepper format
   const mapBookingDataToStepperFormat = (data: Record<string, unknown>) => {
@@ -840,7 +845,9 @@ function InlandExportBookingCreate() {
             <InlandExportBookingStepper
               onStepChange={handleStepChange}
               onComplete={handleComplete}
-              initialData={isEditMode ? jobData : mappedBookingData}
+              initialData={
+                isEditMode ? jobData : (duplicateBooking ?? mappedBookingData)
+              }
               isEditMode={isEditMode}
               jobData={jobData}
               active={active}
