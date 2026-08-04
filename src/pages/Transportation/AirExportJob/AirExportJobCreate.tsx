@@ -56,6 +56,7 @@ import {
   DateTimeInput,
   EstimatesSection,
   useEstimatesForm,
+  ERPListJobStatusPill,
 } from "../../../components";
 import dayjs from "dayjs";
 import {
@@ -72,6 +73,7 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { isJobClosed } from "../../../utils/closeJob";
 import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -534,19 +536,32 @@ function AirExportJobCreate() {
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
     const pathname = location.pathname.toLowerCase();
-    const hasJobData = location.state?.job && location.state.job.id;
-
-    // Check for edit, view, or create in the pathname
-    if (pathname.includes("/edit") || hasJobData) {
-      return "edit";
-    } else if (pathname.includes("/view")) {
+    const state = location.state as
+      | {
+          job?: { id?: unknown; status?: string | null };
+          viewMode?: boolean;
+          actionType?: string;
+        }
+      | null
+      | undefined;
+    // View must win over hasJobData so closed/view navigations stay read-only.
+    if (
+      pathname.includes("/view") ||
+      state?.viewMode === true ||
+      String(state?.actionType ?? "").toLowerCase() === "view" ||
+      isJobClosed(state?.job?.status)
+    ) {
       return "view";
     }
-    // Default to create if neither edit nor view
+    const hasJobData = state?.job && state.job.id;
+    if (pathname.includes("/edit") || hasJobData) {
+      return "edit";
+    }
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly = mode === "view";
+  const isReadOnly =
+    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2213,6 +2228,7 @@ function AirExportJobCreate() {
           cargoDetails: cargoDetailsForm.values,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
+          ...(isReadOnly && { viewMode: true }),
         },
       });
 
@@ -2232,6 +2248,7 @@ function AirExportJobCreate() {
       location.state,
       navigate,
       jobDocuments,
+      isReadOnly,
     ],
   );
 
@@ -3157,6 +3174,9 @@ function AirExportJobCreate() {
             <Badge color="#105476" radius="md" size="md">
               {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
+          )}
+          {jobData?.job_id && (
+            <ERPListJobStatusPill status={jobData?.status} />
           )}
         </Group>
         {!isReadOnly && (
@@ -6002,6 +6022,17 @@ function AirExportJobCreate() {
                     )}
                   </Group>
                   <Group gap="xs">
+                    {isReadOnly && (
+                      <Button
+                        variant="light"
+                        color="#105476"
+                        size="xs"
+                        leftSection={<IconEye size={14} />}
+                        onClick={() => handleEditHawbDetail(index)}
+                      >
+                        View
+                      </Button>
+                    )}
                     {!isReadOnly && (
                       <>
                         <Button

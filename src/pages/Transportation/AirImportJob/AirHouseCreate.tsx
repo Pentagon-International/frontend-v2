@@ -55,6 +55,7 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { isJobClosed } from "../../../utils/closeJob";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -551,6 +552,11 @@ function HouseCreate() {
     enabled: !!editData?.shipment_id,
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
+  const isReadOnly =
+    location.state?.viewMode === true ||
+    isJobClosed(
+      (location.state?.job as { status?: string | null } | undefined)?.status,
+    );
 
   useEffect(() => {
     if (!isEditMode && active === 4) setActive(0);
@@ -2534,15 +2540,21 @@ function HouseCreate() {
     updatedHousingDetails: typeof existingHousingDetails,
   ) => {
     const isInEditMode = location.state?.job && location.state.job.id;
-    const navigatePath = isInEditMode
-      ? "/air/import-job/edit"
-      : "/air/import-job/create";
+    const navigatePath = isReadOnly
+      ? "/air/import-job/view"
+      : isInEditMode
+        ? "/air/import-job/edit"
+        : "/air/import-job/create";
 
     navigate(navigatePath, {
       state: {
         fromHouseCreate: true,
         hawbDetails: updatedHousingDetails,
         housingDetails: updatedHousingDetails,
+        ...(isReadOnly && { viewMode: true, actionType: "view" }),
+        ...(location.state?.fromGlobalSearch && {
+          fromGlobalSearch: location.state.fromGlobalSearch,
+        }),
         ...(location.state?.job && {
           job: {
             ...location.state.job,
@@ -2569,6 +2581,7 @@ function HouseCreate() {
   };
 
   const handleSave = () => {
+    if (isReadOnly) return;
     navigateToJobWithHousingList(buildUpdatedHousingDetailsFromForm());
   };
 
@@ -2768,7 +2781,11 @@ function HouseCreate() {
       <Group justify="space-between" mb="lg">
         <Group gap="md">
           <Text size="xl" fw={600} c="#105476">
-            {isEditMode ? "Edit HAWB Details" : "Create HAWB Details"}
+            {isReadOnly
+              ? "View HAWB Details"
+              : isEditMode
+                ? "Edit HAWB Details"
+                : "Create HAWB Details"}
           </Text>
           {isEditMode && editData?.shipment_id && (
             <Badge color="#105476" size="md" variant="light">
@@ -2804,6 +2821,7 @@ function HouseCreate() {
           >
             Back to Import Job
           </Button> */}
+          {!isReadOnly && (
           <Button
             color="#105476"
             variant="outline"
@@ -2881,6 +2899,7 @@ function HouseCreate() {
           >
             Save HBL
           </Button>
+          )}
           <Menu
             shadow="md"
             width={JOB_HOUSE_ACTION_MENU_WIDTH}
@@ -3031,18 +3050,22 @@ function HouseCreate() {
                 Events
               </Menu.Item>
 
-              <HouseCreateAgentInvoiceMenuItem
-                invoicePath="/air/import-job/invoice"
-                serviceType="AIR"
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-              />
+              {!isReadOnly && (
+                <>
+                  <HouseCreateAgentInvoiceMenuItem
+                    invoicePath="/air/import-job/invoice"
+                    serviceType="AIR"
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                  />
 
-              <HouseAutomateVendorInvoiceMenuItem
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-                onOpen={openVendorInvoiceAutomation}
-              />
+                  <HouseAutomateVendorInvoiceMenuItem
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                    onOpen={openVendorInvoiceAutomation}
+                  />
+                </>
+              )}
 
               <HouseJobLedgerMenuItem
                 serviceName="Air Import"
@@ -3142,6 +3165,11 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        styles={
+          isReadOnly
+            ? { panel: { pointerEvents: "none" } }
+            : undefined
+        }
       >
         <Tabs.List
           mb="md"
@@ -4416,7 +4444,7 @@ function HouseCreate() {
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
               </Text>
-              {location.state?.job?.id != null && (
+              {location.state?.job?.id != null && !isReadOnly && (
                 <Group gap="xs">
                   <Button
                     variant="outline"
@@ -4574,31 +4602,31 @@ function HouseCreate() {
                         charges: collectCharges,
                       };
                       navigate("/air/import-job/invoice", {
-                        state: {
-                          serviceType: "AIR",
-                          hawbDetails: [detailForInvoice],
-                          housingDetails: [detailForInvoice],
-                          is_agent: false,
-                          // Indicate that Bill To / State / Address should come from consignee
-                          billToFrom: "consignee",
-                          ...(location.state?.job && {
-                            job: location.state.job,
-                          }),
-                          ...(location.state?.mawbDetails && {
-                            mawbDetails: location.state.mawbDetails,
-                          }),
-                          ...(location.state?.carrierDetails && {
-                            carrierDetails: location.state.carrierDetails,
-                          }),
-                          ...(location.state?.routings && {
-                            routings: location.state.routings,
-                          }),
-                        },
-                      });
-                    }}
-                  >
-                    Create Invoice
-                  </Button>
+                          state: {
+                            serviceType: "AIR",
+                            hawbDetails: [detailForInvoice],
+                            housingDetails: [detailForInvoice],
+                            is_agent: false,
+                            // Indicate that Bill To / State / Address should come from consignee
+                            billToFrom: "consignee",
+                            ...(location.state?.job && {
+                              job: location.state.job,
+                            }),
+                            ...(location.state?.mawbDetails && {
+                              mawbDetails: location.state.mawbDetails,
+                            }),
+                            ...(location.state?.carrierDetails && {
+                              carrierDetails: location.state.carrierDetails,
+                            }),
+                            ...(location.state?.routings && {
+                              routings: location.state.routings,
+                            }),
+                          },
+                        });
+                      }}
+                    >
+                      Create Invoice
+                    </Button>
                 </Group>
               )}
             </Group>
@@ -5904,7 +5932,9 @@ function HouseCreate() {
           color="#105476"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => {
-            if (isEditMode && editIndex !== undefined) {
+            if (isReadOnly) {
+              navigateToJobWithHousingList(existingHousingDetails);
+            } else if (isEditMode && editIndex !== undefined) {
               navigateToJobWithHousingList(
                 buildUpdatedHousingDetailsFromForm(),
               );
@@ -5937,7 +5967,7 @@ function HouseCreate() {
               Next
             </Button>
           )}
-          {active === 3 && (
+          {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"

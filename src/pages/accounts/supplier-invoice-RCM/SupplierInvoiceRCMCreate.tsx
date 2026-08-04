@@ -952,7 +952,8 @@ import {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [invCrnCalcKey, isIndiaUser]);
   
-    // Auto-calc Approved Amount = net charges local; Difference = Inv/Crn - Approved
+    // Auto-calc Approved Amount = |sum(Dr) − sum(Cr)| of charge local amounts (same for INV and CRN).
+    // Difference Amount = Inv/Crn Amount − Approved Amount.
     const chargesNetKey = form.values.charges_data
       .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
       .join(",");
@@ -962,16 +963,19 @@ import {
         charges.reduce((acc, row) => {
           const amt = parseNum(row.amount_in_local) ?? 0;
           if (!amt) return acc;
+          // Dr adds, Cr subtracts — difference of all Drs vs Crs
           return row.Dr_Cr === "Cr" ? acc - amt : acc + amt;
         }, 0),
       );
-      const nextApproved = clampAmount(netLocal);
+      // Absolute difference so approved stays non-negative for INV and CRN
+      const nextApproved = clampAmount(Math.abs(netLocal));
       if (nextApproved !== (form.values.approved_amount ?? null)) {
         form.setFieldValue("approved_amount", nextApproved);
       }
   
       const inv = parseNum(form.values.Inv_crn_amount) ?? 0;
-      const diff = clampAmount(round2(inv - netLocal));
+      const approved = nextApproved ?? 0;
+      const diff = clampAmount(round2(inv - approved));
       if (diff !== (form.values.difference_amount ?? null)) {
         form.setFieldValue("difference_amount", diff);
       }

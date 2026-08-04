@@ -56,6 +56,7 @@ import {
   DateTimeInput,
   EstimatesSection,
   useEstimatesForm,
+  ERPListJobStatusPill,
 } from "../../../components";
 import dayjs from "dayjs";
 import {
@@ -77,6 +78,7 @@ import {
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
+import { isJobClosed } from "../../../utils/closeJob";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import * as yup from "yup";
@@ -528,19 +530,32 @@ function InlandExportJobCreate() {
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
     const pathname = location.pathname.toLowerCase();
-    const hasJobData = location.state?.job && location.state.job.id;
-
-    // Check for edit, view, or create in the pathname
-    if (pathname.includes("/edit") || hasJobData) {
-      return "edit";
-    } else if (pathname.includes("/view")) {
+    const state = location.state as
+      | {
+          job?: { id?: unknown; status?: string | null };
+          viewMode?: boolean;
+          actionType?: string;
+        }
+      | null
+      | undefined;
+    // View must win over hasJobData so closed/view navigations stay read-only.
+    if (
+      pathname.includes("/view") ||
+      state?.viewMode === true ||
+      String(state?.actionType ?? "").toLowerCase() === "view" ||
+      isJobClosed(state?.job?.status)
+    ) {
       return "view";
     }
-    // Default to create if neither edit nor view
+    const hasJobData = state?.job && state.job.id;
+    if (pathname.includes("/edit") || hasJobData) {
+      return "edit";
+    }
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly = mode === "view";
+  const isReadOnly =
+    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
 
   const { data: inlandExportServices = [] } = useQuery({
     queryKey: ["serviceMaster", "inland_export"],
@@ -2232,6 +2247,7 @@ function InlandExportJobCreate() {
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
+          ...(isReadOnly && { viewMode: true }),
         },
       });
 
@@ -2250,6 +2266,7 @@ function InlandExportJobCreate() {
       location.state,
       navigate,
       jobDocuments,
+      isReadOnly,
     ],
   );
 
@@ -2824,6 +2841,9 @@ function InlandExportJobCreate() {
             <Badge color="#105476" radius="md" size="md">
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
             </Badge>
+          )}
+          {jobData?.job_id && (
+            <ERPListJobStatusPill status={jobData?.status} />
           )}
         </Group>
         {!isReadOnly && (
@@ -5270,6 +5290,17 @@ function InlandExportJobCreate() {
                     )}
                   </Group>
                   <Group gap="xs">
+                    {isReadOnly && (
+                      <Button
+                        variant="light"
+                        color="#105476"
+                        size="xs"
+                        leftSection={<IconEye size={14} />}
+                        onClick={() => handleEditHawbDetail(index)}
+                      >
+                        View
+                      </Button>
+                    )}
                     {!isReadOnly && (
                       <>
                         <Button

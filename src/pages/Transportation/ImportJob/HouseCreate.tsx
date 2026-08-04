@@ -56,6 +56,7 @@ import {
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { isJobClosed } from "../../../utils/closeJob";
 import {
   bindMoneyWholeNumberMode,
   getAmountDecimalScale,
@@ -631,6 +632,11 @@ function HouseCreate() {
     enabled: !!editData?.shipment_id,
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
+  const isReadOnly =
+    location.state?.viewMode === true ||
+    isJobClosed(
+      (location.state?.job as { status?: string | null } | undefined)?.status,
+    );
   const isLclShipment = useMemo(
     () =>
       String(location.state?.mblDetails?.service ?? "").toUpperCase() === "LCL",
@@ -2578,14 +2584,20 @@ function HouseCreate() {
     updatedHousingDetails: typeof existingHousingDetails,
   ) => {
     const isInEditMode = location.state?.job && location.state.job.id;
-    const navigatePath = isInEditMode
-      ? "/SeaExport/import-job/edit"
-      : "/SeaExport/import-job/create";
+    const navigatePath = isReadOnly
+      ? "/SeaExport/import-job/view"
+      : isInEditMode
+        ? "/SeaExport/import-job/edit"
+        : "/SeaExport/import-job/create";
 
     navigate(navigatePath, {
       state: {
         fromHouseCreate: true,
         housingDetails: updatedHousingDetails,
+        ...(isReadOnly && { viewMode: true, actionType: "view" }),
+        ...(location.state?.fromGlobalSearch && {
+          fromGlobalSearch: location.state.fromGlobalSearch,
+        }),
         ...(location.state?.job && {
           job: {
             ...location.state.job,
@@ -2618,6 +2630,7 @@ function HouseCreate() {
   };
 
   const handleSave = () => {
+    if (isReadOnly) return;
     navigateToJobWithHousingList(buildUpdatedHousingDetailsFromForm());
   };
 
@@ -3189,7 +3202,11 @@ function HouseCreate() {
       <Group justify="space-between" mb="lg">
         <Group gap="md">
           <Text size="xl" fw={600} c="#105476">
-            {isEditMode ? "Edit HBL Details" : "Create HBL Details"}
+            {isReadOnly
+              ? "View HBL Details"
+              : isEditMode
+                ? "Edit HBL Details"
+                : "Create HBL Details"}
           </Text>
           {isEditMode && editData?.shipment_id && (
             <Badge color="#105476" size="md" variant="light">
@@ -3225,6 +3242,7 @@ function HouseCreate() {
           >
             Back to Import Job
           </Button> */}
+          {!isReadOnly && (
           <Button
             color="#105476"
             variant="outline"
@@ -3288,6 +3306,7 @@ function HouseCreate() {
           >
             Save HBL
           </Button>
+          )}
           <Menu
             shadow="md"
             width={JOB_HOUSE_ACTION_MENU_WIDTH}
@@ -3429,18 +3448,22 @@ function HouseCreate() {
                 Events
               </Menu.Item>
 
-              <HouseCreateAgentInvoiceMenuItem
-                invoicePath="/SeaExport/import-job/invoice"
-                serviceType={location.state?.mblDetails?.service || "FCL"}
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-              />
+              {!isReadOnly && (
+                <>
+                  <HouseCreateAgentInvoiceMenuItem
+                    invoicePath="/SeaExport/import-job/invoice"
+                    serviceType={location.state?.mblDetails?.service || "FCL"}
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                  />
 
-              <HouseAutomateVendorInvoiceMenuItem
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-                onOpen={openVendorInvoiceAutomation}
-              />
+                  <HouseAutomateVendorInvoiceMenuItem
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                    onOpen={openVendorInvoiceAutomation}
+                  />
+                </>
+              )}
 
               <HouseJobLedgerMenuItem
                 serviceName="Ocean Import"
@@ -3540,6 +3563,11 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        styles={
+          isReadOnly
+            ? { panel: { pointerEvents: "none" } }
+            : undefined
+        }
       >
         <Tabs.List
           mb="md"
@@ -4944,7 +4972,7 @@ function HouseCreate() {
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
               </Text>
-              {location.state?.job?.id != null && (
+              {location.state?.job?.id != null && !isReadOnly && (
                 <Group gap="xs">
                   <Button
                     variant="outline"
@@ -5104,32 +5132,32 @@ function HouseCreate() {
                         charges: collectCharges,
                       };
                       navigate("/SeaExport/import-job/invoice", {
-                        state: {
-                          serviceType:
-                            location.state?.mblDetails?.service || "FCL",
-                          hawbDetails: [detailForInvoice],
-                          housingDetails: [detailForInvoice],
-                          is_agent: false,
-                          // Explicitly indicate that Bill To / State / Address should come from consignee
-                          billToFrom: "consignee",
-                          ...(location.state?.job && {
-                            job: location.state.job,
-                          }),
-                          ...(location.state?.mblDetails && {
-                            mblDetails: location.state.mblDetails,
-                          }),
-                          ...(location.state?.carrierDetails && {
-                            carrierDetails: location.state.carrierDetails,
-                          }),
-                          ...(location.state?.routings && {
-                            routings: location.state.routings,
-                          }),
-                        },
-                      });
-                    }}
-                  >
-                    Create Invoice
-                  </Button>
+                          state: {
+                            serviceType:
+                              location.state?.mblDetails?.service || "FCL",
+                            hawbDetails: [detailForInvoice],
+                            housingDetails: [detailForInvoice],
+                            is_agent: false,
+                            // Explicitly indicate that Bill To / State / Address should come from consignee
+                            billToFrom: "consignee",
+                            ...(location.state?.job && {
+                              job: location.state.job,
+                            }),
+                            ...(location.state?.mblDetails && {
+                              mblDetails: location.state.mblDetails,
+                            }),
+                            ...(location.state?.carrierDetails && {
+                              carrierDetails: location.state.carrierDetails,
+                            }),
+                            ...(location.state?.routings && {
+                              routings: location.state.routings,
+                            }),
+                          },
+                        });
+                      }}
+                    >
+                      Create Invoice
+                    </Button>
                 </Group>
               )}
             </Group>
@@ -6363,7 +6391,9 @@ function HouseCreate() {
           color="#105476"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => {
-            if (isEditMode && editIndex !== undefined) {
+            if (isReadOnly) {
+              navigateToJobWithHousingList(existingHousingDetails);
+            } else if (isEditMode && editIndex !== undefined) {
               navigateToJobWithHousingList(
                 buildUpdatedHousingDetailsFromForm(),
               );
@@ -6396,7 +6426,7 @@ function HouseCreate() {
               Next
             </Button>
           )}
-          {active === 3 && (
+          {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"

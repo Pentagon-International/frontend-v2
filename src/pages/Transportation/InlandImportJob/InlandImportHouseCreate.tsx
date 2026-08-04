@@ -54,6 +54,7 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { isJobClosed } from "../../../utils/closeJob";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -480,6 +481,11 @@ function HouseCreate() {
     enabled: !!editData?.shipment_id,
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
+  const isReadOnly =
+    location.state?.viewMode === true ||
+    isJobClosed(
+      (location.state?.job as { status?: string | null } | undefined)?.status,
+    );
 
   useEffect(() => {
     if (!isEditMode && active === 4) setActive(0);
@@ -2197,7 +2203,47 @@ function HouseCreate() {
   };
 
   // Handle save - navigate to ExportJobCreate with housing details
+  const navigateToJobWithHousingList = (
+    updatedHousingDetails: typeof existingHousingDetails,
+  ) => {
+    const isInEditMode = location.state?.job && location.state.job.id;
+    const navigatePath = isReadOnly
+      ? "/inland/import-job/view"
+      : isInEditMode
+        ? "/inland/import-job/edit"
+        : "/inland/import-job/create";
+
+    navigate(navigatePath, {
+      state: {
+        fromHouseCreate: true,
+        hawbDetails: updatedHousingDetails,
+        housingDetails: updatedHousingDetails,
+        ...(isReadOnly && { viewMode: true, actionType: "view" }),
+        ...(location.state?.fromGlobalSearch && {
+          fromGlobalSearch: location.state.fromGlobalSearch,
+        }),
+        ...(location.state?.job && { job: location.state.job }),
+        ...(location.state?.mawbDetails && {
+          mawbDetails: location.state.mawbDetails,
+        }),
+        ...(location.state?.carrierDetails && {
+          carrierDetails: location.state.carrierDetails,
+        }),
+        ...(location.state?.routings && {
+          routings: location.state.routings,
+        }),
+        ...(location.state?.estimates && {
+          estimates: location.state.estimates,
+        }),
+        ...spreadMasterDocumentsNavState(
+          location.state as Record<string, unknown> | undefined,
+        ),
+      },
+    });
+  };
+
   const handleSave = () => {
+    if (isReadOnly) return;
     // Prepare cargo details (container_number removed for Air)
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
@@ -2291,40 +2337,7 @@ function HouseCreate() {
       updatedHousingDetails = [...existingHousingDetails, housingDetail];
     }
 
-    // Determine navigation path based on edit mode
-    const isInEditMode = location.state?.job && location.state.job.id;
-    const navigatePath = isInEditMode
-      ? "/inland/import-job/edit"
-      : "/inland/import-job/create";
-
-    // Navigate to ExportJobCreate with housing details
-    navigate(navigatePath, {
-      state: {
-        fromHouseCreate: true,
-        hawbDetails: updatedHousingDetails,
-        // Support legacy housingDetails key for backward compatibility
-        housingDetails: updatedHousingDetails,
-        // Preserve any existing job data
-        ...(location.state?.job && { job: location.state.job }),
-        // Preserve form state when navigating back
-        ...(location.state?.mawbDetails && {
-          mawbDetails: location.state.mawbDetails,
-        }),
-        ...(location.state?.carrierDetails && {
-          carrierDetails: location.state.carrierDetails,
-        }),
-        ...(location.state?.routings && {
-          routings: location.state.routings,
-        }),
-        // Preserve master-level estimates so they can be restored on the job screen
-        ...(location.state?.estimates && {
-          estimates: location.state.estimates,
-        }),
-        ...spreadMasterDocumentsNavState(
-          location.state as Record<string, unknown> | undefined,
-        ),
-      },
-    });
+    navigateToJobWithHousingList(updatedHousingDetails);
   };
 
   // Generate PDF preview from current form data
@@ -2461,7 +2474,11 @@ function HouseCreate() {
       <Group justify="space-between" mb="lg">
         <Group gap="md">
           <Text size="xl" fw={600} c="#105476">
-            {isEditMode ? "Edit AWB Details" : "Create AWB Details"}
+            {isReadOnly
+              ? "View AWB Details"
+              : isEditMode
+                ? "Edit AWB Details"
+                : "Create AWB Details"}
           </Text>
           {isEditMode && editData?.shipment_id && (
             <Badge color="#105476" size="md" variant="light">
@@ -2497,6 +2514,7 @@ function HouseCreate() {
           >
             Back to Import Job
           </Button> */}
+          {!isReadOnly && (
           <Button
             color="#105476"
             variant="outline"
@@ -2560,6 +2578,7 @@ function HouseCreate() {
           >
             Save AWB
           </Button>
+          )}
           <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
             <Menu.Target>
               <ActionIcon
@@ -2622,18 +2641,22 @@ function HouseCreate() {
                 Events
               </Menu.Item>
 
-              <HouseCreateAgentInvoiceMenuItem
-                invoicePath="/inland/import-job/invoice"
-                serviceType="AIR"
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-              />
+              {!isReadOnly && (
+                <>
+                  <HouseCreateAgentInvoiceMenuItem
+                    invoicePath="/inland/import-job/invoice"
+                    serviceType="AIR"
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                  />
 
-              <HouseAutomateVendorInvoiceMenuItem
-                getCurrentHousingDetail={getCurrentHousingDetail}
-                jobId={location.state?.job?.id}
-                onOpen={openVendorInvoiceAutomation}
-              />
+                  <HouseAutomateVendorInvoiceMenuItem
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                    onOpen={openVendorInvoiceAutomation}
+                  />
+                </>
+              )}
 
               <HouseJobLedgerMenuItem
                 serviceName="Air Import"
@@ -2733,6 +2756,11 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        styles={
+          isReadOnly
+            ? { panel: { pointerEvents: "none" } }
+            : undefined
+        }
       >
         <Tabs.List
           mb="md"
@@ -4126,7 +4154,7 @@ function HouseCreate() {
                 {chargesForm.values.charges.length > 1 &&
                   ` (${chargesForm.values.charges.length})`}
               </Text>
-              {location.state?.job?.id != null && (
+              {location.state?.job?.id != null && !isReadOnly && (
                 <Group gap="xs">
                   <Button
                     variant="outline"
@@ -4270,27 +4298,27 @@ function HouseCreate() {
                         charges: prepaidCharges,
                       };
                       navigate("/inland/import-job/invoice", {
-                        state: {
-                          serviceType: "AIR",
-                          hawbDetails: [detailForInvoice],
-                          housingDetails: [detailForInvoice],
-                          is_agent: false,
-                          ...(location.state?.job && { job: location.state.job }),
-                          ...(location.state?.mawbDetails && {
-                            mawbDetails: location.state.mawbDetails,
-                          }),
-                          ...(location.state?.carrierDetails && {
-                            carrierDetails: location.state.carrierDetails,
-                          }),
-                          ...(location.state?.routings && {
-                            routings: location.state.routings,
-                          }),
-                        },
-                      });
-                    }}
-                  >
-                    Create Invoice
-                  </Button>
+                          state: {
+                            serviceType: "AIR",
+                            hawbDetails: [detailForInvoice],
+                            housingDetails: [detailForInvoice],
+                            is_agent: false,
+                            ...(location.state?.job && { job: location.state.job }),
+                            ...(location.state?.mawbDetails && {
+                              mawbDetails: location.state.mawbDetails,
+                            }),
+                            ...(location.state?.carrierDetails && {
+                              carrierDetails: location.state.carrierDetails,
+                            }),
+                            ...(location.state?.routings && {
+                              routings: location.state.routings,
+                            }),
+                          },
+                        });
+                      }}
+                    >
+                      Create Invoice
+                    </Button>
                 </Group>
               )}
             </Group>
@@ -5495,38 +5523,7 @@ function HouseCreate() {
           color="#105476"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => {
-            // Determine navigation path based on edit mode
-            const isInEditMode = location.state?.job && location.state.job.id;
-            const navigatePath = isInEditMode
-              ? "/inland/import-job/edit"
-              : "/inland/import-job/create";
-
-            navigate(navigatePath, {
-              state: {
-                fromHouseCreate: true,
-                hawbDetails: existingHousingDetails,
-                // Support legacy housingDetails key for backward compatibility
-                housingDetails: existingHousingDetails,
-                // Preserve any existing job data
-                ...(location.state?.job && { job: location.state.job }),
-                // Preserve form state when navigating back
-                ...(location.state?.mawbDetails && {
-                  mawbDetails: location.state.mawbDetails,
-                }),
-                ...(location.state?.carrierDetails && {
-                  carrierDetails: location.state.carrierDetails,
-                }),
-                ...(location.state?.routings && {
-                  routings: location.state.routings,
-                }),
-                ...(location.state?.estimates && {
-                  estimates: location.state.estimates,
-                }),
-                ...spreadMasterDocumentsNavState(
-                  location.state as Record<string, unknown> | undefined,
-                ),
-              },
-            });
+            navigateToJobWithHousingList(existingHousingDetails);
           }}
         >
           Back to Import Job
@@ -5553,7 +5550,7 @@ function HouseCreate() {
               Next
             </Button>
           )}
-          {active === 3 && (
+          {active === 3 && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"

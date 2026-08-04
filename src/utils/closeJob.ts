@@ -2,6 +2,11 @@ import { apiCallProtected } from "../api/axios";
 import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
 
+/** True when job status is CLOSED (case-insensitive). */
+export function isJobClosed(status?: string | null): boolean {
+  return String(status ?? "").trim().toUpperCase() === "CLOSED";
+}
+
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message.trim()) {
     return err.message;

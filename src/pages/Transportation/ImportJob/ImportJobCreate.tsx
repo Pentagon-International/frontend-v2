@@ -53,6 +53,7 @@ import {
   SingleDateInput,
   EstimatesSection,
   useEstimatesForm,
+  ERPListJobStatusPill,
 } from "../../../components";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
@@ -83,6 +84,7 @@ import {
   getInvoiceDocumentNo,
 } from "../../../utils/invoiceDocumentNumber";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { isJobClosed } from "../../../utils/closeJob";
 import { pickPackageTypeCodeFromCargo, resolvePackageTypeName } from "../../../utils/packageTypeOptions";
 import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import {
@@ -633,19 +635,32 @@ function ImportJobCreate() {
   // Detect mode from URL pathname and location state
   const mode = useMemo(() => {
     const pathname = location.pathname.toLowerCase();
-    const hasJobData = location.state?.job && location.state.job.id;
-
-    // Check for edit, view, or create in the pathname
-    if (pathname.includes("/edit") || hasJobData) {
-      return "edit";
-    } else if (pathname.includes("/view")) {
+    const state = location.state as
+      | {
+          job?: { id?: unknown; status?: string | null };
+          viewMode?: boolean;
+          actionType?: string;
+        }
+      | null
+      | undefined;
+    // View must win over hasJobData so closed/view navigations stay read-only.
+    if (
+      pathname.includes("/view") ||
+      state?.viewMode === true ||
+      String(state?.actionType ?? "").toLowerCase() === "view" ||
+      isJobClosed(state?.job?.status)
+    ) {
       return "view";
     }
-    // Default to create if neither edit nor view
+    const hasJobData = state?.job && state.job.id;
+    if (pathname.includes("/edit") || hasJobData) {
+      return "edit";
+    }
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly = mode === "view";
+  const isReadOnly =
+    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2509,6 +2524,7 @@ function ImportJobCreate() {
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
+          ...(isReadOnly && { viewMode: true }),
         },
       });
     },
@@ -2522,6 +2538,8 @@ function ImportJobCreate() {
       housingDetails,
       jobWithMergedHousingDetails,
       jobDocuments,
+      isReadOnly,
+      navigate,
     ],
   );
 
@@ -3524,6 +3542,9 @@ function ImportJobCreate() {
             <Badge color="#105476" radius="md" size="md">
               {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
+          )}
+          {jobData?.job_id && (
+            <ERPListJobStatusPill status={jobData?.status} />
           )}
         </Group>
         {!isReadOnly && (
@@ -6692,7 +6713,17 @@ function ImportJobCreate() {
                       </Badge>
                     )}
                   </Group>
-                  {!isReadOnly && (
+                  {isReadOnly ? (
+                    <Button
+                      variant="light"
+                      color="#105476"
+                      size="xs"
+                      leftSection={<IconEye size={14} />}
+                      onClick={() => handleEditHousingDetail(index)}
+                    >
+                      View
+                    </Button>
+                  ) : (
                     <Group gap="xs">
                       <Button
                         variant="light"
