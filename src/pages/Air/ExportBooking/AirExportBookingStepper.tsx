@@ -67,6 +67,7 @@ import {
   getAmountDecimalScale,
   isVietnamBranchFromUser,
   roundMoneyToDecimals,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import {
   applyBookingChargeUnitChange,
@@ -854,7 +855,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     [user],
   );
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   // Events master and Trigger Type master
   const { data: eventMasterData = [] } = useQuery({
@@ -2870,8 +2872,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             min_sell: roundMoneyToDecimals(parseFloat(charge.min_sell)) || 0,
             cost_per_unit:
               roundMoneyToDecimals(parseFloat(charge.cost_per_unit)) || 0,
-            total_cost: roundMoneyToDecimals(parseFloat(charge.total_cost)) || 0,
-            total_sell: roundMoneyToDecimals(parseFloat(charge.total_sell)) || 0,
+            total_cost: roundLocalMoneyToDecimals(parseFloat(charge.total_cost)) || 0,
+            total_sell: roundLocalMoneyToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
@@ -5858,7 +5860,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.sell_per_unit}
-                          decimalScale={amountDecimalScale}
+                          decimalScale={currencyAmountDecimalScale}
                           onChange={(val) =>
                             updateCharge(index, "sell_per_unit", val || "")
                           }
@@ -5869,7 +5871,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.min_sell}
-                          decimalScale={amountDecimalScale}
+                          decimalScale={currencyAmountDecimalScale}
                           onChange={(val) =>
                             updateCharge(index, "min_sell", val || "")
                           }
@@ -5880,7 +5882,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.cost_per_unit}
-                          decimalScale={amountDecimalScale}
+                          decimalScale={currencyAmountDecimalScale}
                           onChange={(val) =>
                             updateCharge(index, "cost_per_unit", val || "")
                           }
@@ -5890,7 +5892,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       <Grid.Col span={1}>
                         <FormNumberInput
                           value={charge.total_sell || ""}
-                          decimalScale={amountDecimalScale}
+                          decimalScale={localAmountDecimalScale}
                           readOnly
                           size="xs"
                         />
@@ -5898,7 +5900,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       <Grid.Col span={1}>
                         <FormNumberInput
                           value={charge.total_cost || ""}
-                          decimalScale={amountDecimalScale}
+                          decimalScale={localAmountDecimalScale}
                           readOnly
                           size="xs"
                         />

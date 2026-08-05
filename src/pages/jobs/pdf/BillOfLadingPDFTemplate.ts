@@ -1,5 +1,8 @@
 import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import blSignatureVietnam from "../../../assets/images/BL_Signature_Vietnam.png";
+import seawayBolStamp from "../../../assets/images/seaway_BOL.png";
+import surrenderedBolStamp from "../../../assets/images/surrendered_BOL.png";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { resolvePackageTypeFromHousing } from "../../../utils/packageTypeOptions";
 import { generateUsBillOfLadingPDF } from "./BillOfLadingPDFTemplateUS";
@@ -284,6 +287,79 @@ const drawTransportRowFixed = (
   return endY;
 };
 
+const BOL_TYPE_STAMP: Record<
+  string,
+  { src: string; nativeW: number; nativeH: number; maxWidth: number }
+> = {
+  "SEAWAY BILL": {
+    src: seawayBolStamp,
+    nativeW: 226,
+    nativeH: 30,
+    maxWidth: 52,
+  },
+  SURRENDERED: {
+    src: surrenderedBolStamp,
+    nativeW: 241,
+    nativeH: 48,
+    maxWidth: 55,
+  },
+};
+
+/**
+ * Draw SEAWAY BILL / SURRENDERED PNG stamp centered above bottomY.
+ * Returns true when a stamp was drawn (caller should skip red text label).
+ */
+const drawBolTypeStamp = (
+  doc: jsPDF,
+  blType: string,
+  centerX: number,
+  bottomY: number,
+  availableWidth?: number,
+): boolean => {
+  const stamp = BOL_TYPE_STAMP[blType];
+  if (!stamp) return false;
+  const width = Math.min(
+    stamp.maxWidth,
+    availableWidth && availableWidth > 0 ? availableWidth : stamp.maxWidth,
+  );
+  const height = width * (stamp.nativeH / stamp.nativeW);
+  const x = centerX - width / 2;
+  const y = bottomY - height;
+  try {
+    doc.addImage(stamp.src, "PNG", x, y, width, height);
+    return true;
+  } catch (error) {
+    console.warn(`Could not add ${blType} stamp to BOL PDF:`, error);
+    return false;
+  }
+};
+
+/**
+ * Draw wrapped text lines that stay within [textWidth] horizontally and
+ * stop before maxY so content cannot spill past a fixed section bottom.
+ * Returns the Y after the last drawn line (or startY if nothing drawn).
+ */
+const drawClippedWrappedText = (
+  doc: jsPDF,
+  text: string,
+  x: number,
+  startY: number,
+  textWidth: number,
+  maxY: number,
+  lineHeight: number,
+): number => {
+  if (!text || startY > maxY) return startY;
+  const lines = doc.splitTextToSize(text, textWidth);
+  let y = startY;
+  for (const line of lines) {
+    // Baseline must stay inside the section (with a small bottom inset).
+    if (y > maxY) break;
+    doc.text(line, x, y);
+    y += lineHeight;
+  }
+  return y;
+};
+
 /** Draw consignor / consignee / notify in a fixed-height India left column cell. */
 const drawIndiaPartySection = (
   doc: jsPDF,
@@ -298,22 +374,45 @@ const drawIndiaPartySection = (
   address: string,
 ): number => {
   const textX = innerMargin + boxPadding;
-  const textWidth = leftBoxWidth - 2 * boxPadding;
+  const textWidth = Math.max(10, leftBoxWidth - 2 * boxPadding);
   const titleTopPad = 4;
+  const nameAddressLineHeight = 3;
+  const bottomInset = 2;
+  const endY = startY + sectionHeight;
+  const maxContentY = endY - bottomInset;
+
   let y = startY + titleTopPad;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  doc.text(title, textX, y);
+  // Keep title inside the left half (do not cross midLineX).
+  const titleLines = doc.splitTextToSize(title, textWidth);
+  if (y <= maxContentY) {
+    doc.text(titleLines[0] || title, textX, y);
+  }
   y += 4;
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
-  const nameAddressLineHeight = 3;
-  const nameLines = doc.splitTextToSize(name || "", textWidth);
-  doc.text(nameLines, textX, y);
-  y += nameLines.length * nameAddressLineHeight + 0.5;
-  const addressLines = doc.splitTextToSize(address || "", textWidth);
-  doc.text(addressLines, textX, y);
-  const endY = startY + sectionHeight;
+  y = drawClippedWrappedText(
+    doc,
+    name || "",
+    textX,
+    y,
+    textWidth,
+    maxContentY,
+    nameAddressLineHeight,
+  );
+  y += 0.5;
+  drawClippedWrappedText(
+    doc,
+    address || "",
+    textX,
+    y,
+    textWidth,
+    maxContentY,
+    nameAddressLineHeight,
+  );
+
   doc.line(innerMargin, endY, midLineX, endY);
   return endY;
 };
@@ -332,31 +431,73 @@ const drawIndiaDeliveryContactSection = (
   email: string,
 ): void => {
   const textX = midLineX + boxPadding;
-  const textWidth = rightBoxWidth - 2 * boxPadding;
+  const textWidth = Math.max(10, rightBoxWidth - 2 * boxPadding);
+  const lineHeight = 3.5;
+  const bottomInset = 2;
+  const endY = startY + sectionHeight;
+  const maxContentY = endY - bottomInset;
+
   let y = startY + 4;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
-  doc.text("To Obtain Delivery Contact", textX, y);
-  y += 6;
+  y = drawClippedWrappedText(
+    doc,
+    "To Obtain Delivery Contact",
+    textX,
+    y,
+    textWidth,
+    maxContentY,
+    4,
+  );
+  y += 2;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   if (company) {
-    doc.text(company, textX, y);
-    y += 4;
+    y = drawClippedWrappedText(
+      doc,
+      company,
+      textX,
+      y,
+      textWidth,
+      maxContentY,
+      lineHeight,
+    );
   }
-  const addressLines = doc.splitTextToSize(address || "", textWidth);
-  if (addressLines.length > 0 && addressLines[0] !== "") {
-    doc.text(addressLines, textX, y);
-    y += addressLines.length * 3.5 + 1;
+  if (address) {
+    y = drawClippedWrappedText(
+      doc,
+      address,
+      textX,
+      y,
+      textWidth,
+      maxContentY,
+      lineHeight,
+    );
+    y += 1;
   }
   if (tel) {
-    doc.text(`Tel: ${tel}`, textX, y);
-    y += 4;
+    y = drawClippedWrappedText(
+      doc,
+      `Tel: ${tel}`,
+      textX,
+      y,
+      textWidth,
+      maxContentY,
+      lineHeight,
+    );
   }
   if (email) {
-    doc.text(`Email: ${email}`, textX, y);
+    drawClippedWrappedText(
+      doc,
+      `Email: ${email}`,
+      textX,
+      y,
+      textWidth,
+      maxContentY,
+      lineHeight,
+    );
   }
-  doc.line(midLineX, startY, midLineX, startY + sectionHeight);
+  doc.line(midLineX, startY, midLineX, endY);
 };
 
 export const generateBillOfLadingPDF = (
@@ -386,6 +527,7 @@ export const generateBillOfLadingPDF = (
     const activeBranch = defaultBranch || getActiveBranchFromStore();
     // India layout/spacing for all non-US branches; India-only content stays gated.
     const isIndiaContent = isIndiaBranchForBillOfLading(country, defaultBranch);
+    const isVietnamBranch = isVietnamBranchForBillOfLading(country, defaultBranch);
     const isIndiaBranch = true;
     const isDraftBol = options?.draft === true;
     const blTypeRaw = String(
@@ -573,15 +715,22 @@ export const generateBillOfLadingPDF = (
       housingData?.number_of_originals ??
       housingData?.no_of_originals ??
       "0/ZERO";
+    // Date of issue: draft → ETD; original (and other issued types) → ATD
+    const etdRaw =
+      mblDetails?.etd || carrierDetails?.etd || jobInfo?.etd || null;
+    const atdRaw =
+      mblDetails?.atd || carrierDetails?.atd || jobInfo?.atd || null;
+    const issueDateRaw = isDraftBol ? etdRaw : atdRaw;
+    const issueDateFormatted = issueDateRaw
+      ? formatDateForDisplay(issueDateRaw)
+      : "";
+    const placeOfIssue =
+      housingData?.place_of_issue || masterOrigin || "";
     const placeAndDateOfIssue =
       housingData?.place_and_date_of_issue ||
-      (housingData?.place_of_issue
-        ? `${housingData.place_of_issue}${
-            housingData?.date_of_issue
-              ? ` / ${formatDateForDisplay(housingData.date_of_issue)}`
-              : ""
-          }`
-        : `${masterOrigin} / ${dateOfAcceptance || formatDateForDisplay(new Date().toISOString())}`);
+      (placeOfIssue && issueDateFormatted
+        ? `${placeOfIssue} / ${issueDateFormatted}`
+        : placeOfIssue || issueDateFormatted || "");
 
     // Set document properties
     doc.setProperties({
@@ -1140,8 +1289,8 @@ export const generateBillOfLadingPDF = (
       ? mainTopSectionEndY
       : mainBoxStartY + actualMainBoxHeight;
     
-    // Calculate footer section height
-    const footerSectionHeight = 35; // Approximate height for footer section (top row + bottom section)
+    // Calculate footer section height (Vietnam needs extra space for authorised signature stamp)
+    const footerSectionHeight = isVietnamBranch ? 55 : 35;
     const footerStartY = pageHeight - innerMargin - footerSectionHeight;
     
     // Calculate container details section height (ends before footer section)
@@ -1512,20 +1661,27 @@ export const generateBillOfLadingPDF = (
         }
       }
 
-      // Copy label at end of Column 3 (packages) — red, center-aligned
+      // Copy label / SEAWAY·SURRENDERED stamp at end of Column 3 (packages)
       if (copyLabel) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.setTextColor(255, 0, 0);
-        doc.text(
+        const stampCenterX = containerCol3X + containerCol3Width / 2;
+        const stampDrawn = drawBolTypeStamp(
+          doc,
           copyLabel,
-          containerCol3X + containerCol3Width / 2,
-          footerStartY - 6,
-          { align: "center" },
+          stampCenterX,
+          footerStartY - 3,
+          containerCol3Width - 4,
         );
-        doc.setTextColor(0, 0, 0);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(6);
+        if (!stampDrawn) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11);
+          doc.setTextColor(255, 0, 0);
+          doc.text(copyLabel, stampCenterX, footerStartY - 6, {
+            align: "center",
+          });
+          doc.setTextColor(0, 0, 0);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6);
+        }
       }
       
       // Column 4: Gross Weight (single value, drawn once on first page only)
@@ -1573,20 +1729,27 @@ export const generateBillOfLadingPDF = (
       // Empty row if no container details - draw vertical lines to footer section start
       const containerDetailsEndY = footerStartY;
 
-      // Copy label even when no container details exist (red, center-aligned)
+      // Copy label / SEAWAY·SURRENDERED stamp even when no container details exist
       if (copyLabel) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.setTextColor(255, 0, 0);
-        doc.text(
+        const stampCenterX = containerCol3X + containerCol3Width / 2;
+        const stampDrawn = drawBolTypeStamp(
+          doc,
           copyLabel,
-          containerCol3X + containerCol3Width / 2,
-          footerStartY - 6,
-          { align: "center" },
+          stampCenterX,
+          footerStartY - 3,
+          containerCol3Width - 4,
         );
-        doc.setTextColor(0, 0, 0);
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(6);
+        if (!stampDrawn) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11);
+          doc.setTextColor(255, 0, 0);
+          doc.text(copyLabel, stampCenterX, footerStartY - 6, {
+            align: "center",
+          });
+          doc.setTextColor(0, 0, 0);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(6);
+        }
       }
 
       doc.line(containerCol2X, headerBottomY, containerCol2X, containerDetailsEndY);
@@ -1669,7 +1832,37 @@ export const generateBillOfLadingPDF = (
     const companyText = `For ${branchInfo.name}`;
     const companyLines = doc.splitTextToSize(companyText, signatoryTextWidth);
     doc.text(companyLines, footerBottomRightX + boxPadding, signatoryY);
-    signatoryY += companyLines.length * 3.5 + 4;
+    signatoryY += companyLines.length * 3.5 + 2;
+
+    // Vietnam: stamp image in the authorised signature area
+    if (isVietnamBranch) {
+      try {
+        const signatureMaxWidth = Math.min(50, signatoryTextWidth);
+        const signatureAspect = 164 / 300;
+        const signatureWidth = signatureMaxWidth;
+        const signatureHeight = signatureWidth * signatureAspect;
+        const signatureX =
+          footerBottomRightX +
+          (footerBottomRightWidth - signatureWidth) / 2;
+        doc.addImage(
+          blSignatureVietnam,
+          "PNG",
+          signatureX,
+          signatoryY,
+          signatureWidth,
+          signatureHeight,
+        );
+        signatoryY += signatureHeight + 3;
+      } catch (error) {
+        console.warn(
+          "Could not add Vietnam BL signature to PDF, continuing without it:",
+          error,
+        );
+        signatoryY += 4;
+      }
+    } else {
+      signatoryY += 4;
+    }
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);

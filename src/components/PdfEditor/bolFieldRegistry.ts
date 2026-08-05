@@ -1540,16 +1540,17 @@ function buildIndiaBolFieldRegistry(
         if (h.place_and_date_of_issue) {
           return String(h.place_and_date_of_issue);
         }
-        if (h.place_of_issue && h.date_of_issue) {
-          return `${h.place_of_issue} / ${formatIndiaBolDate(h.date_of_issue)}`;
-        }
         const m = getMblDetails(data);
         const j = getJob(data);
-        const origin = String(m.origin_name || j.origin_name || "");
-        const date =
-          formatIndiaBolDate(getCarrierDetails(data).mbl_date) ||
-          formatIndiaBolDate(new Date().toISOString());
-        return origin ? `${origin} / ${date}` : date;
+        const carrier = getCarrierDetails(data);
+        const isDraft = data.draft === true;
+        const etd = m.etd || carrier.etd || j.etd || null;
+        const atd = m.atd || carrier.atd || j.atd || null;
+        const issueDate = formatIndiaBolDate(isDraft ? etd : atd);
+        const place =
+          String(h.place_of_issue || m.origin_name || j.origin_name || "").trim();
+        if (place && issueDate) return `${place} / ${issueDate}`;
+        return place || issueDate || "";
       },
     }),
   ];

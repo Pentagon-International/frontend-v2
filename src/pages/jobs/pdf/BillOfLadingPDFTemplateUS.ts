@@ -1,5 +1,7 @@
 import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import seawayBolStamp from "../../../assets/images/seaway_BOL.png";
+import surrenderedBolStamp from "../../../assets/images/surrendered_BOL.png";
 import {
   formatPackageTypeNameForBol,
   resolvePackageTypeFromHousing,
@@ -46,6 +48,54 @@ const FONT_LEGAL_BODY = 7;
 const FONT_FMC = 9;
 const US_LEGAL_TEXT =
   "Received by the Carrier from the shipper in apparent good order and condition (unless otherwise noted herein) the total number or quantity of containers or other packages or units indicated. Stated by the shipper to comprise the Goods specified above, for carriage subject to all terms hereof (INCLUDING THE TERMS ON THE REVERSE HEREOF AND THE TERMS OF THE CARRIER'S APPLICABLE TARIFF) from the Place of Receipt or the Port of Loading whichever is applicable, to the port of discharge or the Place of Delivery, whichever is applicable, one original Bill of Lading must be surrendered duly endorsed in exchange for the Goods. In accepting this Bill of Lading the Merchant expressly accepts and agrees to all its terms, conditions, and exceptions, whether printed, stamped or written, or Otherwise incorporated, notwithstanding the nonsigning of the bill of Lading by the Merchant.";
+
+const US_BOL_TYPE_STAMP: Record<
+  string,
+  { src: string; nativeW: number; nativeH: number; maxWidth: number }
+> = {
+  "SEAWAY BILL": {
+    src: seawayBolStamp,
+    nativeW: 226,
+    nativeH: 30,
+    maxWidth: 52,
+  },
+  SURRENDERED: {
+    src: surrenderedBolStamp,
+    nativeW: 241,
+    nativeH: 48,
+    maxWidth: 55,
+  },
+};
+
+const drawUsBolTypeStamp = (
+  doc: jsPDF,
+  blType: string,
+  centerX: number,
+  bottomY: number,
+  availableWidth?: number,
+): boolean => {
+  const stamp = US_BOL_TYPE_STAMP[blType];
+  if (!stamp) return false;
+  const width = Math.min(
+    stamp.maxWidth,
+    availableWidth && availableWidth > 0 ? availableWidth : stamp.maxWidth,
+  );
+  const height = width * (stamp.nativeH / stamp.nativeW);
+  try {
+    doc.addImage(
+      stamp.src,
+      "PNG",
+      centerX - width / 2,
+      bottomY - height,
+      width,
+      height,
+    );
+    return true;
+  } catch (error) {
+    console.warn(`Could not add ${blType} stamp to US BOL PDF:`, error);
+    return false;
+  }
+};
 
 const formatUsDate = (dateString: unknown): string => {
   if (!dateString) return "";
@@ -1432,20 +1482,26 @@ export const generateUsBillOfLadingPDF = (
       }
     });
 
-    // SEAWAY BILL / SURRENDERED — red, center-aligned in Description of Goods column
+    // SEAWAY BILL / SURRENDERED — PNG stamp centered in Description of Goods column
     if (isLastSegment && cargoTypeLabel) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(255, 0, 0);
-      doc.text(
+      const stampDrawn = drawUsBolTypeStamp(
+        doc,
         cargoTypeLabel,
         col3X + col3W / 2,
-        cargoBodyBottomY - 4,
-        { align: "center" },
+        cargoBodyBottomY - 2,
+        col3W - 4,
       );
-      doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(FONT_TABLE_BODY);
+      if (!stampDrawn) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(255, 0, 0);
+        doc.text(cargoTypeLabel, col3X + col3W / 2, cargoBodyBottomY - 4, {
+          align: "center",
+        });
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(FONT_TABLE_BODY);
+      }
     }
 
     if (isLastSegment) {
