@@ -13,6 +13,10 @@ import {
   VendorPanMaster,
   ApproveVendorPanMaster,
   VendorApprovalStatusMaster,
+  AgentMaster,
+  AgentPanMaster,
+  ApproveAgentPanMaster,
+  AgentApprovalStatusMaster,
   Dashboard,
   EnquiryConversionPage,
   GroupCompany,
@@ -1064,6 +1068,7 @@ const NavigationRoutes = () => {
           <Route path="callmode-master-view" element={<CallModeView />} />
           <Route path="create-customer-pan" element={<CustomerPanMaster />} />
           <Route path="create-vendor-pan" element={<VendorPanMaster />} />
+          <Route path="create-agent-pan" element={<AgentPanMaster />} />
           <Route
             path="customer-approval-status"
             element={<CustomerApprovalStatusMaster />}
@@ -1072,13 +1077,19 @@ const NavigationRoutes = () => {
             path="vendor-approval-status"
             element={<VendorApprovalStatusMaster />}
           />
+          <Route
+            path="agent-approval-status"
+            element={<AgentApprovalStatusMaster />}
+          />
           <Route path="create-customer" element={<CustomerCreate />} />
           <Route path="create-vendor" element={<CustomerCreate />} />
+          <Route path="create-agent" element={<CustomerCreate />} />
           <Route
             path="approve-customers"
             element={<ApproveCustomerPanMaster />}
           />
           <Route path="approve-vendors" element={<ApproveVendorPanMaster />} />
+          <Route path="approve-agents" element={<ApproveAgentPanMaster />} />
           <Route path="terms-of-shipment" element={<TermsOfShipment />} />
           <Route
             path="terms-of-shipment-new"
@@ -1129,6 +1140,13 @@ const NavigationRoutes = () => {
 
           <Route path="vendor">
             <Route index element={<VendorMaster />} />
+            <Route path="create" element={<CustomerCreate />} />
+            <Route path="edit/:id" element={<CustomerCreate />} />
+            <Route path="view/:id" element={<CustomerCreate />} />
+          </Route>
+
+          <Route path="agent">
+            <Route index element={<AgentMaster />} />
             <Route path="create" element={<CustomerCreate />} />
             <Route path="edit/:id" element={<CustomerCreate />} />
             <Route path="view/:id" element={<CustomerCreate />} />

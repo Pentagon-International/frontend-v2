@@ -15,7 +15,6 @@ import {
   Menu,
   Modal,
   ScrollArea,
-  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -24,14 +23,17 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import dayjs from "dayjs";
+import useDateFormat from "../../../hooks/useDateFormat";
+import {
+  formatDateForUi,
+  formatDateTimeForUi,
+} from "../../../utils/dateFormat";
 import {
   IconCheck,
-  IconChevronLeft,
-  IconChevronRight,
   IconDotsVertical,
   IconEye,
   IconFilter,
-  IconFilterOff,
+  IconSearch,
   IconUsers,
   IconX,
 } from "@tabler/icons-react";
@@ -40,12 +42,17 @@ import {
   MRT_ColumnDef,
   useMantineReactTable,
 } from "mantine-react-table";
+import { useDebouncedValue } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Dropdown,
+  FormTextArea,
+  FormTextInput,
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
 } from "../../../components";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { URL } from "../../../api/serverUrls";
 import {
   approveCustomerPan,
@@ -200,10 +207,14 @@ function hasDetailValue(value: unknown): boolean {
   return true;
 }
 
-function formatDetailValue(value: unknown): string {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
-    const parsed = dayjs(value);
-    if (parsed.isValid()) return parsed.format("DD MMM YYYY, hh:mm A");
+function formatDetailValue(value: unknown, dateFormat: string): string {
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      return formatDateTimeForUi(value, dateFormat);
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+      return formatDateForUi(value, dateFormat);
+    }
   }
   return formatCustomerPanDisplayValue(value);
 }
@@ -215,6 +226,7 @@ function DetailSection({
   title: string;
   fields: DetailField[];
 }) {
+  const dateFormat = useDateFormat();
   const visibleFields = fields.filter((field) => hasDetailValue(field.value));
   if (visibleFields.length === 0) return null;
 
@@ -240,7 +252,7 @@ function DetailSection({
               {field.label}
             </Text>
             <Text size="sm" style={{ wordBreak: "break-word" }}>
-              {formatDetailValue(field.value)}
+              {formatDetailValue(field.value, dateFormat)}
             </Text>
           </Box>
         ))}
@@ -249,7 +261,7 @@ function DetailSection({
   );
 }
 
-export type ApprovalPartyType = "customer" | "vendor";
+export type ApprovalPartyType = "customer" | "vendor" | "agent";
 
 export function CustomerPanApprovalDetails({
   row,
@@ -264,7 +276,12 @@ export function CustomerPanApprovalDetails({
 }) {
   const addresses = row.addresses_data ?? [];
   const isVendor = partyType === "vendor";
-  const entityLabel = isVendor ? "Vendor" : "Customer";
+  const entityLabel =
+    partyType === "vendor"
+      ? "Vendor"
+      : partyType === "agent"
+        ? "Agent"
+        : "Customer";
   const tdsSections = row.tds_section_data ?? [];
   const bankDetails = row.bank_details_data ?? [];
 
@@ -454,14 +471,14 @@ export function CustomerPanApprovalDetails({
             General Information
           </Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            <Select
+            <Dropdown
               label="Credit Type"
               data={TERM_CODE_OPTIONS}
               value={row.term_code || null}
               onChange={(value) => updateRow({ term_code: value ?? "" })}
               clearable
             />
-            <Select
+            <Dropdown
               label="Own Office"
               data={[
                 { value: "true", label: "Yes" },
@@ -484,12 +501,12 @@ export function CustomerPanApprovalDetails({
               }
               clearable
             />
-            <TextInput
+            <FormTextInput format="normal"
               label={`${entityLabel} Status`}
               value={row.status ?? ""}
               onChange={(e) => updateRow({ status: e.target.value })}
             />
-            <TextInput
+            <FormTextInput format="normal"
               label="Assign To"
               value={row.assigned_to ?? row.created_by ?? ""}
               onChange={(e) => updateRow({ assigned_to: e.target.value })}
@@ -519,7 +536,7 @@ export function CustomerPanApprovalDetails({
               minSearchLength={1}
             />
             {isVendor && (
-              <Select
+              <Dropdown
                 label="TDS Type"
                 data={[
                   { value: "Individual", label: "Individual" },
@@ -536,7 +553,7 @@ export function CustomerPanApprovalDetails({
             Credit Terms
           </Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            <TextInput
+            <FormTextInput format="normal"
               label="Credit Days"
               value={
                 row.credit_day === null || row.credit_day === undefined
@@ -550,7 +567,7 @@ export function CustomerPanApprovalDetails({
                 });
               }}
             />
-            <TextInput
+            <FormTextInput format="normal"
               label="Credit Amount"
               value={
                 row.credit_amount === null || row.credit_amount === undefined
@@ -632,7 +649,7 @@ export function CustomerPanApprovalDetails({
             {(tdsSections.length > 0 ? tdsSections : [{}]).map((item, index) => (
               <Card key={`tds-edit-${index}`} withBorder padding="sm" radius="md">
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                  <TextInput
+                  <FormTextInput format="normal"
                     label="Section ID"
                     value={
                       item.section_id == null ? "" : String(item.section_id)
@@ -644,7 +661,7 @@ export function CustomerPanApprovalDetails({
                       });
                     }}
                   />
-                  <Select
+                  <Dropdown
                     label="Exemption TDS"
                     data={[
                       { value: "true", label: "Yes" },
@@ -657,7 +674,7 @@ export function CustomerPanApprovalDetails({
                       })
                     }
                   />
-                  <TextInput
+                  <FormTextInput format="normal"
                     label="Exemption Certificate No"
                     value={String(item.exemption_certificate_no ?? "")}
                     onChange={(e) =>
@@ -666,7 +683,7 @@ export function CustomerPanApprovalDetails({
                       })
                     }
                   />
-                  <TextInput
+                  <FormTextInput format="normal"
                     label="TDS %"
                     value={String(
                       item.tds_percentage ?? item.tds_percent ?? "",
@@ -702,7 +719,7 @@ export function CustomerPanApprovalDetails({
                       })
                     }
                   />
-                  <TextInput
+                  <FormTextInput format="normal"
                     label="TDS Lower Limit"
                     value={String(item.tds_lower_limit ?? "")}
                     onChange={(e) => {
@@ -760,57 +777,59 @@ export function CustomerPanApprovalDetails({
                   radius="md"
                 >
                   <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="Currency"
                       value={String(item.currency ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { currency: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="Account No"
                       value={String(item.account_no ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { account_no: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="Account Name"
                       value={String(item.account_name ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { account_name: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="Bank Name"
                       value={String(item.bank_name ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { bank_name: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="IFSC"
                       value={String(item.ifsc_code ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { ifsc_code: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="IBAN"
                       value={String(item.iban_no ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { iban_no: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextInput format="normal"
                       label="SWIFT"
                       value={String(item.swift_no ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { swift_no: e.target.value })
                       }
                     />
-                    <TextInput
+                    <FormTextArea
+                      format="initcap"
                       label="Bank Address"
+                      minRows={2}
                       value={String(item.bank_address ?? "")}
                       onChange={(e) =>
                         updateBankRow(index, { bank_address: e.target.value })
@@ -1024,12 +1043,12 @@ function CustomerPanAddressDetails({
           Location
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          <TextInput
+          <FormTextInput format="normal"
             label="Location"
             value={address.customer_location ?? ""}
             onChange={(e) => onChange?.({ customer_location: e.target.value })}
           />
-          <Select
+          <Dropdown
             label="Address Type"
             data={[
               { value: "Primary", label: "Primary" },
@@ -1040,28 +1059,30 @@ function CustomerPanAddressDetails({
             value={address.address_type || null}
             onChange={(value) => onChange?.({ address_type: value ?? "" })}
           />
-          <TextInput
+          <FormTextArea
+            format="initcap"
             label="Address"
+            minRows={2}
             style={{ gridColumn: "1 / -1" }}
             value={address.address ?? ""}
             onChange={(e) => onChange?.({ address: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="City"
             value={address.city ?? ""}
             onChange={(e) => onChange?.({ city: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="State"
             value={address.state ?? ""}
             onChange={(e) => onChange?.({ state: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="Country"
             value={address.country ?? ""}
             onChange={(e) => onChange?.({ country: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="Pin Code"
             value={address.pincode ?? ""}
             onChange={(e) => onChange?.({ pincode: e.target.value })}
@@ -1072,17 +1093,17 @@ function CustomerPanAddressDetails({
           Contact
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          <TextInput
+          <FormTextInput format="normal"
             label="Phone"
             value={address.phone_no ?? ""}
             onChange={(e) => onChange?.({ phone_no: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="Mobile"
             value={address.mobile_no ?? ""}
             onChange={(e) => onChange?.({ mobile_no: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="Email"
             style={{ gridColumn: "1 / -1" }}
             value={address.email ?? ""}
@@ -1094,12 +1115,12 @@ function CustomerPanAddressDetails({
           Tax & Registration
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          <TextInput
+          <FormTextInput format="normal"
             label="PAN"
             value={address.pan_no ?? ""}
             onChange={(e) => onChange?.({ pan_no: e.target.value })}
           />
-          <Select
+          <Dropdown
             label="GST Registration Status"
             data={[
               { value: "Registered", label: "Registered" },
@@ -1111,32 +1132,32 @@ function CustomerPanAddressDetails({
             }
             clearable
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="Tax ID / GSTIN"
             value={address.gst_id ?? ""}
             onChange={(e) => onChange?.({ gst_id: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="IEC Code"
             value={address.iec_code ?? ""}
             onChange={(e) => onChange?.({ iec_code: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="TAN"
             value={address.tan_no ?? ""}
             onChange={(e) => onChange?.({ tan_no: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="ARN"
             value={address.arn_no ?? ""}
             onChange={(e) => onChange?.({ arn_no: e.target.value })}
           />
-          <TextInput
+          <FormTextInput format="normal"
             label="UIN"
             value={address.uin_no ?? ""}
             onChange={(e) => onChange?.({ uin_no: e.target.value })}
           />
-          <Select
+          <Dropdown
             label="Composite / Regular"
             data={[
               { value: "composite", label: "Composite" },
@@ -1148,7 +1169,7 @@ function CustomerPanAddressDetails({
             }
             clearable
           />
-          <Select
+          <Dropdown
             label="SEZ"
             data={[
               { value: "Yes", label: "Yes" },
@@ -1173,7 +1194,7 @@ function CustomerPanAddressDetails({
               }
             />
           )}
-          <Select
+          <Dropdown
             label="MSME"
             data={[
               { value: "Yes", label: "Yes" },
@@ -1188,7 +1209,7 @@ function CustomerPanAddressDetails({
             }
           />
           {!!address.msme && (
-            <TextInput
+            <FormTextInput format="normal"
               label="MSME No"
               value={address.msme_no ?? ""}
               onChange={(e) => onChange?.({ msme_no: e.target.value })}
@@ -1212,15 +1233,18 @@ export default function ApproveCustomerPanMaster({
     user?.screen_permissions?.customer_approval_screen,
   );
   const canAccessApproval = hasCustomerApprovalScreen || !isIndiaUser;
-  const isVendor = partyType === "vendor";
-  const entityLabel = isVendor ? "Vendor" : "Customer";
-  const entityLabelLower = isVendor ? "vendor" : "customer";
+  const entityLabel =
+    partyType === "vendor"
+      ? "Vendor"
+      : partyType === "agent"
+        ? "Agent"
+        : "Customer";
+  const entityLabelLower = partyType;
 
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
-  const [paginationTotal, setPaginationTotal] = useState(1);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(
     null,
   );
@@ -1229,6 +1253,8 @@ export default function ApproveCustomerPanMaster({
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
   const [draftFilters, setDraftFilters] =
     useState<FilterFormState>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
@@ -1242,11 +1268,14 @@ export default function ApproveCustomerPanMaster({
 
   const apiFilters = useMemo<CustomerPanApprovalFilters>(
     () => ({
-      customer_name: appliedFilters.customer_name.trim() || undefined,
+      customer_name:
+        appliedFilters.customer_name.trim() ||
+        debouncedSearch.trim() ||
+        undefined,
       status: appliedFilters.status.trim() || undefined,
       customer_type: partyType,
     }),
-    [appliedFilters, partyType],
+    [appliedFilters, partyType, debouncedSearch],
   );
 
   const {
@@ -1279,9 +1308,12 @@ export default function ApproveCustomerPanMaster({
   useEffect(() => {
     if (listResult) {
       setTotalCount(listResult.total);
-      setPaginationTotal(listResult.paginationTotal);
     }
   }, [listResult]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [debouncedSearch]);
 
   const rawRows = listResult?.rows ?? [];
 
@@ -1302,6 +1334,7 @@ export default function ApproveCustomerPanMaster({
   const clearFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
+    setSearch("");
     setPageIndex(0);
   };
 
@@ -1333,8 +1366,8 @@ export default function ApproveCustomerPanMaster({
     setPageIndex(0);
   };
 
-  const handlePageIndexChange = (newPageIndex: number) => {
-    setPageIndex(newPageIndex);
+  const handlePageChange = (newPage: number) => {
+    setPageIndex(newPage - 1);
   };
 
   const refreshList = useCallback(async () => {
@@ -1637,48 +1670,141 @@ export default function ApproveCustomerPanMaster({
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Box>
-            <Text size="md" fw={600} c="#105476">
-              Approve {isVendor ? "Vendors" : "Customers"}
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="md"
+        radius="md"
+        withBorder
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
+        <Box>
+          <Group justify="space-between" align="center" pb="sm">
+            <Text
+              size="md"
+              fw={600}
+              c="#1E293B"
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
+            >
+              Approve {entityLabel}s
             </Text>
-            <Text size="xs" c="dimmed" mt={4}>
-              Review and approve pending {entityLabelLower} verification
-              requests
-            </Text>
-          </Box>
 
-          <Button
-            variant="outline"
-            leftSection={<IconFilter size={16} />}
-            size="xs"
-            color="#105476"
-            onClick={() => setShowFilters((prev) => !prev)}
-          >
-            Filters
-          </Button>
-        </Group>
+            <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder="Search..."
+                leftSection={<IconSearch size={16} />}
+                rightSection={
+                  search ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => setSearch("")}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
+                w={248}
+                size="sm"
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                styles={{
+                  input: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "regular",
+                    color: "#334155",
+                    minWidth: "24px",
+                    minHeight: "24px",
+                    width: "248px",
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    "&:focus": {
+                      border: "1px solid #105476",
+                    },
+                  },
+                }}
+              />
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters
+                      ? "1px solid #105476"
+                      : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
+                    },
+                  },
+                }}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
+            </Group>
+          </Group>
+        </Box>
 
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
+          <Box
+            tt="capitalize"
+            mb="sm"
+            p="sm"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
+            }}
           >
-            <Group align="center" gap="xs" mb="md">
-              <IconFilter size={16} color="#105476" />
-              <Text size="sm" fw={500} c="#105476">
-                Filters
+            <Group
+              justify="space-between"
+              align="center"
+              mb="sm"
+              px="md"
+              style={{
+                backgroundColor: "#F8FAFC",
+                padding: "4px 8px",
+              }}
+            >
+              <Text
+                size="sm"
+                fw={600}
+                c="#1E293B"
+                style={{ fontFamily: "Inter", fontSize: "14px" }}
+              >
+                Filter
               </Text>
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
+              >
+                <IconX size={18} />
+              </ActionIcon>
             </Group>
 
-            <Grid>
-              <Grid.Col span={{ base: 12, sm: 6 }}>
-                <TextInput
+            <Grid gutter="sm" px="md" pt="xs" pb="sm">
+              <Grid.Col span={2.4}>
+                <FormTextInput
+                  format="normal"
                   label={`${entityLabel} Name`}
                   placeholder={`Enter ${entityLabelLower} name`}
                   size="xs"
@@ -1689,19 +1815,11 @@ export default function ApproveCustomerPanMaster({
                       customer_name: event.currentTarget.value,
                     }))
                   }
-                  styles={{
-                    input: { fontSize: 12 },
-                    label: {
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: "#495057",
-                    },
-                  }}
                 />
               </Grid.Col>
 
-              <Grid.Col span={{ base: 12, sm: 6 }}>
-                <Select
+              <Grid.Col span={2.4}>
+                <Dropdown
                   label="Status"
                   placeholder="Select status"
                   size="xs"
@@ -1713,41 +1831,58 @@ export default function ApproveCustomerPanMaster({
                       status: value ?? "",
                     }))
                   }
-                  styles={{
-                    input: { fontSize: 12 },
-                    label: {
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: "#495057",
-                    },
-                  }}
                 />
               </Grid.Col>
             </Grid>
 
-            <Group justify="flex-end" mt="md" gap="sm">
+            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
               <Button
+                size="sm"
                 variant="default"
-                size="xs"
-                leftSection={<IconFilterOff size={14} />}
                 onClick={clearFilters}
+                leftSection={<IconX size={16} />}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    color: "#1E293B",
+                  },
+                }}
               >
-                Clear
+                Clear Filters
               </Button>
               <Button
-                size="xs"
-                color="#105476"
-                leftSection={<IconFilter size={14} />}
+                size="sm"
                 onClick={applyFilters}
+                loading={tableLoading}
+                disabled={tableLoading}
+                leftSection={<IconFilter size={16} />}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    "&:hover": {
+                      backgroundColor: "#0d4261",
+                    },
+                  },
+                }}
               >
-                Apply
+                Apply Filters
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
         {tableLoading ? (
-          <Center py="xl">
+          <Center py="xl" style={{ flex: 1 }}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed">
@@ -1756,72 +1891,18 @@ export default function ApproveCustomerPanMaster({
             </Stack>
           </Center>
         ) : (
-          <MantineReactTable table={table} />
-        )}
-
-        <Group
-          w="100%"
-          justify="space-between"
-          align="center"
-          px="md"
-          py="xs"
-          style={{ borderTop: "1px solid #e9ecef" }}
-          wrap="nowrap"
-          mt="xs"
-        >
-          <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-            <Text size="sm" c="dimmed">
-              Rows per page
-            </Text>
-            <Select
-              size="xs"
-              data={["10", "25", "50"]}
-              value={String(pageSize)}
-              onChange={(val) => {
-                if (!val) return;
-                handlePageSizeChange(Number(val));
-              }}
-              w={110}
-              styles={{ input: { fontSize: 12, height: 30 } }}
+          <>
+            <MantineReactTable table={table} />
+            <PaginationBar
+              pageSize={pageSize}
+              currentPage={pageIndex + 1}
+              totalRecords={totalCount}
+              onPageSizeChange={handlePageSizeChange}
+              onPageChange={handlePageChange}
+              pageSizeOptions={["10", "25", "50"]}
             />
-            <Text size="sm" c="dimmed">
-              {(() => {
-                if (totalCount === 0) return "0–0 of 0";
-                const start = pageIndex * pageSize + 1;
-                const end = Math.min((pageIndex + 1) * pageSize, totalCount);
-                return `${start}–${end} of ${totalCount}`;
-              })()}
-            </Text>
-          </Group>
-
-          <Group gap="xs" align="center" wrap="nowrap" mt={10}>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() => handlePageIndexChange(Math.max(0, pageIndex - 1))}
-              disabled={pageIndex === 0}
-            >
-              <IconChevronLeft size={16} />
-            </ActionIcon>
-            <Text size="sm" ta="center" style={{ width: 26 }}>
-              {pageIndex + 1}
-            </Text>
-            <Text size="sm" c="dimmed">
-              of {Math.max(1, paginationTotal)}
-            </Text>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() => {
-                const totalPages = Math.max(1, paginationTotal);
-                handlePageIndexChange(Math.min(totalPages - 1, pageIndex + 1));
-              }}
-              disabled={pageIndex >= paginationTotal - 1}
-            >
-              <IconChevronRight size={16} />
-            </ActionIcon>
-          </Group>
-        </Group>
+          </>
+        )}
       </Card>
 
       <Modal
@@ -1931,7 +2012,7 @@ export default function ApproveCustomerPanMaster({
       <Modal
         opened={similarModalOpen}
         onClose={() => !similarLoading && setSimilarModalOpen(false)}
-        title={`Similar ${isVendor ? "Vendors" : "Customers"}`}
+        title={`Similar ${entityLabel}s`}
         centered
         size="lg"
       >

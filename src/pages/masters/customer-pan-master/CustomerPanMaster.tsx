@@ -7,13 +7,10 @@ import {
   Grid,
   Group,
   Modal,
-  MultiSelect,
   ScrollArea,
-  Select,
   Stack,
   Table,
   Text,
-  TextInput,
   Badge,
 } from "@mantine/core";
 import { IconPaperclip, IconSearch } from "@tabler/icons-react";
@@ -22,6 +19,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Dropdown,
+  FormMultiSelect,
+  FormTextInput,
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
@@ -125,16 +124,21 @@ const EMPTY_ADDITIONAL_DETAILS: AdditionalDetailsForm = {
   msme_no: "",
 };
 
-function resolveCustomerTypeCode(types: CustomerTypeRow[]): string {
+function resolveCustomerTypeCode(
+  types: CustomerTypeRow[],
+  preferredName = "customer",
+): string {
+  const preferred = preferredName.trim().toLowerCase();
   const match = types.find(
     (t) =>
-      String(t.customer_type_name ?? "").trim().toLowerCase() === "customer",
+      String(t.customer_type_name ?? "").trim().toLowerCase() === preferred,
   );
   if (match?.customer_type_code) return match.customer_type_code;
   const loose = types.find((t) =>
-    String(t.customer_type_name ?? "").toLowerCase().includes("customer"),
+    String(t.customer_type_name ?? "").toLowerCase().includes(preferred),
   );
-  return loose?.customer_type_code ?? "customer";
+  if (loose?.customer_type_code) return loose.customer_type_code;
+  return types[0]?.customer_type_code ?? preferred;
 }
 
 function resolveLoggedInAssignTo(
@@ -302,28 +306,45 @@ function buildCustomerPayload(
   };
 }
 
-function formatCustomerCreateError(message: string): string {
+function formatCustomerCreateError(
+  message: string,
+  entityLabel = "customer",
+): string {
   const lower = message.toLowerCase();
   if (
     lower.includes("already exist") ||
     lower.includes("already exists") ||
     lower.includes("customer exist")
   ) {
-    return "This customer already exists.";
+    return `This ${entityLabel} already exists.`;
   }
   return message;
 }
 
-export default function CustomerPanMaster() {
+export default function CustomerPanMaster({
+  partyCategory = "customer",
+}: {
+  partyCategory?: "customer" | "agent";
+} = {}) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
+  const entityLabel = partyCategory === "agent" ? "Agent" : "Customer";
+  const entityLabelLower = partyCategory;
+  const forApprovalPath =
+    partyCategory === "agent"
+      ? "/master/create-agent"
+      : "/master/create-customer";
+  const panCreatePath =
+    partyCategory === "agent"
+      ? "/master/create-agent-pan"
+      : "/master/create-customer-pan";
 
   useEffect(() => {
     if (!isIndiaUser) {
-      navigate("/master/create-customer", { replace: true });
+      navigate(forApprovalPath, { replace: true });
     }
-  }, [isIndiaUser, navigate]);
+  }, [isIndiaUser, navigate, forApprovalPath]);
 
   const [panNumber, setPanNumber] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -349,10 +370,10 @@ export default function CustomerPanMaster() {
   );
 
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", "pan-master", "vendor=False"],
+    queryKey: ["customerTypes", "pan-master", `category=${partyCategory}`],
     queryFn: async () => {
       const response = (await getAPICall(
-        `${URL.customerType}?vendor=False`,
+        `${URL.customerType}?category=${partyCategory}`,
         API_HEADER,
       )) as
         | { success?: boolean; data?: CustomerTypeRow[] }
@@ -382,8 +403,8 @@ export default function CustomerPanMaster() {
   });
 
   const customerTypeCode = useMemo(
-    () => resolveCustomerTypeCode(customerTypes),
-    [customerTypes],
+    () => resolveCustomerTypeCode(customerTypes, partyCategory),
+    [customerTypes, partyCategory],
   );
 
   const assignedTo = useMemo(
@@ -582,8 +603,8 @@ export default function CustomerPanMaster() {
         message:
           apiMessage ??
           (selected.length === 1
-            ? "Customer verification submitted successfully."
-            : `Customer verification submitted with ${selected.length} addresses.`),
+            ? `${entityLabel} verification submitted successfully.`
+            : `${entityLabel} verification submitted with ${selected.length} addresses.`),
       });
       closeDetailsModal();
       setPanNumber("");
@@ -593,11 +614,14 @@ export default function CustomerPanMaster() {
       setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
       setAdditionalDetails({ ...EMPTY_ADDITIONAL_DETAILS });
       setDetailsErrors({});
-      navigate("/master/create-customer-pan", { replace: true });
+      navigate(panCreatePath, { replace: true });
     } catch (error) {
       ToastNotification({
         type: "error",
-        message: formatCustomerCreateError(extractApiErrorMessage(error)),
+        message: formatCustomerCreateError(
+          extractApiErrorMessage(error),
+          entityLabelLower,
+        ),
       });
     } finally {
       setIsCreating(false);
@@ -612,16 +636,17 @@ export default function CustomerPanMaster() {
     <Card shadow="sm" padding="lg" radius="md">
       <Group justify="space-between" mb="md">
         <Text size="md" fw={600}>
-          Create Customer from PAN
+          Create {entityLabel} from PAN
         </Text>
       </Group>
 
       <Group align="flex-end" gap="sm" mt="lg">
-        <TextInput
+        <FormTextInput
           label="PAN Number"
           placeholder="Enter PAN Number"
+          format="capital"
           value={panNumber}
-          onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+          onChange={(e) => setPanNumber(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !isSearching) {
               e.preventDefault();
@@ -766,7 +791,7 @@ export default function CustomerPanMaster() {
             onClick={handleOpenDetailsModal}
             disabled={selectedGstins.size === 0}
           >
-            Create Customer
+            Create {entityLabel}
             {selectedGstins.size > 0 ? ` (${selectedGstins.size})` : ""}
           </Button>
         </Group>
@@ -783,28 +808,29 @@ export default function CustomerPanMaster() {
       <Modal
         opened={detailsModalOpened}
         onClose={() => !isCreating && closeDetailsModal()}
-        title="Additional Customer Details"
+        title={`Additional ${entityLabel} Details`}
         centered
         size="xl"
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Fill India customer details that are not fetched from GSTIN search.
-            These values will be included in the create payload.
+            Fill India {entityLabelLower} details that are not fetched from
+            GSTIN search. These values will be included in the create payload.
           </Text>
 
           <ScrollArea.Autosize mah="65vh" offsetScrollbars type="auto">
             <Stack gap="lg">
               <div>
                 <Text size="sm" fw={600} c="#105476" mb="sm">
-                  Customer details
+                  {entityLabel} details
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <MultiSelect
-                      label="Customer Type"
+                    <FormMultiSelect
+                      label={`${entityLabel} Type`}
                       withAsterisk
-                      placeholder="Select customer type"
+                      dropdownZIndex={1000}
+                      placeholder={`Select ${entityLabelLower} type`}
                       searchable
                       data={customerTypeOptions}
                       value={additionalDetails.customer_type_code}
@@ -815,9 +841,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <Select
+                    <Dropdown
                       label="Credit Type"
                       withAsterisk
+                      dropdownZIndex={1000}
                       placeholder="Select credit type"
                       data={TERM_CODE_OPTIONS}
                       value={additionalDetails.term_code || null}
@@ -828,9 +855,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <Select
+                    <Dropdown
                       label="Own Office"
                       withAsterisk
+                      dropdownZIndex={1000}
                       placeholder="Select Own Office"
                       data={[
                         { value: "true", label: "Yes" },
@@ -867,9 +895,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Credit Amount"
                       placeholder="Enter credit amount"
+                      format="normal"
                       value={additionalDetails.credit_amount}
                       onChange={(e) => {
                         const next = e.target.value;
@@ -881,9 +910,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Credit Day"
                       placeholder="Enter credit days"
+                      format="normal"
                       value={additionalDetails.credit_day}
                       onChange={(e) =>
                         updateAdditionalDetails(
@@ -921,9 +951,10 @@ export default function CustomerPanMaster() {
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Landline Number"
                       placeholder="Enter landline number"
+                      format="normal"
                       value={additionalDetails.phone_no}
                       onChange={(e) =>
                         updateAdditionalDetails("phone_no", e.target.value)
@@ -931,9 +962,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Mobile Number"
                       placeholder="Enter mobile number"
+                      format="normal"
                       value={additionalDetails.mobile_no}
                       onChange={(e) =>
                         updateAdditionalDetails("mobile_no", e.target.value)
@@ -942,9 +974,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Email Id"
                       placeholder="Enter email address"
+                      format="normal"
                       value={additionalDetails.email}
                       onChange={(e) =>
                         updateAdditionalDetails("email", e.target.value)
@@ -963,9 +996,10 @@ export default function CustomerPanMaster() {
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="IEC Code"
                       placeholder="Enter IEC Code"
+                      format="capital"
                       value={additionalDetails.iec_code}
                       onChange={(e) =>
                         updateAdditionalDetails("iec_code", e.target.value)
@@ -973,9 +1007,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="TAN No"
                       placeholder="Enter TAN number"
+                      format="capital"
                       value={additionalDetails.tan_no}
                       onChange={(e) =>
                         updateAdditionalDetails("tan_no", e.target.value)
@@ -983,9 +1018,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="ARN No"
                       placeholder="Enter ARN number"
+                      format="normal"
                       value={additionalDetails.arn_no}
                       onChange={(e) =>
                         updateAdditionalDetails("arn_no", e.target.value)
@@ -993,9 +1029,10 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="UIN No"
                       placeholder="Enter UIN number"
+                      format="normal"
                       value={additionalDetails.uin_no}
                       onChange={(e) =>
                         updateAdditionalDetails("uin_no", e.target.value)
@@ -1003,7 +1040,7 @@ export default function CustomerPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <Select
+                    <Dropdown
                       label="Composite / Regular"
                       placeholder="Select"
                       data={[
@@ -1017,11 +1054,12 @@ export default function CustomerPanMaster() {
                           value ?? "",
                         )
                       }
+                      dropdownZIndex={1000}
                       clearable
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <Select
+                    <Dropdown
                       label="SEZ"
                       placeholder="Select"
                       data={[
@@ -1043,6 +1081,7 @@ export default function CustomerPanMaster() {
                           return next;
                         });
                       }}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   {additionalDetails.sez && (
@@ -1065,7 +1104,7 @@ export default function CustomerPanMaster() {
                     </Grid.Col>
                   )}
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <Select
+                    <Dropdown
                       label="MSME"
                       placeholder="Select"
                       data={[
@@ -1087,14 +1126,16 @@ export default function CustomerPanMaster() {
                           return next;
                         });
                       }}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   {additionalDetails.msme && (
                     <Grid.Col span={{ base: 12, sm: 4 }}>
-                      <TextInput
+                      <FormTextInput
                         label="MSME No"
                         withAsterisk
                         placeholder="Enter MSME number"
+                        format="normal"
                         value={additionalDetails.msme_no}
                         onChange={(e) =>
                           updateAdditionalDetails("msme_no", e.target.value)

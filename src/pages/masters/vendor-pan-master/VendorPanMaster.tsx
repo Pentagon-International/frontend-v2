@@ -9,15 +9,11 @@ import {
   Grid,
   Group,
   Modal,
-  MultiSelect,
   ScrollArea,
-  Select,
   Stack,
   Switch,
   Table,
   Text,
-  TextInput,
-  Textarea,
   Badge,
 } from "@mantine/core";
 import { IconPaperclip, IconPlus, IconSearch, IconTrash } from "@tabler/icons-react";
@@ -26,6 +22,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   Dropdown,
+  FormMultiSelect,
+  FormTextArea,
+  FormTextInput,
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
@@ -535,10 +534,10 @@ export default function VendorPanMaster() {
   ]);
 
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", "vendor-pan-master", "vendor=True"],
+    queryKey: ["customerTypes", "vendor-pan-master", "category=vendor"],
     queryFn: async () => {
       const response = (await getAPICall(
-        `${URL.customerType}?vendor=True`,
+        `${URL.customerType}?category=vendor`,
         API_HEADER,
       )) as
         | { success?: boolean; data?: CustomerTypeRow[] }
@@ -904,11 +903,12 @@ export default function VendorPanMaster() {
       </Group>
 
       <Group align="flex-end" gap="sm" mt="lg">
-        <TextInput
+        <FormTextInput
           label="PAN Number"
           placeholder="Enter PAN Number"
+          format="capital"
           value={panNumber}
-          onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+          onChange={(e) => setPanNumber(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !isSearching) {
               e.preventDefault();
@@ -1086,7 +1086,7 @@ export default function VendorPanMaster() {
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <MultiSelect
+                    <FormMultiSelect
                       label="Customer Type"
                       withAsterisk
                       placeholder="Select customer type"
@@ -1097,10 +1097,11 @@ export default function VendorPanMaster() {
                         updateAdditionalDetails("customer_type_code", value)
                       }
                       error={detailsErrors.customer_type_code}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <Select
+                    <Dropdown
                       label="Credit Type"
                       withAsterisk
                       placeholder="Select credit type"
@@ -1110,10 +1111,11 @@ export default function VendorPanMaster() {
                         updateAdditionalDetails("term_code", value ?? "")
                       }
                       error={detailsErrors.term_code}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <Select
+                    <Dropdown
                       label="Own Office"
                       withAsterisk
                       placeholder="Select Own Office"
@@ -1126,6 +1128,7 @@ export default function VendorPanMaster() {
                         updateAdditionalDetails("own_office", value ?? "")
                       }
                       error={detailsErrors.own_office}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
@@ -1152,9 +1155,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Credit Amount"
                       placeholder="Enter credit amount"
+                      format="normal"
                       value={additionalDetails.credit_amount}
                       onChange={(e) => {
                         const next = e.target.value;
@@ -1166,9 +1170,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Credit Day"
                       placeholder="Enter credit days"
+                      format="normal"
                       value={additionalDetails.credit_day}
                       onChange={(e) =>
                         updateAdditionalDetails(
@@ -1196,7 +1201,7 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
-                    <Select
+                    <Dropdown
                       label="TDS Type"
                       placeholder="Select TDS type"
                       data={[
@@ -1209,6 +1214,7 @@ export default function VendorPanMaster() {
                         updateAdditionalDetails("tds_type", value ?? "")
                       }
                       clearable
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                 </Grid>
@@ -1262,7 +1268,7 @@ export default function VendorPanMaster() {
                       </Group>
                       <Grid gutter="sm">
                         <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <Select
+                          <Dropdown
                             label="Section Name"
                             placeholder="Select section name"
                             searchable
@@ -1298,12 +1304,14 @@ export default function VendorPanMaster() {
                                 return next;
                               });
                             }}
+                            dropdownZIndex={1000}
                           />
                         </Grid.Col>
                         <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <TextInput
+                          <FormTextInput
                             label="Section Code"
                             placeholder="Section code"
+                            format="normal"
                             disabled
                             value={row.section_code}
                           />
@@ -1340,9 +1348,10 @@ export default function VendorPanMaster() {
                           </Box>
                         </Grid.Col>
                         <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <TextInput
+                          <FormTextInput
                             label="Exemption Certificate No"
                             placeholder="Certificate number"
+                            format="normal"
                             disabled={!row.exemption_tds}
                             withAsterisk={row.exemption_tds}
                             value={row.exemption_certificate_no}
@@ -1356,9 +1365,10 @@ export default function VendorPanMaster() {
                           />
                         </Grid.Col>
                         <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <TextInput
+                          <FormTextInput
                             label="TDS %"
                             placeholder="TDS %"
+                            format="normal"
                             disabled={!row.exemption_tds}
                             withAsterisk={row.exemption_tds}
                             inputMode="decimal"
@@ -1375,9 +1385,10 @@ export default function VendorPanMaster() {
                           />
                         </Grid.Col>
                         <Grid.Col span={{ base: 12, sm: 4 }}>
-                          <TextInput
+                          <FormTextInput
                             label="TDS Lower Limit"
                             placeholder="Lower limit"
+                            format="normal"
                             disabled={!row.exemption_tds}
                             withAsterisk={row.exemption_tds}
                             inputMode="decimal"
@@ -1483,7 +1494,7 @@ export default function VendorPanMaster() {
                         </Group>
                         <Grid gutter="sm">
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <Select
+                            <Dropdown
                               label="Currency"
                               placeholder="Select currency"
                               searchable
@@ -1497,12 +1508,14 @@ export default function VendorPanMaster() {
                                 )
                               }
                               clearable
+                              dropdownZIndex={1000}
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <TextInput
+                            <FormTextInput
                               label="Account No"
                               placeholder="Enter account number"
+                              format="normal"
                               withAsterisk={rowTouched}
                               value={row.account_no}
                               onChange={(e) =>
@@ -1515,7 +1528,7 @@ export default function VendorPanMaster() {
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <TextInput
+                            <FormTextInput
                               label="Account Name"
                               placeholder="Enter account name"
                               withAsterisk={rowTouched}
@@ -1530,7 +1543,7 @@ export default function VendorPanMaster() {
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <TextInput
+                            <FormTextInput
                               label="Bank Name"
                               placeholder="Enter bank name"
                               withAsterisk={rowTouched}
@@ -1545,9 +1558,10 @@ export default function VendorPanMaster() {
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <TextInput
+                            <FormTextInput
                               label="IBAN No"
                               placeholder="Enter IBAN number"
+                              format="capital"
                               value={row.iban_no}
                               onChange={(e) =>
                                 updateBankDetail(
@@ -1559,9 +1573,10 @@ export default function VendorPanMaster() {
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <TextInput
+                            <FormTextInput
                               label="SWIFT No"
                               placeholder="Enter SWIFT code"
+                              format="capital"
                               value={row.swift_no}
                               onChange={(e) =>
                                 updateBankDetail(
@@ -1573,9 +1588,10 @@ export default function VendorPanMaster() {
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 4 }}>
-                            <TextInput
+                            <FormTextInput
                               label="IFSC Code"
                               placeholder="Enter IFSC code"
+                              format="capital"
                               withAsterisk={rowTouched}
                               value={row.ifsc_code}
                               onChange={(e) =>
@@ -1588,16 +1604,17 @@ export default function VendorPanMaster() {
                             />
                           </Grid.Col>
                           <Grid.Col span={{ base: 12, sm: 8 }}>
-                            <Textarea
+                            <FormTextArea
                               label="Bank Address"
                               placeholder="Enter bank address"
                               minRows={2}
+                              format="initcap"
                               value={row.bank_address}
                               onChange={(e) =>
                                 updateBankDetail(
                                   index,
                                   "bank_address",
-                                  e.target.value,
+                                  e.currentTarget.value,
                                 )
                               }
                             />
@@ -1617,9 +1634,10 @@ export default function VendorPanMaster() {
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Landline Number"
                       placeholder="Enter landline number"
+                      format="normal"
                       value={additionalDetails.phone_no}
                       onChange={(e) =>
                         updateAdditionalDetails("phone_no", e.target.value)
@@ -1627,9 +1645,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Mobile Number"
                       placeholder="Enter mobile number"
+                      format="normal"
                       value={additionalDetails.mobile_no}
                       onChange={(e) =>
                         updateAdditionalDetails("mobile_no", e.target.value)
@@ -1638,9 +1657,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="Email Id"
                       placeholder="Enter email address"
+                      format="normal"
                       value={additionalDetails.email}
                       onChange={(e) =>
                         updateAdditionalDetails("email", e.target.value)
@@ -1659,9 +1679,10 @@ export default function VendorPanMaster() {
                 </Text>
                 <Grid gutter="sm">
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="IEC Code"
                       placeholder="Enter IEC Code"
+                      format="capital"
                       value={additionalDetails.iec_code}
                       onChange={(e) =>
                         updateAdditionalDetails("iec_code", e.target.value)
@@ -1669,9 +1690,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="TAN No"
                       placeholder="Enter TAN number"
+                      format="capital"
                       value={additionalDetails.tan_no}
                       onChange={(e) =>
                         updateAdditionalDetails("tan_no", e.target.value)
@@ -1679,9 +1701,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="ARN No"
                       placeholder="Enter ARN number"
+                      format="normal"
                       value={additionalDetails.arn_no}
                       onChange={(e) =>
                         updateAdditionalDetails("arn_no", e.target.value)
@@ -1689,9 +1712,10 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <TextInput
+                    <FormTextInput
                       label="UIN No"
                       placeholder="Enter UIN number"
+                      format="normal"
                       value={additionalDetails.uin_no}
                       onChange={(e) =>
                         updateAdditionalDetails("uin_no", e.target.value)
@@ -1699,7 +1723,7 @@ export default function VendorPanMaster() {
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <Select
+                    <Dropdown
                       label="Composite / Regular"
                       placeholder="Select"
                       data={[
@@ -1714,10 +1738,11 @@ export default function VendorPanMaster() {
                         )
                       }
                       clearable
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <Select
+                    <Dropdown
                       label="SEZ"
                       placeholder="Select"
                       data={[
@@ -1739,6 +1764,7 @@ export default function VendorPanMaster() {
                           return next;
                         });
                       }}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   {additionalDetails.sez && (
@@ -1761,7 +1787,7 @@ export default function VendorPanMaster() {
                     </Grid.Col>
                   )}
                   <Grid.Col span={{ base: 12, sm: 4 }}>
-                    <Select
+                    <Dropdown
                       label="MSME"
                       placeholder="Select"
                       data={[
@@ -1783,14 +1809,16 @@ export default function VendorPanMaster() {
                           return next;
                         });
                       }}
+                      dropdownZIndex={1000}
                     />
                   </Grid.Col>
                   {additionalDetails.msme && (
                     <Grid.Col span={{ base: 12, sm: 4 }}>
-                      <TextInput
+                      <FormTextInput
                         label="MSME No"
                         withAsterisk
                         placeholder="Enter MSME number"
+                        format="normal"
                         value={additionalDetails.msme_no}
                         onChange={(e) =>
                           updateAdditionalDetails("msme_no", e.target.value)

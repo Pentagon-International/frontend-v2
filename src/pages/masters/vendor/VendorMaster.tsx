@@ -19,7 +19,6 @@ import {
   Card,
   Center,
   Loader,
-  Select,
   Stack,
   Grid,
   TextInput,
@@ -40,7 +39,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { SearchableSelect } from "../../../components";
+import { SearchableSelect, Dropdown, FormTextInput } from "../../../components";
 import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
@@ -50,16 +49,6 @@ import useAuthStore from "../../../store/authStore";
 import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 const LIST_KEY = "VENDOR_MASTER";
-
-/** Default customer_type filter for Vendor Master list (customertype-master ids). */
-const DEFAULT_VENDOR_CUSTOMER_TYPE_IDS = [6, 8, 12] as const;
-
-/** Customer types shown in Vendor Master filter (matches customer_type_name from API). */
-const VENDOR_CUSTOMER_TYPE_NAMES = ["Supplier", "Carrier", "Transporter"] as const;
-
-const VENDOR_LABELS_LC = new Set(
-  VENDOR_CUSTOMER_TYPE_NAMES.map((n) => n.toLowerCase()),
-);
 
 type AddressData = {
   id?: number;
@@ -305,13 +294,12 @@ function buildVendorFilterPayload(
 ): Record<string, string | number[]> {
   const payload: Record<string, string | number[]> = {};
 
+  // Prefer explicit type id; otherwise rely on ?customer-category=vendor on the request URL.
   if (filters.customer_type_id?.trim()) {
     const id = Number(filters.customer_type_id.trim());
-    payload.customer_type = Number.isNaN(id)
-      ? [...DEFAULT_VENDOR_CUSTOMER_TYPE_IDS]
-      : [id];
-  } else {
-    payload.customer_type = [...DEFAULT_VENDOR_CUSTOMER_TYPE_IDS];
+    if (!Number.isNaN(id)) {
+      payload.customer_type = [id];
+    }
   }
 
   if (searchValue?.trim()) {
@@ -479,11 +467,11 @@ export default function VendorMaster() {
   });
 
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", "vendor", "vendor=True"],
+    queryKey: ["customerTypes", "vendor", "category=vendor"],
     queryFn: async () => {
       try {
         const response = (await getAPICall(
-          `${URL.customerType}?vendor=True`,
+          `${URL.customerType}?category=vendor`,
           API_HEADER,
         )) as
           | { success: boolean; data: CustomerTypeData[] }
@@ -541,14 +529,10 @@ export default function VendorMaster() {
   }, [states]);
 
   const vendorCustomerTypeOptions = useMemo(() => {
-    return customerTypes
-      .filter((type) =>
-        VENDOR_LABELS_LC.has((type.customer_type_name || "").toLowerCase()),
-      )
-      .map((type) => ({
-        value: String(type.id),
-        label: type.customer_type_name,
-      }));
+    return customerTypes.map((type) => ({
+      value: String(type.id),
+      label: type.customer_type_name,
+    }));
   }, [customerTypes]);
 
   const salespersonOptions = useMemo(() => {
@@ -583,7 +567,7 @@ export default function VendorMaster() {
 
         setIsInitialLoad(false);
         const response = await apiCallProtected.post(
-          `${URL.customerFilter}?index=${index}&limit=${pagination.pageSize}`,
+          `${URL.customerFilter}?customer-category=vendor&index=${index}&limit=${pagination.pageSize}`,
           { filters: filtersPayload },
         );
         setShowFilters(false);
@@ -1249,7 +1233,7 @@ export default function VendorMaster() {
               </Grid.Col>
 
               <Grid.Col span={2.4}>
-                <Select
+                <Dropdown
                   label="Vendor Type"
                   placeholder="Supplier / Carrier / Transporter"
                   searchable
@@ -1277,7 +1261,7 @@ export default function VendorMaster() {
               </Grid.Col>
 
               <Grid.Col span={2.4}>
-                <Select
+                <Dropdown
                   label="Salesperson"
                   placeholder="Select salesperson"
                   searchable
@@ -1305,7 +1289,7 @@ export default function VendorMaster() {
               </Grid.Col>
 
               <Grid.Col span={2.4}>
-                <Select
+                <Dropdown
                   label="Country"
                   placeholder="Select country"
                   searchable
@@ -1336,7 +1320,7 @@ export default function VendorMaster() {
               </Grid.Col>
 
               <Grid.Col span={2.4}>
-                <Select
+                <Dropdown
                   label="State"
                   placeholder={
                     statesLoading ? "Loading state values..." : "Select state"
@@ -1373,7 +1357,8 @@ export default function VendorMaster() {
               </Grid.Col>
 
               <Grid.Col span={2.4}>
-                <TextInput
+                <FormTextInput
+                  format="normal"
                   label="City"
                   placeholder="Type city name"
                   size="xs"
@@ -1398,7 +1383,7 @@ export default function VendorMaster() {
               </Grid.Col>
 
               <Grid.Col span={2.4}>
-                <Select
+                <Dropdown
                   label="Status"
                   placeholder="Select status"
                   searchable

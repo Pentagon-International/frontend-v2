@@ -9,10 +9,11 @@ import {
   Grid,
   Card,
 } from "@mantine/core";
-import dayjs from "dayjs";
 import { useMemo } from "react";
 import DateRangeInput from "../DateRangeInput"; // <-- If needed, adjust path
 import useAuthStore from "../../store/authStore";
+import useDateFormat from "../../hooks/useDateFormat";
+import { formatDateForUi } from "../../utils/dateFormat";
 import {
   getDefaultBranchCountryCode,
   getDefaultBranchCurrencyCode,
@@ -89,6 +90,7 @@ export default function CustomerDataDrawer({
   onQuotationClick,
 }: CustomerDataDrawerProps) {
   const user = useAuthStore((state) => state.user);
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(
     () => isVietnamBranchFromUser(user),
     [user],
@@ -257,7 +259,11 @@ export default function CustomerDataDrawer({
                         </Text>
                         <Text size="sm" fw={500} c="#333">
                           {customerLastVisited
-                            ? dayjs(customerLastVisited).format("DD/MM/YYYY")
+                            ? formatDateForUi(
+                                customerLastVisited,
+                                dateFormat,
+                                "-",
+                              )
                             : "-"}
                         </Text>
                       </Grid.Col>
@@ -371,8 +377,10 @@ export default function CustomerDataDrawer({
                           <Group justify="space-between" align="center">
                             <Text size="sm" fw={600} c="#105476">
                               {q.enquiry_received_date
-                                ? dayjs(q.enquiry_received_date).format(
-                                    "DD/MM/YYYY",
+                                ? formatDateForUi(
+                                    q.enquiry_received_date,
+                                    dateFormat,
+                                    "-",
                                   )
                                 : "-"}
                             </Text>
@@ -595,7 +603,11 @@ export default function CustomerDataDrawer({
                           <Group justify="space-between" align="center">
                             <Text size="sm" fw={600} c="#105476">
                               {call.call_date
-                                ? dayjs(call.call_date).format("DD/MM/YYYY")
+                                ? formatDateForUi(
+                                    call.call_date,
+                                    dateFormat,
+                                    "-",
+                                  )
                                 : "-"}
                             </Text>
                             <Text size="xs" c="dimmed">
@@ -610,8 +622,10 @@ export default function CustomerDataDrawer({
                               </Text>
                               <Text size="sm" fw={500} c="#333">
                                 {call.followup_date
-                                  ? dayjs(call.followup_date).format(
-                                      "DD/MM/YYYY",
+                                  ? formatDateForUi(
+                                      call.followup_date,
+                                      dateFormat,
+                                      "-",
                                     )
                                   : "-"}
                               </Text>

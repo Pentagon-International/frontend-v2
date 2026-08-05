@@ -44,10 +44,14 @@ export default function MastersPage() {
   const formatRoute = (label: string) => {
     if (label === "Customer for Approval") return "create-customer";
     if (label === "Vendor for Approval") return "create-vendor";
+    if (label === "Agent for Approval") return "create-agent";
     if (label === "Create Customer-PAN") return "create-customer-pan";
     if (label === "Create Vendor-PAN") return "create-vendor-pan";
+    if (label === "Create Agent-PAN") return "create-agent-pan";
     if (label === "Customer Approval Status") return "customer-approval-status";
     if (label === "Vendor Approval Status") return "vendor-approval-status";
+    if (label === "Agent Approval Status") return "agent-approval-status";
+    if (label === "Approve Agent") return "approve-agents";
     if (label === "Maker & Checker Mapping") return "maker-checker-mapping";
     return label.toLowerCase().replace(/\s+/g, "-");
   };
@@ -97,6 +101,10 @@ export default function MastersPage() {
           {
             icon: <IconTruck size={28} color="#105476" />,
             label: "Vendor",
+          },
+          {
+            icon: <IconUserHexagon size={28} color="#105476" />,
+            label: "Agent",
           },
           {
             icon: <IconUsersGroup size={28} color="#105476" />,
@@ -173,12 +181,20 @@ export default function MastersPage() {
                   label: "Create Vendor-PAN",
                 },
                 {
+                  icon: <IconUserHexagon size={28} color="#105476" />,
+                  label: "Create Agent-PAN",
+                },
+                {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
                   label: "Customer Approval Status",
                 },
                 {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
                   label: "Vendor Approval Status",
+                },
+                {
+                  icon: <IconClipboardCheck size={28} color="#105476" />,
+                  label: "Agent Approval Status",
                 },
               ]
             : [
@@ -190,6 +206,10 @@ export default function MastersPage() {
                   icon: <IconTruck size={28} color="#105476" />,
                   label: "Vendor for Approval",
                 },
+                {
+                  icon: <IconUserHexagon size={28} color="#105476" />,
+                  label: "Agent for Approval",
+                },
               ]),
           ...(showApproveCustomers
             ? [
@@ -200,6 +220,10 @@ export default function MastersPage() {
                 {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
                   label: "Approve Vendors",
+                },
+                {
+                  icon: <IconClipboardCheck size={28} color="#105476" />,
+                  label: "Approve Agent",
                 },
               ]
             : []),

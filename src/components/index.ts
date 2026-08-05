@@ -3,6 +3,9 @@ import Navbar from "./Navbar/Navbar";
 import SearchableSelect from "./SearchableSelect";
 import CustomerNameSelect from "./CustomerNameSelect";
 import Dropdown from "./Dropdown";
+import FormTextInput from "./FormTextInput";
+import FormTextArea from "./FormTextArea";
+import FormMultiSelect from "./FormMultiSelect";
 import ServiceDetailsSlider from "./ServiceDetailsSlider";
 import DownloadComponent from "./DownloadComponent";
 import DetailedViewTable from "./DetailedViewTable";
@@ -99,6 +102,9 @@ export {
   SearchableSelect,
   CustomerNameSelect,
   Dropdown,
+  FormTextInput,
+  FormTextArea,
+  FormMultiSelect,
   ServiceDetailsSlider,
   DownloadComponent,
   DetailedViewTable,

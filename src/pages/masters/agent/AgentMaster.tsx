@@ -5,6 +5,7 @@ import {
   MantineReactTable,
   MRT_ColumnDef,
   useMantineReactTable,
+  type MRT_PaginationState,
 } from "mantine-react-table";
 import {
   Badge,
@@ -19,9 +20,6 @@ import {
   Center,
   Loader,
   Stack,
-  Modal,
-  Drawer,
-  Divider,
   Grid,
   TextInput,
 } from "@mantine/core";
@@ -34,27 +32,23 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { useNavigate, Outlet, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { apiCallProtected } from "../../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteApiCall } from "../../../service/deleteApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useForm } from "@mantine/form";
-import {
-  SearchableSelect,
-  Dropdown,
-  FormTextInput,
-} from "../../../components";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { SearchableSelect, Dropdown, FormTextInput } from "../../../components";
 import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import { useListFilterStore } from "../../../store/listFilterStore";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import { isIndianUserCountry } from "../../../utils/userNumberFormat";
-import type { CustomerDocumentListItem } from "../../../utils/customerDocuments";
+
+const LIST_KEY = "AGENT_MASTER";
 
 type AddressData = {
   id?: number;
@@ -69,7 +63,6 @@ type AddressData = {
   mobile_no: string;
   email: string;
   pan_no?: string;
-  iec_code?: string;
   gst_id?: string;
   tan_no?: string;
   arn_no?: string;
@@ -98,6 +91,7 @@ type CustomerData = {
   customer_code: string;
   customer_name: string;
   customer_type?: string;
+  customer_type_name?: string;
   customer_types?: Array<{
     id?: number;
     customer_type_code?: string;
@@ -124,14 +118,28 @@ type CustomerApiResponse = {
   data: CustomerData[];
 };
 
-type FilterState = {
+type AgentFilterState = {
   customer_name: string | null;
-  customer_type: string | null;
+  /** Display name for filter API (SearchableSelect label) */
+  customer_name_label: string | null;
+  /** Selected customertype-master id (string for Select); null = use default id list */
+  customer_type_id: string | null;
   assigned_to_display: string | null;
   country: string | null;
   state: string | null;
   city: string | null;
   status: string | null;
+};
+
+const DEFAULT_AGENT_FILTERS: AgentFilterState = {
+  customer_name: null,
+  customer_name_label: null,
+  customer_type_id: null,
+  assigned_to_display: null,
+  country: null,
+  state: null,
+  city: null,
+  status: null,
 };
 
 type CountryData = {
@@ -280,7 +288,38 @@ type CustomerDataResponse = {
   };
 };
 
-function CustomerMaster() {
+function buildAgentFilterPayload(
+  filters: AgentFilterState,
+  searchValue: string,
+): Record<string, string | number[]> {
+  const payload: Record<string, string | number[]> = {};
+
+  // Prefer explicit type id; otherwise rely on ?customer-category=agent on the request URL.
+  if (filters.customer_type_id?.trim()) {
+    const id = Number(filters.customer_type_id.trim());
+    if (!Number.isNaN(id)) {
+      payload.customer_type = [id];
+    }
+  }
+
+  if (searchValue?.trim()) {
+    payload.customer_name = searchValue.trim();
+  } else if (filters.customer_name_label?.trim()) {
+    payload.customer_name = filters.customer_name_label.trim();
+  }
+
+  if (filters.assigned_to_display) {
+    payload.assigned_to_display = filters.assigned_to_display;
+  }
+  if (filters.country) payload.country = filters.country;
+  if (filters.state) payload.state = filters.state;
+  if (filters.city) payload.city = filters.city;
+  if (filters.status) payload.status = filters.status;
+
+  return payload;
+}
+
+export default function AgentMaster() {
   const isAdmin = useIsAdminUser();
   const userPulseId = useAuthStore((s) => s.user?.pulse_id);
   const userCountry = useAuthStore((s) => s.user?.country);
@@ -300,64 +339,92 @@ function CustomerMaster() {
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  // Search states
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debounced] = useDebouncedValue(searchQuery, 500);
-
-  // Pagination states
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
-  const [totalCount, setTotalCount] = useState(0);
-  const [paginationTotal, setPaginationTotal] = useState(0);
+  const [pagination, setPagination] = useState<MRT_PaginationState>({
+    pageIndex: 0,
+    pageSize: 25,
+  });
+  const [totalRecords, setTotalRecords] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
-  const [customerDisplayValue, setCustomerDisplayValue] = useState<
-    string | null
-  >(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedState, setSelectedState] = useState<string | null>(null);
 
-  // Filter form
-  const filterForm = useForm<FilterState>({
-    initialValues: {
-      customer_name: null,
-      customer_type: null,
-      assigned_to_display: null,
-      country: null,
-      state: null,
-      city: null,
-      status: null,
-    },
-  });
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
 
-  // Build filter payload function
-  const buildFilterPayload = useCallback(() => {
-    const payload: Record<string, string> = {};
-    // Use customerDisplayValue (customer name) for payload instead of customer_code
-    if (customerDisplayValue) {
-      payload.customer_name = customerDisplayValue;
-    }
-    if (filterForm.values.customer_type) {
-      payload.customer_type = filterForm.values.customer_type;
-    }
-    if (filterForm.values.assigned_to_display) {
-      payload.assigned_to_display = filterForm.values.assigned_to_display;
-    }
-    if (filterForm.values.country) {
-      payload.country = filterForm.values.country;
-    }
-    if (filterForm.values.state) {
-      payload.state = filterForm.values.state;
-    }
-    if (filterForm.values.city) {
-      payload.city = filterForm.values.city;
-    }
-    if (filterForm.values.status) {
-      payload.status = filterForm.values.status;
-    }
-    return payload;
-  }, [filterForm.values, customerDisplayValue]);
+  const [isRestoring, setIsRestoring] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Fetch countries data
+  const getState = useListFilterStore((s) => s.getState);
+  const setStoreFilters = useListFilterStore((s) => s.setFilters);
+  const setStoreSearch = useListFilterStore((s) => s.setSearch);
+  const clearAllStore = useListFilterStore((s) => s.clearAll);
+  const clearAllExcept = useListFilterStore((s) => s.clearAllExcept);
+  const setShouldRestore = useListFilterStore((s) => s.setShouldRestore);
+
+  const [draftFilters, setDraftFilters] =
+    useState<AgentFilterState>(DEFAULT_AGENT_FILTERS);
+
+  const [appliedFilters, setAppliedFilters] =
+    useState<AgentFilterState>(DEFAULT_AGENT_FILTERS);
+
+  useEffect(() => {
+    const stored = getState(LIST_KEY);
+    const shouldRestore = stored?.shouldRestore === true;
+
+    if (!shouldRestore) {
+      setIsRestoring(false);
+      return;
+    }
+
+    if (typeof stored?.search === "string") {
+      setSearch(stored.search);
+    }
+
+    if (stored?.filters && typeof stored.filters === "object") {
+      const raw = { ...(stored.filters as Record<string, unknown>) };
+      delete raw.customer_type;
+      const restored = {
+        ...DEFAULT_AGENT_FILTERS,
+        ...(raw as Partial<AgentFilterState>),
+      };
+      setDraftFilters(restored);
+      setAppliedFilters(restored);
+      setSelectedCountry(restored.country);
+      setSelectedState(restored.state);
+    }
+
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllExcept(LIST_KEY);
+    setShouldRestore(LIST_KEY, false);
+    setIsRestoring(false);
+  }, [location.key]);
+
+  const currentPage = pagination.pageIndex + 1;
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPagination({ pageIndex: 0, pageSize: newPageSize });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPagination((prev) => ({ ...prev, pageIndex: newPage - 1 }));
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters({ ...draftFilters });
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreSearch(LIST_KEY, search);
+  };
+
+  const clearAllFilters = () => {
+    setDraftFilters(DEFAULT_AGENT_FILTERS);
+    setAppliedFilters(DEFAULT_AGENT_FILTERS);
+    setSelectedCountry(null);
+    setSelectedState(null);
+    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    clearAllStore(LIST_KEY);
+  };
+
   const { data: countries = [] } = useQuery({
     queryKey: ["countries"],
     queryFn: async () => {
@@ -377,7 +444,6 @@ function CustomerMaster() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch states data
   const { data: states = [], isLoading: statesLoading } = useQuery({
     queryKey: ["states"],
     queryFn: async () => {
@@ -391,7 +457,6 @@ function CustomerMaster() {
         } else if (Array.isArray(response)) {
           statesData = response;
         }
-        // Return all active states
         return statesData.filter((state) => state.status === "active");
       } catch (error) {
         console.error("Error fetching states:", error);
@@ -401,34 +466,13 @@ function CustomerMaster() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch cities data
-  // const { data: cities = [] } = useQuery({
-  //   queryKey: ["cities"],
-  //   queryFn: async () => {
-  //     try {
-  //       const response = (await getAPICall(`${URL.city}`, API_HEADER)) as
-  //         | { success: boolean; data: CityData[] }
-  //         | CityData[];
-  //       if (response && typeof response === "object" && "success" in response) {
-  //         return response.data || [];
-  //       }
-  //       return Array.isArray(response) ? response : [];
-  //     } catch (error) {
-  //       console.error("Error fetching cities:", error);
-  //       return [];
-  //     }
-  //   },
-  //   staleTime: 5 * 60 * 1000,
-  // });
-
-  // Fetch customer types data (scoped to customer category)
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", "customer", "category=customer"],
+    queryKey: ["customerTypes", "agent", "category=agent"],
     queryFn: async () => {
       try {
         const response = (await getAPICall(
-          `${URL.customerType}?category=customer`,
-          API_HEADER
+          `${URL.customerType}?category=agent`,
+          API_HEADER,
         )) as
           | { success: boolean; data: CustomerTypeData[] }
           | CustomerTypeData[];
@@ -447,7 +491,6 @@ function CustomerMaster() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch salespersons data
   const { data: salespersonsData = [] } = useQuery({
     queryKey: ["salespersons"],
     queryFn: async () => {
@@ -455,7 +498,7 @@ function CustomerMaster() {
         const response = (await postAPICall(
           URL.salespersons,
           {},
-          API_HEADER
+          API_HEADER,
         )) as { success: boolean; data: SalespersonData[] } | SalespersonData[];
         if (response && typeof response === "object" && "success" in response) {
           return response.data || [];
@@ -469,7 +512,6 @@ function CustomerMaster() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // Memoized dropdown options
   const countryOptions = useMemo(() => {
     return countries
       .filter((country) => country.status === "ACTIVE")
@@ -486,18 +528,9 @@ function CustomerMaster() {
     }));
   }, [states]);
 
-  // const cityOptions = useMemo(() => {
-  //   return cities
-  //     .filter((city) => city.status === "active")
-  //     .map((city) => ({
-  //       value: city.city_name,
-  //       label: city.city_name,
-  //     }));
-  // }, [cities]);
-
-  const customerTypeOptions = useMemo(() => {
+  const agentCustomerTypeOptions = useMemo(() => {
     return customerTypes.map((type) => ({
-      value: type.customer_type_name,
+      value: String(type.id),
       label: type.customer_type_name,
     }));
   }, [customerTypes]);
@@ -511,106 +544,104 @@ function CustomerMaster() {
       }));
   }, [salespersonsData]);
 
-  // Fetch customer data with React Query - using filter API
   const {
-    data: customerData = [],
-    isLoading: customerLoading,
-    refetch: refetchCustomers,
+    data: tableData = [],
+    isLoading: listLoading,
+    isFetching: listFetching,
+    error: listError,
   } = useQuery({
-    queryKey: ["customers", pageIndex, pageSize],
+    queryKey: [
+      "agent-master-list",
+      pagination.pageIndex,
+      pagination.pageSize,
+      JSON.stringify(appliedFilters),
+      debouncedSearch,
+    ],
     queryFn: async () => {
       try {
-        const index = pageIndex * pageSize;
-        const response = await apiCallProtected.post(
-          `${URL.customerFilter}?customer-category=customer&index=${index}&limit=${pageSize}`,
-          { filters: {} }
+        const index = pagination.pageIndex * pagination.pageSize;
+        const filtersPayload = buildAgentFilterPayload(
+          appliedFilters,
+          debouncedSearch,
         );
-        console.log("customer response---", response);
+
+        setIsInitialLoad(false);
+        const response = await apiCallProtected.post(
+          `${URL.customerFilter}?customer-category=agent&index=${index}&limit=${pagination.pageSize}`,
+          { filters: filtersPayload },
+        );
+        setShowFilters(false);
 
         const data = response as unknown as CustomerApiResponse;
         if (data && data.success && Array.isArray(data.data)) {
-          const total = data.filters_total_count || data.total || 0;
-          const derivedTotalPages =
-            pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-          const pagination_total =
-            data.pagination_total && data.pagination_total > 0
-              ? data.pagination_total
-              : derivedTotalPages;
-          // Store metadata in the cache
-          queryClient.setQueryData(["customersMetadata", pageIndex, pageSize], {
-            total,
-            pagination_total,
-          });
+          const total =
+            data.filters_total_count ?? data.total ?? data.data.length;
+          setTotalRecords(total);
           return data.data;
         }
+        setTotalRecords(0);
         return [];
       } catch (error) {
-        console.error("Error fetching customer data:", error);
-        return [];
+        console.error("Error fetching Agent Master data:", error);
+        setShowFilters(false);
+        setTotalRecords(0);
+        throw error;
       }
     },
-    staleTime: 5 * 60 * 1000,
+    enabled: !isRestoring && search === debouncedSearch,
+    staleTime: 0,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
-  // Separate query for filtered data - only runs when filters are applied
-  const {
-    data: filteredCustomerData = [],
-    isLoading: filteredCustomerLoading,
-    refetch: refetchFilteredCustomers,
-  } = useQuery({
-    queryKey: ["filteredCustomers", pageIndex, pageSize, buildFilterPayload()],
-    queryFn: async () => {
-      try {
-        const filterPayload = buildFilterPayload();
-        if (Object.keys(filterPayload).length === 0) return [];
+  const isLoading = listFetching || listLoading || isInitialLoad;
 
-        const index = pageIndex * pageSize;
-        const response = await apiCallProtected.post(
-          `${URL.customerFilter}?customer-category=customer&index=${index}&limit=${pageSize}`,
-          {
-            filters: filterPayload,
-          }
-        );
-        const data = response as unknown as CustomerApiResponse;
-        if (data && data.success && Array.isArray(data.data)) {
-          const total = data.filters_total_count || data.total || 0;
-          const derivedTotalPages =
-            pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-          const pagination_total =
-            data.pagination_total && data.pagination_total > 0
-              ? data.pagination_total
-              : derivedTotalPages;
-          // Store metadata in the cache
-          queryClient.setQueryData(["customersMetadata", pageIndex, pageSize], {
-            total,
-            pagination_total,
-          });
-          return data.data;
-        }
-        return [];
-      } catch (error) {
-        console.error("Error fetching filtered customer data:", error);
-        return [];
-      }
+  useEffect(() => {
+    if (location.state?.refreshData) {
+      navigate(location.pathname, { replace: true, state: {} });
+      setSearch("");
+      queryClient.invalidateQueries({ queryKey: ["agent-master-list"] });
+    }
+  }, [location.state, navigate, location.pathname, queryClient]);
+
+  const handleViewCustomer = useCallback(
+    (rowData: CustomerData) => {
+      setStoreFilters(LIST_KEY, appliedFilters);
+      setStoreSearch(LIST_KEY, search);
+      setShouldRestore(LIST_KEY, true);
+      navigate(`/master/agent/view/${rowData.id}`, {
+        state: { customerData: rowData },
+      });
     },
-    enabled: false, // Don't run automatically
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-  });
-
-  // State to track if filters have been applied
-  const [filtersApplied, setFiltersApplied] = useState(false);
-
-  // Delete confirmation state
-  const [customerToDelete, setCustomerToDelete] = useState<CustomerData | null>(
-    null
+    [
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ],
   );
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deletePopoverOpened, setDeletePopoverOpened] = useState(false);
 
-  // Customer Data Drawer state
+  const handleEditCustomer = useCallback(
+    (rowData: CustomerData) => {
+      setStoreFilters(LIST_KEY, appliedFilters);
+      setStoreSearch(LIST_KEY, search);
+      setShouldRestore(LIST_KEY, true);
+      navigate(`/master/agent/edit/${rowData.id}`, {
+        state: { customerData: rowData },
+      });
+    },
+    [
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ],
+  );
+
   const [
     customerDataDrawer,
     { open: openCustomerDataDrawer, close: closeCustomerDataDrawer },
@@ -624,13 +655,13 @@ function CustomerMaster() {
   const [selectedCustomerName, setSelectedCustomerName] = useState<string>("");
   const [selectedCustomerCode, setSelectedCustomerCode] = useState<string>("");
   const [customerCreditDay, setCustomerCreditDay] = useState<number | null>(
-    null
+    null,
   );
   const [customerSalesperson, setCustomerSalesperson] = useState<string | null>(
-    null
+    null,
   );
   const [customerLastVisited, setCustomerLastVisited] = useState<string | null>(
-    null
+    null,
   );
   const [customerTotalCreditAmount, setCustomerTotalCreditAmount] = useState<
     number | null
@@ -638,327 +669,34 @@ function CustomerMaster() {
   const [totalRevenue, setTotalRevenue] = useState<number | null>(null);
   const [totalProfit, setTotalProfit] = useState<number | null>(null);
   const [customerCurrency, setCustomerCurrency] = useState<string>("");
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    new Date().getMonth() + 1
-  );
-  const [selectedYear, setSelectedYear] = useState<number>(
-    new Date().getFullYear()
-  );
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
-  const [isRefreshingList, setIsRefreshingList] = useState(false);
   const [totalOutstandingAmount, setTotalOutstandingAmount] =
     useState<number>(0);
 
-  // Date range for customer data drawer (same as CallEntryNew / EnquiryCreate)
   const getPreviousMonthRange = () => {
     const now = new Date();
     const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastDayOfPreviousMonth = new Date(
       now.getFullYear(),
       now.getMonth(),
-      0
+      0,
     );
     return { from: previousMonth, to: lastDayOfPreviousMonth };
   };
   const previousMonthRange = getPreviousMonthRange();
   const [customerDataFromDate, setCustomerDataFromDate] = useState<Date | null>(
-    previousMonthRange.from
+    previousMonthRange.from,
   );
   const [customerDataToDate, setCustomerDataToDate] = useState<Date | null>(
-    previousMonthRange.to
+    previousMonthRange.to,
   );
 
-  // Search data with React Query - using filter API with customer_name
-  const { data: searchData, isLoading: searchLoading } = useQuery({
-    queryKey: ["customerSearch", debounced, pageIndex, pageSize],
-    queryFn: async () => {
-      if (!debounced.trim()) return null;
-      try {
-        const index = pageIndex * pageSize;
-        // Use filter API with customer_name filter
-        const response = await apiCallProtected.post(
-          `${URL.customerFilter}?customer-category=customer&index=${index}&limit=${pageSize}`,
-          {
-            filters: {
-              customer_name: debounced,
-            },
-          }
-        );
-
-        const data = response as unknown as CustomerApiResponse;
-        if (data && data.success && Array.isArray(data.data)) {
-          const total = data.filters_total_count || data.total || 0;
-          const derivedTotalPages =
-            pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
-          const pagination_total =
-            data.pagination_total && data.pagination_total > 0
-              ? data.pagination_total
-              : derivedTotalPages;
-          // Store metadata in the cache
-          queryClient.setQueryData(["customersMetadata", pageIndex, pageSize], {
-            total,
-            pagination_total,
-          });
-          return data.data;
-        }
-        return [];
-      } catch (error) {
-        console.error("Search API Error:", error);
-        return null;
-      }
-    },
-    enabled: debounced.trim() !== "",
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-  });
-
-  // Reset filtersApplied when search is cleared
-  useEffect(() => {
-    if (debounced.trim() === "" && searchQuery.trim() === "") {
-      setFiltersApplied(false);
-    }
-  }, [debounced, searchQuery]);
-
-  // Effect to get pagination metadata from cache
-  useEffect(() => {
-    const metadata = queryClient.getQueryData<{
-      total: number;
-      pagination_total: number;
-    }>(["customersMetadata", pageIndex, pageSize]);
-
-    if (metadata) {
-      setTotalCount(metadata.total || 0);
-      setPaginationTotal(metadata.pagination_total || 0);
-    }
-  }, [
-    queryClient,
-    pageIndex,
-    pageSize,
-    customerData,
-    searchData,
-    filteredCustomerData,
-  ]);
-
-  // Determine which data to display
-  const displayData = useMemo(() => {
-    if (debounced.trim() !== "" && searchData) {
-      return searchData;
-    }
-    // Only show filtered data if filters have been explicitly applied via "Apply Filters" button
-    if (filtersApplied) {
-      return filteredCustomerData;
-    }
-    // Otherwise, show the default customer data
-    return customerData;
-  }, [
-    debounced,
-    searchData,
-    customerData,
-    filteredCustomerData,
-    filtersApplied,
-  ]);
-
-  // Loading state
-  const isLoading =
-    isRefreshingList ||
-    customerLoading ||
-    (filtersApplied && filteredCustomerLoading) ||
-    searchLoading;
-
-  // Add effect to refresh data when returning from create/edit operations
-  useEffect(() => {
-    if (!location.state?.refreshData) return;
-
-    const refreshListAfterSave = async () => {
-      setIsRefreshingList(true);
-      navigate(location.pathname, { replace: true, state: {} });
-      setSearchQuery("");
-
-      await queryClient.invalidateQueries({ queryKey: ["customers"] });
-      await queryClient.invalidateQueries({ queryKey: ["filteredCustomers"] });
-      await queryClient.invalidateQueries({ queryKey: ["customerSearch"] });
-      await queryClient.invalidateQueries({ queryKey: ["customersMetadata"] });
-
-      try {
-        if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-          await refetchFilteredCustomers();
-        } else {
-          await refetchCustomers();
-        }
-      } finally {
-        setIsRefreshingList(false);
-      }
-    };
-
-    void refreshListAfterSave();
-  }, [
-    location.state?.refreshData,
-    refetchFilteredCustomers,
-    refetchCustomers,
-    navigate,
-    filtersApplied,
-    queryClient,
-    buildFilterPayload,
-    location.pathname,
-  ]);
-
-  const handleViewCustomer = useCallback(
-    (rowData: CustomerData) => {
-      navigate(`./view/${rowData.id}`, { state: { customerData: rowData } });
-    },
-    [navigate]
-  );
-
-  const handleEditCustomer = useCallback(
-    (rowData: CustomerData) => {
-      navigate(`./edit/${rowData.id}`, { state: { customerData: rowData } });
-    },
-    [navigate]
-  );
-
-  // Delete functionality is commented out in the menu
-  // const handleDeleteCustomer = useCallback((rowData: CustomerData) => {
-  //   setCustomerToDelete(rowData);
-  //   setDeletePopoverOpened(true);
-  // }, []);
-
-  // Cleanup function to reset delete state
-  const resetDeleteState = () => {
-    setCustomerToDelete(null);
-    setDeletePopoverOpened(false);
-  };
-
-  // Close delete popover when menu closes
-  useEffect(() => {
-    if (!deletePopoverOpened) {
-      setCustomerToDelete(null);
-    }
-  }, [deletePopoverOpened]);
-
-  const confirmDelete = async () => {
-    if (!customerToDelete) return;
-
-    try {
-      setIsDeleting(true);
-      const deleteValue = {
-        id: customerToDelete.id,
-        group_code: customerToDelete.customer_code || "",
-        group_name: customerToDelete.customer_name || "",
-        status: (customerToDelete.status === "ACTIVE"
-          ? "ACTIVE"
-          : "INACTIVE") as "ACTIVE" | "INACTIVE",
-      };
-
-      const response = await deleteApiCall(URL.customer, {}, deleteValue);
-      if (response) {
-        ToastNotification({
-          type: "success",
-          message: "Customer deleted successfully",
-        });
-
-        // Invalidate and refresh the data
-        queryClient.invalidateQueries({ queryKey: ["customers"] });
-        queryClient.invalidateQueries({ queryKey: ["filteredCustomers"] });
-        queryClient.invalidateQueries({ queryKey: ["customerSearch"] });
-        queryClient.invalidateQueries({ queryKey: ["customersMetadata"] });
-
-        if (filtersApplied && Object.keys(buildFilterPayload()).length > 0) {
-          refetchFilteredCustomers();
-        } else {
-          refetchCustomers();
-        }
-      }
-    } catch (error) {
-      console.error("Error deleting customer:", error);
-      ToastNotification({
-        type: "error",
-        message: "Failed to delete customer",
-      });
-    } finally {
-      setIsDeleting(false);
-      setCustomerToDelete(null);
-      setDeletePopoverOpened(false);
-    }
-  };
-
-  // Handle pagination changes
-  const handlePageSizeChange = (newPageSize: number) => {
-    setPageSize(newPageSize);
-    setPageIndex(0); // Reset to first page when changing page size
-  };
-
-  const handlePageIndexChange = (newPageIndex: number) => {
-    setPageIndex(newPageIndex);
-  };
-
-  const applyFilters = async () => {
-    try {
-      const hasFilterValues =
-        filterForm.values.customer_name ||
-        filterForm.values.customer_type ||
-        filterForm.values.assigned_to_display ||
-        filterForm.values.country ||
-        filterForm.values.state ||
-        filterForm.values.city ||
-        filterForm.values.status;
-
-      if (!hasFilterValues) {
-        setFiltersApplied(false);
-        setPageIndex(0);
-        await queryClient.invalidateQueries({ queryKey: ["customers"] });
-        await refetchCustomers();
-        ToastNotification({
-          type: "info",
-          message: "No filters selected, showing all data",
-        });
-        return;
-      }
-
-      setPageIndex(0);
-      setFiltersApplied(true);
-      setShowFilters(false);
-
-      await queryClient.invalidateQueries({
-        queryKey: ["filteredCustomers"],
-      });
-      await refetchFilteredCustomers();
-    } catch (error) {
-      console.error("Error applying filters:", error);
-      ToastNotification({
-        type: "error",
-        message: "Failed to apply filters",
-      });
-    }
-  };
-
-  const clearAllFilters = async () => {
-    setShowFilters(false);
-    filterForm.reset();
-    setSearchQuery("");
-    setPageIndex(0);
-    setFiltersApplied(false);
-    setCustomerDisplayValue(null);
-    setSelectedCountry(null);
-    setSelectedState(null);
-
-    await queryClient.invalidateQueries({ queryKey: ["customers"] });
-    await queryClient.invalidateQueries({ queryKey: ["filteredCustomers"] });
-    await refetchCustomers();
-
-    ToastNotification({
-      type: "success",
-      message: "All filters cleared successfully",
-    });
-  };
-
-  // Fetch customer data for drawer (supports date range like CallEntryNew / EnquiryCreate)
   const fetchCustomerData = useCallback(
     async (
       customerCode: string,
       customerName: string,
       fromDate?: Date | null,
-      toDate?: Date | null
+      toDate?: Date | null,
     ) => {
       try {
         setIsLoadingData(true);
@@ -988,12 +726,10 @@ function CustomerMaster() {
 
         const customerData = (await postAPICall(
           `${URL.customerData}`,
-          payload
+          payload,
         )) as CustomerDataResponse;
 
-        // Extract data from the API response
         if (customerData) {
-          // Set customer name from customer_info if available
           if (
             customerData.customer_info &&
             customerData.customer_info.customer_name
@@ -1001,48 +737,43 @@ function CustomerMaster() {
             setSelectedCustomerName(customerData.customer_info.customer_name);
           }
 
-          // Set customer info fields
           if (customerData.customer_info) {
             setCustomerCreditDay(customerData.customer_info.credit_day);
             setCustomerSalesperson(customerData.customer_info.salesperson);
             setCustomerLastVisited(customerData.customer_info.last_visited);
             setCustomerTotalCreditAmount(
-              customerData.customer_info.total_credit_amount
+              customerData.customer_info.total_credit_amount,
             );
             setTotalRevenue(
-              customerData.customer_info.overall_total_revenue ?? null
+              customerData.customer_info.overall_total_revenue ?? null,
             );
             setTotalProfit(customerData.customer_info.overall_total_gp ?? null);
             if (customerData.customer_info.total_net_balance !== undefined) {
               setTotalOutstandingAmount(
-                customerData.customer_info.total_net_balance
+                customerData.customer_info.total_net_balance,
               );
             }
             setCustomerCurrency(customerData.customer_info.currency || "");
           }
 
-          // Set quotations data
           if (customerData.quotations && customerData.quotations.data) {
             setQuotationData(customerData.quotations.data);
           } else {
             setQuotationData([]);
           }
 
-          // Set call entries data
           if (customerData.call_entries && customerData.call_entries.data) {
             setCallEntryData(customerData.call_entries.data);
           } else {
             setCallEntryData([]);
           }
 
-          // Set shipment data
           if (customerData.shipment && customerData.shipment.data) {
             setShipmentData(customerData.shipment.data);
           } else {
             setShipmentData([]);
           }
 
-          // Set potential profiling data
           if (
             customerData.potential_profiling &&
             customerData.potential_profiling.data
@@ -1062,7 +793,7 @@ function CustomerMaster() {
         setIsLoadingData(false);
       }
     },
-    [customerDataFromDate, customerDataToDate]
+    [customerDataFromDate, customerDataToDate],
   );
 
   const handleCustomerNameClick = useCallback(
@@ -1074,11 +805,11 @@ function CustomerMaster() {
         customer.customer_code,
         customer.customer_name,
         prev.from,
-        prev.to
+        prev.to,
       );
       openCustomerDataDrawer();
     },
-    [fetchCustomerData, openCustomerDataDrawer]
+    [fetchCustomerData, openCustomerDataDrawer],
   );
 
   const columns = useMemo<MRT_ColumnDef<CustomerData>[]>(
@@ -1094,12 +825,12 @@ function CustomerMaster() {
       },
       {
         accessorKey: "customer_code",
-        header: "Customer Code",
+        header: "Agent Code",
         size: 150,
       },
       {
         accessorKey: "customer_name",
-        header: "Customer Name",
+        header: "Agent Name",
         size: 250,
         Cell: ({ row }) => {
           const customer = row.original as CustomerData;
@@ -1120,7 +851,7 @@ function CustomerMaster() {
       },
       {
         accessorKey: "customer_type_name",
-        header: "Customer Type",
+        header: "Agent Type",
         size: 150,
         Cell: ({ row, cell }) => {
           const rowData = row.original as CustomerData;
@@ -1146,14 +877,6 @@ function CustomerMaster() {
           <Text size="sm">{cell.getValue<string>() || "N/A"}</Text>
         ),
       },
-      // {
-      //   accessorKey: "assigned_to_display",
-      //   header: "Assigned To",
-      //   size: 150,
-      //   Cell: ({ cell }) => (
-      //     <Text size="sm">{cell.getValue<string>() || "N/A"}</Text>
-      //   ),
-      // },
       {
         accessorKey: "status",
         header: "Status",
@@ -1170,63 +893,59 @@ function CustomerMaster() {
       {
         id: "actions",
         header: "Actions",
-        size: 50,
-        Cell: ({ row }) => {
-          return (
-            <Menu
-              withinPortal
-              position="bottom-start"
-              shadow="sm"
-              radius={"md"}
-            >
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      handleViewCustomer(row.original);
-                    }}
-                  >
-                    <Group gap={"sm"}>
-                      <IconEye size={16} style={{ color: "#105476" }} />
-                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
-                        View
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      handleEditCustomer(row.original);
-                    }}
-                  >
-                    <Group gap={"sm"}>
-                      <IconEdit size={16} style={{ color: "#105476" }} />
-                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
-                        Edit
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
+        size: 70,
+        Cell: ({ row }) => (
+          <Menu withinPortal position="bottom-end" shadow="sm" radius={"md"}>
+            <Menu.Target>
+              <ActionIcon variant="subtle" color="gray">
+                <IconDotsVertical size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() => handleViewCustomer(row.original)}
+                >
+                  <Group gap={"sm"}>
+                    <IconEye size={16} style={{ color: "#105476" }} />
+                    <Text
+                      size="sm"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      View
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+              <Menu.Divider />
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() => handleEditCustomer(row.original)}
+                >
+                  <Group gap={"sm"}>
+                    <IconEdit size={16} style={{ color: "#105476" }} />
+                    <Text
+                      size="sm"
+                      style={{ fontFamily: "Inter, sans-serif" }}
+                    >
+                      Edit
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
+            </Menu.Dropdown>
+          </Menu>
+        ),
       },
     ],
-    [handleViewCustomer, handleEditCustomer, handleCustomerNameClick]
+    [handleViewCustomer, handleEditCustomer, handleCustomerNameClick],
   );
 
-  const table = useMantineReactTable<CustomerData>({
+  const table = useMantineReactTable({
     columns,
-    data: displayData,
+    data: tableData,
     enableColumnFilters: false,
-    enablePagination: false,
+    enablePagination: true,
     enableTopToolbar: false,
     enableColumnActions: false,
     enableSorting: false,
@@ -1234,9 +953,16 @@ function CustomerMaster() {
     enableColumnPinning: true,
     enableStickyHeader: true,
     initialState: {
+      pagination: { pageSize: 25, pageIndex: 0 },
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
+    manualPagination: true,
+    onPaginationChange: setPagination,
+    rowCount: totalRecords,
+    state: {
+      pagination,
+    },
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
@@ -1273,6 +999,7 @@ function CustomerMaster() {
           width: "fit-content",
           padding: "8px 16px",
           fontSize: "14px",
+          fontstyle: "regular",
           fontFamily: "Inter",
           color: "#334155",
           backgroundColor: "#ffffff",
@@ -1298,6 +1025,7 @@ function CustomerMaster() {
           padding: "8px 16px",
           fontSize: "14px",
           fontFamily: "Inter",
+          fontstyle: "bold",
           color: "#1E293B",
           backgroundColor: "#F8FAFC",
           top: 0,
@@ -1343,7 +1071,7 @@ function CustomerMaster() {
               c={"#1E293B"}
               style={{ fontFamily: "Inter", fontSize: "16px" }}
             >
-              Customer Master List
+              Agent Master List
             </Text>
 
             <Group gap="xs" wrap="nowrap">
@@ -1351,11 +1079,11 @@ function CustomerMaster() {
                 placeholder="Search..."
                 leftSection={<IconSearch size={16} />}
                 rightSection={
-                  searchQuery ? (
+                  search ? (
                     <ActionIcon
                       variant="transparent"
                       size="sm"
-                      onClick={() => setSearchQuery("")}
+                      onClick={() => setSearch("")}
                       style={{ cursor: "pointer" }}
                     >
                       <IconX size={16} />
@@ -1364,14 +1092,17 @@ function CustomerMaster() {
                 }
                 w={248}
                 size="sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
                 styles={{
                   input: {
                     borderRadius: "4px",
                     fontSize: "14px",
                     fontFamily: "Inter",
+                    fontstyle: "regular",
                     color: "#334155",
+                    minWidth: "24px",
+                    minHeight: "24px",
                     width: "248px",
                     height: "36px",
                     border: "1px solid #D0D1D4",
@@ -1394,6 +1125,10 @@ function CustomerMaster() {
                       ? "1px solid #105476"
                       : "1px solid #737780",
                     color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
+                    },
                   },
                 }}
               >
@@ -1410,12 +1145,18 @@ function CustomerMaster() {
                       color: "#FFFFFF",
                       fontSize: "14px",
                       fontFamily: "Inter",
+                      fontStyle: "semibold",
                       "&:hover": {
                         backgroundColor: "#105476",
                       },
                     },
                   }}
-                  onClick={() => navigate("./create")}
+                  onClick={() => {
+                    setStoreFilters(LIST_KEY, appliedFilters);
+                    setStoreSearch(LIST_KEY, search);
+                    setShouldRestore(LIST_KEY, true);
+                    navigate("/master/agent/create");
+                  }}
                 >
                   Create New
                 </Button>
@@ -1426,12 +1167,14 @@ function CustomerMaster() {
 
         {showFilters && (
           <Box
+            tt="capitalize"
             mb="sm"
             p="sm"
             style={{
               borderRadius: "8px",
               border: "1px solid #E0E0E0",
               flexShrink: 0,
+              height: "fit-content",
             }}
           >
             <Group
@@ -1467,7 +1210,7 @@ function CustomerMaster() {
               <Grid.Col span={2.4}>
                 <SearchableSelect
                   size="xs"
-                  label="Customer Name"
+                  label="Agent Name"
                   placeholder="Type customer name"
                   apiEndpoint={URL.allCustomers}
                   searchFields={["customer_name", "customer_code"]}
@@ -1475,11 +1218,14 @@ function CustomerMaster() {
                     value: String(item.customer_code as string),
                     label: item.customer_name as string,
                   })}
-                  value={filterForm.values.customer_name}
-                  displayValue={customerDisplayValue}
+                  value={draftFilters.customer_name}
+                  displayValue={draftFilters.customer_name_label}
                   onChange={(value, selectedData) => {
-                    filterForm.setFieldValue("customer_name", value || null);
-                    setCustomerDisplayValue(selectedData?.label || null);
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      customer_name: value || null,
+                      customer_name_label: selectedData?.label || null,
+                    }));
                   }}
                   minSearchLength={2}
                   dropdownZIndex={1000}
@@ -1488,99 +1234,182 @@ function CustomerMaster() {
 
               <Grid.Col span={2.4}>
                 <Dropdown
-                  size="xs"
-                  label="Customer Type"
-                  placeholder="Select customer type"
+                  label="Agent Type"
+                  placeholder="Supplier / Carrier / Transporter"
                   searchable
                   clearable
-                  data={customerTypeOptions}
-                  value={filterForm.values.customer_type}
+                  size="xs"
+                  data={agentCustomerTypeOptions}
+                  value={draftFilters.customer_type_id || null}
                   onChange={(value) =>
-                    filterForm.setFieldValue("customer_type", value || null)
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      customer_type_id: value || null,
+                    }))
                   }
-                />
-              </Grid.Col>
-
-              <Grid.Col span={2.4}>
-                <Dropdown
-                  size="xs"
-                  label="Salesperson"
-                  placeholder="Select salesperson"
-                  searchable
-                  clearable
-                  data={salespersonOptions}
-                  value={filterForm.values.assigned_to_display}
-                  onChange={(value) =>
-                    filterForm.setFieldValue(
-                      "assigned_to_display",
-                      value || null,
-                    )
-                  }
-                />
-              </Grid.Col>
-
-              <Grid.Col span={2.4}>
-                <Dropdown
-                  size="xs"
-                  label="Country"
-                  placeholder="Select country"
-                  searchable
-                  clearable
-                  data={countryOptions}
-                  value={selectedCountry}
-                  onChange={(value) => {
-                    setSelectedCountry(value);
-                    filterForm.setFieldValue("country", value || null);
-                    setSelectedState(null);
-                    filterForm.setFieldValue("state", null);
+                  styles={{
+                    input: { fontSize: "12px", fontFamily: "Inter" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
                   }}
                 />
               </Grid.Col>
 
               <Grid.Col span={2.4}>
                 <Dropdown
+                  label="Salesperson"
+                  placeholder="Select salesperson"
+                  searchable
+                  clearable
                   size="xs"
+                  data={salespersonOptions}
+                  value={draftFilters.assigned_to_display || null}
+                  onChange={(value) =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      assigned_to_display: value || null,
+                    }))
+                  }
+                  styles={{
+                    input: { fontSize: "12px", fontFamily: "Inter" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={2.4}>
+                <Dropdown
+                  label="Country"
+                  placeholder="Select country"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={countryOptions}
+                  value={selectedCountry}
+                  onChange={(value) => {
+                    setSelectedCountry(value);
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      country: value || null,
+                      state: null,
+                    }));
+                    setSelectedState(null);
+                  }}
+                  styles={{
+                    input: { fontSize: "12px", fontFamily: "Inter" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={2.4}>
+                <Dropdown
                   label="State"
                   placeholder={
                     statesLoading ? "Loading state values..." : "Select state"
                   }
                   searchable
                   clearable
+                  size="xs"
                   data={stateOptions}
                   value={selectedState}
                   onChange={(value) => {
                     setSelectedState(value);
-                    filterForm.setFieldValue("state", value || null);
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      state: value || null,
+                    }));
                   }}
                   disabled={statesLoading}
+                  nothingFoundMessage={
+                    statesLoading
+                      ? "Loading state values..."
+                      : "No states found"
+                  }
+                  styles={{
+                    input: { fontSize: "12px", fontFamily: "Inter" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
                 />
               </Grid.Col>
 
               <Grid.Col span={2.4}>
                 <FormTextInput
+                  format="normal"
                   label="City"
                   placeholder="Type city name"
                   size="xs"
-                  format="normal"
-                  {...filterForm.getInputProps("city")}
+                  value={draftFilters.city || ""}
+                  onChange={(e) =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      city: e.currentTarget.value || null,
+                    }))
+                  }
+                  styles={{
+                    input: { fontSize: "12px", fontFamily: "Inter" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
                 />
               </Grid.Col>
 
               <Grid.Col span={2.4}>
                 <Dropdown
-                  size="xs"
                   label="Status"
                   placeholder="Select status"
                   searchable
                   clearable
+                  size="xs"
                   data={[
                     { value: "ACTIVE", label: "ACTIVE" },
                     { value: "INACTIVE", label: "INACTIVE" },
                   ]}
-                  value={filterForm.values.status}
+                  value={draftFilters.status || null}
                   onChange={(value) =>
-                    filterForm.setFieldValue("status", value || null)
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      status: value || null,
+                    }))
                   }
+                  styles={{
+                    input: { fontSize: "12px", fontFamily: "Inter" },
+                    label: {
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                      marginBottom: "4px",
+                      fontFamily: "Inter",
+                    },
+                  }}
                 />
               </Grid.Col>
             </Grid>
@@ -1635,10 +1464,15 @@ function CustomerMaster() {
           <Center py="xl" style={{ flex: 1 }}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
+              <Text c="dimmed">Loading agents...</Text>
+            </Stack>
+          </Center>
+        ) : listError ? (
+          <Center py="xl" style={{ flex: 1 }}>
+            <Stack align="center" gap="md">
+              <Loader size="lg" color="#105476" />
               <Text c="dimmed">
-                {isRefreshingList
-                  ? "Refreshing customers..."
-                  : "Loading customers..."}
+                Error loading agent data. Please try refreshing the page.
               </Text>
             </Stack>
           </Center>
@@ -1646,80 +1480,17 @@ function CustomerMaster() {
           <>
             <MantineReactTable table={table} />
             <PaginationBar
-              pageSize={pageSize}
-              currentPage={pageIndex + 1}
-              totalRecords={totalCount}
+              pageSize={pagination.pageSize}
+              currentPage={currentPage}
+              totalRecords={totalRecords}
               onPageSizeChange={handlePageSizeChange}
-              onPageChange={(page) => handlePageIndexChange(page - 1)}
+              onPageChange={handlePageChange}
               pageSizeOptions={["10", "25", "50"]}
             />
           </>
         )}
       </Card>
 
-      {/* Delete Confirmation Modal */}
-      <Modal
-        opened={deletePopoverOpened}
-        onClose={resetDeleteState}
-        title="Confirm Delete"
-        centered
-        size="sm"
-        closeOnClickOutside={false}
-        closeOnEscape={true}
-      >
-        <Stack gap="md">
-          {/* <Group mb={5} gap="xs">
-            <IconTrash color="red" size={16} />
-            <Text size="sm" c="red" fw={700}>
-              Delete
-            </Text>
-          </Group> */}
-          <Text size="sm">
-            Are you sure? Do you want to delete this customer?
-          </Text>
-          {/* {customerToDelete && (
-            <Box p="xs" bg="#f8f9fa" style={{ borderRadius: "4px" }}>
-              <Text size="xs" c="dimmed">
-                <Text span fw={500}>
-                  Customer Code:
-                </Text>{" "}
-                {customerToDelete.customer_code}
-                <br />
-                <Text span fw={500}>
-                  Customer Name:
-                </Text>{" "}
-                {customerToDelete.customer_name}
-                <br />
-                <Text span fw={500}>
-                  Status:
-                </Text>{" "}
-                {customerToDelete.status}
-              </Text>
-            </Box>
-          )} */}
-          <Group justify="flex-end" gap="sm">
-            <Button
-              variant="outline"
-              color="#105476"
-              size="xs"
-              onClick={resetDeleteState}
-            >
-              Not now
-            </Button>
-            <Button
-              size="xs"
-              color="#FF0004"
-              w={100}
-              onClick={() => confirmDelete()}
-              loading={isDeleting}
-            >
-              Yes, Delete
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      {/* Customer Data Drawer */}
       <CustomerDataDrawer
         opened={customerDataDrawer}
         onClose={() => {
@@ -1736,17 +1507,13 @@ function CustomerMaster() {
           setTotalProfit(null);
           setSelectedCustomerName("");
           setSelectedCustomerCode("");
-
-          // Reset date range to previous month (optional)
-          const previousMonthRange = getPreviousMonthRange();
-          setCustomerDataFromDate(previousMonthRange.from);
-          setCustomerDataToDate(previousMonthRange.to);
-
+          const pm = getPreviousMonthRange();
+          setCustomerDataFromDate(pm.from);
+          setCustomerDataToDate(pm.to);
           setTotalOutstandingAmount(0);
         }}
-        title={`Customer Data for ${selectedCustomerName}`}
+        title={`agent data for ${selectedCustomerName}`}
         isLoading={isLoadingData}
-        /* Customer Info */
         customerSalesperson={customerSalesperson}
         customerCreditDay={customerCreditDay}
         customerLastVisited={customerLastVisited}
@@ -1755,8 +1522,7 @@ function CustomerMaster() {
         customerCurrency={customerCurrency}
         totalRevenue={totalRevenue}
         totalProfit={totalProfit}
-        /* Date Range Filter */
-        isAdmin={true} // Or user?.is_staff
+        isAdmin={true}
         fromDate={customerDataFromDate}
         toDate={customerDataToDate}
         onFromDateChange={(date) => {
@@ -1771,7 +1537,7 @@ function CustomerMaster() {
               selectedCustomerCode,
               selectedCustomerName,
               date,
-              customerDataToDate
+              customerDataToDate,
             );
           }
         }}
@@ -1787,16 +1553,14 @@ function CustomerMaster() {
               selectedCustomerCode,
               selectedCustomerName,
               customerDataFromDate,
-              date
+              date,
             );
           }
         }}
-        /* Section Lists */
         quotationData={quotationData}
         shipmentData={shipmentData}
         callEntryData={callEntryData}
         potentialProfilingData={potentialProfilingData}
-        /* Click Handler */
         onQuotationClick={(quotation) => {
           navigate("/quotation-create", {
             state: {
@@ -1818,10 +1582,6 @@ function CustomerMaster() {
           });
         }}
       />
-
-      <Outlet />
     </>
   );
 }
-
-export default CustomerMaster;
