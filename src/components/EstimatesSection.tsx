@@ -39,7 +39,7 @@ import {
   bindMoneyWholeNumberMode,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
-  roundMoneyAmountBound,
+  clampCurrencyMoneyAmountBound,
 } from "../utils/nonDecimalMoneyAmount";
 
 export type EstimateRow = {
@@ -146,7 +146,7 @@ function calcTotalCost(
   if (!Number.isFinite(qty) || !Number.isFinite(cpu) || !Number.isFinite(rate)) {
     return null;
   }
-  return roundMoneyAmountBound(qty * rate * cpu);
+  return clampCurrencyMoneyAmountBound(qty * rate * cpu);
 }
 
 function normalizePpCc(value: unknown): string {
@@ -202,7 +202,7 @@ export function EstimatesSection({
     [user],
   );
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const {
     isBaseCurrency,
     isChargeBaseCurrencyFor,
@@ -684,12 +684,12 @@ export function EstimatesSection({
               placeholder="Cost"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={currencyAmountDecimalScale}
               value={row.cost_per_unit ?? undefined}
               onChange={(value) => {
                 const v = typeof value === "number" ? value : toNumberOrNull(value);
                 const rounded =
-                  v == null ? null : roundMoneyAmountBound(v);
+                  v == null ? null : clampCurrencyMoneyAmountBound(v);
                 form.setFieldValue(`estimates.${index}.cost_per_unit`, rounded);
                 const total = calcTotalCost(row.no_of_unit, row.roe, rounded);
                 form.setFieldValue(`estimates.${index}.total_cost`, total);
@@ -703,13 +703,13 @@ export function EstimatesSection({
               placeholder="Total"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={currencyAmountDecimalScale}
               value={row.total_cost ?? undefined}
               onChange={(value) => {
                 const v = typeof value === "number" ? value : toNumberOrNull(value);
                 form.setFieldValue(
                   `estimates.${index}.total_cost`,
-                  v == null ? null : roundMoneyAmountBound(v),
+                  v == null ? null : clampCurrencyMoneyAmountBound(v),
                 );
               }}
               disabled={readOnly}

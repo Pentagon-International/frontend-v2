@@ -170,10 +170,18 @@ export function getBoundAmountDecimalScale(): 0 | 2 {
 }
 
 /**
- * Drop-in for amount fields that currently use `roundToDecimals(..., 2)`.
- * Respects the bound non-decimal (whole-number) mode.
+ * Currency charge fields (amount, cost, per-unit): always 2 decimal places.
  */
-export function roundMoneyToDecimals(
+export function roundCurrencyMoneyToDecimals(
+  value: number | string | null | undefined,
+): number | null | undefined {
+  return roundToDecimals(value, 2);
+}
+
+/**
+ * Local amount fields: whole numbers when non-decimal mode (Vietnam) is bound.
+ */
+export function roundLocalMoneyToDecimals(
   value: number | string | null | undefined,
 ): number | null | undefined {
   if (moneyWholeNumberMode) {
@@ -185,4 +193,20 @@ export function roundMoneyToDecimals(
     return Math.round(num);
   }
   return roundToDecimals(value, 2);
+}
+
+/**
+ * Drop-in for currency amount fields that currently use `roundToDecimals(..., 2)`.
+ * Always 2 decimal places (not affected by Vietnam whole-number mode).
+ */
+export function roundMoneyToDecimals(
+  value: number | string | null | undefined,
+): number | null | undefined {
+  return roundCurrencyMoneyToDecimals(value);
+}
+
+export function clampCurrencyMoneyAmountBound(
+  value: number | null | undefined,
+): number | null {
+  return clampMoneyAmount(value, false);
 }

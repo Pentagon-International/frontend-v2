@@ -76,7 +76,9 @@ import {
   clampMoneyAmount,
   clampMoneyAmountBound,
   formatMoneyAmountBound,
+  formatMoneyAmount,
   getAmountDecimalScale,
+  isMoneyWholeNumberMode,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 
@@ -148,12 +150,106 @@ const parseGstRatesPayload = (res: unknown): GstRates | null => {
   };
 };
 
+function clampAmount(value: number | null | undefined): number | null {
+  return clampMoneyAmountBound(value);
+}
+
+function isVndCurrency(code: string | null | undefined): boolean {
+  return (code ?? "").trim().toUpperCase() === "VND";
+}
+
+function isUsdCurrency(code: string | null | undefined): boolean {
+  return (code ?? "").trim().toUpperCase() === "USD";
+}
+
+/** VAT amount rounding follows billing currency: VND → whole numbers; foreign → 2 dp. */
+function clampVatAmount(
+  value: number | null | undefined,
+  billingCurrency: string | null | undefined,
+): number | null {
+  return clampMoneyAmount(value, isVndCurrency(billingCurrency));
+}
+
+function getVatAmountDecimalScale(
+  billingCurrency: string | null | undefined,
+): 0 | 2 {
+  return getAmountDecimalScale(isVndCurrency(billingCurrency));
+}
+
+function resolveVatTaxBase(
+  charge: {
+    currency?: string | null;
+    amount?: number | null;
+    amount_in_local?: number | null;
+    header_amount?: number | null;
+  },
+  billingCurrency?: string | null | undefined,
+): number | null | undefined {
+  if (isVndCurrency(billingCurrency)) {
+    const base =
+      charge.header_amount ??
+      charge.amount_in_local ??
+      charge.amount ??
+      null;
+    if (base == null) return null;
+    return clampLocalAmount(base);
+  }
+
+  if (isUsdCurrency(charge.currency)) {
+    return (
+      charge.header_amount ?? charge.amount ?? charge.amount_in_local ?? null
+    );
+  }
+
+  if (isMoneyWholeNumberMode() && isVndCurrency(charge.currency)) {
+    const base =
+      charge.amount_in_local ??
+      charge.header_amount ??
+      charge.amount ??
+      null;
+    if (base == null) return null;
+    return clampLocalAmount(base);
+  }
+
+  return (
+    charge.amount_in_local ?? charge.header_amount ?? charge.amount ?? null
+  );
+}
+
+/** Per-unit / currency amount: always 2 decimal places (including Vietnam). */
+function clampCurrencyAmount(
+  value: number | null | undefined,
+): number | null {
+  return clampMoneyAmount(value, false);
+}
+
+/** Local amount: whole numbers for Vietnam branches. */
+function clampLocalAmount(value: number | null | undefined): number | null {
+  return clampMoneyAmountBound(value);
+}
+
+/** Billing/header amount: whole numbers only when Vietnam + billing currency is VND. */
+function clampHeaderAmount(
+  value: number | null | undefined,
+  billingCurrency: string | null | undefined,
+): number | null {
+  return clampMoneyAmount(
+    value,
+    isMoneyWholeNumberMode() && isVndCurrency(billingCurrency),
+  );
+}
+
 const calcTaxAmountFromRate = (
   base: number | null | undefined,
   rate: number | null | undefined,
+  billingCurrency?: string | null,
 ): number => {
   if (base == null || rate == null || rate <= 0) return 0;
-  return clampAmount(base * (rate / 100)) ?? 0;
+  const raw = base * (rate / 100);
+  if (billingCurrency != null && billingCurrency !== "") {
+    return clampVatAmount(raw, billingCurrency) ?? 0;
+  }
+  return clampAmount(raw) ?? 0;
 };
 
 const resolveVatTaxRate = (
@@ -168,29 +264,51 @@ const resolveVatTaxRate = (
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+function computeChargeVatAmount(
+  charge: {
+    currency?: string | null;
+    amount?: number | null;
+    amount_in_local?: number | null;
+    header_amount?: number | null;
+    tax_rate?: number | string | null;
+    charge_id?: number | null;
+    is_tax_row?: boolean;
+  },
+  billingCurrency?: string | null | undefined,
+): number {
+  if (charge.is_tax_row === true) return 0;
+  const rate = resolveVatTaxRate(null, charge.charge_id, charge.tax_rate);
+  const taxBase = resolveVatTaxBase(charge, billingCurrency);
+  if (rate <= 0 || taxBase == null || taxBase <= 0) return 0;
+  return calcTaxAmountFromRate(taxBase, rate, billingCurrency);
+}
+
 /** Live VAT total from each charge's own rate × local/header amount (Cr − Dr). */
 const calcVatTotalFromCharges = (
   charges: Array<{
     dr_cr?: string | null;
     Dr_Cr?: string | null;
+    currency?: string | null;
+    amount?: number | null;
     amount_in_local?: number | null;
     header_amount?: number | null;
     tax_rate?: number | string | null;
     is_tax_row?: boolean;
     charge_id?: number | null;
   }>,
+  billingCurrency?: string | null,
 ): number => {
   let cr = 0;
   let dr = 0;
   for (const charge of charges) {
     if (charge.is_tax_row === true) continue;
     const rate = resolveVatTaxRate(null, charge.charge_id, charge.tax_rate);
-    const taxBase = charge.amount_in_local ?? charge.header_amount;
-    const amount = calcTaxAmountFromRate(taxBase, rate);
+    const taxBase = resolveVatTaxBase(charge, billingCurrency);
+    const amount = calcTaxAmountFromRate(taxBase, rate, billingCurrency);
     if (resolveChargeDrCr(charge) === "Dr") dr += amount;
     else cr += amount;
   }
-  return clampAmount(cr - dr) ?? 0;
+  return clampVatAmount(cr - dr, billingCurrency) ?? 0;
 };
 const fetchCurrencyMaster = async () => {
   try {
@@ -673,11 +791,6 @@ function parseInvoiceDate(
   return isNaN(native.getTime()) ? null : native;
 }
 
-// Round monetary amounts (2 dp, or whole numbers for Vietnam — see nonDecimalMoneyAmount).
-function clampAmount(value: number | null | undefined): number | null {
-  return clampMoneyAmountBound(value);
-}
-
 /** Prefer first non-empty string from nested party/job records (ocean housings vary by field names). */
 function pickFirstTrimmedCode(
   records: Array<Record<string, unknown> | null | undefined>,
@@ -731,7 +844,7 @@ function resolveChargeLocalAmount(charge: DrCrChargeLike): number {
 /** Net totals: sum(Cr) − sum(Dr) for currency/header/local amounts. */
 function calcChargeTotalsByDrCr(
   charges: DrCrChargeLike[],
-  options?: { includeTaxRows?: boolean },
+  options?: { includeTaxRows?: boolean; billingCurrency?: string | null },
 ): {
   crAmountTotal: number;
   drAmountTotal: number;
@@ -745,6 +858,7 @@ function calcChargeTotalsByDrCr(
   total: number;
 } {
   const includeTaxRows = options?.includeTaxRows ?? false;
+  const billingCurrency = options?.billingCurrency;
   let crAmount = 0;
   let drAmount = 0;
   let crHeader = 0;
@@ -769,15 +883,16 @@ function calcChargeTotalsByDrCr(
     }
   }
 
-  const crAmountTotal = clampAmount(crAmount) ?? 0;
-  const drAmountTotal = clampAmount(drAmount) ?? 0;
-  const crHeaderTotal = clampAmount(crHeader) ?? 0;
-  const drHeaderTotal = clampAmount(drHeader) ?? 0;
-  const crLocalTotal = clampAmount(crLocal) ?? 0;
-  const drLocalTotal = clampAmount(drLocal) ?? 0;
-  const amount_total = clampAmount(crAmount - drAmount) ?? 0;
-  const header_total = clampAmount(crHeader - drHeader) ?? 0;
-  const local_total = clampAmount(crLocal - drLocal) ?? 0;
+  const crAmountTotal = clampCurrencyAmount(crAmount) ?? 0;
+  const drAmountTotal = clampCurrencyAmount(drAmount) ?? 0;
+  const crHeaderTotal = clampHeaderAmount(crHeader, billingCurrency) ?? 0;
+  const drHeaderTotal = clampHeaderAmount(drHeader, billingCurrency) ?? 0;
+  const crLocalTotal = clampLocalAmount(crLocal) ?? 0;
+  const drLocalTotal = clampLocalAmount(drLocal) ?? 0;
+  const amount_total = clampCurrencyAmount(crAmount - drAmount) ?? 0;
+  const header_total =
+    clampHeaderAmount(crHeader - drHeader, billingCurrency) ?? 0;
+  const local_total = clampLocalAmount(crLocal - drLocal) ?? 0;
 
   return {
     crAmountTotal,
@@ -881,33 +996,35 @@ function calcChargeHeaderAmount(
   if (billCurr === chargeCurr) {
     const currencyAmount = charge.amount;
     if (currencyAmount == null || currencyAmount <= 0) return null;
-    return clampAmount(currencyAmount);
+    return clampHeaderAmount(currencyAmount, billingCurrency);
   }
 
   const local = charge.amount_in_local;
   if (local == null || local <= 0) return null;
   if (billingRoe != null && billingRoe > 0) {
-    return clampAmount(local / billingRoe);
+    return clampHeaderAmount(local / billingRoe, billingCurrency);
   }
-  return clampAmount(local);
+  return clampHeaderAmount(local, billingCurrency);
 }
 
 /** Tax row from calculate-gst-breakup: local = total_amount; header = local ÷ billing ROE; currency amount = local (roe 1). */
 function calcTaxRowAmountsFromBreakupTotal(
   totalAmount: number,
   billingRoe: number,
+  billingCurrency?: string | null,
 ): {
   amountInLocal: number;
   amountInHeader: number;
   currencyAmount: number;
 } {
-  const amountInLocal = clampAmount(totalAmount) ?? 0;
+  const amountInLocal = clampLocalAmount(totalAmount) ?? 0;
   const roe = billingRoe > 0 ? billingRoe : 1;
-  const amountInHeader = clampAmount(amountInLocal / roe) ?? amountInLocal;
+  const amountInHeader =
+    clampHeaderAmount(amountInLocal / roe, billingCurrency) ?? amountInLocal;
   return {
     amountInLocal,
     amountInHeader,
-    currencyAmount: amountInLocal,
+    currencyAmount: clampCurrencyAmount(amountInLocal) ?? amountInLocal,
   };
 }
 
@@ -1380,7 +1497,8 @@ function InvoiceCreate({
 
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const isKenyaUser = useMemo(() => {
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
@@ -1537,6 +1655,11 @@ function InvoiceCreate({
         ),
     },
   });
+
+  const isBillingVnd = isVndCurrency(form.values.currency);
+  const headerAmountDecimalScale = getAmountDecimalScale(
+    isVietnamBranch && isBillingVnd,
+  );
 
   useEffect(() => {
     billingCurrencyRef.current = form.values.currency;
@@ -2451,7 +2574,9 @@ function InvoiceCreate({
                   amountPerUnit != null &&
                   amountPerUnit > 0
                 ) {
-                  const calcAmount = clampAmount(noOfUnit * amountPerUnit);
+                  const calcAmount = clampCurrencyAmount(
+                    noOfUnit * amountPerUnit,
+                  );
                   if (calcAmount != null) amount = calcAmount;
                   if (
                     amount != null &&
@@ -2459,7 +2584,7 @@ function InvoiceCreate({
                     roeVal != null &&
                     roeVal > 0
                   ) {
-                    const calcLocal = clampAmount(amount * roeVal);
+                    const calcLocal = clampLocalAmount(amount * roeVal);
                     if (calcLocal != null) amountInLocal = calcLocal;
                   }
                 }
@@ -3154,7 +3279,7 @@ function InvoiceCreate({
         charge.no_of_unit > 0
       ) {
         const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
-        const clamped = clampAmount(calculatedAmount);
+        const clamped = clampCurrencyAmount(calculatedAmount);
         if (clamped != null && clamped !== charge.amount) {
           return {
             ...charge,
@@ -3197,7 +3322,7 @@ function InvoiceCreate({
         charge.roe > 0
       ) {
         const calculatedLocalAmount = charge.amount * charge.roe;
-        const clamped = clampAmount(calculatedLocalAmount);
+        const clamped = clampLocalAmount(calculatedLocalAmount);
         if (
           clamped != null &&
           clamped > 0 &&
@@ -3593,6 +3718,7 @@ function InvoiceCreate({
       // Net totals are Cr − Dr for currency/header/local amounts.
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         values.charges.filter((c) => c.is_tax_row !== true),
+        { billingCurrency: values.currency },
       );
 
       const isAgentSave =
@@ -3661,15 +3787,15 @@ function InvoiceCreate({
                   String(u.unit_code || u.code || u.id) === charge.unit_code,
               );
           const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
-          const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+          const headerAmount =
+            clampHeaderAmount(charge.header_amount ?? 0, values.currency) ?? 0;
 
           if (isVatSave) {
             const taxRate = applyVat
               ? resolveVatTaxRate(gstBreakup, charge.charge_id, charge.tax_rate)
               : 0;
-            const taxBase = charge.amount_in_local ?? headerAmount;
             const taxAmount = applyVat
-              ? calcTaxAmountFromRate(taxBase, taxRate)
+              ? computeChargeVatAmount(charge, values.currency)
               : 0;
             return {
               ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
@@ -3684,9 +3810,11 @@ function InvoiceCreate({
               no_of_unit: charge.no_of_unit ?? 0,
               currency_id: chargeCurrencyId,
               roe: roundRoeForPayload(charge.roe) ?? 0,
-              amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-              amount: clampAmount(charge.amount ?? 0) ?? 0,
-              amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+              amount_per_unit:
+                clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
+              amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+              amount_in_local:
+                clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
               Dr_Cr: charge.dr_cr ?? "Cr",
               tax_rate: taxRate,
@@ -3725,9 +3853,10 @@ function InvoiceCreate({
             no_of_unit: charge.no_of_unit ?? 0,
             currency_id: chargeCurrencyId,
             roe: roundRoeForPayload(charge.roe) ?? 0,
-            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampAmount(charge.amount ?? 0) ?? 0,
-            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+            amount_per_unit:
+              clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
+            amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+            amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
             Dr_Cr: charge.dr_cr ?? "Cr",
@@ -4043,7 +4172,8 @@ function InvoiceCreate({
                   String(u.unit_code || u.code || u.id) === charge.unit_code,
               );
           const unitId = unitItem?.id != null ? Number(unitItem.id) : null;
-          const headerAmount = clampAmount(charge.header_amount ?? 0) ?? 0;
+          const headerAmount =
+            clampHeaderAmount(charge.header_amount ?? 0, values.currency) ?? 0;
 
           if (isVatPost) {
             const taxRate = applyVat
@@ -4053,9 +4183,8 @@ function InvoiceCreate({
                   charge.tax_rate,
                 )
               : 0;
-            const taxBase = charge.amount_in_local ?? headerAmount;
             const taxAmount = applyVat
-              ? calcTaxAmountFromRate(taxBase, taxRate)
+              ? computeChargeVatAmount(charge, values.currency)
               : 0;
             return {
               ...(charge.id != null && charge.id > 0 ? { id: charge.id } : {}),
@@ -4070,9 +4199,11 @@ function InvoiceCreate({
               no_of_unit: charge.no_of_unit ?? 0,
               currency_id: chargeCurrencyId,
               roe: roundRoeForPayload(charge.roe) ?? 0,
-              amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-              amount: clampAmount(charge.amount ?? 0) ?? 0,
-              amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+              amount_per_unit:
+                clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
+              amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+              amount_in_local:
+                clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
               Dr_Cr: charge.dr_cr ?? "Cr",
               tax_rate: taxRate,
@@ -4111,9 +4242,10 @@ function InvoiceCreate({
             no_of_unit: charge.no_of_unit ?? 0,
             currency_id: chargeCurrencyId,
             roe: roundRoeForPayload(charge.roe) ?? 0,
-            amount_per_unit: clampAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampAmount(charge.amount ?? 0) ?? 0,
-            amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
+            amount_per_unit:
+              clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
+            amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+            amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
             Dr_Cr: charge.dr_cr ?? "Cr",
@@ -4129,9 +4261,13 @@ function InvoiceCreate({
         ? percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
-              const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
+              const taxableTotal = clampLocalAmount(row.taxable_total ?? 0) ?? 0;
               const { amountInLocal, amountInHeader, currencyAmount } =
-                calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
+                calcTaxRowAmountsFromBreakupTotal(
+                  taxableTotal,
+                  topRoe,
+                  values.currency,
+                );
               return {
                 shipment_no: values.shipment_no,
                 charge_id: row.vat_charge_id ?? null,
@@ -4162,9 +4298,13 @@ function InvoiceCreate({
                 return true;
               })
               .map((row) => {
-                const totalAmount = clampAmount(row.total_amount ?? 0) ?? 0;
+                const totalAmount = clampLocalAmount(row.total_amount ?? 0) ?? 0;
                 const { amountInLocal, amountInHeader, currencyAmount } =
-                  calcTaxRowAmountsFromBreakupTotal(totalAmount, topRoe);
+                  calcTaxRowAmountsFromBreakupTotal(
+                    totalAmount,
+                    topRoe,
+                    values.currency,
+                  );
                 return {
                   shipment_no: values.shipment_no,
                   charge_id: row.charge_id ?? null,
@@ -4197,7 +4337,7 @@ function InvoiceCreate({
       // Recompute net totals from final charges payload (base charges + appended tax rows)
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         allChargesPayload,
-        { includeTaxRows: true },
+        { includeTaxRows: true, billingCurrency: values.currency },
       );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
@@ -4411,9 +4551,13 @@ function InvoiceCreate({
         const vatTaxRows: ChargeItem[] = percentageWiseTotals
           .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
           .map((row) => {
-            const taxableTotal = clampAmount(row.taxable_total ?? 0) ?? 0;
+            const taxableTotal = clampLocalAmount(row.taxable_total ?? 0) ?? 0;
             const { amountInLocal, amountInHeader, currencyAmount } =
-              calcTaxRowAmountsFromBreakupTotal(taxableTotal, topRoe);
+              calcTaxRowAmountsFromBreakupTotal(
+                taxableTotal,
+                topRoe,
+                values.currency,
+              );
             return {
               charge_id: row.vat_charge_id ?? null,
               charge_code: row.vat_charge_code ?? "VAT",
@@ -4538,13 +4682,20 @@ function InvoiceCreate({
     () =>
       calcChargeTotalsByDrCr(
         form.values.charges.filter((c) => c.is_tax_row !== true),
+        { billingCurrency: form.values.currency },
       ),
-    [form.values.charges],
+    [form.values.charges, form.values.currency],
   );
 
   const vatSectionTotal = useMemo(
-    () => calcVatTotalFromCharges(form.values.charges),
-    [form.values.charges],
+    () =>
+      calcVatTotalFromCharges(form.values.charges, form.values.currency),
+    [form.values.charges, form.values.currency],
+  );
+
+  const vatTotalWholeNumbersOnly = useMemo(
+    () => isVndCurrency(form.values.currency),
+    [form.values.currency],
   );
 
   const gstSectionTotals = useMemo(
@@ -5533,7 +5684,7 @@ function InvoiceCreate({
                             const currentCharge = form.values.charges[index];
                             const amt = currentCharge.amount;
                             if (amt != null && amt > 0) {
-                              const local = clampAmount(amt * 1);
+                              const local = clampLocalAmount(amt * 1);
                               if (local != null) {
                                 form.setFieldValue(
                                   `charges.${index}.amount_in_local`,
@@ -5568,7 +5719,7 @@ function InvoiceCreate({
                               if (amt != null && amt > 0) {
                                 let local = currentCharge.amount_in_local;
                                 if (newRoe != null && newRoe > 0) {
-                                  local = clampAmount(amt * newRoe);
+                                  local = clampLocalAmount(amt * newRoe);
                                   if (local != null) {
                                     form.setFieldValue(
                                       `charges.${index}.amount_in_local`,
@@ -5727,7 +5878,7 @@ function InvoiceCreate({
                             currentCharge.no_of_unit != null &&
                             currentCharge.no_of_unit > 0
                           ) {
-                            amount = clampAmount(
+                            amount = clampCurrencyAmount(
                               currentCharge.no_of_unit *
                                 currentCharge.amount_per_unit,
                             );
@@ -5738,7 +5889,7 @@ function InvoiceCreate({
                             roe != null &&
                             roe > 0
                           ) {
-                            amountInLocal = clampAmount(amount * roe);
+                            amountInLocal = clampLocalAmount(amount * roe);
                           }
                           headerAmt =
                             calcChargeHeaderAmount(
@@ -5835,7 +5986,7 @@ function InvoiceCreate({
                             noOfUnit != null &&
                             noOfUnit > 0
                           ) {
-                            amount = clampAmount(
+                            amount = clampCurrencyAmount(
                               noOfUnit * currentCharge.amount_per_unit,
                             );
                             const roeVal = currentCharge.roe;
@@ -5845,7 +5996,7 @@ function InvoiceCreate({
                               roeVal != null &&
                               roeVal > 0
                             ) {
-                              amountInLocal = clampAmount(amount * roeVal);
+                              amountInLocal = clampLocalAmount(amount * roeVal);
                             }
                             headerAmt =
                               calcChargeHeaderAmount(
@@ -5880,12 +6031,12 @@ function InvoiceCreate({
                         placeholder="Per Unit"
                         min={0}
                         hideControls
-                        decimalScale={amountDecimalScale}
+                        decimalScale={currencyAmountDecimalScale}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount_per_unit || undefined}
                         onChange={(value) => {
-                          const amountPerUnit = clampAmount(
+                          const amountPerUnit = clampCurrencyAmount(
                             value as number | null,
                           );
                           const currentCharge = form.values.charges[index];
@@ -5899,7 +6050,7 @@ function InvoiceCreate({
                             currentCharge.no_of_unit != null &&
                             currentCharge.no_of_unit > 0
                           ) {
-                            amount = clampAmount(
+                            amount = clampCurrencyAmount(
                               currentCharge.no_of_unit * amountPerUnit,
                             );
                             const roeVal = currentCharge.roe;
@@ -5909,7 +6060,7 @@ function InvoiceCreate({
                               roeVal != null &&
                               roeVal > 0
                             ) {
-                              amountInLocal = clampAmount(amount * roeVal);
+                              amountInLocal = clampLocalAmount(amount * roeVal);
                             }
                             headerAmt =
                               calcChargeHeaderAmount(
@@ -5944,13 +6095,13 @@ function InvoiceCreate({
                         placeholder="Currency Amount"
                         min={0}
                         hideControls
-                        decimalScale={amountDecimalScale}
+                        decimalScale={currencyAmountDecimalScale}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount || undefined}
                         onChange={(value) => {
-                          const currencyAmount = clampAmount(
+                          const currencyAmount = clampCurrencyAmount(
                             value as number | null,
                           );
                           const currentCharge = form.values.charges[index];
@@ -5963,7 +6114,7 @@ function InvoiceCreate({
                             currentCharge.roe != null &&
                             currentCharge.roe > 0
                           ) {
-                            amountInLocal = clampAmount(
+                            amountInLocal = clampLocalAmount(
                               currencyAmount * currentCharge.roe,
                             );
                           }
@@ -6009,14 +6160,17 @@ function InvoiceCreate({
                         placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
                         min={0}
                         hideControls
-                        decimalScale={amountDecimalScale}
+                        decimalScale={headerAmountDecimalScale}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.header_amount || undefined}
                         onChange={(value) => {
                           form.setFieldValue(
                             `charges.${index}.header_amount`,
-                            clampAmount(value as number | null),
+                            clampHeaderAmount(
+                              value as number | null,
+                              form.values.currency,
+                            ),
                           );
                         }}
                       />
@@ -6026,13 +6180,13 @@ function InvoiceCreate({
                         placeholder="Local Amount"
                         min={0}
                         hideControls
-                        decimalScale={amountDecimalScale}
+                        decimalScale={localAmountDecimalScale}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount_in_local || undefined}
                         onChange={(value) => {
-                          const clampedLocal = clampAmount(
+                          const clampedLocal = clampLocalAmount(
                             value as number | null,
                           );
                           const currentCharges = form.values.charges;
@@ -6130,20 +6284,20 @@ function InvoiceCreate({
                               value === null ||
                               value === undefined
                             ) {
-                              form.setFieldValue(
-                                `charges.${index}.tax_rate`,
-                                null,
+                              const cleared = form.values.charges.map((c, i) =>
+                                i !== index ? c : { ...c, tax_rate: null },
                               );
+                              form.setFieldValue("charges", cleared);
                               return;
                             }
                             const parsed = clampMoneyAmount(
                               value as number | null,
                               false,
                             );
-                            form.setFieldValue(
-                              `charges.${index}.tax_rate`,
-                              parsed,
+                            const updated = form.values.charges.map((c, i) =>
+                              i !== index ? c : { ...c, tax_rate: parsed },
                             );
+                            form.setFieldValue("charges", updated);
                           }}
                           styles={{
                             input: {
@@ -6158,22 +6312,19 @@ function InvoiceCreate({
                     {applyVat && (
                       <Grid.Col span={chargeGridCols.vatAmount}>
                         <FormNumberInput
+                          key={`vat-amt-${index}-${form.values.currency ?? ""}-${String(charge.tax_rate ?? "")}-${charge.header_amount ?? ""}-${charge.amount_in_local ?? ""}-${charge.amount ?? ""}`}
                           placeholder="VAT Amount"
                           min={0}
                           hideControls
-                          decimalScale={amountDecimalScale}
+                          decimalScale={getVatAmountDecimalScale(
+                            form.values.currency,
+                          )}
                           readOnly
                           value={(() => {
-                            if (charge.is_tax_row === true) return undefined;
-                            const rate = resolveVatTaxRate(
-                              gstBreakup,
-                              charge.charge_id,
-                              charge.tax_rate,
+                            const amount = computeChargeVatAmount(
+                              charge,
+                              form.values.currency,
                             );
-                            const taxBase =
-                              charge.amount_in_local ?? charge.header_amount;
-                            if (rate <= 0 || taxBase == null) return undefined;
-                            const amount = calcTaxAmountFromRate(taxBase, rate);
                             return amount > 0 ? amount : undefined;
                           })()}
                           styles={{
@@ -6523,7 +6674,10 @@ function InvoiceCreate({
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmountBound(vatSectionTotal)}
+                              {formatMoneyAmount(
+                                vatSectionTotal,
+                                vatTotalWholeNumbersOnly,
+                              )}
                             </Text>
                           </Box>
                         </Grid.Col>

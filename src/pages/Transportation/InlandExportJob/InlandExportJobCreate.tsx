@@ -91,6 +91,7 @@ import {
   bindMoneyWholeNumberMode,
   isVietnamBranchFromUser,
   roundMoneyToDecimals,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
@@ -2726,8 +2727,8 @@ function InlandExportJobCreate() {
                 roundMoneyToDecimals(charge.amount_per_unit) ?? null,
               amount: roundMoneyToDecimals(charge.amount) ?? null,
               sell_local_amount:
-                roundMoneyToDecimals(charge.sell_local_amount) ??
-                roundMoneyToDecimals(charge.local_amount) ??
+                roundLocalMoneyToDecimals(charge.sell_local_amount) ??
+                roundLocalMoneyToDecimals(charge.local_amount) ??
                 null,
               unit_cost:
                 roundMoneyToDecimals(charge.unit_cost) ??
@@ -2735,7 +2736,7 @@ function InlandExportJobCreate() {
                 null,
               total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
               cost_local_amount:
-                roundMoneyToDecimals(charge.cost_local_amount) ?? null,
+                roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
             }));
           })(),
         })),

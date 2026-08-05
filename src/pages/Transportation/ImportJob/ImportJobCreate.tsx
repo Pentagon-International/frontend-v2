@@ -77,6 +77,7 @@ import {
   bindMoneyWholeNumberMode,
   isVietnamBranchFromUser,
   roundMoneyToDecimals,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
@@ -3385,7 +3386,7 @@ function ImportJobCreate() {
               amount:
                 roundMoneyToDecimals(charge.amount as number | string) ?? null,
               sell_local_amount:
-                roundMoneyToDecimals(
+                roundLocalMoneyToDecimals(
                   (charge.sell_local_amount != null
                     ? charge.sell_local_amount
                     : (charge as { local_amount?: number | string })
@@ -3402,7 +3403,7 @@ function ImportJobCreate() {
                 roundMoneyToDecimals(charge.total_cost as number | string) ??
                 null,
               cost_local_amount:
-                roundMoneyToDecimals(
+                roundLocalMoneyToDecimals(
                   charge.cost_local_amount as number | string,
                 ) ?? null,
             }));

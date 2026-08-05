@@ -8,7 +8,10 @@
  * Rounding follows bound non-decimal money mode (see nonDecimalMoneyAmount.ts).
  */
 
-import { roundMoneyAmountBound } from "./nonDecimalMoneyAmount";
+import {
+  clampMoneyAmount,
+  roundMoneyAmountBound,
+} from "./nonDecimalMoneyAmount";
 
 export function toChargeNumber(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -17,7 +20,13 @@ export function toChargeNumber(value: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** Currency-side charge amounts (sell/cost in charge currency): always 2 dp. */
 export function roundChargeAmount(value: number): number {
+  return clampMoneyAmount(value, false) ?? 0;
+}
+
+/** Local amount fields (sell/cost in branch currency): Vietnam whole numbers when bound. */
+export function roundLocalChargeAmount(value: number): number {
   return roundMoneyAmountBound(value);
 }
 
@@ -48,7 +57,7 @@ export function calcSellLocalAmount(
   const sellAmount = resolveSellAmount(amount, noOfUnit, amountPerUnit);
   const rate = toChargeNumber(roe) ?? 1;
   if (sellAmount == null || sellAmount <= 0 || rate <= 0) return null;
-  return roundChargeAmount(sellAmount * rate);
+  return roundLocalChargeAmount(sellAmount * rate);
 }
 
 export function calcCostLocalAmount(
@@ -58,7 +67,7 @@ export function calcCostLocalAmount(
   const cost = toChargeNumber(totalCost);
   const rate = toChargeNumber(roe) ?? 1;
   if (cost == null || cost <= 0 || rate <= 0) return null;
-  return roundChargeAmount(cost * rate);
+  return roundLocalChargeAmount(cost * rate);
 }
 
 /** For job-create API payload (numeric or empty string). */
