@@ -18,6 +18,13 @@ import {
   MantineProvider,
 } from "@mantine/core";
 import {
+  carrierDisplayFormat,
+  carrierNameValueDisplayFormat,
+  carrierTransportParamsFromService,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
+import {
   IconDotsVertical,
   IconEdit,
   IconEyeSpark,
@@ -454,15 +461,17 @@ export default function OriginMaster() {
           placeholder="Type carrier name"
           apiEndpoint={URL.carrier}
           searchFields={["carrier_name", "carrier_code"]}
-          displayFormat={(item: Record<string, unknown>) => ({
-            value: String(item.carrier_name),
-            label: String(item.carrier_name),
-          })}
+          displayFormat={carrierNameValueDisplayFormat}
           value={filterForm.values.carrier_name}
           displayValue={carrierDisplayValue}
           dropdownZIndex={1000}
+          additionalParams={carrierTransportParamsFromService(
+            filterForm.values.service,
+          )}
           onChange={(value, selected) => {
-            const label = selected?.label ?? null;
+            const label = selected?.label
+              ? parseCarrierNameFromLabel(selected.label)
+              : null;
             handleHeaderFilterChange("carrier_name", value ?? "", label);
             if (value) onClose();
           }}
@@ -1142,17 +1151,17 @@ export default function OriginMaster() {
                             placeholder="Type carrier name"
                             apiEndpoint={URL.carrier}
                             searchFields={["carrier_name", "carrier_code"]}
-                            displayFormat={(item: any) => ({
-                              value: String(item.carrier_name),
-                              label: item.carrier_name,
-                            })}
+                            displayFormat={carrierNameValueDisplayFormat}
                             value={filterForm.values.carrier_name}
                             displayValue={carrierDisplayValue}
                             onChange={(value, selectedData) => {
                               filterForm.setFieldValue("carrier_name", value || null);
-                              setCarrierDisplayValue(selectedData?.label || null);
+                              setCarrierDisplayValue(parseCarrierNameFromLabel(selectedData?.label || "") || null);
                             }}
                             minSearchLength={2}
+                            additionalParams={carrierTransportParamsFromService(
+                              filterForm.values.service,
+                            )}
                             classNames={erpListGeistSelectClassNames}
                             styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                             className="filter-searchable-select"

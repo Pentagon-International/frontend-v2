@@ -12,6 +12,11 @@ import {
   Select,
   Tabs,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
@@ -1236,7 +1241,7 @@ function OceanJobGenerationCreate() {
                     jobDetailsForm.setFieldValue("agent_code", value || "");
                     jobDetailsForm.setFieldValue(
                       "agent_name",
-                      selectedData?.label?.split(" (")[0] ?? "",
+                      parseCarrierNameFromLabel(selectedData?.label || ""),
                     );
                   }}
                   disabled={isReadOnly}
@@ -1371,24 +1376,17 @@ function OceanJobGenerationCreate() {
                   placeholder="Type carrier code or name"
                   searchFields={["carrier_code", "carrier_name"]}
                   dropdownZIndex={310}
-                  displayFormat={(item: Record<string, unknown>) => {
-                    const row = item as { carrier_code?: string; carrier_name?: string };
-                    return {
-                      value: String(row.carrier_code ?? ""),
-                      label: String(row.carrier_name ?? row.carrier_code ?? ""),
-                    };
-                  }}
+                  displayFormat={carrierDisplayFormat}
                   value={jobDetailsForm.values.carrier_code}
-                  displayValue={
-                    jobDetailsForm.values.carrier_name
-                      ? `${jobDetailsForm.values.carrier_name}`
-                      : jobDetailsForm.values.carrier_code || ""
-                  }
+                  displayValue={formatCarrierDisplayValue(
+                    jobDetailsForm.values.carrier_name,
+                    jobDetailsForm.values.carrier_code,
+                  )}
                   onChange={(value, selectedData) => {
                     jobDetailsForm.setFieldValue("carrier_code", value || "");
                     jobDetailsForm.setFieldValue(
                       "carrier_name",
-                      selectedData?.label?.split(" (")[0] ?? "",
+                      parseCarrierNameFromLabel(selectedData?.label || ""),
                     );
                   }}
                   error={jobDetailsForm.errors.carrier_code as string}
@@ -1827,7 +1825,7 @@ function OceanJobGenerationCreate() {
                           updated[index] = {
                             ...updated[index],
                             from_port_code: value || "",
-                            from_port_name: selectedData?.label?.split(" (")[0] ?? "",
+                            from_port_name: parseCarrierNameFromLabel(selectedData?.label || ""),
                           };
                           setRoutingDetails(updated);
                         }}
@@ -1861,7 +1859,7 @@ function OceanJobGenerationCreate() {
                           updated[index] = {
                             ...updated[index],
                             to_port_code: value || "",
-                            to_port_name: selectedData?.label?.split(" (")[0] ?? "",
+                            to_port_name: parseCarrierNameFromLabel(selectedData?.label || ""),
                           };
                           setRoutingDetails(updated);
                         }}
@@ -1880,22 +1878,15 @@ function OceanJobGenerationCreate() {
                         apiEndpoint={URL.carrier}
                         searchFields={["carrier_code", "carrier_name"]}
                         dropdownZIndex={310}
-                        displayFormat={(item: Record<string, unknown>) => {
-                          const r = item as { carrier_code?: string; carrier_name?: string };
-                          return { value: String(r.carrier_code ?? ""), label: String(r.carrier_name ?? r.carrier_code ?? "") };
-                        }}
+                        displayFormat={carrierDisplayFormat}
                         value={route.carrier_code}
-                        displayValue={
-                          route.carrier_name
-                            ? `${route.carrier_name}`
-                            : route.carrier_code
-                        }
+                        displayValue={formatCarrierDisplayValue(route.carrier_name, route.carrier_code)}
                         onChange={(value, selectedData) => {
                           const updated = [...routingDetails];
                           updated[index] = {
                             ...updated[index],
                             carrier_code: value || "",
-                            carrier_name: selectedData?.label?.split(" (")[0] ?? "",
+                            carrier_name: parseCarrierNameFromLabel(selectedData?.label || ""),
                           };
                           setRoutingDetails(updated);
                         }}

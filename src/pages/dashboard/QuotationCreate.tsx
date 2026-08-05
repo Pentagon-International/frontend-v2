@@ -23,6 +23,12 @@ import {
   ActionIcon,
   Checkbox,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  carrierTransportParamsFromService,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../utils/carrierSelect";
 import { DateInput } from "@mantine/dates";
 import { useForm, yupResolver } from "@mantine/form";
 import * as Yup from "yup";
@@ -876,6 +882,11 @@ function QuotationCreate({
   const selectedService = useMemo(() => {
     return services[selectedServiceIndex] || null;
   }, [services, selectedServiceIndex]);
+
+  const carrierTransportModeParams = useMemo(
+    () => carrierTransportParamsFromService(selectedService?.service),
+    [selectedService?.service],
+  );
 
   useEffect(() => {
     selectedServiceRef.current = selectedService;
@@ -5388,12 +5399,28 @@ function QuotationCreate({
                     </Grid.Col>
                     {selectedService?.service !== "LCL" && (
                       <Grid.Col span={1.25}>
-                        <Dropdown
+                        <SearchableSelect
                           label="Carrier"
-                          placeholder="Carrier"
-                          searchable
-                          // withAsterisk
-                          data={carrierData}
+                          placeholder="Type carrier name"
+                          apiEndpoint={URL.carrier}
+                          searchFields={["carrier_code", "carrier_name"]}
+                          displayFormat={carrierDisplayFormat}
+                          value={quotationForm.values.carrier_code || null}
+                          displayValue={formatCarrierDisplayValue(
+                            carrierData.find(
+                              (c) =>
+                                c.value === quotationForm.values.carrier_code,
+                            )?.label,
+                            quotationForm.values.carrier_code,
+                          )}
+                          onChange={(value) => {
+                            quotationForm.setFieldValue(
+                              "carrier_code",
+                              value || "",
+                            );
+                          }}
+                          minSearchLength={2}
+                          dropdownZIndex={10}
                           styles={{
                             input: {
                               fontSize: "14px",
@@ -5409,7 +5436,12 @@ function QuotationCreate({
                               fontStyle: "medium",
                             },
                           }}
-                          {...quotationForm.getInputProps("carrier_code")}
+                          error={
+                            quotationForm.errors.carrier_code as
+                              | string
+                              | undefined
+                          }
+                          additionalParams={carrierTransportModeParams}
                           readOnly={isViewMode}
                           disabled={isViewMode}
                         />
@@ -6781,11 +6813,28 @@ function QuotationCreate({
                   </Grid.Col>
                   {selectedService?.service !== "LCL" && (
                     <Grid.Col span={1.25}>
-                      <Dropdown
+                      <SearchableSelect
                         label="Carrier"
-                        placeholder="Carrier"
-                        searchable
-                        data={carrierData}
+                        placeholder="Type carrier name"
+                        apiEndpoint={URL.carrier}
+                        searchFields={["carrier_code", "carrier_name"]}
+                        displayFormat={carrierDisplayFormat}
+                        value={quotationForm.values.carrier_code || null}
+                          displayValue={formatCarrierDisplayValue(
+                            carrierData.find(
+                              (c) =>
+                                c.value === quotationForm.values.carrier_code,
+                            )?.label,
+                            quotationForm.values.carrier_code,
+                          )}
+                        onChange={(value) => {
+                          quotationForm.setFieldValue(
+                            "carrier_code",
+                            value || "",
+                          );
+                        }}
+                        minSearchLength={2}
+                        dropdownZIndex={10}
                         styles={{
                           input: {
                             fontSize: "14px",
@@ -6801,7 +6850,12 @@ function QuotationCreate({
                             fontStyle: "medium",
                           },
                         }}
-                        {...quotationForm.getInputProps("carrier_code")}
+                        error={
+                          quotationForm.errors.carrier_code as
+                            | string
+                            | undefined
+                        }
+                        additionalParams={carrierTransportModeParams}
                       />
                     </Grid.Col>
                   )}

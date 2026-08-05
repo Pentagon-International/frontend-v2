@@ -19,6 +19,11 @@ import {
   Loader,
   Modal,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
   IconArrowLeft,
@@ -3551,12 +3556,12 @@ function InlandImportJobCreate() {
                   apiEndpoint={URL.carrier}
                   placeholder="Type carrier name"
                   searchFields={["carrier_code", "carrier_name"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.carrier_code),
-                    label: String(item.carrier_name),
-                  })}
+                  displayFormat={carrierDisplayFormat}
                   value={carrierDetailsForm.values.carrier_code || null}
-                  displayValue={carrierDetailsForm.values.carrier_name || null}
+                  displayValue={formatCarrierDisplayValue(
+                    carrierDetailsForm.values.carrier_name,
+                    carrierDetailsForm.values.carrier_code,
+                  )}
                   onChange={(value, selectedData) => {
                     carrierDetailsForm.setFieldValue(
                       "carrier_code",
@@ -3564,11 +3569,12 @@ function InlandImportJobCreate() {
                     );
                     carrierDetailsForm.setFieldValue(
                       "carrier_name",
-                      selectedData?.label || "",
+                      parseCarrierNameFromLabel(selectedData?.label || ""),
                     );
                   }}
                   minSearchLength={2}
                   error={carrierDetailsForm.errors.carrier_code as string}
+                  additionalParams={{ transport_mode: "LAND" }}
                 />
               </Grid.Col>
 
@@ -3837,14 +3843,12 @@ function InlandImportJobCreate() {
                               apiEndpoint={URL.carrier}
                               placeholder="Type carrier name"
                               searchFields={["carrier_code", "carrier_name"]}
-                              displayFormat={(
-                                item: Record<string, unknown>,
-                              ) => ({
-                                value: String(item.carrier_code),
-                                label: String(item.carrier_name),
-                              })}
+                              displayFormat={carrierDisplayFormat}
                               value={routing.carrier_code || null}
-                              displayValue={routing.carrier_name || null}
+                              displayValue={formatCarrierDisplayValue(
+                                routing.carrier_name,
+                                routing.carrier_code,
+                              )}
                               onChange={(value, selectedData) => {
                                 routingsForm.setFieldValue(
                                   `routings.${index}.carrier_code`,
@@ -3908,14 +3912,12 @@ function InlandImportJobCreate() {
                               apiEndpoint={URL.carrier}
                               placeholder="Type carrier name"
                               searchFields={["carrier_code", "carrier_name"]}
-                              displayFormat={(
-                                item: Record<string, unknown>,
-                              ) => ({
-                                value: String(item.carrier_code),
-                                label: String(item.carrier_name),
-                              })}
+                              displayFormat={carrierDisplayFormat}
                               value={routing.carrier_code || null}
-                              displayValue={routing.carrier_name || null}
+                              displayValue={formatCarrierDisplayValue(
+                                routing.carrier_name,
+                                routing.carrier_code,
+                              )}
                               onChange={(value, selectedData) => {
                                 routingsForm.setFieldValue(
                                   `routings.${index}.carrier_code`,
@@ -3957,14 +3959,12 @@ function InlandImportJobCreate() {
                               apiEndpoint={URL.carrier}
                               placeholder="Type carrier name"
                               searchFields={["carrier_code", "carrier_name"]}
-                              displayFormat={(
-                                item: Record<string, unknown>,
-                              ) => ({
-                                value: String(item.carrier_code),
-                                label: String(item.carrier_name),
-                              })}
+                              displayFormat={carrierDisplayFormat}
                               value={routing.carrier_code || null}
-                              displayValue={routing.carrier_name || null}
+                              displayValue={formatCarrierDisplayValue(
+                                routing.carrier_name,
+                                routing.carrier_code,
+                              )}
                               onChange={(value, selectedData) => {
                                 routingsForm.setFieldValue(
                                   `routings.${index}.carrier_code`,

@@ -10,6 +10,11 @@ import {
   Loader,
   Tabs,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
@@ -797,7 +802,7 @@ function AirJobGenerationCreate() {
                   }
                   onChange={(value, selectedData) => {
                     jobDetailsForm.setFieldValue("agent_code", value || "");
-                    jobDetailsForm.setFieldValue("agent_name", selectedData?.label?.split(" (")[0] ?? "");
+                    jobDetailsForm.setFieldValue("agent_name", parseCarrierNameFromLabel(selectedData?.label || ""));
                   }}
                   disabled={isReadOnly}
                 />
@@ -908,19 +913,15 @@ function AirJobGenerationCreate() {
                   placeholder="Type carrier code or name"
                   searchFields={["carrier_code", "carrier_name"]}
                   dropdownZIndex={310}
-                  displayFormat={(item: Record<string, unknown>) => {
-                    const row = item as { carrier_code?: string; carrier_name?: string };
-                    return { value: String(row.carrier_code ?? ""), label: String(row.carrier_name ?? row.carrier_code ?? "") };
-                  }}
+                  displayFormat={carrierDisplayFormat}
                   value={jobDetailsForm.values.carrier_code}
-                  displayValue={
-                    jobDetailsForm.values.carrier_name
-                      ? `${jobDetailsForm.values.carrier_name}`
-                      : jobDetailsForm.values.carrier_code || ""
-                  }
+                  displayValue={formatCarrierDisplayValue(
+                    jobDetailsForm.values.carrier_name,
+                    jobDetailsForm.values.carrier_code,
+                  )}
                   onChange={(value, selectedData) => {
                     jobDetailsForm.setFieldValue("carrier_code", value || "");
-                    jobDetailsForm.setFieldValue("carrier_name", selectedData?.label?.split(" (")[0] ?? "");
+                    jobDetailsForm.setFieldValue("carrier_name", parseCarrierNameFromLabel(selectedData?.label || ""));
                   }}
                   error={jobDetailsForm.errors.carrier_code as string}
                   additionalParams={{ transport_mode: "AIR" }}
@@ -1192,10 +1193,7 @@ function AirJobGenerationCreate() {
                         apiEndpoint={URL.carrier}
                         searchFields={["carrier_code", "carrier_name"]}
                         dropdownZIndex={310}
-                        displayFormat={(item: Record<string, unknown>) => {
-                          const r = item as { carrier_code?: string; carrier_name?: string };
-                          return { value: String(r.carrier_code ?? ""), label: String(r.carrier_name ?? r.carrier_code ?? "") };
-                        }}
+                        displayFormat={carrierDisplayFormat}
                         value={routingForm.values.routings[index].carrier_code}
                         displayValue={
                           routingForm.values.routings[index].carrier_name
@@ -1204,7 +1202,7 @@ function AirJobGenerationCreate() {
                         }
                         onChange={(value, selectedData) => {
                           routingForm.setFieldValue(`routings.${index}.carrier_code`, value || "");
-                          routingForm.setFieldValue(`routings.${index}.carrier_name`, selectedData?.label?.split(" (")[0] ?? "");
+                          routingForm.setFieldValue(`routings.${index}.carrier_name`, parseCarrierNameFromLabel(selectedData?.label || ""));
                         }}
                         minSearchLength={2}
                         additionalParams={

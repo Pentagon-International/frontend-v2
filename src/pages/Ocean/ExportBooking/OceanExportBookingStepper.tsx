@@ -8,6 +8,11 @@ import React, {
   Suspense,
 } from "react";
 import {
+  carrierDisplayFormat,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
+import {
   Box,
   Button,
   Group,
@@ -4161,7 +4166,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       form.setFieldValue("carrier_code", value || "");
                       form.setFieldValue(
                         "carrier_name",
-                        selectedData?.label || "",
+                        parseCarrierNameFromLabel(selectedData?.label || ""),
                       );
                     }}
                     error={form.errors.carrier_code as string}
@@ -4440,20 +4445,15 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="Type carrier name"
                           apiEndpoint={URL.carrier}
                           searchFields={["carrier_code", "carrier_name"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.carrier_code),
-                            label: String(item.carrier_name),
-                          })}
+                          displayFormat={carrierDisplayFormat}
                           value={
                             form.values.routingDetails[index]?.carrier_code ||
                             ""
                           }
-                          displayValue={
-                            form.values.routingDetails[index]?.carrier_name &&
-                            form.values.routingDetails[index]?.carrier_code
-                              ? `${form.values.routingDetails[index].carrier_name}`
-                              : undefined
-                          }
+                          displayValue={formatCarrierDisplayValue(
+                            form.values.routingDetails[index]?.carrier_name,
+                            form.values.routingDetails[index]?.carrier_code,
+                          )}
                           onChange={(value, selectedData) => {
                             form.setFieldValue(
                               `routingDetails.${index}.carrier_code`,
@@ -4461,7 +4461,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             );
                             form.setFieldValue(
                               `routingDetails.${index}.carrier_name`,
-                              selectedData?.label || "",
+                              parseCarrierNameFromLabel(
+                                selectedData?.label || "",
+                              ),
                             );
                           }}
                           error={

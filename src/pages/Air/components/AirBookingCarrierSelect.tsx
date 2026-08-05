@@ -1,13 +1,12 @@
 import { useCallback, useMemo, useRef } from "react";
 import SearchableSelect from "../../../components/SearchableSelect";
 import { URL } from "../../../api/serverUrls";
-
-const CARRIER_SEARCH_FIELDS = ["carrier_code", "carrier_name"] as const;
-
-const carrierDisplayFormat = (item: Record<string, unknown>) => ({
-  value: String(item.carrier_code),
-  label: String(item.carrier_name),
-});
+import {
+  CARRIER_SEARCH_FIELDS,
+  carrierDisplayFormat,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 
 type AirBookingCarrierSelectProps = {
   label?: string;
@@ -33,17 +32,22 @@ export default function AirBookingCarrierSelect({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const additionalParams = useMemo(
-    () => ({ transport_mode: "AIR" }),
-    [],
-  );
+  const additionalParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
   const handleChange = useCallback(
     (
       nextValue: string | null,
       selectedData?: { value: string; label: string } | null,
     ) => {
-      onChangeRef.current(nextValue, selectedData);
+      onChangeRef.current(
+        nextValue,
+        selectedData
+          ? {
+              value: selectedData.value,
+              label: parseCarrierNameFromLabel(selectedData.label),
+            }
+          : selectedData,
+      );
     },
     [],
   );
@@ -58,7 +62,7 @@ export default function AirBookingCarrierSelect({
       additionalParams={additionalParams}
       dropdownZIndex={dropdownZIndex}
       value={value}
-      displayValue={displayValue}
+      displayValue={formatCarrierDisplayValue(displayValue, value)}
       onChange={handleChange}
       error={error}
       minSearchLength={2}

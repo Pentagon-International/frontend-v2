@@ -1,5 +1,4 @@
 import type { ContractDetailResponse } from "./types";
-import { getVendorTypeLabel } from "./utils";
 
 export type MappedRateSheetRow = {
   key: string;
@@ -73,7 +72,7 @@ export function mapDetailToCreateForm(
   return {
     contractId: basics.tariff_codes?.[0] || detail.vendor_reference,
     carrierCode: basics.carrier_code,
-    carrierLabel: `${basics.carrier_name} · ${getVendorTypeLabel(basics.service)}`,
+    carrierLabel: basics.carrier_name || basics.carrier_code || "",
     vendorReference: basics.vendor_reference,
     service: basics.service,
     coverageDescription: basics.coverage_description,

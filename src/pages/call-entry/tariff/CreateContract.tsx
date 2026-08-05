@@ -7,6 +7,12 @@ import {
   IconPlus,
   IconX,
 } from "@tabler/icons-react";
+import {
+  carrierDisplayFormat,
+  carrierTransportParamsFromService,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader, Select } from "@mantine/core";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -46,11 +52,6 @@ type ChargeMasterRow = {
   id?: number;
   charge_code?: string;
   charge_name?: string;
-};
-
-type CarrierMasterRow = {
-  carrier_code: string;
-  carrier_name: string;
 };
 
 type CurrencyMasterRow = {
@@ -203,14 +204,6 @@ async function fetchContainerTypes(): Promise<ContainerOption[]> {
     : [];
 }
 
-async function fetchCarrierMaster(): Promise<CarrierMasterRow[]> {
-  const response = await getAPICall(URL.carrier, API_HEADER);
-  if (Array.isArray(response)) return response as CarrierMasterRow[];
-  return Array.isArray((response as { data?: CarrierMasterRow[] })?.data)
-    ? ((response as { data: CarrierMasterRow[] }).data ?? [])
-    : [];
-}
-
 async function fetchCurrencyMaster(): Promise<CurrencyMasterRow[]> {
   const response = await getAPICall(URL.currencyMaster, API_HEADER);
   if (Array.isArray(response)) return response as CurrencyMasterRow[];
@@ -323,27 +316,6 @@ export default function CreateContract() {
     queryFn: fetchContainerTypes,
     staleTime: 60_000,
   });
-
-  const { data: carrierOptions = [], isLoading: carriersLoading } = useQuery({
-    queryKey: ["contract-create-carriers"],
-    queryFn: fetchCarrierMaster,
-    staleTime: 60_000,
-  });
-
-  const carrierSelectData = useMemo(() => {
-    const options = carrierOptions.map((item) => ({
-      value: item.carrier_code,
-      label: `${item.carrier_name} - ${item.carrier_code}`,
-    }));
-    if (
-      carrierCode &&
-      carrierLabel &&
-      !options.some((item) => item.value === carrierCode)
-    ) {
-      return [{ value: carrierCode, label: carrierLabel }, ...options];
-    }
-    return options;
-  }, [carrierOptions, carrierCode, carrierLabel]);
 
   const { data: currencyOptions = [], isLoading: currenciesLoading } = useQuery({
     queryKey: ["contract-create-currencies"],
@@ -711,37 +683,23 @@ export default function CreateContract() {
 
           <div className="create-contract-form-grid">
             <div className="create-contract-field create-contract-searchable">
-              <Select
+              <SearchableSelect
                 label="Vendor"
-                placeholder={carriersLoading ? "Loading carriers…" : "Select carrier"}
-                searchable
-                clearable
-                data={carrierSelectData}
-                value={carrierCode || null}
-                comboboxProps={{ zIndex: 40 }}
-                disabled={carriersLoading}
-                onChange={(value) => {
-                  setCarrierCode(value || "");
-                  const selected = carrierSelectData.find((item) => item.value === value);
-                  setCarrierLabel(selected?.label || "");
-                }}
                 required
-                withAsterisk
-                error={formErrors.carrier_code}
-                styles={{
-                  input: {
-                    fontSize: "13px",
-                    height: "36px",
-                    fontFamily: "Inter",
-                  },
-                  label: {
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#424242",
-                    marginBottom: "4px",
-                    fontFamily: "Inter",
-                  },
+                placeholder="Type carrier name"
+                apiEndpoint={URL.carrier}
+                searchFields={["carrier_code", "carrier_name"]}
+                displayFormat={carrierDisplayFormat}
+                value={carrierCode || null}
+                displayValue={formatCarrierDisplayValue(carrierLabel, carrierCode)}
+                dropdownZIndex={40}
+                onChange={(value, selectedData) => {
+                  setCarrierCode(value || "");
+                  setCarrierLabel(parseCarrierNameFromLabel(selectedData?.label || ""));
                 }}
+                minSearchLength={2}
+                additionalParams={carrierTransportParamsFromService(service)}
+                error={formErrors.carrier_code}
               />
             </div>
 

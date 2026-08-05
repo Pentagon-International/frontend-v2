@@ -20,6 +20,11 @@ import {
   Select,
   ActionIcon,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 import { Dropzone } from "@mantine/dropzone";
 import { useForm } from "@mantine/form";
 import {
@@ -3976,20 +3981,15 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           placeholder="Type carrier name"
                           apiEndpoint={URL.carrier}
                           searchFields={["carrier_code", "carrier_name"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.carrier_code),
-                            label: String(item.carrier_name),
-                          })}
+                          displayFormat={carrierDisplayFormat}
                           value={
                             form.values.routingDetails[index]?.carrier_code ||
                             ""
                           }
-                          displayValue={
-                            form.values.routingDetails[index]?.carrier_name &&
-                            form.values.routingDetails[index]?.carrier_code
-                              ? `${form.values.routingDetails[index].carrier_name}`
-                              : undefined
-                          }
+                          displayValue={formatCarrierDisplayValue(
+                            form.values.routingDetails[index]?.carrier_name,
+                            form.values.routingDetails[index]?.carrier_code,
+                          )}
                           onChange={(value, selectedData) => {
                             form.setFieldValue(
                               `routingDetails.${index}.carrier_code`,
@@ -3997,7 +3997,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             );
                             form.setFieldValue(
                               `routingDetails.${index}.carrier_name`,
-                              selectedData?.label || "",
+                              parseCarrierNameFromLabel(
+                                selectedData?.label || "",
+                              ),
                             );
                           }}
                           error={

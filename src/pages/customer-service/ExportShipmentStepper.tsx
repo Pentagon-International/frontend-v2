@@ -13,6 +13,13 @@ import {
   Divider,
   Textarea,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  carrierTransportParamsFromMoveType,
+  carrierTransportParamsFromService,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../utils/carrierSelect";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import {
@@ -1522,21 +1529,24 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   placeholder="Type carrier name"
                   apiEndpoint={URL.carrier}
                   searchFields={["carrier_code", "carrier_name"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.carrier_code),
-                    label: String(item.carrier_name),
-                  })}
+                  displayFormat={carrierDisplayFormat}
                   value={form.values.carrier_code}
-                  displayValue={form.values.carrier_name}
+                  displayValue={formatCarrierDisplayValue(
+                    form.values.carrier_name,
+                    form.values.carrier_code,
+                  )}
                   onChange={(value, selectedData) => {
                     form.setFieldValue("carrier_code", value || "");
                     form.setFieldValue(
                       "carrier_name",
-                      selectedData?.label || "",
+                      parseCarrierNameFromLabel(selectedData?.label || ""),
                     );
                   }}
                   error={form.errors.carrier_code as string}
                   minSearchLength={2}
+                  additionalParams={carrierTransportParamsFromService(
+                    form.values.service,
+                  )}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -1783,16 +1793,14 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                         placeholder="Type carrier name"
                         apiEndpoint={URL.carrier}
                         searchFields={["carrier_code", "carrier_name"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.carrier_code),
-                          label: String(item.carrier_name),
-                        })}
+                        displayFormat={carrierDisplayFormat}
                         value={
                           form.values.routingDetails[index]?.carrier_code || ""
                         }
-                        displayValue={
-                          routingDisplayNames[index]?.carrier || null
-                        }
+                        displayValue={formatCarrierDisplayValue(
+                          routingDisplayNames[index]?.carrier,
+                          form.values.routingDetails[index]?.carrier_code,
+                        )}
                         onChange={(value, selectedData) => {
                           form.setFieldValue(
                             `routingDetails.${index}.carrier_code`,
@@ -1802,7 +1810,9 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                           const updatedDisplayNames = [...routingDisplayNames];
                           updatedDisplayNames[index] = {
                             ...updatedDisplayNames[index],
-                            carrier: selectedData?.label || null,
+                            carrier: selectedData?.label
+                              ? parseCarrierNameFromLabel(selectedData.label)
+                              : null,
                           };
                           setRoutingDisplayNames(updatedDisplayNames);
                         }}
@@ -1812,6 +1822,9 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                           ] as string
                         }
                         minSearchLength={2}
+                        additionalParams={carrierTransportParamsFromMoveType(
+                          form.values.routingDetails[index]?.move_type,
+                        )}
                         // required
                       />
                     </Grid.Col>

@@ -17,6 +17,12 @@ import {
   Menu,
   ActionIcon,
 } from "@mantine/core";
+import {
+  carrierDisplayFormat,
+  carrierTransportParamsFromService,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
 import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import {
@@ -1104,7 +1110,10 @@ function OriginCreate() {
                                 gridForm.values.tariff_charges[index]
                                   .carrier_code || null
                               }
-                              displayValue={carrierDisplayValues[index] || null}
+                              displayValue={formatCarrierDisplayValue(
+                                carrierDisplayValues[index],
+                                gridForm.values.tariff_charges[index].carrier_code,
+                              )}
                               returnOriginalData={true}
                               dropdownZIndex={1000}
                               onChange={(value, selectedData, originalData) => {
@@ -1115,9 +1124,7 @@ function OriginCreate() {
                                 // Update the display value for this specific index
                                 // Use carrier_name from original data if available, otherwise use label
                                 const carrierName =
-                                  (originalData as any)?.carrier_name ||
-                                  selectedData?.label ||
-                                  "";
+                                  (originalData as any)?.carrier_name || parseCarrierNameFromLabel(selectedData?.label || "");
                                 const newDisplayValues = [
                                   ...carrierDisplayValues,
                                 ];
@@ -1125,15 +1132,13 @@ function OriginCreate() {
                                 setCarrierDisplayValues(newDisplayValues);
                               }}
                               searchFields={["carrier_code", "carrier_name"]}
-                              displayFormat={(item: any) => ({
-                                value: String(item.carrier_code),
-                                label: String(
-                                  item.carrier_name || item.carrier_code || ""
-                                ),
-                              })}
+                              displayFormat={carrierDisplayFormat}
                               required={!isViewMode}
                               disabled={isViewMode}
                               minSearchLength={3}
+                              additionalParams={carrierTransportParamsFromService(
+                                mainForm.values.service,
+                              )}
                               styles={{
                                 input: {
                                   fontSize: "13px",

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  carrierDisplayFormat,
+  carrierNameValueDisplayFormat,
+  carrierTransportParamsFromService,
+  formatCarrierDisplayValue,
+  parseCarrierNameFromLabel,
+} from "../../../utils/carrierSelect";
+import {
   ActionIcon,
   Box,
   Button,
@@ -506,7 +513,9 @@ export default function Freight() {
           displayValue={originDisplayValue}
           dropdownZIndex={1000}
           onChange={(value, selected) => {
-            const label = selected?.label ?? null;
+            const label = selected?.label
+              ? parseCarrierNameFromLabel(selected.label)
+              : null;
             handleHeaderFilterChange("origin", value ?? "", label);
             if (value) onClose();
           }}
@@ -530,7 +539,9 @@ export default function Freight() {
           displayValue={destinationDisplayValue}
           dropdownZIndex={1000}
           onChange={(value, selected) => {
-            const label = selected?.label ?? null;
+            const label = selected?.label
+              ? parseCarrierNameFromLabel(selected.label)
+              : null;
             handleHeaderFilterChange("destination", value ?? "", label);
             if (value) onClose();
           }}
@@ -564,15 +575,17 @@ export default function Freight() {
           placeholder="Type carrier name"
           apiEndpoint={URL.carrier}
           searchFields={["carrier_name", "carrier_code"]}
-          displayFormat={(item: Record<string, unknown>) => ({
-            value: String(item.carrier_name),
-            label: String(item.carrier_name),
-          })}
+          displayFormat={carrierNameValueDisplayFormat}
           value={filterForm.values.carrier_name}
           displayValue={carrierDisplayValue}
           dropdownZIndex={1000}
+          additionalParams={carrierTransportParamsFromService(
+            filterForm.values.service,
+          )}
           onChange={(value, selected, original) => {
-            const label = selected?.label ?? null;
+            const label = selected?.label
+              ? parseCarrierNameFromLabel(selected.label)
+              : null;
             const code =
               typeof original?.carrier_code === "string"
                 ? (original.carrier_code as string)
@@ -1198,15 +1211,12 @@ export default function Freight() {
                       placeholder="Type carrier name"
                       apiEndpoint={URL.carrier}
                       searchFields={["carrier_name", "carrier_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.carrier_name),
-                        label: String(item.carrier_name),
-                      })}
+                      displayFormat={carrierNameValueDisplayFormat}
                       value={filterForm.values.carrier_name}
                       displayValue={carrierDisplayValue}
                       onChange={(value, selectedData, originalData) => {
                         filterForm.setFieldValue("carrier_name", value || null);
-                        setCarrierDisplayValue(selectedData?.label || null);
+                        setCarrierDisplayValue(parseCarrierNameFromLabel(selectedData?.label || "") || null);
                         const code =
                           typeof originalData?.carrier_code === "string"
                             ? (originalData.carrier_code as string)
@@ -1217,6 +1227,9 @@ export default function Freight() {
                         );
                       }}
                       minSearchLength={2}
+                      additionalParams={carrierTransportParamsFromService(
+                        filterForm.values.service,
+                      )}
                       classNames={erpListGeistSelectClassNames}
                       styles={erpListFilterUnifiedMantineStyles(erpTheme)}
                       className="filter-searchable-select"
