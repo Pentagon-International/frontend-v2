@@ -1,14 +1,17 @@
+import { useEffect, useState } from "react";
 import { Box, Button, Flex, Grid, Group, Text, TextInput } from "@mantine/core";
-import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react";
-import { useDisclosure } from "@mantine/hooks";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Popover } from "@mantine/core";
-import { deleteApiCall } from "../../../service/deleteApiCall";
-import { URL } from "../../../api/serverUrls";
+import { useForm } from "@mantine/form";
+import { IconCheck } from "@tabler/icons-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import * as yup from "yup";
+import { yupResolver } from "mantine-form-yup-resolver";
+import { postAPICall } from "../../../service/postApiCall";
+import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { Dropdown, ToastNotification } from "../../../components";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
+import { URL } from "../../../api/serverUrls";
 
 const CUSTOMER_CATEGORY_OPTIONS = [
   { value: "customer", label: "Customer" },
@@ -16,12 +19,10 @@ const CUSTOMER_CATEGORY_OPTIONS = [
   { value: "agent", label: "Agent" },
 ];
 
-type CustomerTypeData = {
-  id: number;
-  customer_type_code?: string;
+type CustomerTypeFormData = {
   customer_type_name: string;
-  customer_category?: string;
-  status: "ACTIVE" | "INACTIVE";
+  customer_category: string;
+  status: string;
 };
 
 const fieldStyles = {
@@ -39,39 +40,104 @@ const fieldStyles = {
   },
 };
 
-function CustomerTypeView() {
+const schema = yup.object().shape({
+  customer_type_name: yup.string().required("Customer type name is required"),
+  customer_category: yup.string().required("Customer category is required"),
+});
+
+export default function CustomerTypeCreate() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [opened, { open, close }] = useDisclosure(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const viewData = location.state as CustomerTypeData;
+  const editData =
+    (location.state as CustomerTypeFormData & {
+      id?: number;
+      customer_type_code?: string;
+    }) || null;
+  const isEditMode = !!editData?.id;
+  const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
+    useMasterEditAuditRefresh(
+      isEditMode ? (editData as Record<string, unknown>) : null,
+      {
+        detailBaseUrl: isEditMode ? URL.customerType : undefined,
+        recordId: editData?.id,
+        enabled: isEditMode,
+      },
+    );
 
-  const { auditSource } = useMasterEditAuditRefresh(
-    viewData as Record<string, unknown> | undefined,
-    { detailBaseUrl: URL.customerType },
-  );
+  const form = useForm<CustomerTypeFormData>({
+    initialValues: {
+      customer_type_name: "",
+      customer_category: "",
+      status: "ACTIVE",
+    },
+    validate: yupResolver(schema),
+  });
 
-  const handleDelete = async () => {
-    try {
-      await deleteApiCall(URL.customerType, API_HEADER, viewData);
-      ToastNotification({
-        type: "success",
-        message: "Customer Type deleted successfully",
+  useEffect(() => {
+    if (isEditMode && editData) {
+      form.setValues({
+        customer_type_name: editData.customer_type_name || "",
+        customer_category: (editData.customer_category || "").toLowerCase(),
+        status: editData.status || "ACTIVE",
       });
+    }
+  }, [isEditMode, editData]);
+
+  const handleSubmit = async (values: CustomerTypeFormData) => {
+    setIsSubmitting(true);
+
+    try {
+      const payload = {
+        customer_type_name: values.customer_type_name.trim(),
+        customer_category: values.customer_category,
+        status: values.status || "ACTIVE",
+      };
+
+      if (isEditMode && editData?.id != null) {
+        const res = await putAPICall(
+          URL.customerType,
+          {
+            ...payload,
+            id: editData.id,
+          },
+          API_HEADER,
+        );
+        applyAuditFromResponse(res);
+        await refreshAuditFromDetail(editData.id);
+        ToastNotification({
+          type: "success",
+          message: "Customer Type updated successfully",
+        });
+      } else {
+        await postAPICall(URL.customerType, payload, API_HEADER);
+        ToastNotification({
+          type: "success",
+          message: "Customer Type created successfully",
+        });
+      }
+
       navigate("/master/customer-type", { state: { refreshData: true } });
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
         type: "error",
-        message: `Error while deleting: ${errorMessage}`,
+        message: `Error ${isEditMode ? "updating" : "creating"} Customer Type: ${errorMessage}`,
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const categoryValue = (viewData?.customer_category || "").toLowerCase();
+  const handleCancel = () => {
+    navigate("/master/customer-type");
+  };
 
   return (
     <Box
+      component="form"
+      onSubmit={form.onSubmit(handleSubmit)}
       style={{
         backgroundColor: "#F8F8F8",
         position: "relative",
@@ -108,7 +174,7 @@ function CustomerTypeView() {
             >
               <MasterAuditHeadingRow
                 auditSource={auditSource}
-                visible
+                visible={isEditMode}
                 justify="center"
               >
                 <Text
@@ -123,7 +189,7 @@ function CustomerTypeView() {
                     textAlign: "center",
                   }}
                 >
-                  View Customer Type
+                  {isEditMode ? "Edit Customer Type" : "Create Customer Type"}
                 </Text>
               </MasterAuditHeadingRow>
             </Box>
@@ -155,12 +221,12 @@ function CustomerTypeView() {
                   padding: "24px",
                 }}
               >
-                {viewData?.customer_type_code ? (
+                {isEditMode && editData?.customer_type_code ? (
                   <Grid.Col span={6}>
                     <TextInput
                       label="Customer Type Code"
-                      value={viewData.customer_type_code}
-                      readOnly
+                      value={editData.customer_type_code}
+                      disabled
                       styles={fieldStyles}
                     />
                   </Grid.Col>
@@ -169,8 +235,9 @@ function CustomerTypeView() {
                 <Grid.Col span={6}>
                   <TextInput
                     label="Customer Type Name"
-                    value={viewData?.customer_type_name || ""}
-                    readOnly
+                    placeholder="Enter customer type name"
+                    withAsterisk
+                    {...form.getInputProps("customer_type_name")}
                     styles={fieldStyles}
                   />
                 </Grid.Col>
@@ -178,22 +245,32 @@ function CustomerTypeView() {
                 <Grid.Col span={6}>
                   <Dropdown
                     label="Customer Category"
+                    placeholder="Select customer category"
+                    withAsterisk
                     data={CUSTOMER_CATEGORY_OPTIONS}
-                    value={categoryValue || null}
-                    disabled
+                    value={form.values.customer_category || null}
+                    onChange={(value) =>
+                      form.setFieldValue("customer_category", value || "")
+                    }
+                    error={form.errors.customer_category}
                     styles={fieldStyles}
                   />
                 </Grid.Col>
 
-                <Grid.Col span={6}>
-                  <Dropdown
-                    label="Status"
-                    data={["ACTIVE", "INACTIVE"]}
-                    value={viewData?.status || null}
-                    disabled
-                    styles={fieldStyles}
-                  />
-                </Grid.Col>
+                {isEditMode ? (
+                  <Grid.Col span={6}>
+                    <Dropdown
+                      label="Status"
+                      placeholder="Select status"
+                      data={["ACTIVE", "INACTIVE"]}
+                      value={form.values.status || null}
+                      onChange={(value) =>
+                        form.setFieldValue("status", value || "ACTIVE")
+                      }
+                      styles={fieldStyles}
+                    />
+                  </Grid.Col>
+                ) : null}
               </Grid>
             </Box>
 
@@ -205,94 +282,42 @@ function CustomerTypeView() {
               }}
             >
               <Group justify="space-between">
-                <Popover
-                  opened={opened}
-                  width={240}
-                  position="right-start"
-                  offset={15}
-                  clickOutsideEvents={["mouseup", "touchend"]}
-                  radius="md"
-                >
-                  <Popover.Target>
-                    <Button
-                      onClick={open}
-                      size="sm"
-                      color="red"
-                      variant="outline"
-                      leftSection={<IconTrash size={16} />}
-                    >
-                      Delete
-                    </Button>
-                  </Popover.Target>
-                  <Popover.Dropdown>
-                    <Group mb={5}>
-                      <IconTrash color="red" size={16} />
-                      <Text size="sm" fw={700} c="red">
-                        Delete
-                      </Text>
-                    </Group>
-                    <Text size="sm" mb="xs">
-                      Are you sure?
-                      <br />
-                      Do you want to delete this?
-                    </Text>
-                    <Group mt={10} gap="lg">
-                      <Button
-                        variant="outline"
-                        color="#105476"
-                        size="xs"
-                        onClick={close}
-                      >
-                        Not now
-                      </Button>
-                      <Button
-                        size="xs"
-                        color="#FF0004"
-                        style={{ width: 100 }}
-                        onClick={() => {
-                          void handleDelete();
-                          close();
-                        }}
-                      >
-                        Yes, Delete
-                      </Button>
-                    </Group>
-                  </Popover.Dropdown>
-                </Popover>
-
                 <Group gap="sm">
                   <Button
                     variant="outline"
                     color="gray"
                     size="sm"
-                    leftSection={<IconArrowLeft size={16} />}
                     styles={{
                       root: {
                         borderColor: "#d0d0d0",
                         color: "#666",
                         fontSize: "13px",
                         fontFamily: "Inter",
+                        fontStyle: "medium",
                       },
                     }}
-                    onClick={() => navigate("/master/customer-type")}
+                    onClick={handleCancel}
                   >
-                    Back
+                    Cancel
                   </Button>
+                </Group>
+
+                <Group gap="sm">
                   <Button
+                    type="submit"
                     size="sm"
-                    leftSection={<IconEdit size={16} />}
+                    loading={isSubmitting}
+                    disabled={isSubmitting}
                     style={{
                       backgroundColor: "#105476",
                       fontSize: "13px",
                       fontFamily: "Inter",
+                      fontStyle: "medium",
+                      cursor: isSubmitting ? "not-allowed" : "pointer",
                     }}
-                    onClick={() =>
-                      navigate("/master/customer-type-edit", {
-                        state: { ...viewData, from: "view" },
-                      })
-                    }
+                    rightSection={<IconCheck size={16} />}
                   >
-                    Edit
+                    {isEditMode ? "Update" : "Create"}
                   </Button>
                 </Group>
               </Group>
@@ -303,5 +328,3 @@ function CustomerTypeView() {
     </Box>
   );
 }
-
-export default CustomerTypeView;

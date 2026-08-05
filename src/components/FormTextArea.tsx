@@ -20,7 +20,7 @@ const applyFormat = (value: string, format: TextFormatType): string => {
 };
 
 const FormTextArea = React.forwardRef<HTMLTextAreaElement, FormTextAreaProps>(
-  ({ format = "initcap", onChange, value, defaultValue, ...props }, ref) => {
+  ({ format = "initcap", onChange, value, defaultValue, styles: userStyles, ...props }, ref) => {
     const isControlled = value !== undefined;
 
     const [internalValue, setInternalValue] = useState<string>(
@@ -42,25 +42,33 @@ const FormTextArea = React.forwardRef<HTMLTextAreaElement, FormTextAreaProps>(
       onChange?.(e);
     };
 
+    const base = {
+      label: {
+        fontSize: "13px",
+        fontWeight: 500,
+        color: "#424242",
+        marginBottom: "4px",
+        fontFamily: "Inter",
+      },
+      input: {
+        fontSize: "13px",
+        fontFamily: "Inter",
+      },
+    };
+
     return (
       <Textarea
         ref={ref}
+        autoComplete="off"
+        radius="sm"
+        size="sm"
         {...props}
         value={displayValue}
         onChange={handleChange}
         styles={{
-          label: {
-            fontSize: "13px",
-            fontWeight: 500,
-            color: "#424242",
-            marginBottom: "4px",
-            fontFamily: "Inter",
-          },
-          input: {
-            fontSize: "13px",
-            fontFamily: "Inter",
-          },
-          ...props.styles,
+          ...userStyles,
+          label: { ...base.label, ...userStyles?.label },
+          input: { ...base.input, ...userStyles?.input },
         }}
       />
     );

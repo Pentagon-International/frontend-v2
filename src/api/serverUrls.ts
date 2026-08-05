@@ -36,6 +36,7 @@ export const URL = {
   customerAddressMapping: "customer_address_mapping/",
   frequency: "frequency-master/",
   customerType: "customertype-master/",
+  customerTypeFilter: "filter/customertype-master/",
   branchMaster: "branch-master/",
   filterBranchMaster: "filter/branch-master/",
   coordinatorsUser: "coordinators-user/",

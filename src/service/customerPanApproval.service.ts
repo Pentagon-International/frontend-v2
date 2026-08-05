@@ -73,8 +73,8 @@ export type CustomerPanApprovalFilters = {
   term_code?: string;
   status?: string;
   assigned_to?: string;
-  /** `"customer"` | `"vendor"` — scopes verification list */
-  customer_type?: "customer" | "vendor";
+  /** `"customer"` | `"vendor"` | `"agent"` — scopes verification list */
+  customer_type?: "customer" | "vendor" | "agent";
 };
 
 export type RelatedCustomer = {
@@ -205,8 +205,12 @@ export async function fetchCustomerPanPendingList(
   paginationTotal: number;
 }> {
   const filtersPayload = buildCustomerPanApprovalFiltersPayload(filters);
+  const category = filters?.customer_type;
+  const categoryQuery = category
+    ? `customer-category=${encodeURIComponent(category)}&`
+    : "";
   const response = await apiCallProtected.post(
-    `${URL.customerVerificationFilter}?index=${index}&limit=${limit}`,
+    `${URL.customerVerificationFilter}?${categoryQuery}index=${index}&limit=${limit}`,
     { filters: filtersPayload },
   );
   return normalizeListResponse(response, limit);

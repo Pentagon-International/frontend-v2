@@ -86,6 +86,10 @@ import UserCreate from "./masters/user/UserCreate";
 import CustomerMaster from "./masters/customer-addressMapping/CustomerMaster";
 import CustomerCreate from "./masters/customer-addressMapping/CustomerCreate";
 import VendorMaster from "./masters/vendor/VendorMaster";
+import AgentMaster from "./masters/agent/AgentMaster";
+import AgentPanMaster from "./masters/agent/AgentPanMaster";
+import ApproveAgentPanMaster from "./masters/agent/ApproveAgentPanMaster";
+import AgentApprovalStatusMaster from "./masters/agent/AgentApprovalStatusMaster";
 import CoordinatorReassignationMaster from "./masters/coordinator-reassignation/CoordinatorReassignationMaster";
 import CoordinatorReassignationCreate from "./masters/coordinator-reassignation/CoordinatorReassignationCreate";
 import CustomerRelationshipMappingMaster from "./masters/customer-relationship-mapping/CustomerRelationshipMappingMaster";
@@ -270,6 +274,10 @@ export {
   CustomerMaster,
   CustomerCreate,
   VendorMaster,
+  AgentMaster,
+  AgentPanMaster,
+  ApproveAgentPanMaster,
+  AgentApprovalStatusMaster,
   CoordinatorReassignationMaster,
   CoordinatorReassignationCreate,
   CustomerRelationshipMappingMaster,

@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   Dropdown,
+  FormMultiSelect,
+  FormTextArea,
+  FormTextInput,
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
@@ -13,14 +16,10 @@ import {
   Card,
   Grid,
   Group,
-  Select,
-  MultiSelect,
   Stack,
   Tabs,
   Switch,
   Text,
-  TextInput,
-  Textarea,
   ActionIcon,
   Center,
   Divider,
@@ -66,7 +65,6 @@ import {
   isIndianUserFromProfile,
   isVietnameseBranch,
 } from "../../../utils/userNumberFormat";
-import FormTextArea from "../../../components/FormTextArea";
 
 function parseYesNoBoolean(value: unknown): boolean {
   if (value === true) return true;
@@ -1139,7 +1137,7 @@ const AddressCard = ({
           </Text>
           <Grid>
             <Grid.Col span={4}>
-              <TextInput
+              <FormTextInput
                 label="Location"
                 placeholder="Enter location"
                 disabled={!!isViewMode}
@@ -1148,10 +1146,9 @@ const AddressCard = ({
                   ""
                 }
                 onChange={(e) => {
-                  const formattedValue = toTitleCase(e.target.value);
                   addressForm.setFieldValue(
                     `addresses_data.${index}.customer_location`,
-                    formattedValue,
+                    e.target.value,
                   );
                 }}
                 error={
@@ -1163,7 +1160,7 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <Select
+              <Dropdown
                 label="Address Type"
                 withAsterisk
                 placeholder="Select address type"
@@ -1184,18 +1181,18 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <Textarea
+              <FormTextArea
                 label="Address"
                 withAsterisk
                 placeholder="Enter complete address"
                 minRows={3}
+                format="initcap"
                 disabled={isViewMode}
                 value={addressForm.values.addresses_data[index]?.address || ""}
                 onChange={(e) => {
-                  const formattedValue = toTitleCase(e.currentTarget.value);
                   addressForm.setFieldValue(
                     `addresses_data.${index}.address`,
-                    formattedValue,
+                    e.currentTarget.value,
                   );
                 }}
                 error={addressForm.errors[`addresses_data.${index}.address`]}
@@ -1203,7 +1200,7 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <Select
+              <Dropdown
                 label="Country"
                 withAsterisk
                 placeholder="Select country"
@@ -1219,7 +1216,7 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <Select
+              <Dropdown
                 label="State"
                 withAsterisk={isStateRequired}
                 placeholder="Select state"
@@ -1240,7 +1237,7 @@ const AddressCard = ({
 
             <Grid.Col span={4}>
               {customCities[index] ? (
-                <TextInput
+                <FormTextInput
                   label="City"
                   placeholder="Enter city name"
                   disabled={isViewMode}
@@ -1251,8 +1248,7 @@ const AddressCard = ({
                       : addressForm.values.addresses_data[index]?.city || ""
                   }
                   onChange={(e) => {
-                    const formattedValue = toTitleCase(e.target.value);
-                    handleCustomCityChange(index, formattedValue);
+                    handleCustomCityChange(index, e.target.value);
                   }}
                   error={
                     (
@@ -1275,7 +1271,7 @@ const AddressCard = ({
                   }
                 />
               ) : (
-                <Select
+                <Dropdown
                   key={`city-select-${index}-${addressForm.values.addresses_data[index]?.city || ""}`}
                   label="City"
                   placeholder="Select or search city"
@@ -1306,9 +1302,10 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <TextInput
+              <FormTextInput
                 label="Pin/Zip Code"
                 placeholder="Enter pin/zip code"
+                format="normal"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(
                   `addresses_data.${index}.pincode`,
@@ -1317,9 +1314,10 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <TextInput
+              <FormTextInput
                 label="Landline Number"
                 placeholder="Enter Landline number"
+                format="normal"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(
                   `addresses_data.${index}.phone_no`,
@@ -1328,10 +1326,11 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <TextInput
+              <FormTextInput
                 label="Mobile Number"
                 withAsterisk={!isKenyaUser}
                 placeholder="Enter mobile number"
+                format="normal"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(
                   `addresses_data.${index}.mobile_no`,
@@ -1340,10 +1339,11 @@ const AddressCard = ({
             </Grid.Col>
 
             <Grid.Col span={4}>
-              <TextInput
+              <FormTextInput
                 label="Email Id"
                 withAsterisk={!isKenyaUser}
                 placeholder="Enter email address"
+                format="normal"
                 disabled={isViewMode}
                 {...addressForm.getInputProps(`addresses_data.${index}.email`)}
               />
@@ -1351,9 +1351,10 @@ const AddressCard = ({
             {isDubaiUser && (
               <>
                 <Grid.Col span={4}>
-                  <TextInput
+                  <FormTextInput
                     label="TRN No"
                     placeholder="Enter TRN no"
+                    format="normal"
                     disabled={isViewMode}
                     {...addressForm.getInputProps(
                       `addresses_data.${index}.trn_no`,
@@ -1381,11 +1382,12 @@ const AddressCard = ({
             )}
             {(isKenyaUser || isChinaUser) && (
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label={isKenyaUser ? "PIN Number" : "TIN Number"}
                   placeholder={
                     isKenyaUser ? "Enter PIN number" : "Enter TIN number"
                   }
+                  format="normal"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.gst_id`,
@@ -1395,7 +1397,7 @@ const AddressCard = ({
             )}
             {isVietnamUser && (
               <Grid.Col span={4}>
-                <Select
+                <Dropdown
                   label="Tax Exemption"
                   placeholder="Select"
                   disabled={isViewMode}
@@ -1429,7 +1431,7 @@ const AddressCard = ({
             </Text>
             <Grid>
               <Grid.Col span={4}>
-                <Select
+                <Dropdown
                   label="GST Registration Status"
                   withAsterisk={!isViewMode}
                   placeholder="Select status"
@@ -1453,10 +1455,11 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="PAN No"
                   withAsterisk={panGstRequired}
                   placeholder="Enter PAN number"
+                  format="capital"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.pan_no`,
@@ -1464,9 +1467,10 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="IEC Code"
                   placeholder="Enter IEC Code"
+                  format="capital"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.iec_code`,
@@ -1474,10 +1478,11 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="GST No"
                   withAsterisk={panGstRequired}
                   placeholder="Enter GST number"
+                  format="capital"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.gst_id`,
@@ -1485,9 +1490,10 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="TAN No"
                   placeholder="Enter TAN number"
+                  format="capital"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.tan_no`,
@@ -1495,9 +1501,10 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="ARN No"
                   placeholder="Enter ARN number"
+                  format="normal"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.arn_no`,
@@ -1505,9 +1512,10 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <TextInput
+                <FormTextInput
                   label="UIN No"
                   placeholder="Enter UIN number"
+                  format="normal"
                   disabled={isViewMode}
                   {...addressForm.getInputProps(
                     `addresses_data.${index}.uin_no`,
@@ -1515,7 +1523,7 @@ const AddressCard = ({
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                <Select
+                <Dropdown
                   label="Composite / Regular"
                   placeholder="Select"
                   data={[
@@ -1531,7 +1539,7 @@ const AddressCard = ({
 
               {isVendorMasterRoute && (
                 <Grid.Col span={4}>
-                  <Select
+                  <Dropdown
                     label="Income tax return filed"
                     placeholder="Select"
                     data={[
@@ -1548,7 +1556,7 @@ const AddressCard = ({
               )}
 
               <Grid.Col span={4}>
-                <Select
+                <Dropdown
                   label="SEZ"
                   placeholder="Select"
                   disabled={isViewMode}
@@ -1608,7 +1616,7 @@ const AddressCard = ({
               )}
 
               <Grid.Col span={4}>
-                <Select
+                <Dropdown
                   label="MSME"
                   placeholder="Select"
                   disabled={isViewMode}
@@ -1638,10 +1646,11 @@ const AddressCard = ({
 
               {msmeEnabled && (
                 <Grid.Col span={4}>
-                  <TextInput
+                  <FormTextInput
                     label="MSME No"
                     withAsterisk={!isViewMode}
                     placeholder="Enter MSME number"
+                    format="normal"
                     disabled={isViewMode}
                     {...addressForm.getInputProps(
                       `addresses_data.${index}.msme_no`,
@@ -1810,18 +1819,36 @@ function CustomerCreate() {
   const params = useParams();
   const isVendorVerificationRoute =
     location.pathname === "/master/create-vendor";
+  const isAgentVerificationRoute =
+    location.pathname === "/master/create-agent";
   const isVerificationCreateRoute =
     location.pathname === "/master/create-customer" ||
-    isVendorVerificationRoute;
+    isVendorVerificationRoute ||
+    isAgentVerificationRoute;
   const customerData = location.state?.customerData as
     CustomerDetailRecord | undefined;
   const isVendorMasterRoute =
     location.pathname.includes("/master/vendor") || isVendorVerificationRoute;
+  const isAgentMasterRoute =
+    location.pathname.includes("/master/agent") || isAgentVerificationRoute;
+  const partyCategory: "customer" | "vendor" | "agent" = isVendorMasterRoute
+    ? "vendor"
+    : isAgentMasterRoute
+      ? "agent"
+      : "customer";
+  const partyEntityLabel =
+    partyCategory === "vendor"
+      ? "Vendor"
+      : partyCategory === "agent"
+        ? "Agent"
+        : "Customer";
   const baseMasterPath = isVerificationCreateRoute
     ? "/master"
     : isVendorMasterRoute
       ? "/master/vendor"
-      : "/master/customer";
+      : isAgentMasterRoute
+        ? "/master/agent"
+        : "/master/customer";
 
   // Determine the mode based on route parameters
   const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
@@ -1981,14 +2008,10 @@ function CustomerCreate() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Fetch customer types data
-  // Customer Master / Customer for Approval: ?vendor=False
-  // Vendor Master create/edit: ?vendor=True
-  const customerTypeEndpoint = isVendorMasterRoute
-    ? `${URL.customerType}?vendor=True`
-    : `${URL.customerType}?vendor=False`;
+  // Fetch customer types data scoped by party category
+  const customerTypeEndpoint = `${URL.customerType}?category=${partyCategory}`;
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", isVendorMasterRoute ? "vendor" : "customer"],
+    queryKey: ["customerTypes", partyCategory],
     queryFn: async () => {
       try {
         const response = (await getAPICall(
@@ -2019,14 +2042,11 @@ function CustomerCreate() {
 
   // Memoized dropdown options for better performance
   const customerTypeOptions = useMemo(() => {
-    const opts = customerTypes.map((type) => ({
+    return customerTypes.map((type) => ({
       value: type.customer_type_code,
       label: type.customer_type_name,
     }));
-    if (!isVendorMasterRoute) return opts;
-    const allow = new Set(["supplier", "carrier", "transporter"]);
-    return opts.filter((o) => allow.has((o.label || "").toLowerCase()));
-  }, [customerTypes, isVendorMasterRoute]);
+  }, [customerTypes]);
 
   // Memoize country options
   const countryOptions = useMemo(() => {
@@ -2982,7 +3002,9 @@ function CustomerCreate() {
             apiMessage ??
             (isVendorVerificationRoute
               ? "Vendor verification submitted successfully."
-              : "Customer verification submitted successfully."),
+              : isAgentVerificationRoute
+                ? "Agent verification submitted successfully."
+                : "Customer verification submitted successfully."),
         });
         navigate("/master");
         return;
@@ -2998,7 +3020,9 @@ function CustomerCreate() {
           type: "success",
           message: isVendorMasterRoute
             ? "Vendor created successfully"
-            : "Customer created successfully",
+            : isAgentMasterRoute
+              ? "Agent created successfully"
+              : "Customer created successfully",
         });
         navigate(baseMasterPath, { state: { refreshData: true } });
       }
@@ -3122,7 +3146,9 @@ function CustomerCreate() {
           type: "success",
           message: isVendorMasterRoute
             ? "Vendor updated successfully"
-            : "Customer updated successfully",
+            : isAgentMasterRoute
+              ? "Agent updated successfully"
+              : "Customer updated successfully",
         });
         navigate(baseMasterPath, { state: { refreshData: true } });
       }
@@ -3344,14 +3370,22 @@ function CustomerCreate() {
             <Loader size="lg" color="#105476" />
             <Text c="dimmed" fw={500}>
               {isVerificationCreateRoute && isCreateMode
-                ? "Submitting Customer for Approval..."
+                ? isVendorVerificationRoute
+                  ? "Submitting Vendor for Approval..."
+                  : isAgentVerificationRoute
+                    ? "Submitting Agent for Approval..."
+                    : "Submitting Customer for Approval..."
                 : isCreateMode
                   ? isVendorMasterRoute
                     ? "Creating Vendor..."
-                    : "Creating Customer..."
+                    : isAgentMasterRoute
+                      ? "Creating Agent..."
+                      : "Creating Customer..."
                   : isVendorMasterRoute
                     ? "Updating Vendor..."
-                    : "Updating Customer..."}
+                    : isAgentMasterRoute
+                      ? "Updating Agent..."
+                      : "Updating Customer..."}
             </Text>
           </Stack>
         </Box>
@@ -3432,7 +3466,11 @@ function CustomerCreate() {
                   fontWeight: active === 0 ? 600 : 400,
                 }}
               >
-                {isVendorMasterRoute ? "Vendor" : "Customer"}
+                {isVendorMasterRoute
+                  ? "Vendor"
+                  : isAgentMasterRoute
+                    ? "Agent"
+                    : "Customer"}
               </Tabs.Tab>
 
               <Tabs.Tab
@@ -3499,25 +3537,16 @@ function CustomerCreate() {
                   <Card shadow="sm" padding="lg" radius="md">
                     <Grid gutter={"sm"}>
                       <Grid.Col span={4}>
-                        <TextInput
-                          label={
-                            isVendorMasterRoute
-                              ? "Vendor Name"
-                              : "Customer Name"
-                          }
+                        <FormTextInput
+                          label={`${partyEntityLabel} Name`}
                           withAsterisk
-                          placeholder={
-                            isVendorMasterRoute
-                              ? "Enter vendor name"
-                              : "Enter customer name"
-                          }
+                          placeholder={`Enter ${partyEntityLabel.toLowerCase()} name`}
                           disabled={!!isViewMode}
                           value={customerForm.values.customer_name}
                           onChange={(e) => {
-                            const formattedValue = toTitleCase(e.target.value);
                             customerForm.setFieldValue(
                               "customer_name",
-                              formattedValue,
+                              e.target.value,
                             );
                           }}
                           error={customerForm.errors.customer_name}
@@ -3525,18 +3554,10 @@ function CustomerCreate() {
                       </Grid.Col>
 
                       <Grid.Col span={4}>
-                        <MultiSelect
-                          label={
-                            isVendorMasterRoute
-                              ? "Vendor Type"
-                              : "Customer Type"
-                          }
+                        <FormMultiSelect
+                          label={`${partyEntityLabel} Type`}
                           withAsterisk
-                          placeholder={
-                            isVendorMasterRoute
-                              ? "Select vendor type"
-                              : "Select customer type"
-                          }
+                          placeholder={`Select ${partyEntityLabel.toLowerCase()} type`}
                           searchable
                           data={customerTypeOptions}
                           disabled={!!isViewMode}
@@ -3545,7 +3566,7 @@ function CustomerCreate() {
                       </Grid.Col>
 
                       <Grid.Col span={4}>
-                        <Select
+                        <Dropdown
                           label="Credit Type"
                           withAsterisk
                           placeholder="Select credit type"
@@ -3556,7 +3577,7 @@ function CustomerCreate() {
                       </Grid.Col>
 
                       <Grid.Col span={4}>
-                        <Select
+                        <Dropdown
                           label="Own Office"
                           data={[
                             { value: "true", label: "Yes" },
@@ -3600,9 +3621,10 @@ function CustomerCreate() {
                       </Grid.Col>
 
                       <Grid.Col span={4}>
-                        <TextInput
+                        <FormTextInput
                           label="Credit Amount"
                           placeholder="Enter credit amount"
+                          format="normal"
                           disabled={isViewMode}
                           value={customerForm.values.credit_amount}
                           onChange={(e) => {
@@ -3619,9 +3641,10 @@ function CustomerCreate() {
                       </Grid.Col>
 
                       <Grid.Col span={4}>
-                        <TextInput
+                        <FormTextInput
                           label="Credit Day"
                           placeholder="Enter credit days"
+                          format="normal"
                           disabled={isViewMode}
                           value={customerForm.values.credit_day}
                           onChange={(e) => {
@@ -3743,7 +3766,7 @@ function CustomerCreate() {
                       <Stack gap="md">
                         <Grid gutter="sm">
                           <Grid.Col span={4}>
-                            <Select
+                            <Dropdown
                               label="TDS Type"
                               placeholder="Select TDS type"
                               data={[
@@ -3802,7 +3825,7 @@ function CustomerCreate() {
                             </Group>
                             <Grid gutter="sm">
                               <Grid.Col span={4}>
-                                <Select
+                                <Dropdown
                                   label="Section Name"
                                   placeholder="Select section name"
                                   searchable
@@ -3866,9 +3889,10 @@ function CustomerCreate() {
                                 />
                               </Grid.Col>
                               <Grid.Col span={4}>
-                                <TextInput
+                                <FormTextInput
                                   label="Section Code"
                                   placeholder="Section code"
+                                  format="normal"
                                   disabled
                                   {...tdsDisplayForm.getInputProps(
                                     `tds_sections.${index}.section_code`,
@@ -3939,9 +3963,10 @@ function CustomerCreate() {
                                 </Box>
                               </Grid.Col>
                               <Grid.Col span={4}>
-                                <TextInput
+                                <FormTextInput
                                   label="Exemption Certificate No"
                                   placeholder="Certificate number"
+                                  format="normal"
                                   disabled={
                                     isViewMode ||
                                     !tdsDisplayForm.values.tds_sections[index]
@@ -3970,9 +3995,10 @@ function CustomerCreate() {
                                 />
                               </Grid.Col>
                               <Grid.Col span={4}>
-                                <TextInput
+                                <FormTextInput
                                   label="TDS %"
                                   placeholder="TDS %"
+                                  format="normal"
                                   disabled={
                                     isViewMode ||
                                     !tdsDisplayForm.values.tds_sections[index]
@@ -4072,9 +4098,10 @@ function CustomerCreate() {
                                 />
                               </Grid.Col>
                               <Grid.Col span={4}>
-                                <TextInput
+                                <FormTextInput
                                   label="TDS Lower Limit"
                                   placeholder="TDS lower limit"
+                                  format="normal"
                                   disabled={
                                     isViewMode ||
                                     !tdsDisplayForm.values.tds_sections[index]
@@ -4203,7 +4230,7 @@ function CustomerCreate() {
                                 </Group>
                                 <Grid gutter="sm">
                                   <Grid.Col span={4}>
-                                    <Select
+                                    <Dropdown
                                       label="Currency"
                                       placeholder="Select currency"
                                       searchable
@@ -4216,9 +4243,10 @@ function CustomerCreate() {
                                     />
                                   </Grid.Col>
                                   <Grid.Col span={4}>
-                                    <TextInput
+                                    <FormTextInput
                                       label="Account No"
                                       placeholder="Enter account number"
+                                      format="normal"
                                       withAsterisk={rowTouched}
                                       disabled={isViewMode}
                                       {...bankDetailsForm.getInputProps(
@@ -4228,7 +4256,7 @@ function CustomerCreate() {
                                     />
                                   </Grid.Col>
                                   <Grid.Col span={4}>
-                                    <TextInput
+                                    <FormTextInput
                                       label="Account Name"
                                       placeholder="Enter account name"
                                       withAsterisk={rowTouched}
@@ -4240,7 +4268,7 @@ function CustomerCreate() {
                                     />
                                   </Grid.Col>
                                   <Grid.Col span={4}>
-                                    <TextInput
+                                    <FormTextInput
                                       label="Bank Name"
                                       placeholder="Enter bank name"
                                       withAsterisk={rowTouched}
@@ -4252,9 +4280,10 @@ function CustomerCreate() {
                                     />
                                   </Grid.Col>
                                   <Grid.Col span={4}>
-                                    <TextInput
+                                    <FormTextInput
                                       label="IBAN No"
                                       placeholder="Enter IBAN number"
+                                      format="capital"
                                       disabled={isViewMode}
                                       {...bankDetailsForm.getInputProps(
                                         `bank_details.${index}.iban_no`,
@@ -4263,9 +4292,10 @@ function CustomerCreate() {
                                     />
                                   </Grid.Col>
                                   <Grid.Col span={4}>
-                                    <TextInput
+                                    <FormTextInput
                                       label="SWIFT No"
                                       placeholder="Enter SWIFT code"
+                                      format="capital"
                                       disabled={isViewMode}
                                       {...bankDetailsForm.getInputProps(
                                         `bank_details.${index}.swift_no`,
@@ -4274,9 +4304,10 @@ function CustomerCreate() {
                                     />
                                   </Grid.Col>
                                   <Grid.Col span={4}>
-                                    <TextInput
+                                    <FormTextInput
                                       label="IFSC Code"
                                       placeholder="Enter IFSC code"
+                                      format="capital"
                                       withAsterisk={rowTouched}
                                       disabled={isViewMode}
                                       {...bankDetailsForm.getInputProps(

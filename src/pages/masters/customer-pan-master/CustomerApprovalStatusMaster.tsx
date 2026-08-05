@@ -9,29 +9,33 @@ import {
   Card,
   Center,
   Divider,
+  Grid,
   Group,
   Loader,
   Modal,
   ScrollArea,
-  Select,
   Stack,
   Text,
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
-  IconChevronLeft,
-  IconChevronRight,
   IconEye,
   IconFilter,
-  IconFilterOff,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import {
   MantineReactTable,
   MRT_ColumnDef,
   useMantineReactTable,
 } from "mantine-react-table";
+import { useDebouncedValue } from "@mantine/hooks";
 import { useQuery } from "@tanstack/react-query";
+import { Dropdown, FormTextInput } from "../../../components";
+import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import useDateFormat from "../../../hooks/useDateFormat";
+import { formatDateTimeForUi } from "../../../utils/dateFormat";
 import {
   fetchCustomerPanPendingList,
   type CustomerPanApprovalFilters,
@@ -79,16 +83,22 @@ export default function CustomerApprovalStatusMaster({
   const user = useAuthStore((state) => state.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
   const assignedToEmail = useMemo(() => resolveUserEmail(user), [user]);
-  const isVendor = partyType === "vendor";
-  const entityLabel = isVendor ? "Vendor" : "Customer";
-  const entityLabelLower = isVendor ? "vendor" : "customer";
+  const entityLabel =
+    partyType === "vendor"
+      ? "Vendor"
+      : partyType === "agent"
+        ? "Agent"
+        : "Customer";
+  const entityLabelLower = partyType;
+  const dateFormat = useDateFormat();
 
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
-  const [paginationTotal, setPaginationTotal] = useState(1);
   const [viewRow, setViewRow] = useState<CustomerPanApprovalRow | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
   const [draftFilters, setDraftFilters] =
     useState<FilterFormState>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
@@ -97,11 +107,14 @@ export default function CustomerApprovalStatusMaster({
   const apiFilters = useMemo<CustomerPanApprovalFilters>(
     () => ({
       assigned_to: assignedToEmail || undefined,
-      customer_name: appliedFilters.customer_name.trim() || undefined,
+      customer_name:
+        appliedFilters.customer_name.trim() ||
+        debouncedSearch.trim() ||
+        undefined,
       status: appliedFilters.status.trim() || undefined,
       customer_type: partyType,
     }),
-    [assignedToEmail, appliedFilters, partyType],
+    [assignedToEmail, appliedFilters, partyType, debouncedSearch],
   );
 
   const {
@@ -130,9 +143,12 @@ export default function CustomerApprovalStatusMaster({
   useEffect(() => {
     if (listResult) {
       setTotalCount(listResult.total);
-      setPaginationTotal(listResult.paginationTotal);
     }
   }, [listResult]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     if (!isIndiaUser) {
@@ -159,7 +175,17 @@ export default function CustomerApprovalStatusMaster({
   const clearFilters = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
+    setSearch("");
     setPageIndex(0);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPageIndex(0);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPageIndex(newPage - 1);
   };
 
   const columns = useMemo<MRT_ColumnDef<TableRow>[]>(
@@ -193,7 +219,9 @@ export default function CustomerApprovalStatusMaster({
         header: "Submitted On",
         size: 160,
         Cell: ({ cell }) => (
-          <Text size="sm">{cell.getValue<string>() || "—"}</Text>
+          <Text size="sm">
+            {formatDateTimeForUi(cell.getValue<string>(), dateFormat)}
+          </Text>
         ),
       },
       {
@@ -233,7 +261,7 @@ export default function CustomerApprovalStatusMaster({
         ),
       },
     ],
-    [entityLabel, entityLabelLower],
+    [entityLabel, entityLabelLower, dateFormat],
   );
 
   const table = useMantineReactTable<TableRow>({
@@ -273,84 +301,217 @@ export default function CustomerApprovalStatusMaster({
 
   return (
     <>
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Group justify="space-between" align="center" mb="md" wrap="nowrap">
-          <Text size="md" fw={600} c="#105476">
-            {entityLabel} Approval Status
-          </Text>
+      <Card
+        shadow="sm"
+        pt="md"
+        pb="sm"
+        px="md"
+        radius="md"
+        withBorder
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          overflow: "hidden",
+          flex: 1,
+        }}
+      >
+        <Box>
+          <Group justify="space-between" align="center" pb="sm">
+            <Text
+              size="md"
+              fw={600}
+              c="#1E293B"
+              style={{ fontFamily: "Inter", fontSize: "16px" }}
+            >
+              {entityLabel} Approval Status
+            </Text>
 
-          <Button
-            variant="outline"
-            leftSection={<IconFilter size={16} />}
-            size="xs"
-            color="#105476"
-            onClick={() => setShowFilters((prev) => !prev)}
-          >
-            Filters
-          </Button>
-        </Group>
+            <Group gap="xs" wrap="nowrap">
+              <TextInput
+                placeholder="Search..."
+                leftSection={<IconSearch size={16} />}
+                rightSection={
+                  search ? (
+                    <ActionIcon
+                      variant="transparent"
+                      size="sm"
+                      onClick={() => setSearch("")}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <IconX size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
+                w={248}
+                size="sm"
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                styles={{
+                  input: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontstyle: "regular",
+                    color: "#334155",
+                    minWidth: "24px",
+                    minHeight: "24px",
+                    width: "248px",
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    "&:focus": {
+                      border: "1px solid #105476",
+                    },
+                  },
+                }}
+              />
+              <ActionIcon
+                variant={showFilters ? "filled" : "outline"}
+                size={36}
+                color={showFilters ? "#E0F5FF" : "gray"}
+                onClick={() => setShowFilters(!showFilters)}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
+                    border: showFilters
+                      ? "1px solid #105476"
+                      : "1px solid #737780",
+                    color: showFilters ? "#105476" : "#737780",
+                    "&:active": {
+                      border: "1px solid #105476",
+                      color: "#FFFFFF",
+                    },
+                  },
+                }}
+              >
+                <IconFilter size={18} />
+              </ActionIcon>
+            </Group>
+          </Group>
+        </Box>
 
         {showFilters && (
-          <Card
-            shadow="xs"
-            padding="md"
-            radius="md"
-            withBorder
-            mb="md"
-            bg="#f8f9fa"
+          <Box
+            tt="capitalize"
+            mb="sm"
+            p="sm"
+            style={{
+              borderRadius: "8px",
+              border: "1px solid #E0E0E0",
+              flexShrink: 0,
+              height: "fit-content",
+            }}
           >
-            <Group align="flex-end" gap="md" wrap="wrap">
-              <TextInput
-                label={`${entityLabel} Name`}
-                placeholder="Search by name"
-                value={draftFilters.customer_name}
-                onChange={(e) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    customer_name: e.target.value,
-                  }))
-                }
-                style={{ flex: 1, minWidth: 200 }}
+            <Group
+              justify="space-between"
+              align="center"
+              mb="sm"
+              px="md"
+              style={{
+                backgroundColor: "#F8FAFC",
+                padding: "4px 8px",
+              }}
+            >
+              <Text
                 size="sm"
-              />
-              <Select
-                label="Status"
-                data={STATUS_FILTER_OPTIONS}
-                value={draftFilters.status}
-                onChange={(value) =>
-                  setDraftFilters((prev) => ({
-                    ...prev,
-                    status: value ?? "",
-                  }))
-                }
-                style={{ minWidth: 160 }}
-                size="sm"
-              />
-            </Group>
-            <Group justify="flex-end" mt="md" gap="xs">
-              <Button
+                fw={600}
+                c="#1E293B"
+                style={{ fontFamily: "Inter", fontSize: "14px" }}
+              >
+                Filter
+              </Text>
+              <ActionIcon
                 variant="subtle"
-                size="xs"
                 color="gray"
-                leftSection={<IconFilterOff size={14} />}
-                onClick={clearFilters}
+                onClick={() => setShowFilters(false)}
+                aria-label="Close filters"
+                size="sm"
               >
-                Clear
+                <IconX size={18} />
+              </ActionIcon>
+            </Group>
+
+            <Grid gutter="sm" px="md" pt="xs" pb="sm">
+              <Grid.Col span={2.4}>
+                <FormTextInput
+                  format="normal"
+                  label={`${entityLabel} Name`}
+                  placeholder="Search by name"
+                  size="xs"
+                  value={draftFilters.customer_name}
+                  onChange={(e) =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      customer_name: e.target.value,
+                    }))
+                  }
+                />
+              </Grid.Col>
+              <Grid.Col span={2.4}>
+                <Dropdown
+                  label="Status"
+                  data={STATUS_FILTER_OPTIONS}
+                  value={draftFilters.status}
+                  onChange={(value) =>
+                    setDraftFilters((prev) => ({
+                      ...prev,
+                      status: value ?? "",
+                    }))
+                  }
+                  size="xs"
+                />
+              </Grid.Col>
+            </Grid>
+
+            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={clearFilters}
+                leftSection={<IconX size={16} />}
+                styles={{
+                  root: {
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    border: "1px solid #D0D1D4",
+                    color: "#1E293B",
+                  },
+                }}
+              >
+                Clear Filters
               </Button>
               <Button
-                size="xs"
-                color="#105476"
-                leftSection={<IconFilter size={14} />}
+                size="sm"
                 onClick={applyFilters}
+                loading={tableLoading}
+                disabled={tableLoading}
+                leftSection={<IconFilter size={16} />}
+                styles={{
+                  root: {
+                    backgroundColor: "#105476",
+                    borderRadius: "4px",
+                    fontSize: "14px",
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                    height: "36px",
+                    "&:hover": {
+                      backgroundColor: "#0d4261",
+                    },
+                  },
+                }}
               >
-                Apply
+                Apply Filters
               </Button>
             </Group>
-          </Card>
+          </Box>
         )}
 
         {tableLoading ? (
-          <Center py="xl">
+          <Center py="xl" style={{ flex: 1 }}>
             <Stack align="center" gap="md">
               <Loader size="lg" color="#105476" />
               <Text c="dimmed">
@@ -359,73 +520,18 @@ export default function CustomerApprovalStatusMaster({
             </Stack>
           </Center>
         ) : (
-          <MantineReactTable table={table} />
-        )}
-
-        <Group
-          w="100%"
-          justify="space-between"
-          align="center"
-          px="md"
-          py="xs"
-          style={{ borderTop: "1px solid #e9ecef" }}
-          wrap="nowrap"
-          mt="xs"
-        >
-          <Group gap="sm" align="center" wrap="nowrap" mt={10}>
-            <Text size="sm" c="dimmed">
-              Rows per page
-            </Text>
-            <Select
-              size="xs"
-              data={["10", "25", "50"]}
-              value={String(pageSize)}
-              onChange={(val) => {
-                if (!val) return;
-                setPageSize(Number(val));
-                setPageIndex(0);
-              }}
-              w={110}
-              styles={{ input: { fontSize: 12, height: 30 } }}
+          <>
+            <MantineReactTable table={table} />
+            <PaginationBar
+              pageSize={pageSize}
+              currentPage={pageIndex + 1}
+              totalRecords={totalCount}
+              onPageSizeChange={handlePageSizeChange}
+              onPageChange={handlePageChange}
+              pageSizeOptions={["10", "25", "50"]}
             />
-            <Text size="sm" c="dimmed">
-              {(() => {
-                if (totalCount === 0) return "0–0 of 0";
-                const start = pageIndex * pageSize + 1;
-                const end = Math.min((pageIndex + 1) * pageSize, totalCount);
-                return `${start}–${end} of ${totalCount}`;
-              })()}
-            </Text>
-          </Group>
-
-          <Group gap="xs" align="center" wrap="nowrap" mt={10}>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() => setPageIndex(Math.max(0, pageIndex - 1))}
-              disabled={pageIndex === 0}
-            >
-              <IconChevronLeft size={16} />
-            </ActionIcon>
-            <Text size="sm" ta="center" style={{ width: 26 }}>
-              {pageIndex + 1}
-            </Text>
-            <Text size="sm" c="dimmed">
-              of {Math.max(1, paginationTotal)}
-            </Text>
-            <ActionIcon
-              variant="default"
-              size="sm"
-              onClick={() => {
-                const totalPages = Math.max(1, paginationTotal);
-                setPageIndex(Math.min(totalPages - 1, pageIndex + 1));
-              }}
-              disabled={pageIndex >= paginationTotal - 1}
-            >
-              <IconChevronRight size={16} />
-            </ActionIcon>
-          </Group>
-        </Group>
+          </>
+        )}
       </Card>
 
       <Modal
