@@ -651,10 +651,7 @@ export const generateBillOfLadingPDF = (
       housingData?.notify1_customer_address ||
       "";
 
-    // To Obtain Delivery Contact
-    // Vietnam: house Destination Agent only (leave empty when unset — never consignee).
-    // Other branches: MBL agent, or consignee when master is direct.
-    const isDirectMaster = Boolean(mblDetails?.is_direct);
+    // To Obtain Delivery Contact — house Destination Agent (US uses separate template)
     const houseDestinationAgentName =
       housingData?.agent_name ||
       housingData?.destination_agent_name ||
@@ -667,22 +664,10 @@ export const generateBillOfLadingPDF = (
       housingData?.agent_email ||
       housingData?.destination_agent_email ||
       "";
-    const deliveryContactCompany = isVietnamBranch
-      ? houseDestinationAgentName
-      : isDirectMaster
-        ? mblDetails?.consignee_name || ""
-        : mblDetails?.agent_name || "";
-    const deliveryContactAddress = isVietnamBranch
-      ? houseDestinationAgentAddress
-      : isDirectMaster
-        ? mblDetails?.consignee_address || ""
-        : mblDetails?.agent_address || "";
+    const deliveryContactCompany = houseDestinationAgentName;
+    const deliveryContactAddress = houseDestinationAgentAddress;
     const deliveryContactTel = "";
-    const deliveryContactEmail = isVietnamBranch
-      ? houseDestinationAgentEmail
-      : isDirectMaster
-        ? mblDetails?.consignee_email || ""
-        : mblDetails?.agent_email || "";
+    const deliveryContactEmail = houseDestinationAgentEmail;
 
     // Shipment Route and Mode
     const houseOrigin = housingData?.origin_name || "";
