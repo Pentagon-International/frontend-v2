@@ -88,11 +88,24 @@ import {
   formatLocalDateTime,
   parseLocalDateTime,
 } from "../../../utils/localDateTime";
+import { ServiceJobCargoDetailsSection } from "./ServiceJobCargoDetailsSection";
+import {
+  EMPTY_SERVICE_JOB_CARGO,
+  EMPTY_SERVICE_JOB_CONTAINER,
+  mapCargoDetailsForPayload,
+  mapCargoDetailsFromApi,
+  mapContainersForPayload,
+  mapContainersFromApi,
+  resolveServiceJobCargoMode,
+  type ServiceJobCargoDetail,
+  type ServiceJobContainerDetail,
+} from "./serviceJobCargoShared";
 
 const JOB_DETAILS_TAB = 0;
 const PARTY_DETAILS_TAB = 1;
-const CHARGES_TAB = 2;
-const ACCOUNTS_TAB = 3;
+const CARGO_DETAILS_TAB = 2;
+const CHARGES_TAB = 3;
+const ACCOUNTS_TAB = 4;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,6 +116,7 @@ type ServiceMasterRow = {
   service_code?: string;
   service_name: string;
   transport_mode: string;
+  full_groupage?: string;
   import_export?: string;
   status?: string;
 };
@@ -1338,6 +1352,22 @@ export default function ServiceJobCreate() {
     },
   });
 
+  const [containers, setContainers] = useState<ServiceJobContainerDetail[]>([
+    { ...EMPTY_SERVICE_JOB_CONTAINER },
+  ]);
+  const [cargoDetails, setCargoDetails] = useState<ServiceJobCargoDetail[]>([
+    { ...EMPTY_SERVICE_JOB_CARGO },
+  ]);
+  const [commodityDescription, setCommodityDescription] = useState("");
+  const [marksNo, setMarksNo] = useState("");
+
+  const resetCargoState = useCallback(() => {
+    setContainers([{ ...EMPTY_SERVICE_JOB_CONTAINER }]);
+    setCargoDetails([{ ...EMPTY_SERVICE_JOB_CARGO }]);
+    setCommodityDescription("");
+    setMarksNo("");
+  }, []);
+
   const { data: serviceMasterList = [] } = useQuery({
     queryKey: ["serviceMasterList"],
     queryFn: async () => {
@@ -1372,6 +1402,14 @@ export default function ServiceJobCreate() {
   );
 
   const transportMode = selectedService?.transport_mode ?? "";
+  const cargoMode = useMemo(
+    () =>
+      resolveServiceJobCargoMode(
+        selectedService?.transport_mode,
+        selectedService?.full_groupage,
+      ),
+    [selectedService?.transport_mode, selectedService?.full_groupage],
+  );
   const defaultPpCc = getDefaultPpCcFromService(selectedService?.import_export);
   const isSeaJob =
     Boolean(transportMode) && !isAirTransportMode(transportMode);
@@ -1513,6 +1551,16 @@ export default function ServiceJobCreate() {
           chargesForm.setValues({ charges: chargeRows });
         }
       }
+
+      const mappedContainers = mapContainersFromApi(job.container_details);
+      setContainers(mappedContainers);
+      setCargoDetails(
+        mapCargoDetailsFromApi(house?.cargo_details, mappedContainers),
+      );
+      setCommodityDescription(
+        String(house?.commodity_description ?? job.commodity_description ?? ""),
+      );
+      setMarksNo(String(house?.marks_no ?? job.marks_no ?? ""));
     },
     [serviceMasterList, chargesForm, form, partyDetailsForm],
   );
@@ -1606,6 +1654,7 @@ export default function ServiceJobCreate() {
     const masterAwbField = getMasterAwbField(mode);
     const houseAwbField = getHouseAwbField(mode);
     const chargesKey = getHousingChargesPayloadKey(mode);
+    const payloadMode = isEditMode ? "edit" : "create";
     const housePartyBlock = {
       shipper_name: partyDetailsForm.values.shipper_name || "",
       shipper_email: partyDetailsForm.values.shipper_email || "",
@@ -1619,6 +1668,13 @@ export default function ServiceJobCreate() {
         partyDetailsForm.values.carrier_agent_address || "",
     };
 
+    const cargoDetailsPayload = mapCargoDetailsForPayload(
+      cargoDetails,
+      containers,
+      payloadMode,
+      cargoMode,
+    );
+
     const housingDetail: Record<string, unknown> = {
       ...(houseMeta.id != null && { id: houseMeta.id }),
       ...(houseMeta.shipment_id && { shipment_id: houseMeta.shipment_id }),
@@ -1629,9 +1685,12 @@ export default function ServiceJobCreate() {
       destination_code: form.values.destination_code || null,
       ...housePartyBlock,
       [houseAwbField]: form.values.awb_number || null,
+      commodity_description: commodityDescription || null,
+      marks_no: marksNo || null,
+      cargo_details: cargoDetailsPayload,
       [chargesKey]: mapChargesForPayload(
         chargesForm.values.charges,
-        isEditMode ? "edit" : "create",
+        payloadMode,
       ),
     };
 
@@ -1653,6 +1712,11 @@ export default function ServiceJobCreate() {
       consignee_email: "",
       consignee_address: "",
       [masterAwbField]: form.values.awb_number || null,
+      container_details: mapContainersForPayload(
+        containers,
+        payloadMode,
+        cargoMode,
+      ),
       housing_details: [housingDetail],
     };
   };
@@ -2193,6 +2257,21 @@ export default function ServiceJobCreate() {
           >
             Party Details
           </Tabs.Tab>
+          <Tabs.Tab
+            value={String(CARGO_DETAILS_TAB)}
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom:
+                activeTab === CARGO_DETAILS_TAB ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: activeTab === CARGO_DETAILS_TAB ? 600 : 400,
+            }}
+          >
+            Cargo Details
+          </Tabs.Tab>
           <Tabs.Tab 
             value={String(CHARGES_TAB)}
             style={{
@@ -2241,6 +2320,7 @@ export default function ServiceJobCreate() {
                     form.setFieldValue("origin_name", "");
                     form.setFieldValue("destination_code", "");
                     form.setFieldValue("destination_name", "");
+                    resetCargoState();
                     const svc =
                       activeServices.find((s) => String(s.id) === (value || "")) ??
                       null;
@@ -2445,6 +2525,20 @@ export default function ServiceJobCreate() {
               setCarrierAgentAddressCustom={setCarrierAgentAddressCustom}
             />
           </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel value={String(CARGO_DETAILS_TAB)}>
+          <ServiceJobCargoDetailsSection
+            cargoMode={cargoMode}
+            containers={containers}
+            onContainersChange={setContainers}
+            cargoDetails={cargoDetails}
+            onCargoDetailsChange={setCargoDetails}
+            commodityDescription={commodityDescription}
+            onCommodityDescriptionChange={setCommodityDescription}
+            marksNo={marksNo}
+            onMarksNoChange={setMarksNo}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value={String(CHARGES_TAB)}>

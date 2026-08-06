@@ -2008,10 +2008,12 @@ function CustomerCreate() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Fetch customer types data scoped by party category
-  const customerTypeEndpoint = `${URL.customerType}?category=${partyCategory}`;
+  // Create: scope by party category. Edit/view: fetch all types (no category in URL).
+  const customerTypeEndpoint = isCreateMode
+    ? `${URL.customerType}?category=${partyCategory}`
+    : URL.customerType;
   const { data: customerTypes = [] } = useQuery({
-    queryKey: ["customerTypes", partyCategory],
+    queryKey: ["customerTypes", isCreateMode ? partyCategory : "all"],
     queryFn: async () => {
       try {
         const response = (await getAPICall(
