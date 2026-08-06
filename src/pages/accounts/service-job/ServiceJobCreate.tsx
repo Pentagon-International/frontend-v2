@@ -1512,35 +1512,84 @@ export default function ServiceJobCreate() {
 
       partyDetailsForm.setValues({
         shipper_id: String(
-          house?.shipper_id ?? house?.shipper_code ?? "",
+          house?.shipper_id ??
+            house?.shipper_code ??
+            job.shipper_id ??
+            job.shipper_code ??
+            "",
         ),
-        shipper_name: String(house?.shipper_name ?? ""),
-        shipper_email: String(house?.shipper_email ?? ""),
-        shipper_address_id: String(house?.shipper_address_id ?? ""),
-        shipper_address: String(house?.shipper_address ?? ""),
+        shipper_name: String(
+          house?.shipper_name ?? job.shipper_name ?? "",
+        ),
+        shipper_email: String(
+          house?.shipper_email ?? job.shipper_email ?? "",
+        ),
+        shipper_address_id: String(
+          house?.shipper_address_id ?? job.shipper_address_id ?? "",
+        ),
+        shipper_address: String(
+          house?.shipper_address ?? job.shipper_address ?? "",
+        ),
         consignee_id: String(
-          house?.consignee_id ?? house?.consignee_code ?? "",
+          house?.consignee_id ??
+            house?.consignee_code ??
+            job.consignee_id ??
+            job.consignee_code ??
+            "",
         ),
-        consignee_name: String(house?.consignee_name ?? ""),
-        consignee_email: String(house?.consignee_email ?? ""),
-        consignee_address_id: String(house?.consignee_address_id ?? ""),
-        consignee_address: String(house?.consignee_address ?? ""),
+        consignee_name: String(
+          house?.consignee_name ?? job.consignee_name ?? "",
+        ),
+        consignee_email: String(
+          house?.consignee_email ?? job.consignee_email ?? "",
+        ),
+        consignee_address_id: String(
+          house?.consignee_address_id ?? job.consignee_address_id ?? "",
+        ),
+        consignee_address: String(
+          house?.consignee_address ?? job.consignee_address ?? "",
+        ),
+        // Carrier agent is stored on job header (Air/Export pattern); housing may omit it
         carrier_agent_id: String(
-          house?.carrier_agent_id ?? house?.carrier_agent_code ?? "",
+          house?.carrier_agent_id ??
+            house?.carrier_agent_code ??
+            job.carrier_agent_id ??
+            job.carrier_agent_code ??
+            "",
         ),
-        carrier_agent_name: String(house?.carrier_agent_name ?? ""),
-        carrier_agent_email: String(house?.carrier_agent_email ?? ""),
+        carrier_agent_name: String(
+          house?.carrier_agent_name ?? job.carrier_agent_name ?? "",
+        ),
+        carrier_agent_email: String(
+          house?.carrier_agent_email ?? job.carrier_agent_email ?? "",
+        ),
         carrier_agent_address_id: String(
-          house?.carrier_agent_address_id ?? "",
+          house?.carrier_agent_address_id ??
+            job.carrier_agent_address_id ??
+            "",
         ),
-        carrier_agent_address: String(house?.carrier_agent_address ?? ""),
+        carrier_agent_address: String(
+          house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
+        ),
       });
-      setShipperAddressCustom(Boolean(String(house?.shipper_address ?? "").trim()));
+      setShipperAddressCustom(
+        Boolean(
+          String(house?.shipper_address ?? job.shipper_address ?? "").trim(),
+        ),
+      );
       setConsigneeAddressCustom(
-        Boolean(String(house?.consignee_address ?? "").trim()),
+        Boolean(
+          String(
+            house?.consignee_address ?? job.consignee_address ?? "",
+          ).trim(),
+        ),
       );
       setCarrierAgentAddressCustom(
-        Boolean(String(house?.carrier_agent_address ?? "").trim()),
+        Boolean(
+          String(
+            house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
+          ).trim(),
+        ),
       );
 
       if (house) {
@@ -1704,13 +1753,8 @@ export default function ServiceJobCreate() {
       destination_code: form.values.destination_code || null,
       etd: formatJobDateForPayload(form.values.etd, mode),
       eta: formatJobDateForPayload(form.values.eta, mode),
-      // Master shipper / consignee intentionally empty for service jobs
-      shipper_name: "",
-      shipper_email: "",
-      shipper_address: "",
-      consignee_name: "",
-      consignee_email: "",
-      consignee_address: "",
+      // Header-level parties (same as housing) — required for job master sync
+      ...housePartyBlock,
       [masterAwbField]: form.values.awb_number || null,
       container_details: mapContainersForPayload(
         containers,

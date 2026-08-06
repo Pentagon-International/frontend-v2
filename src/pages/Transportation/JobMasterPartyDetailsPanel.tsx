@@ -316,6 +316,7 @@ export function JobMasterPartyDetailsPanel({
         </Grid.Col>
         <Grid.Col span={4}>
           <SearchableSelect
+            key={`${idPrefix}-carrier-agent-${partyDetailsForm.values.carrier_agent_id}:${partyDetailsForm.values.carrier_agent_name ?? "_"}`}
             size="sm"
             label="Carrier Agent Name"
             dropdownZIndex={10}
