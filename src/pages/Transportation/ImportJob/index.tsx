@@ -91,6 +91,7 @@ type VisibleColumnsState = {
   agent: boolean;
   volume: boolean;
   route: boolean;
+  job_date: boolean;
   etd: boolean;
   eta: boolean;
   status: boolean;
@@ -105,6 +106,7 @@ const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   agent: "Agent",
   volume: "Volume",
   route: "Route",
+  job_date: "Job Date",
   etd: "ETD",
   eta: "ETA",
   status: "Status",
@@ -204,6 +206,11 @@ type OceanImportJobFilters = {
   destination_code: string;
   destination_name: string;
   service: string;
+  /** Exact job_date (column header filter only). */
+  job_date: string;
+  /** Range job_date (filter panel); open-ended from/to. Mutually exclusive with job_date. */
+  job_date_from: string;
+  job_date_to: string;
   etd: string;
   eta: string;
   status: string;
@@ -235,6 +242,9 @@ function ImportJobMaster() {
     destination_code: "",
     destination_name: "",
     service: "",
+    job_date: "",
+    job_date_from: dayjs().startOf("month").format("YYYY-MM-DD"),
+    job_date_to: dayjs().format("YYYY-MM-DD"),
     etd: "",
     eta: "",
     status: "",
@@ -277,6 +287,7 @@ function ImportJobMaster() {
     agent: true,
     volume: true,
     route: true,
+    job_date: true,
     etd: true,
     eta: true,
     status: true,
@@ -292,7 +303,11 @@ function ImportJobMaster() {
   const commitHeaderFilters = useCallback(
     (partial: Partial<OceanImportJobFilters>) => {
       setDraftFilters((prev) => {
-        const next = { ...prev, ...partial };
+        let next = { ...prev, ...partial };
+        // Exact column job_date clears panel range (mutually exclusive).
+        if ("job_date" in partial) {
+          next = { ...next, job_date_from: "", job_date_to: "" };
+        }
         setAppliedFilters(next);
         setStoreFilters(LIST_KEY, next);
         return next;
@@ -358,9 +373,17 @@ function ImportJobMaster() {
   };
 
   const applyFilters = () => {
-    setAppliedFilters(draftFilters);
+    const from = draftFilters.job_date_from?.trim();
+    const to = draftFilters.job_date_to?.trim();
+    // Range from filter panel clears exact job_date (mutually exclusive).
+    const next =
+      from || to
+        ? { ...draftFilters, job_date: "" }
+        : draftFilters;
+    setDraftFilters(next);
+    setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreFilters(LIST_KEY, next);
     setStoreSearch(LIST_KEY, search);
     setShowFilters(false);
   };
@@ -375,7 +398,7 @@ function ImportJobMaster() {
   const buildFiltersPayload = (
     filters: OceanImportJobFilters,
     searchValue: string
-  ): Record<string, string | string[]> => {
+  ): Record<string, string | string[] | { from?: string; to?: string }> => {
     const cleaned: Record<string, string> = {};
 
     const entries: [keyof OceanImportJobFilters, string][] = [
@@ -405,11 +428,23 @@ function ImportJobMaster() {
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
     const serviceVal = filters.service?.trim();
-    const base: Record<string, string | string[]> = {
+    const base: Record<string, string | string[] | { from?: string; to?: string }> = {
       service: serviceVal ? serviceVal : ["FCL", "LCL"],
       service_type: "Import",
       ...cleaned,
     };
+
+    const exactJobDate = filters.job_date?.trim();
+    const jobDateFrom = filters.job_date_from?.trim();
+    const jobDateTo = filters.job_date_to?.trim();
+    if (exactJobDate) {
+      base.job_date = exactJobDate;
+    } else if (jobDateFrom || jobDateTo) {
+      const range: { from?: string; to?: string } = {};
+      if (jobDateFrom) range.from = jobDateFrom;
+      if (jobDateTo) range.to = jobDateTo;
+      base.job_date = range;
+    }
 
     return base;
   };
@@ -893,6 +928,56 @@ function ImportJobMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
+                      label="Job Date From"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={
+                        draftFilters.job_date_from
+                          ? dayjs(draftFilters.job_date_from).toDate()
+                          : null
+                      }
+                      onChange={(date) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          job_date_from: date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "",
+                          job_date: "",
+                        }))
+                      }
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Job Date To"
+                      placeholder="YYYY-MM-DD"
+                      size="xs"
+                      value={
+                        draftFilters.job_date_to
+                          ? dayjs(draftFilters.job_date_to).toDate()
+                          : null
+                      }
+                      onChange={(date) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          job_date_to: date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "",
+                          job_date: "",
+                        }))
+                      }
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
                       label="ETD"
                       placeholder="YYYY-MM-DD"
                       size="xs"
@@ -1158,6 +1243,42 @@ function ImportJobMaster() {
                                   />
                                 </Box>
                               </Group>
+                            )}
+                          />
+                        </th>
+                      )}
+                      {visibleColumns.job_date && (
+                        <th style={mergeTh(130, 130)}>
+                          <ERPListColumnHeaderFilter
+                            label="Job Date"
+                            value={appliedFilters.job_date}
+                            displayValue={formatFilterDateLabel(appliedFilters.job_date)}
+                            theme={theme}
+                            isEditing={editingHeaderId === "job_date"}
+                            onStartEdit={() => openHeaderEditor("job_date")}
+                            onStopEdit={() => collapseHeaderEditor("job_date")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <SingleDateInput
+                                placeholder="YYYY-MM-DD"
+                                size="xs"
+                                value={
+                                  appliedFilters.job_date
+                                    ? dayjs(appliedFilters.job_date).toDate()
+                                    : null
+                                }
+                                onChange={(date) => {
+                                  commitHeaderFilters({
+                                    job_date: date
+                                      ? dayjs(date).format("YYYY-MM-DD")
+                                      : "",
+                                  });
+                                  if (date) onClose();
+                                }}
+                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                                styles={filterFieldStyles}
+                                {...(autoFocus ? { autoFocus: true } : {})}
+                              />
                             )}
                           />
                         </th>
@@ -1452,6 +1573,9 @@ function ImportJobMaster() {
                                 </td>
                               );
                             })()}
+                            {visibleColumns.job_date && (
+                              <td style={tdDate}>{fmtDate(row.job_date)}</td>
+                            )}
                             {visibleColumns.etd && (
                               <td style={tdDate}>{fmtDate(row.etd)}</td>
                             )}
