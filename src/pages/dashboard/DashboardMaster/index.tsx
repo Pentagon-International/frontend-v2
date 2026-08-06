@@ -90,9 +90,9 @@ import AccountsDashboard from "./AccountsDashboard";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { useLayoutStore } from "../../../store/useLayoutStore";
 import {
+  formatOutstandingAmountCompact,
   getDefaultBranchCountryCode,
   getDefaultBranchCurrencyCode,
-  getOutstandingAmountCurrencySymbol,
   resolveOutstandingDisplayCurrency,
 } from "../../../utils/userNumberFormat";
 
@@ -7615,10 +7615,6 @@ const Dashboard = () => {
       branchCurrencyCode,
       branchCountryCode,
     );
-    const overdueCurrencySymbol = getOutstandingAmountCurrencySymbol(
-      overdueDisplayCurrency,
-      branchCountryCode,
-    );
     const pipelineN = extractNumericValue(
       (contextTotals as any).outstanding ?? (contextTotals as any).total_outstanding
     );
@@ -7716,7 +7712,11 @@ const Dashboard = () => {
       {
         key: "overdue-ar",
         label: "Overdue AR",
-        value: dashFormatInrAdaptive(overdueN, overdueCurrencySymbol),
+        value: formatOutstandingAmountCompact(
+          overdueN,
+          branchCountryCode,
+          overdueDisplayCurrency,
+        ),
         trend: undefined,
         spark: "redUp" as DashLeadershipSparkKind,
       },
