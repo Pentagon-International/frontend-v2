@@ -112,6 +112,7 @@ import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplat
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { CanShowChargesModal } from "../../../components/CanShowChargesModal";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
@@ -448,6 +449,7 @@ function HouseCreate() {
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
+  const [canChargesModalOpen, setCanChargesModalOpen] = useState(false);
 
   // Delivery Order preview state
   const [doPreviewOpen, setDoPreviewOpen] = useState(false);
@@ -2779,7 +2781,7 @@ function HouseCreate() {
   };
 
   // Generate PDF preview from current form data
-  const generatePDFPreview = async () => {
+  const generatePDFPreview = async (showCharges: boolean) => {
     try {
       setPreviewOpen(true);
 
@@ -2853,17 +2855,26 @@ function HouseCreate() {
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         note: form.values.note || "",
-        cargo_details: cargoDetails.map((cargo) => ({
-          no_of_packages: cargo.no_of_packages,
-          gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
-          volume: formatHouseCargoWeightForPayload(cargo.volume),
-          chargeable_weight: formatHouseCargoChargeableForPayload(
-            cargo.gross_weight,
-            cargo.volume,
-            "ocean",
-          ),
-          haz: cargo.haz === true,
-        })),
+        cargo_details: cargoDetails.map((cargo) => {
+          const packageTypeName =
+            resolvePackageTypeName(
+              cargo.package_type,
+              packageTypeOptions,
+            ) || String(cargo.package_type_name ?? "").trim();
+          return {
+            no_of_packages: cargo.no_of_packages,
+            package_type: cargo.package_type,
+            package_type_name: packageTypeName,
+            gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
+            volume: formatHouseCargoWeightForPayload(cargo.volume),
+            chargeable_weight: formatHouseCargoChargeableForPayload(
+              cargo.gross_weight,
+              cargo.volume,
+              "ocean",
+            ),
+            haz: cargo.haz === true,
+          };
+        }),
         mbl_charges: (() => {
           const meaningfulCharges = getMeaningfulHouseCharges(
             chargesForm.values.charges,
@@ -2911,6 +2922,7 @@ function HouseCreate() {
         housingData,
         defaultBranch,
         country,
+        { showCharges },
       );
       setPdfBlob(blobUrl);
       void patchHousingPdfReleasedEvent("CAN Released").catch((e) =>
@@ -3370,7 +3382,7 @@ function HouseCreate() {
                     color: "#424242",
                   },
                 }}
-                onClick={generatePDFPreview}
+                onClick={() => setCanChargesModalOpen(true)}
               >
                 Cargo Arrival Notice
               </Menu.Item>
@@ -6494,6 +6506,15 @@ function HouseCreate() {
           </Group>
         </Stack>
       </Modal>
+
+      <CanShowChargesModal
+        opened={canChargesModalOpen}
+        onClose={() => setCanChargesModalOpen(false)}
+        onConfirm={(showCharges) => {
+          setCanChargesModalOpen(false);
+          void generatePDFPreview(showCharges);
+        }}
+      />
 
       {/* PDF Preview Modal */}
       <Modal

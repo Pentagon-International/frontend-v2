@@ -4,6 +4,7 @@ import {
   getCctBranchInfoFromLogin,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
+import { formatPackageTypeNameForBol } from "../../../utils/packageTypeOptions";
 import type { CanSacWiseTotal } from "./canGstBreakup";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
@@ -185,6 +186,26 @@ const toCanDisplayValue = (value: unknown): string => {
   const text = String(value).trim();
   if (!text || text === "null" || text === "undefined") return "";
   return text;
+};
+
+/** e.g. "1 Carton, 2 Block" from cargo_details no_of_packages + package_type_name */
+const formatCanPackagesWithType = (cargoDetails: unknown[]): string => {
+  const parts: string[] = [];
+  for (const row of cargoDetails) {
+    const cargo = (row ?? {}) as Record<string, unknown>;
+    const qtyRaw = parseFloat(String(cargo.no_of_packages ?? ""));
+    if (!Number.isFinite(qtyRaw) || qtyRaw <= 0) continue;
+    const qtyDisplay = Number.isInteger(qtyRaw)
+      ? String(qtyRaw)
+      : String(qtyRaw);
+    const typeName =
+      pickCanField(cargo.package_type_name) ||
+      formatPackageTypeNameForBol(
+        String(cargo.package_type_code ?? cargo.package_type ?? ""),
+      );
+    parts.push(typeName ? `${qtyDisplay} ${typeName}` : qtyDisplay);
+  }
+  return parts.join(", ");
 };
 
 type CanContainerDetailRow = {
@@ -525,7 +546,7 @@ const drawCanKeyValueRow = (
   return Math.max(1, lines.length) * CAN_LINE_SPACING;
 };
 
-// USA logo for India and USA branches; empty otherwise (no fallback)
+// USA logo for India, USA, and Vietnam branches; empty otherwise (no fallback)
 const getLogoByCountry = (country: any): string | null => {
   try {
     let countryName = "";
@@ -554,8 +575,13 @@ const getLogoByCountry = (country: any): string | null => {
       countryCode === "US" ||
       countryName === "USA" ||
       countryName.includes("UNITED STATES");
+    const isVietnam =
+      countryName.includes("VIETNAM") ||
+      countryName.includes("VIET NAM") ||
+      countryCode === "VN" ||
+      countryCode === "VNM";
 
-    if (isIndia || isUSA) {
+    if (isIndia || isUSA || isVietnam) {
       return pentagonPrimeAmericas;
     }
     return null;
@@ -914,8 +940,10 @@ export const generateCargoArrivalNoticePDF = (
   defaultBranch: any,
   country?: any,
   sacWiseTotals: CanSacWiseTotal[] = [],
+  options?: { showCharges?: boolean },
 ): string => {
   try {
+    const showCharges = options?.showCharges !== false;
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -1327,15 +1355,17 @@ export const generateCargoArrivalNoticePDF = (
       hawbData?.mawb_charges ||
       hawbData?.mbl_charges ||
       [];
-    const baseDisplayableCharges = (
-      Array.isArray(charges) ? charges : []
-    ).filter(
-      (charge: Record<string, unknown>) =>
-        isDisplayableCanCharge(charge) && isCollectCanCharge(charge),
-    );
-    const taxCharges = sacWiseTotalsToCanCharges(indiaSacWiseTotals).filter(
-      (charge) => isDisplayableCanCharge(charge),
-    );
+    const baseDisplayableCharges = showCharges
+      ? (Array.isArray(charges) ? charges : []).filter(
+          (charge: Record<string, unknown>) =>
+            isDisplayableCanCharge(charge) && isCollectCanCharge(charge),
+        )
+      : [];
+    const taxCharges = showCharges
+      ? sacWiseTotalsToCanCharges(indiaSacWiseTotals).filter((charge) =>
+          isDisplayableCanCharge(charge),
+        )
+      : [];
     const displayableCharges = [...baseDisplayableCharges, ...taxCharges];
     const taxableChargeNames =
       buildCanTaxableChargeNamesSet(indiaSacWiseTotals);
@@ -1741,20 +1771,20 @@ export const generateCargoArrivalNoticePDF = (
     doc.setFontSize(CAN_BODY_FONT_SIZE);
     const cargoHeaders = [
       "Commodity",
-      "No of Pcs",
+      "No of Pkgs",
       "Char. Weight (Kgs)",
       "Gr.Wt (Kgs)",
     ];
     const cargoTableX = margin + boxPadding;
     const cargoTableW = pageWidth - 2 * margin - 2 * boxPadding;
     const cargoColWidths = [
-      Math.round(cargoTableW * 0.46),
-      Math.round(cargoTableW * 0.16),
-      Math.round(cargoTableW * 0.19),
+      Math.round(cargoTableW * 0.4),
+      Math.round(cargoTableW * 0.24),
+      Math.round(cargoTableW * 0.18),
       cargoTableW -
-        (Math.round(cargoTableW * 0.46) +
-          Math.round(cargoTableW * 0.16) +
-          Math.round(cargoTableW * 0.19)),
+        (Math.round(cargoTableW * 0.4) +
+          Math.round(cargoTableW * 0.24) +
+          Math.round(cargoTableW * 0.18)),
     ];
     const cargoHeaderH = CAN_TABLE_HEADER_H;
     const cargoRowH = CAN_TABLE_ROW_H;
@@ -1807,10 +1837,6 @@ export const generateCargoArrivalNoticePDF = (
 
     if (cargoDetails.length > 0) {
       // Compute totals across all cargo rows
-      const totalNoOfPcs = cargoDetails.reduce((sum: number, c: any) => {
-        const v = parseFloat(c.no_of_packages);
-        return sum + (isNaN(v) ? 0 : v);
-      }, 0);
       const totalCharWeight = cargoDetails.reduce((sum: number, c: any) => {
         const v = parseFloat(c.chargeable_weight);
         return sum + (isNaN(v) ? 0 : v);
@@ -1821,7 +1847,7 @@ export const generateCargoArrivalNoticePDF = (
       }, 0);
 
       const commodity = commodityDescription;
-      const noOfPcs = totalNoOfPcs > 0 ? String(totalNoOfPcs) : "";
+      const noOfPkgs = formatCanPackagesWithType(cargoDetails);
       const charWeight = totalCharWeight > 0 ? String(totalCharWeight) : "";
       const grossWeight = totalGrossWeight > 0 ? String(totalGrossWeight) : "";
 
@@ -1963,12 +1989,12 @@ export const generateCargoArrivalNoticePDF = (
           sectionY + segmentRowH,
         );
 
-        // Numeric values (No of Pcs, Char. Weight, Gr.Wt) — only on the first segment row, vertically centred
+        // Numeric values (No of Pkgs, Char. Weight, Gr.Wt) — only on the first segment row, vertically centred
         if (isFirstSegment) {
           const numericY = sectionY + segmentRowH / 2 + 1;
           let numX = cargoTableX + cargoColWidths[0];
           [
-            { val: noOfPcs, w: cargoColWidths[1] },
+            { val: noOfPkgs, w: cargoColWidths[1] },
             { val: charWeight, w: cargoColWidths[2] },
             { val: grossWeight, w: cargoColWidths[3] },
           ].forEach(({ val, w }, i, arr) => {

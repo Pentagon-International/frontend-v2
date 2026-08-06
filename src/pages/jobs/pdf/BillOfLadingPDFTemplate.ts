@@ -651,18 +651,38 @@ export const generateBillOfLadingPDF = (
       housingData?.notify1_customer_address ||
       "";
 
-    // To Obtain Delivery Contact — master (MBL) only
+    // To Obtain Delivery Contact
+    // Vietnam: house Destination Agent only (leave empty when unset — never consignee).
+    // Other branches: MBL agent, or consignee when master is direct.
     const isDirectMaster = Boolean(mblDetails?.is_direct);
-    const deliveryContactCompany = isDirectMaster
-      ? mblDetails?.consignee_name || ""
-      : mblDetails?.agent_name || "";
-    const deliveryContactAddress = isDirectMaster
-      ? mblDetails?.consignee_address || ""
-      : mblDetails?.agent_address || "";
+    const houseDestinationAgentName =
+      housingData?.agent_name ||
+      housingData?.destination_agent_name ||
+      "";
+    const houseDestinationAgentAddress =
+      housingData?.agent_address ||
+      housingData?.destination_agent_address ||
+      "";
+    const houseDestinationAgentEmail =
+      housingData?.agent_email ||
+      housingData?.destination_agent_email ||
+      "";
+    const deliveryContactCompany = isVietnamBranch
+      ? houseDestinationAgentName
+      : isDirectMaster
+        ? mblDetails?.consignee_name || ""
+        : mblDetails?.agent_name || "";
+    const deliveryContactAddress = isVietnamBranch
+      ? houseDestinationAgentAddress
+      : isDirectMaster
+        ? mblDetails?.consignee_address || ""
+        : mblDetails?.agent_address || "";
     const deliveryContactTel = "";
-    const deliveryContactEmail = isDirectMaster
-      ? mblDetails?.consignee_email || ""
-      : mblDetails?.agent_email || "";
+    const deliveryContactEmail = isVietnamBranch
+      ? houseDestinationAgentEmail
+      : isDirectMaster
+        ? mblDetails?.consignee_email || ""
+        : mblDetails?.agent_email || "";
 
     // Shipment Route and Mode
     const houseOrigin = housingData?.origin_name || "";
@@ -1289,8 +1309,10 @@ export const generateBillOfLadingPDF = (
       ? mainTopSectionEndY
       : mainBoxStartY + actualMainBoxHeight;
     
-    // Calculate footer section height (Vietnam needs extra space for authorised signature stamp)
-    const footerSectionHeight = isVietnamBranch ? 55 : 35;
+    // Vietnam SEAWAY/SURRENDERED need extra footer space for the authorised signature stamp
+    const showVietnamSignatureStamp =
+      isVietnamBranch && isSeawayOrSurrendered;
+    const footerSectionHeight = showVietnamSignatureStamp ? 55 : 35;
     const footerStartY = pageHeight - innerMargin - footerSectionHeight;
     
     // Calculate container details section height (ends before footer section)
@@ -1834,8 +1856,8 @@ export const generateBillOfLadingPDF = (
     doc.text(companyLines, footerBottomRightX + boxPadding, signatoryY);
     signatoryY += companyLines.length * 3.5 + 2;
 
-    // Vietnam: stamp image in the authorised signature area
-    if (isVietnamBranch) {
+    // Vietnam: authorised signature stamp only for SEAWAY BILL / SURRENDERED
+    if (showVietnamSignatureStamp) {
       try {
         const signatureMaxWidth = Math.min(50, signatoryTextWidth);
         const signatureAspect = 164 / 300;

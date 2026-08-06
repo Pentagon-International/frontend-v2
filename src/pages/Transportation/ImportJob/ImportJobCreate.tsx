@@ -61,6 +61,7 @@ import {
   ERPListJobStatusPill,
 } from "../../../components";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { CanShowChargesModal } from "../../../components/CanShowChargesModal";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
@@ -566,6 +567,9 @@ function ImportJobCreate() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [currentHousingForPreview, setCurrentHousingForPreview] =
+    useState<HousingDetail | null>(null);
+  const [canChargesModalOpen, setCanChargesModalOpen] = useState(false);
+  const [pendingHousingForCan, setPendingHousingForCan] =
     useState<HousingDetail | null>(null);
 
   // Delivery Order preview state
@@ -2701,6 +2705,7 @@ function ImportJobCreate() {
   // Generate Cargo Arrival Notice PDF
   const generateCargoArrivalNoticePDFPreview = async (
     housing: HousingDetail,
+    showCharges: boolean,
   ) => {
     try {
       setPreviewOpen(true);
@@ -2748,6 +2753,7 @@ function ImportJobCreate() {
         housing,
         defaultBranch,
         country,
+        { showCharges },
       );
       setPdfBlob(blobUrl);
       void patchHousingPdfReleasedEvent(
@@ -6509,6 +6515,22 @@ function ImportJobCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <CanShowChargesModal
+        opened={canChargesModalOpen}
+        onClose={() => {
+          setCanChargesModalOpen(false);
+          setPendingHousingForCan(null);
+        }}
+        onConfirm={(showCharges) => {
+          const housing = pendingHousingForCan;
+          setCanChargesModalOpen(false);
+          setPendingHousingForCan(null);
+          if (housing) {
+            void generateCargoArrivalNoticePDFPreview(housing, showCharges);
+          }
+        }}
+      />
+
       <JobDocumentsModal
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
@@ -6795,9 +6817,10 @@ function ImportJobCreate() {
                                 color: "#424242",
                               },
                             }}
-                            onClick={() =>
-                              generateCargoArrivalNoticePDFPreview(house)
-                            }
+                            onClick={() => {
+                              setPendingHousingForCan(house);
+                              setCanChargesModalOpen(true);
+                            }}
                           >
                             Cargo Arrival Notice
                           </Menu.Item>

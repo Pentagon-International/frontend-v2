@@ -73,6 +73,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { CanShowChargesModal } from "../../../components/CanShowChargesModal";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
@@ -504,6 +505,10 @@ function AirImportJobCreate() {
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [currentHawbForPreview, setCurrentHawbForPreview] =
     useState<HAWBDetail | null>(null);
+  const [canChargesModalOpen, setCanChargesModalOpen] = useState(false);
+  const [pendingHawbForCan, setPendingHawbForCan] = useState<HAWBDetail | null>(
+    null,
+  );
   const { user } = useAuthStore();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -2545,7 +2550,10 @@ function AirImportJobCreate() {
   };
 
   // Generate Cargo Arrival Notice PDF
-  const generateCargoArrivalNoticePDFPreview = async (hawb: HAWBDetail) => {
+  const generateCargoArrivalNoticePDFPreview = async (
+    hawb: HAWBDetail,
+    showCharges: boolean,
+  ) => {
     try {
       setPreviewOpen(true);
       setCurrentHawbForPreview(hawb);
@@ -2589,6 +2597,7 @@ function AirImportJobCreate() {
         hawb,
         defaultBranch,
         country,
+        { showCharges },
       );
       setPdfBlob(blobUrl);
       void patchHousingPdfReleasedEvent(
@@ -5745,6 +5754,22 @@ function AirImportJobCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
+      <CanShowChargesModal
+        opened={canChargesModalOpen}
+        onClose={() => {
+          setCanChargesModalOpen(false);
+          setPendingHawbForCan(null);
+        }}
+        onConfirm={(showCharges) => {
+          const hawb = pendingHawbForCan;
+          setCanChargesModalOpen(false);
+          setPendingHawbForCan(null);
+          if (hawb) {
+            void generateCargoArrivalNoticePDFPreview(hawb, showCharges);
+          }
+        }}
+      />
+
       <JobDocumentsModal
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
@@ -6001,9 +6026,10 @@ function AirImportJobCreate() {
                                 color: "#424242",
                               },
                             }}
-                            onClick={() =>
-                              generateCargoArrivalNoticePDFPreview(hawb)
-                            }
+                            onClick={() => {
+                              setPendingHawbForCan(hawb);
+                              setCanChargesModalOpen(true);
+                            }}
                           >
                             Cargo Arrival Notice
                           </Menu.Item>
