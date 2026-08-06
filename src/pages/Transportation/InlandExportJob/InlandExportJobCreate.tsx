@@ -111,6 +111,7 @@ import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendor
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
+import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
 import { getMasterShipmentNo } from "../../../utils/vendorInvoiceAutomation";
 import {
   JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
@@ -3139,6 +3140,14 @@ function InlandExportJobCreate() {
               </Menu>
             )}
           </Group>
+        )}
+        {isReadOnly && (
+          <ClosedJobMasterLedgerMenu
+            jobId={jobData?.job_id}
+            serviceName="Inland Export"
+            returnTo={location.pathname}
+            returnToState={location.state}
+          />
         )}
       </Group>
 

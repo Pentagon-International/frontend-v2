@@ -1506,6 +1506,24 @@ function InlandImportJobMaster() {
                                         },
                                       });
                                     }}
+                                    onView={() => {
+                                      setStoreFilters(LIST_KEY, appliedFilters);
+                                      setStoreSearch(LIST_KEY, search);
+                                      setShouldRestore(LIST_KEY, true);
+                                      navigate(`/inland/import-job/view`, {
+                                        state: {
+                                          job: withInlandImportJobServiceFields(
+                                            row as unknown as Record<
+                                              string,
+                                              unknown
+                                            >,
+                                          ),
+                                          jobId: row.id ?? row.job_id,
+                                          actionType: "view",
+                                          viewMode: true,
+                                        },
+                                      });
+                                    }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />
                                 );

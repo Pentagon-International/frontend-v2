@@ -1478,6 +1478,14 @@ function ImportJobMaster() {
                                         job: row,
                                       });
                                     }}
+                                    onView={() => {
+                                      persistListAndNavigate(`/SeaExport/import-job/view`, {
+                                        job: row,
+                                        jobId: row.id ?? row.job_id,
+                                        actionType: "view",
+                                        viewMode: true,
+                                      });
+                                    }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />
                                 );

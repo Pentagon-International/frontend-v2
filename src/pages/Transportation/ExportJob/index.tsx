@@ -1481,6 +1481,14 @@ function ExportJobMaster() {
                                         job: row,
                                       });
                                     }}
+                                    onView={() => {
+                                      persistListAndNavigate(`/SeaExport/export-job/view`, {
+                                        job: row,
+                                        jobId: row.id ?? row.job_id,
+                                        actionType: "view",
+                                        viewMode: true,
+                                      });
+                                    }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />
                                 );

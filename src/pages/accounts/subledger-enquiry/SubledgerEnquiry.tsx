@@ -90,6 +90,8 @@ type SubledgerEntryRow = {
   day_book_code?: string | null;
   day_book_type?: string | null;
   document_no?: string | null;
+  reversed?: boolean;
+  reversed_doc_no?: string | null;
   party_name?: string | null;
   date_document?: string | null;
   due_date?: string | null;
@@ -1656,18 +1658,31 @@ function SubledgerTable(props: {
           if (c.key === "document_no") {
             const docNo = row.original.document_no?.trim() ?? "";
             if (!docNo) return "—";
-            return (
+            const isReversed = Boolean(row.original.reversed);
+            const reversedDocNo =
+              row.original.reversed_doc_no?.trim() ?? "";
+            const link = (
               <Anchor
                 component="button"
                 type="button"
                 size="sm"
-                c="#105476"
+                c={isReversed ? "#B45309" : "#105476"}
                 td="underline"
+                fw={isReversed ? 500 : 400}
                 style={{ fontFamily: theme.fontSans, cursor: "pointer" }}
                 onClick={() => void onDocumentNoClick(docNo)}
               >
                 {docNo}
               </Anchor>
+            );
+            if (!isReversed) return link;
+            return (
+              <Tooltip
+                label={reversedDocNo || "This document is reversed"}
+                withArrow
+              >
+                {link}
+              </Tooltip>
             );
           }
           if (

@@ -1357,6 +1357,19 @@ function AirImportJobMaster() {
                                         state: { job: row },
                                       });
                                     }}
+                                    onView={() => {
+                                      setStoreFilters(LIST_KEY, appliedFilters);
+                                      setStoreSearch(LIST_KEY, search);
+                                      setShouldRestore(LIST_KEY, true);
+                                      navigate(`/air/import-job/view`, {
+                                        state: {
+                                          job: row,
+                                          jobId: row.id ?? row.job_id,
+                                          actionType: "view",
+                                          viewMode: true,
+                                        },
+                                      });
+                                    }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />
                                 );

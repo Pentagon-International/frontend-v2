@@ -3,6 +3,7 @@ import { ActionIcon, Box, Menu, Tooltip } from "@mantine/core";
 import {
   IconDotsVertical,
   IconEdit,
+  IconEye,
   IconLock,
   IconLockOpen,
   IconX,
@@ -16,6 +17,8 @@ type ERPListJobActionMenuProps = {
   status: string | null | undefined;
   variant?: "job-page" | "closure-page" | "reopen-page";
   onEdit?: () => void;
+  /** When job is CLOSED, opens view-only flow (same as global search). */
+  onView?: () => void;
   onCancel?: () => void;
   onCloseJob?: () => void;
   onReopenJob?: () => void;
@@ -53,6 +56,7 @@ export function ERPListJobActionMenu({
   status,
   variant = "job-page",
   onEdit,
+  onView,
   onCancel,
   onCloseJob,
   onReopenJob,
@@ -84,11 +88,20 @@ export function ERPListJobActionMenu({
       <Menu.Dropdown>
         {showEdit &&
           (isClosed ? (
-            <DisabledMenuItemWithTooltip
-              label="Edit"
-              tooltip="This job is already closed"
-              leftSection={<IconEdit size={14} />}
-            />
+            onView ? (
+              <Menu.Item
+                leftSection={<IconEye size={14} />}
+                onClick={onView}
+              >
+                View
+              </Menu.Item>
+            ) : (
+              <DisabledMenuItemWithTooltip
+                label="Edit"
+                tooltip="This job is already closed"
+                leftSection={<IconEdit size={14} />}
+              />
+            )
           ) : (
             <Menu.Item
               leftSection={<IconEdit size={14} />}
