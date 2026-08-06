@@ -750,7 +750,8 @@ function JournalVoucherMaster() {
         Cell: ({ row }) => {
           const status = String(row.original.status ?? "").trim().toUpperCase();
           const isPosted = status === "POSTED";
-          const canEdit = !isPosted;
+          const isUnposted = status === "UNPOSTED";
+          const canEdit = isUnposted || isPosted;
           return (
             <Menu
               withinPortal

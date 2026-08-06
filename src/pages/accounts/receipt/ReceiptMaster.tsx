@@ -777,13 +777,15 @@ export default function ReceiptMaster() {
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        const {
-                          documents: _documents,
-                          supporting_documents: _supportingDocuments,
-                          ...receiptDataWithoutDocuments
-                        } = (row.original as any) ?? {};
                         navigate("/receipt/reversal/create", {
-                          state: receiptDataWithoutDocuments,
+                          state: (() => {
+                            const {
+                              documents: _documents,
+                              supporting_documents: _supportingDocuments,
+                              ...receiptDataWithoutDocuments
+                            } = (row.original as any) ?? {};
+                            return receiptDataWithoutDocuments;
+                          })(),
                         });
                       }}
                     >

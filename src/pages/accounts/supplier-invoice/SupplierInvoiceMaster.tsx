@@ -74,7 +74,6 @@ import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
-import { getDefaultBranchCountryCode } from "../../../utils/userNumberFormat";
 
 type SupplierInvoiceRow = Record<string, unknown> & {
   id?: number | string;
@@ -206,21 +205,6 @@ function SupplierInvoiceMaster() {
   const user = useAuthStore((s) => s.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const isChinaUser = useMemo(() => {
-    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
-    if (branchCountryCode) {
-      const bc = branchCountryCode.toUpperCase();
-      if (bc === "CN" || bc.includes("CHINA")) return true;
-    }
-    const defaultBranch =
-      user?.branches?.find((b) => b.is_default) ?? user?.branches?.[0];
-    const branchCode = String(defaultBranch?.branch_code ?? "").toUpperCase();
-    const branchName = String(defaultBranch?.branch_name ?? "").toUpperCase();
-    if (branchCode === "CHN" || branchName.includes("CHINA")) return true;
-    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
-    const countryName = (user?.country?.country_name ?? "").toUpperCase();
-    return countryCode === "CN" || countryName === "CHINA";
-  }, [user?.branches, user?.country?.country_code, user?.country?.country_name]);
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -766,13 +750,14 @@ function SupplierInvoiceMaster() {
           const status = String(row.original?.status ?? "").toUpperCase();
           const isPosted = status === "POSTED";
           const isUnposted = status === "UNPOSTED";
-          const canEdit = isUnposted || (isPosted && isChinaUser);
+          // Unposted: full edit. Posted (all branches): edit for docs/fapiao PATCH only
+          const canEdit = isUnposted || isPosted;
           return (
             <Menu
               withinPortal
               position="bottom-end"
               shadow="md"
-              width={220}
+              width={250}
               styles={erpListGeistMenuDropdownStyles}
               classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
             >
@@ -836,18 +821,28 @@ function SupplierInvoiceMaster() {
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
                         navigate("/supplier-invoice/reversal/create", {
-                          state: row.original,
+                          state: (() => {
+                            const {
+                              documents: _documents,
+                              supporting_documents: _supportingDocuments,
+                              ...invoiceDataWithoutDocuments
+                            } = (row.original as any) ?? {};
+                            return invoiceDataWithoutDocuments;
+                          })(),
                         });
                       }}
                     >
-                      <Group gap="sm">
+                      <Group gap="sm" wrap="nowrap">
                         <IconReceiptRefund
                           size={16}
                           color={primary}
                         />
                         <Text
                           size="sm"
-                          style={{ fontFamily: erpTheme.fontSans }}
+                          style={{
+                            fontFamily: erpTheme.fontSans,
+                            whiteSpace: "nowrap",
+                          }}
                         >
                           Create Supplier Invoice Reverse
                         </Text>
@@ -877,7 +872,6 @@ function SupplierInvoiceMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
-      isChinaUser,
     ],
   );
 

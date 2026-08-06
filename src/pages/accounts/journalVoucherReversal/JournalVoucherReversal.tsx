@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -437,7 +438,7 @@ function JournalVoucherReversal() {
       charges: chargesFromApi,
     });
 
-    // Populate supporting documents for edit/view (skip for reversal)
+    // Populate supporting documents for edit/view (skip for reversal create — upload manually)
     if (
       !isReversalMode &&
       Array.isArray(d.documents) &&
@@ -453,6 +454,8 @@ function JournalVoucherReversal() {
             doc.original_document_name ?? doc.document_name ?? "",
         })),
       );
+    } else if (isReversalMode) {
+      setSupportingDocuments([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jvFetchRes]);
@@ -556,11 +559,10 @@ function JournalVoucherReversal() {
     fd.append("reverse_voucher", JSON.stringify(payload));
     let fileIndex = 0;
     supportingDocuments.forEach((doc) => {
-      if (doc.file) {
-        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
-        fd.append(`document[${fileIndex}]`, doc.file);
-        fileIndex++;
-      }
+      if (!doc.file) return;
+      fd.append(`document_names[${fileIndex}]`, (doc.name ?? "").toString());
+      fd.append(`document[${fileIndex}]`, doc.file);
+      fileIndex++;
     });
     return fd;
   };
@@ -653,9 +655,7 @@ function JournalVoucherReversal() {
       }
     } catch (err: unknown) {
       ToastNotification({
-        message:
-          (err as { message?: string })?.message ??
-          "Failed to save journal voucher",
+        message: getServerErrorMessage(err, "Failed to save journal voucher"),
         type: "error",
       });
     } finally {
@@ -719,9 +719,7 @@ function JournalVoucherReversal() {
       }
     } catch (err: unknown) {
       ToastNotification({
-        message:
-          (err as { message?: string })?.message ??
-          "Failed to post journal voucher",
+        message: getServerErrorMessage(err, "Failed to post journal voucher"),
         type: "error",
       });
     } finally {

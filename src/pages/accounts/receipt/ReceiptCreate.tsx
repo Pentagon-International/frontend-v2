@@ -66,6 +66,7 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 
 const RECEIPT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -885,31 +886,35 @@ export default function ReceiptCreate({
       });
     }
 
-    // Pass-through documents from ReceiptMaster list so view/edit can show downloads
-    const rawDocs =
-      (receiptFromState as any)?.documents ??
-      (receiptFromState as any)?.supporting_documents ??
-      [];
-    if (Array.isArray(rawDocs) && rawDocs.length > 0) {
-      form.setFieldValue(
-        "supporting_documents",
-        rawDocs.map((doc: any) => ({
-          name: (
-            doc.document_name ??
-            doc.file_name ??
-            doc.name ??
-            ""
-          ).toString(),
-          file: null,
-          document_url: doc.document_url ?? doc.url ?? "",
-          document_id: doc.id ?? undefined,
-          original_document_name:
-            doc.original_document_name ??
-            doc.document_name ??
-            doc.file_name ??
-            "",
-        })),
-      );
+    // Pass-through documents for view/edit only — reversal create starts with no attachments
+    if (!isReversalCreate) {
+      const rawDocs =
+        (receiptFromState as any)?.documents ??
+        (receiptFromState as any)?.supporting_documents ??
+        [];
+      if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+        form.setFieldValue(
+          "supporting_documents",
+          rawDocs.map((doc: any) => ({
+            name: (
+              doc.document_name ??
+              doc.file_name ??
+              doc.name ??
+              ""
+            ).toString(),
+            file: null,
+            document_url: doc.document_url ?? doc.url ?? "",
+            document_id: doc.id ?? undefined,
+            original_document_name:
+              doc.original_document_name ??
+              doc.document_name ??
+              doc.file_name ??
+              "",
+          })),
+        );
+      }
+    } else {
+      form.setFieldValue("supporting_documents", []);
     }
   }, [
     receiptFromState?.id,
@@ -1578,27 +1583,110 @@ export default function ReceiptCreate({
       postedStatus === "POSTED" &&
       saveResponse?.id != null
     ) {
+      const newDocs = values.supporting_documents.filter(
+        (d) => d.document_id == null,
+      );
+      const hasNewFiles = newDocs.some((d) => d.file != null);
+
+      if (hasNewFiles) {
+        const incompleteNewDoc = newDocs.some(
+          (d) =>
+            (Boolean(d.file) && !(d.name ?? "").trim()) ||
+            (Boolean((d.name ?? "").trim()) && !d.file),
+        );
+        if (incompleteNewDoc) {
+          ToastNotification({
+            message: "Each new document must have both a name and a file.",
+            type: "error",
+          });
+          return;
+        }
+        const oversized = values.supporting_documents.some(
+          (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
+        );
+        if (oversized) {
+          ToastNotification({
+            message: "One or more files exceed the 5MB limit.",
+            type: "error",
+          });
+          return;
+        }
+      }
+
       setIsSubmitting(true);
       try {
         const id = saveResponse.id;
-        await apiCallProtected.patch(
-          `${URL.receipt}${id}/`,
-          {
-            id,
-            chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
-          },
-          API_HEADER,
-        );
-        await queryClient.invalidateQueries({ queryKey: ["receipt"] });
-        ToastNotification({
-          type: "success",
-          message: "Cheque Cleared Date updated successfully.",
-        });
+        if (hasNewFiles) {
+          const fd = new FormData();
+          fd.append(
+            "receipt",
+            JSON.stringify({
+              id,
+              chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+            }),
+          );
+          let fileIndex = 0;
+          values.supporting_documents.forEach((doc) => {
+            if (!doc.file) return;
+            fd.append(
+              `document_names[${fileIndex}]`,
+              (doc.name ?? "").toString(),
+            );
+            fd.append(`document[${fileIndex}]`, doc.file);
+            fileIndex++;
+          });
+          const raw = (await apiCallProtected.patch(
+            `${URL.receipt}${id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
+          if (Array.isArray(res?.documents)) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  doc.name ??
+                  ""
+                ).toString(),
+                file: null,
+                document_url: doc.document_url ?? doc.url ?? "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ??
+                  doc.document_name ??
+                  doc.file_name ??
+                  "",
+              })),
+            );
+          }
+          await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+          ToastNotification({
+            type: "success",
+            message: "Receipt updated successfully.",
+          });
+        } else {
+          await apiCallProtected.patch(
+            `${URL.receipt}${id}/`,
+            {
+              id,
+              chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+            },
+            API_HEADER,
+          );
+          await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+          ToastNotification({
+            type: "success",
+            message: "Cheque Cleared Date updated successfully.",
+          });
+        }
       } catch (e: unknown) {
-        console.error("Failed to update cheque cleared date", e);
+        console.error("Failed to update posted receipt", e);
         ToastNotification({
           type: "error",
-          message: "Failed to update Cheque Cleared Date.",
+          message: getServerErrorMessage(e, "Failed to update receipt."),
         });
       } finally {
         setIsSubmitting(false);
@@ -1847,9 +1935,7 @@ export default function ReceiptCreate({
       console.error("Save/update receipt error:", err);
       ToastNotification({
         type: "error",
-        message:
-          (err as { response?: { data?: { message?: string } } })?.response
-            ?.data?.message ?? "Failed to save receipt.",
+        message: getServerErrorMessage(err, "Failed to save receipt."),
       });
     } finally {
       setIsSubmitting(false);
@@ -1959,9 +2045,7 @@ export default function ReceiptCreate({
       console.error("Post reverse receipt error:", err);
       ToastNotification({
         type: "error",
-        message:
-          (err as { response?: { data?: { message?: string } } })?.response
-            ?.data?.message ?? "Failed to post reverse receipt.",
+        message: getServerErrorMessage(err, "Failed to post reverse receipt."),
       });
     } finally {
       setIsPosting(false);
@@ -2006,9 +2090,7 @@ export default function ReceiptCreate({
       console.error("Post receipt error:", err);
       ToastNotification({
         type: "error",
-        message:
-          (err as { response?: { data?: { message?: string } } })?.response
-            ?.data?.message ?? "Failed to post receipt.",
+        message: getServerErrorMessage(err, "Failed to post receipt."),
       });
     } finally {
       setIsPosting(false);
@@ -2087,6 +2169,15 @@ export default function ReceiptCreate({
     isViewRoute ||
     (!_isReversal && statusUpper === "POSTED") ||
     (_isReversal && reversalStatusUpper === "POSTED");
+  const canAttachDocumentsAfterPost =
+    !_isReversal &&
+    !isViewRoute &&
+    pathname.includes("/edit") &&
+    statusUpper === "POSTED" &&
+    saveResponse?.id != null &&
+    saveResponse.id > 0;
+  const canManageSupportingDocuments =
+    !isReadOnly || canAttachDocumentsAfterPost;
   // On reversal page, header daybook and date are editable; all other fields disabled.
   const reversalFormDisabled = _isReversal;
   const inputStyles =
@@ -3375,9 +3466,9 @@ export default function ReceiptCreate({
             opened={documentsModalOpened}
             onClose={closeDocumentsModal}
             title={
-              isReadOnly
-                ? "Supporting Documents"
-                : "Attach Supporting Documents"
+              canManageSupportingDocuments
+                ? "Attach Supporting Documents"
+                : "Supporting Documents"
             }
             size="xl"
             centered
@@ -3385,16 +3476,22 @@ export default function ReceiptCreate({
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
             <Stack gap="xs">
-              {form.values.supporting_documents.map((doc, index) => (
+              {form.values.supporting_documents.map((doc, index) => {
+                const isExistingDoc = doc.document_id != null;
+                const canEditDocRow =
+                  !isReadOnly ||
+                  (canAttachDocumentsAfterPost && !isExistingDoc);
+
+                return (
                 <Grid key={index} columns={12} gutter="sm" align="flex-end">
                   <Grid.Col span={5.5}>
                     <TextInput
                       label="Document Name"
                       placeholder="Enter document name"
                       value={doc.name}
-                      disabled={isReadOnly}
+                      disabled={!canEditDocRow}
                       onChange={(e) => {
-                        if (isReadOnly) return;
+                        if (!canEditDocRow) return;
                         const updatedDocs = [
                           ...form.values.supporting_documents,
                         ];
@@ -3412,8 +3509,9 @@ export default function ReceiptCreate({
                         File
                       </Text>
                       <Dropzone
+                        disabled={!canEditDocRow}
                         onDrop={(files: File[]) => {
-                          if (isReadOnly) return;
+                          if (!canEditDocRow) return;
                           if (files.length === 0) return;
                           const file = files[0];
                           if (fileErrors[index]) {
@@ -3446,7 +3544,7 @@ export default function ReceiptCreate({
                           );
                         }}
                         onReject={(fileRejections: any[]) => {
-                          if (isReadOnly) return;
+                          if (!canEditDocRow) return;
                           const rejection = fileRejections[0];
                           if (
                             rejection?.errors?.some(
@@ -3482,7 +3580,7 @@ export default function ReceiptCreate({
                           style={{
                             minHeight: "36px",
                             pointerEvents: "none",
-                            cursor: "pointer",
+                            cursor: canEditDocRow ? "pointer" : "default",
                           }}
                         >
                           <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
@@ -3559,7 +3657,7 @@ export default function ReceiptCreate({
                               </>
                             )}
                           </Group>
-                          {!isReadOnly && (doc.file || doc.document_url) && (
+                          {canEditDocRow && (doc.file || doc.document_url) && (
                             <Button
                               variant="subtle"
                               color="red"
@@ -3600,7 +3698,7 @@ export default function ReceiptCreate({
                       )}
                     </Box>
                   </Grid.Col>
-                  {!isReadOnly && (
+                  {canEditDocRow && (
                     <Grid.Col span={1}>
                       <Button
                         variant="light"
@@ -3643,7 +3741,7 @@ export default function ReceiptCreate({
                       </Button>
                     </Grid.Col>
                   )}
-                  {!isReadOnly && (
+                  {canManageSupportingDocuments && (
                     <Grid.Col span={1} offset={11}>
                       {index ===
                         form.values.supporting_documents.length - 1 && (
@@ -3663,9 +3761,11 @@ export default function ReceiptCreate({
                     </Grid.Col>
                   )}
                 </Grid>
-              ))}
+                );
+              })}
 
-              {!isReadOnly && form.values.supporting_documents.length === 0 && (
+              {canManageSupportingDocuments &&
+                form.values.supporting_documents.length === 0 && (
                 <Button
                   variant="light"
                   color="#105476"
@@ -3691,39 +3791,42 @@ export default function ReceiptCreate({
 
           {/* Action Buttons */}
           <Group justify="flex-end" mt="xl">
-            {!isViewRoute && (
-              <Button
-                variant="outline"
-                size="sm"
-                styles={{
-                  root: {
-                    borderColor: "#105476",
-                    color: "#666",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                  },
-                }}
-                onClick={() => {
-                  if (form.values.supporting_documents.length === 0) {
-                    form.setFieldValue("supporting_documents", [
-                      { name: "", file: null },
-                    ]);
+            <Button
+              variant="outline"
+              size="sm"
+              styles={{
+                root: {
+                  borderColor: "#105476",
+                  color: "#666",
+                  fontSize: "13px",
+                  fontFamily: "Inter",
+                },
+              }}
+              onClick={() => {
+                if (
+                  canManageSupportingDocuments &&
+                  form.values.supporting_documents.length === 0
+                ) {
+                  form.setFieldValue("supporting_documents", [
+                    { name: "", file: null },
+                  ]);
+                }
+                const newErrors: { [key: number]: string } = {};
+                form.values.supporting_documents.forEach((doc, idx) => {
+                  if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                    newErrors[idx] =
+                      `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                   }
-                  const newErrors: { [key: number]: string } = {};
-                  form.values.supporting_documents.forEach((doc, idx) => {
-                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                      newErrors[idx] =
-                        `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
-                    }
-                  });
-                  setFileErrors(newErrors);
-                  openDocumentsModal();
-                }}
-                disabled={isSubmitting}
-              >
-                Attach supporting document
-              </Button>
-            )}
+                });
+                setFileErrors(newErrors);
+                openDocumentsModal();
+              }}
+              disabled={isSubmitting}
+            >
+              {canManageSupportingDocuments
+                ? "Attach supporting document"
+                : "View supporting document(s)"}
+            </Button>
             <Button
               variant="outline"
               color="#105476"

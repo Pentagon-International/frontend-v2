@@ -40,6 +40,7 @@ import {
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import {
@@ -277,7 +278,7 @@ function JournalVoucher() {
   const canPostDocuments = useCanPostDocuments();
 
   const isViewMode = location.pathname.includes("/view/");
-  const isReadOnly = isViewMode;
+  const isEditMode = location.pathname.includes("/edit/");
 
   const handleFinanceDocumentBack = () => {
     navigateFinanceReturn(navigate, location.state);
@@ -448,6 +449,22 @@ function JournalVoucher() {
     },
   });
 
+  const statusUpper = String(
+    saveResponse?.status ?? form.values.status ?? "",
+  ).toUpperCase();
+  const isPostedJv = statusUpper === "POSTED";
+  const isReadOnly = isViewMode || (isPostedJv && !isReversalMode);
+  const canAttachDocumentsAfterPost =
+    isEditMode &&
+    !isViewMode &&
+    isPostedJv &&
+    !isReversalMode &&
+    saveResponse?.id != null &&
+    saveResponse.id > 0;
+  const canManageSupportingDocuments =
+    !isReadOnly || canAttachDocumentsAfterPost;
+  const canUpdatePostedJv = canAttachDocumentsAfterPost;
+
   const chargeCurrencyKey = form.values.charges
     .map((c) => `${c.currency_id}|${c.currency_code}|${c.roe}`)
     .join(";");
@@ -579,12 +596,8 @@ function JournalVoucher() {
       charges: chargesFromApi,
     });
 
-    // Populate supporting documents for edit/view (skip for reversal)
-    if (
-      !isReversalMode &&
-      Array.isArray(d.documents) &&
-      d.documents.length > 0
-    ) {
+    // Populate supporting documents for edit/view (including reversal create from source)
+    if (Array.isArray(d.documents) && d.documents.length > 0) {
       setSupportingDocuments(
         d.documents.map((doc: any) => ({
           name: doc.document_name ?? "",
@@ -695,13 +708,18 @@ function JournalVoucher() {
   const buildFormData = (payload: object): FormData => {
     const fd = new FormData();
     fd.append("journal_voucher", JSON.stringify(payload));
-    let fileIndex = 0;
+    let docIndex = 0;
     supportingDocuments.forEach((doc) => {
       if (doc.file) {
-        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
-        fd.append(`document[${fileIndex}]`, doc.file);
-        fileIndex++;
+        fd.append(`document_names[${docIndex}]`, (doc.name ?? "").toString());
+        fd.append(`document[${docIndex}]`, doc.file);
+        if (doc.document_id != null) {
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
+        }
+      } else if (doc.document_id != null) {
+        fd.append(`document_id[${docIndex}]`, String(doc.document_id));
       }
+      docIndex++;
     });
     return fd;
   };
@@ -715,6 +733,15 @@ function JournalVoucher() {
   };
 
   const handleSubmit = async (values: JVFormValues) => {
+    if (canUpdatePostedJv) {
+      ToastNotification({
+        message:
+          "Use Update to attach supporting documents on posted journal vouchers.",
+        type: "error",
+      });
+      return;
+    }
+
     for (let i = 0; i < (values.charges ?? []).length; i++) {
       const charge = values.charges[i];
       const chargeRoeToastError = validateRoeToast(
@@ -791,9 +818,108 @@ function JournalVoucher() {
       }
     } catch (err: unknown) {
       ToastNotification({
-        message:
-          (err as { message?: string })?.message ??
-          "Failed to save journal voucher",
+        message: getServerErrorMessage(err, "Failed to save journal voucher"),
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePostedDocumentUpdate = async () => {
+    if (!saveResponse?.id) {
+      ToastNotification({
+        message: "Save the journal voucher first before updating.",
+        type: "error",
+      });
+      return;
+    }
+
+    const newDocs = supportingDocuments.filter((d) => d.document_id == null);
+    const hasNewFiles = newDocs.some((d) => d.file != null);
+
+    if (!hasNewFiles) {
+      ToastNotification({
+        message: "Attach at least one new document before updating.",
+        type: "error",
+      });
+      return;
+    }
+
+    const incompleteNewDoc = newDocs.some(
+      (d) =>
+        (Boolean(d.file) && !(d.name ?? "").trim()) ||
+        (Boolean((d.name ?? "").trim()) && !d.file),
+    );
+    if (incompleteNewDoc) {
+      ToastNotification({
+        message: "Each new document must have both a name and a file.",
+        type: "error",
+      });
+      return;
+    }
+
+    const oversized = supportingDocuments.some(
+      (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
+    );
+    if (oversized) {
+      ToastNotification({
+        message: "One or more files exceed the 5MB limit.",
+        type: "error",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const journalVoucherId = saveResponse.id;
+      const fd = new FormData();
+      fd.append(
+        "journal_voucher",
+        JSON.stringify({ id: journalVoucherId }),
+      );
+
+      let fileIndex = 0;
+      supportingDocuments.forEach((doc) => {
+        if (!doc.file) return;
+        fd.append(`document_names[${fileIndex}]`, (doc.name ?? "").toString());
+        fd.append(`document[${fileIndex}]`, doc.file);
+        fileIndex++;
+      });
+
+      const raw = (await apiCallProtected.patch(
+        `${(URL as any).journalVoucher}${journalVoucherId}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+
+      const data = raw?.data?.data ?? raw?.data ?? raw;
+      if (data && Array.isArray((data as { documents?: unknown }).documents)) {
+        setSupportingDocuments(
+          (data as { documents: Array<Record<string, any>> }).documents.map(
+            (doc) => ({
+              name: doc.document_name ?? doc.name ?? "",
+              file: null,
+              document_url: doc.document_url ?? doc.url ?? "",
+              document_id: doc.id ?? undefined,
+              original_document_name:
+                doc.original_document_name ?? doc.document_name ?? "",
+            }),
+          ),
+        );
+      }
+
+      ToastNotification({
+        message: "Journal voucher updated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      console.error("Error updating posted journal voucher:", error);
+      ToastNotification({
+        message: getServerErrorMessage(
+          error,
+          "Failed to update journal voucher",
+        ),
         type: "error",
       });
     } finally {
@@ -857,9 +983,7 @@ function JournalVoucher() {
       }
     } catch (err: unknown) {
       ToastNotification({
-        message:
-          (err as { message?: string })?.message ??
-          "Failed to post journal voucher",
+        message: getServerErrorMessage(err, "Failed to post journal voucher"),
         type: "error",
       });
     } finally {
@@ -2127,30 +2251,33 @@ function JournalVoucher() {
               Cancel
             </Button>
             <Group gap="sm">
-              {!isReadOnly && (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    if (supportingDocuments.length === 0) {
-                      setSupportingDocuments([{ name: "", file: null }]);
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={() => {
+                  if (
+                    canManageSupportingDocuments &&
+                    supportingDocuments.length === 0
+                  ) {
+                    setSupportingDocuments([{ name: "", file: null }]);
+                  }
+                  const newErrors: { [key: number]: string } = {};
+                  supportingDocuments.forEach((doc, idx) => {
+                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                      newErrors[idx] =
+                        `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                     }
-                    const newErrors: { [key: number]: string } = {};
-                    supportingDocuments.forEach((doc, idx) => {
-                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] =
-                          `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
-                      }
-                    });
-                    setFileErrors(newErrors);
-                    openDocumentsModal();
-                  }}
-                  disabled={isSubmitting}
-                  styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
-                >
-                  Attach Supporting Documents
-                </Button>
-              )}
+                  });
+                  setFileErrors(newErrors);
+                  openDocumentsModal();
+                }}
+                disabled={isSubmitting}
+                styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+              >
+                {canManageSupportingDocuments
+                  ? "Attach Supporting Documents"
+                  : "View Supporting Documents"}
+              </Button>
               {!isReadOnly && (
                 <Button
                   type="submit"
@@ -2160,6 +2287,18 @@ function JournalVoucher() {
                   styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
                 >
                   {isUpdate ? "Update" : "Save"}
+                </Button>
+              )}
+              {canUpdatePostedJv && (
+                <Button
+                  type="button"
+                  color="#105476"
+                  rightSection={<IconChevronRight size={16} />}
+                  loading={isSubmitting}
+                  onClick={handlePostedDocumentUpdate}
+                  styles={{ root: { fontFamily: "Inter", fontSize: "13px" } }}
+                >
+                  Update
                 </Button>
               )}
               {!isReadOnly && isUpdate && canPostDocuments && (
@@ -2184,20 +2323,32 @@ function JournalVoucher() {
       <Modal
         opened={documentsModalOpened}
         onClose={closeDocumentsModal}
-        title="Attach Supporting Documents"
+        title={
+          canManageSupportingDocuments
+            ? "Attach Supporting Documents"
+            : "Supporting Documents"
+        }
         size="xl"
         centered
         style={{ fontFamily: "Inter" }}
       >
         <Stack gap="xs">
-          {supportingDocuments.map((doc, index) => (
+          {supportingDocuments.map((doc, index) => {
+            const isExistingDoc = doc.document_id != null;
+            const canEditDocRow =
+              !isReadOnly ||
+              (canAttachDocumentsAfterPost && !isExistingDoc);
+
+            return (
             <Grid key={index} columns={12} gutter="sm" align="flex-end">
               <Grid.Col span={5.5}>
                 <TextInput
                   label="Document Name"
                   placeholder="Enter document name"
                   value={doc.name}
+                  disabled={!canEditDocRow}
                   onChange={(e) => {
+                    if (!canEditDocRow) return;
                     const updated = [...supportingDocuments];
                     updated[index] = {
                       ...updated[index],
@@ -2219,7 +2370,9 @@ function JournalVoucher() {
                     File
                   </Text>
                   <Dropzone
+                    disabled={!canEditDocRow}
                     onDrop={(files: File[]) => {
+                      if (!canEditDocRow) return;
                       if (files.length === 0) return;
                       const file = files[0];
                       if (fileErrors[index]) {
@@ -2280,7 +2433,7 @@ function JournalVoucher() {
                       style={{
                         minHeight: "36px",
                         pointerEvents: "none",
-                        cursor: "pointer",
+                        cursor: canEditDocRow ? "pointer" : "default",
                       }}
                     >
                       <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
@@ -2350,7 +2503,7 @@ function JournalVoucher() {
                           </>
                         )}
                       </Group>
-                      {(doc.file || doc.document_url) && (
+                      {canEditDocRow && (doc.file || doc.document_url) && (
                         <Button
                           variant="subtle"
                           color="red"
@@ -2386,6 +2539,7 @@ function JournalVoucher() {
                   )}
                 </Box>
               </Grid.Col>
+              {canEditDocRow && (
               <Grid.Col span={1}>
                 <Button
                   variant="light"
@@ -2418,6 +2572,8 @@ function JournalVoucher() {
                   <IconTrash size={16} />
                 </Button>
               </Grid.Col>
+              )}
+              {canManageSupportingDocuments && (
               <Grid.Col span={1} offset={11}>
                 {index === supportingDocuments.length - 1 && (
                   <Button
@@ -2434,10 +2590,12 @@ function JournalVoucher() {
                   </Button>
                 )}
               </Grid.Col>
+              )}
             </Grid>
-          ))}
+          );
+          })}
 
-          {supportingDocuments.length === 0 && (
+          {canManageSupportingDocuments && supportingDocuments.length === 0 && (
             <Button
               variant="light"
               color="#105476"

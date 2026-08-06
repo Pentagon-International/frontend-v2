@@ -32,6 +32,7 @@ import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -954,29 +955,33 @@ export default function OverseasPaymentCreate({
       });
     }
 
-    // Populate documents for edit/view (documents are passed from the list in `location.state`)
-    const rawDocs = (paymentFromState as any)?.documents;
-    if (Array.isArray(rawDocs) && rawDocs.length > 0) {
-      form.setFieldValue(
-        "supporting_documents",
-        rawDocs.map((doc: any) => ({
-          name: (
-            doc.document_name ??
-            doc.file_name ??
-            doc.name ??
-            ""
-          ).toString(),
-          file: null as File | null,
-          document_url: doc.document_url ?? doc.url ?? "",
-          document_id: doc.id ?? undefined,
-          original_document_name: (
-            doc.original_document_name ??
-            doc.document_name ??
-            doc.file_name ??
-            ""
-          ).toString(),
-        })),
-      );
+    // Populate documents for edit/view only — reversal create starts empty (manual upload)
+    if (!isReversalCreate) {
+      const rawDocs = (paymentFromState as any)?.documents;
+      if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+        form.setFieldValue(
+          "supporting_documents",
+          rawDocs.map((doc: any) => ({
+            name: (
+              doc.document_name ??
+              doc.file_name ??
+              doc.name ??
+              ""
+            ).toString(),
+            file: null as File | null,
+            document_url: doc.document_url ?? doc.url ?? "",
+            document_id: doc.id ?? undefined,
+            original_document_name: (
+              doc.original_document_name ??
+              doc.document_name ??
+              doc.file_name ??
+              ""
+            ).toString(),
+          })),
+        );
+      }
+    } else {
+      form.setFieldValue("supporting_documents", []);
     }
     suppressAutoCalculationsRef.current = true;
     // Re-run when state changes (e.g. navigating from list to edit/view with different row)
@@ -1769,17 +1774,18 @@ export default function OverseasPaymentCreate({
     const fd = new FormData();
     fd.append("reverse_payment", JSON.stringify(payload));
 
-    let fileIndex = 0;
+    let docIndex = 0;
     form.values.supporting_documents.forEach((doc) => {
-      // Only send fields for newly uploaded files
       if (doc.file) {
-        if (doc.name) fd.append(`document_names[${fileIndex}]`, doc.name);
-        fd.append(`document[${fileIndex}]`, doc.file);
+        fd.append(`document_names[${docIndex}]`, (doc.name ?? "").toString());
+        fd.append(`document[${docIndex}]`, doc.file);
         if (doc.document_id != null) {
-          fd.append(`document_id[${fileIndex}]`, String(doc.document_id));
+          fd.append(`document_id[${docIndex}]`, String(doc.document_id));
         }
-        fileIndex++;
+      } else if (doc.document_id != null) {
+        fd.append(`document_id[${docIndex}]`, String(doc.document_id));
       }
+      docIndex++;
     });
 
     return fd;
@@ -1811,6 +1817,108 @@ export default function OverseasPaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
+    const postedStatus = String(saveResponse?.status ?? "").toUpperCase();
+    if (
+      !_isReversal &&
+      pathname.includes("/edit") &&
+      postedStatus === "POSTED" &&
+      saveResponse?.id != null
+    ) {
+      const newDocs = values.supporting_documents.filter(
+        (d) => d.document_id == null,
+      );
+      const hasNewFiles = newDocs.some((d) => d.file != null);
+
+      if (!hasNewFiles) {
+        ToastNotification({
+          message: "Attach at least one new document before updating.",
+          type: "error",
+        });
+        return;
+      }
+
+      const incompleteNewDoc = newDocs.some(
+        (d) =>
+          (Boolean(d.file) && !(d.name ?? "").trim()) ||
+          (Boolean((d.name ?? "").trim()) && !d.file),
+      );
+      if (incompleteNewDoc) {
+        ToastNotification({
+          message: "Each new document must have both a name and a file.",
+          type: "error",
+        });
+        return;
+      }
+      const oversized = values.supporting_documents.some(
+        (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
+      );
+      if (oversized) {
+        ToastNotification({
+          message: "One or more files exceed the 5MB limit.",
+          type: "error",
+        });
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const id = saveResponse.id;
+        const fd = new FormData();
+        fd.append("payment", JSON.stringify({ id }));
+        let fileIndex = 0;
+        values.supporting_documents.forEach((doc) => {
+          if (!doc.file) return;
+          fd.append(
+            `document_names[${fileIndex}]`,
+            (doc.name ?? "").toString(),
+          );
+          fd.append(`document[${fileIndex}]`, doc.file);
+          fileIndex++;
+        });
+        const raw = (await apiCallProtected.patch(
+          `${URL.payment}${id}/`,
+          fd,
+          FORM_DATA_HEADERS,
+        )) as any;
+        const res = raw?.data?.data ?? raw?.data ?? raw;
+        if (Array.isArray(res?.documents)) {
+          form.setFieldValue(
+            "supporting_documents",
+            res.documents.map((doc: any) => ({
+              name: (
+                doc.document_name ??
+                doc.file_name ??
+                doc.name ??
+                ""
+              ).toString(),
+              file: null,
+              document_url: doc.document_url ?? doc.url ?? "",
+              document_id: doc.id ?? undefined,
+              original_document_name:
+                doc.original_document_name ??
+                doc.document_name ??
+                doc.file_name ??
+                "",
+            })),
+          );
+        }
+        await queryClient.invalidateQueries({ queryKey: ["payment"] });
+        ToastNotification({
+          type: "success",
+          message: "Payment updated successfully.",
+        });
+      } catch (e: unknown) {
+        console.error("Failed to update posted overseas payment", e);
+        ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(e, "Failed to update payment."),
+      });
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     const headerRoeToastError = validateRoeToast(values.currency, values.roe);
     if (headerRoeToastError) {
       form.setFieldError(
@@ -2119,9 +2227,7 @@ export default function OverseasPaymentCreate({
       console.error("Save/update payment error:", err);
       ToastNotification({
         type: "error",
-        message:
-          (err as { response?: { data?: { message?: string } } })?.response
-            ?.data?.message ?? "Failed to save payment.",
+        message: getServerErrorMessage(err, "Failed to save payment."),
       });
     } finally {
       setIsSubmitting(false);
@@ -2193,9 +2299,7 @@ export default function OverseasPaymentCreate({
         console.error("Post payment reversal error:", err);
         ToastNotification({
           type: "error",
-          message:
-            (err as { response?: { data?: { message?: string } } })?.response
-              ?.data?.message ?? "Failed to post payment reversal.",
+          message: getServerErrorMessage(err, "Failed to post payment reversal."),
         });
       } finally {
         setIsPosting(false);
@@ -2260,9 +2364,7 @@ export default function OverseasPaymentCreate({
       console.error("Post payment error:", err);
       ToastNotification({
         type: "error",
-        message:
-          (err as { response?: { data?: { message?: string } } })?.response
-            ?.data?.message ?? "Failed to post payment.",
+        message: getServerErrorMessage(err, "Failed to post payment."),
       });
     } finally {
       setIsPosting(false);
@@ -2278,6 +2380,17 @@ export default function OverseasPaymentCreate({
     isViewRoute ||
     (!_isReversal && statusUpper === "POSTED") ||
     (_isReversal && reversalStatusUpper === "POSTED");
+  const isPostedDocumentAttachEdit =
+    !_isReversal &&
+    !isViewRoute &&
+    pathname.includes("/edit") &&
+    statusUpper === "POSTED";
+  const canAttachDocumentsAfterPost =
+    isPostedDocumentAttachEdit &&
+    saveResponse?.id != null &&
+    saveResponse.id > 0;
+  const canManageSupportingDocuments =
+    !isReadOnly || canAttachDocumentsAfterPost;
   const reversalFormDisabled = _isReversal;
   const inputStyles =
     isReadOnly || reversalFormDisabled ? readOnlyFieldStyles : fieldStyles;
@@ -3514,9 +3627,9 @@ export default function OverseasPaymentCreate({
             opened={documentsModalOpened}
             onClose={closeDocumentsModal}
             title={
-              isReadOnly
-                ? "Supporting Documents"
-                : "Attach Supporting Documents"
+              canManageSupportingDocuments
+                ? "Attach Supporting Documents"
+                : "Supporting Documents"
             }
             size="xl"
             centered
@@ -3524,14 +3637,22 @@ export default function OverseasPaymentCreate({
             styles={{ title: { fontWeight: 600, color: "#105476" } }}
           >
             <Stack gap="xs">
-              {form.values.supporting_documents.map((doc, index) => (
+              {form.values.supporting_documents.map((doc, index) => {
+                const isExistingDoc = doc.document_id != null;
+                const canEditDocRow =
+                  !isReadOnly ||
+                  (canAttachDocumentsAfterPost && !isExistingDoc);
+
+                return (
                 <Grid key={index} columns={12} gutter="sm" align="flex-end">
                   <Grid.Col span={5.5}>
                     <TextInput
                       label="Document Name"
                       placeholder="Enter document name"
                       value={doc.name}
+                      disabled={!canEditDocRow}
                       onChange={(e) => {
+                        if (!canEditDocRow) return;
                         const updatedDocs = [
                           ...form.values.supporting_documents,
                         ];
@@ -3549,8 +3670,9 @@ export default function OverseasPaymentCreate({
                         File
                       </Text>
                       <Dropzone
+                        disabled={!canEditDocRow}
                         onDrop={(files: File[]) => {
-                          if (isReadOnly) return;
+                          if (!canEditDocRow) return;
                           if (files.length === 0) return;
                           const file = files[0];
                           if (fileErrors[index]) {
@@ -3618,7 +3740,7 @@ export default function OverseasPaymentCreate({
                           style={{
                             minHeight: "36px",
                             pointerEvents: "none",
-                            cursor: "pointer",
+                            cursor: canEditDocRow ? "pointer" : "default",
                           }}
                         >
                           <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
@@ -3695,7 +3817,7 @@ export default function OverseasPaymentCreate({
                               </>
                             )}
                           </Group>
-                          {!isReadOnly && (doc.file || doc.document_url) && (
+                          {canEditDocRow && (doc.file || doc.document_url) && (
                             <Button
                               variant="subtle"
                               color="red"
@@ -3736,6 +3858,7 @@ export default function OverseasPaymentCreate({
                       )}
                     </Box>
                   </Grid.Col>
+                  {canEditDocRow && (
                   <Grid.Col span={1}>
                     <Button
                       variant="light"
@@ -3775,9 +3898,10 @@ export default function OverseasPaymentCreate({
                       <IconTrash size={16} />
                     </Button>
                   </Grid.Col>
+                  )}
+                  {canManageSupportingDocuments && (
                   <Grid.Col span={1} offset={11}>
-                    {!isReadOnly &&
-                      index === form.values.supporting_documents.length - 1 && (
+                    {index === form.values.supporting_documents.length - 1 && (
                         <Button
                           variant="light"
                           color="#105476"
@@ -3792,10 +3916,13 @@ export default function OverseasPaymentCreate({
                         </Button>
                       )}
                   </Grid.Col>
+                  )}
                 </Grid>
-              ))}
+              );
+              })}
 
-              {!isReadOnly && form.values.supporting_documents.length === 0 && (
+              {canManageSupportingDocuments &&
+                form.values.supporting_documents.length === 0 && (
                 <Button
                   variant="light"
                   color="#105476"
@@ -3832,7 +3959,10 @@ export default function OverseasPaymentCreate({
                 },
               }}
               onClick={() => {
-                if (form.values.supporting_documents.length === 0) {
+                if (
+                  canManageSupportingDocuments &&
+                  form.values.supporting_documents.length === 0
+                ) {
                   form.setFieldValue("supporting_documents", [
                     { name: "", file: null },
                   ]);
@@ -3849,9 +3979,9 @@ export default function OverseasPaymentCreate({
               }}
               disabled={isSubmitting}
             >
-              {isReadOnly
-                ? "View supporting document(s)"
-                : "Attach supporting document"}
+              {canManageSupportingDocuments
+                ? "Attach supporting document"
+                : "View supporting document(s)"}
             </Button>
             <Button
               variant="outline"
@@ -3860,7 +3990,7 @@ export default function OverseasPaymentCreate({
             >
               Cancel
             </Button>
-            {!isReadOnly && (
+            {(!isReadOnly || isPostedDocumentAttachEdit) && (
               <>
                 <Button
                   type="submit"

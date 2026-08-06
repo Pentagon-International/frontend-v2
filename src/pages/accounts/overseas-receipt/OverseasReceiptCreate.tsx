@@ -36,6 +36,7 @@ import {
   import { useNavigate, useLocation } from "react-router-dom";
   import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
   import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+  import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
   import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
   import { useQuery, useQueryClient } from "@tanstack/react-query";
   import { URL } from "../../../api/serverUrls";
@@ -879,24 +880,28 @@ import {
         });
       }
 
-      // Populate supporting documents for edit/view (list must provide `documents` in location.state)
-      const rawDocs = (receiptFromState as any)?.documents;
-      if (Array.isArray(rawDocs) && rawDocs.length > 0) {
-        form.setFieldValue(
-          "supporting_documents",
-          rawDocs.map((doc: any) => ({
-            name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
-            file: null as File | null,
-            document_url:
-               doc.document_url ?? doc.url ?? "",
-            document_id: doc.id ?? undefined,
-            original_document_name:
-              (doc.original_document_name ??
-                doc.document_name ??
-                doc.file_name ??
-                "").toString(),
-          })),
-        );
+      // Populate supporting documents for edit/view only — reversal create starts empty
+      if (!isReversalCreate) {
+        const rawDocs = (receiptFromState as any)?.documents;
+        if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+          form.setFieldValue(
+            "supporting_documents",
+            rawDocs.map((doc: any) => ({
+              name: (doc.document_name ?? doc.file_name ?? doc.name ?? "").toString(),
+              file: null as File | null,
+              document_url:
+                 doc.document_url ?? doc.url ?? "",
+              document_id: doc.id ?? undefined,
+              original_document_name:
+                (doc.original_document_name ??
+                  doc.document_name ??
+                  doc.file_name ??
+                  "").toString(),
+            })),
+          );
+        }
+      } else {
+        form.setFieldValue("supporting_documents", []);
       }
     }, [
       receiptFromState?.id,
@@ -1589,6 +1594,108 @@ import {
     };
   
     const handleSubmit = async (values: ReceiptFormValues) => {
+      const postedStatus = String(saveResponse?.status ?? "").toUpperCase();
+      if (
+        !_isReversal &&
+        pathname.includes("/edit") &&
+        postedStatus === "POSTED" &&
+        saveResponse?.id != null
+      ) {
+        const newDocs = values.supporting_documents.filter(
+          (d) => d.document_id == null,
+        );
+        const hasNewFiles = newDocs.some((d) => d.file != null);
+
+        if (!hasNewFiles) {
+          ToastNotification({
+            message: "Attach at least one new document before updating.",
+            type: "error",
+          });
+          return;
+        }
+
+        const incompleteNewDoc = newDocs.some(
+          (d) =>
+            (Boolean(d.file) && !(d.name ?? "").trim()) ||
+            (Boolean((d.name ?? "").trim()) && !d.file),
+        );
+        if (incompleteNewDoc) {
+          ToastNotification({
+            message: "Each new document must have both a name and a file.",
+            type: "error",
+          });
+          return;
+        }
+        const oversized = values.supporting_documents.some(
+          (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
+        );
+        if (oversized) {
+          ToastNotification({
+            message: "One or more files exceed the 5MB limit.",
+            type: "error",
+          });
+          return;
+        }
+
+        setIsSubmitting(true);
+        try {
+          const id = saveResponse.id;
+          const fd = new FormData();
+          fd.append("receipt", JSON.stringify({ id }));
+          let fileIndex = 0;
+          values.supporting_documents.forEach((doc) => {
+            if (!doc.file) return;
+            fd.append(
+              `document_names[${fileIndex}]`,
+              (doc.name ?? "").toString(),
+            );
+            fd.append(`document[${fileIndex}]`, doc.file);
+            fileIndex++;
+          });
+          const raw = (await apiCallProtected.patch(
+            `${URL.receipt}${id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
+          if (Array.isArray(res?.documents)) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  doc.name ??
+                  ""
+                ).toString(),
+                file: null,
+                document_url: doc.document_url ?? doc.url ?? "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ??
+                  doc.document_name ??
+                  doc.file_name ??
+                  "",
+              })),
+            );
+          }
+          await queryClient.invalidateQueries({ queryKey: ["receipt"] });
+          ToastNotification({
+            type: "success",
+            message: "Receipt updated successfully.",
+          });
+        } catch (e: unknown) {
+          console.error("Failed to update posted overseas receipt", e);
+          ToastNotification({
+            type: "error",
+            message: getServerErrorMessage(e, "Failed to update receipt."),
+          });
+        } finally {
+          setIsSubmitting(false);
+        }
+        return;
+      }
+
       const headerRoeToastError = validateRoeToast(values.currency, values.roe);
       if (headerRoeToastError) {
         form.setFieldError(
@@ -1930,9 +2037,7 @@ import {
         console.error("Save/update receipt error:", err);
         ToastNotification({
           type: "error",
-          message:
-            (err as { response?: { data?: { message?: string } } })?.response
-              ?.data?.message ?? "Failed to save receipt.",
+          message: getServerErrorMessage(err, "Failed to save receipt."),
         });
       } finally {
         setIsSubmitting(false);
@@ -2002,9 +2107,7 @@ import {
         console.error("Post reverse receipt error:", err);
         ToastNotification({
           type: "error",
-          message:
-            (err as { response?: { data?: { message?: string } } })?.response
-              ?.data?.message ?? "Failed to post reverse receipt.",
+          message: getServerErrorMessage(err, "Failed to post reverse receipt."),
         });
       } finally {
         setIsPosting(false);
@@ -2070,9 +2173,7 @@ import {
         console.error("Post receipt error:", err);
         ToastNotification({
           type: "error",
-          message:
-            (err as { response?: { data?: { message?: string } } })?.response
-              ?.data?.message ?? "Failed to post receipt.",
+          message: getServerErrorMessage(err, "Failed to post receipt."),
         });
       } finally {
         setIsPosting(false);
@@ -2089,6 +2190,17 @@ import {
       isViewRoute ||
       (!_isReversal && statusUpper === "POSTED") ||
       (_isReversal && reversalStatusUpper === "POSTED");
+    const isPostedDocumentAttachEdit =
+      !_isReversal &&
+      !isViewRoute &&
+      pathname.includes("/edit") &&
+      statusUpper === "POSTED";
+    const canAttachDocumentsAfterPost =
+      isPostedDocumentAttachEdit &&
+      saveResponse?.id != null &&
+      saveResponse.id > 0;
+    const canManageSupportingDocuments =
+      !isReadOnly || canAttachDocumentsAfterPost;
     // On reversal page, header daybook and date are editable; all other fields disabled.
     const reversalFormDisabled = _isReversal;
     const inputStyles =
@@ -3371,23 +3483,33 @@ import {
               <Modal
                 opened={documentsModalOpened}
                 onClose={closeDocumentsModal}
-                title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
+                title={
+                  canManageSupportingDocuments
+                    ? "Attach Supporting Documents"
+                    : "Supporting Documents"
+                }
                 size="xl"
                 centered
                 style={{ fontFamily: "Inter" }}
                 styles={{ title: { fontWeight: 600, color: "#105476" } }}
               >
                 <Stack gap="xs">
-                  {form.values.supporting_documents.map((doc, index) => (
+                  {form.values.supporting_documents.map((doc, index) => {
+                    const isExistingDoc = doc.document_id != null;
+                    const canEditDocRow =
+                      !isReadOnly ||
+                      (canAttachDocumentsAfterPost && !isExistingDoc);
+
+                    return (
                     <Grid key={index} columns={12} gutter="sm" align="flex-end">
                       <Grid.Col span={5.5}>
                         <TextInput
                           label="Document Name"
                           placeholder="Enter document name"
                           value={doc.name}
-                          disabled={isReadOnly}
+                          disabled={!canEditDocRow}
                           onChange={(e) => {
-                            if (isReadOnly) return;
+                            if (!canEditDocRow) return;
                             const updatedDocs = [
                               ...form.values.supporting_documents,
                             ];
@@ -3408,8 +3530,9 @@ import {
                             File
                           </Text>
                           <Dropzone
+                            disabled={!canEditDocRow}
                             onDrop={(files: File[]) => {
-                              if (isReadOnly) return;
+                              if (!canEditDocRow) return;
                               if (files.length === 0) return;
                               const file = files[0];
                               if (fileErrors[index]) {
@@ -3476,7 +3599,7 @@ import {
                               style={{
                                 minHeight: "36px",
                                 pointerEvents: "none",
-                                cursor: "pointer",
+                                cursor: canEditDocRow ? "pointer" : "default",
                               }}
                             >
                               <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
@@ -3553,7 +3676,7 @@ import {
                                   </>
                                 )}
                               </Group>
-                              {!isReadOnly && (doc.file || doc.document_url) && (
+                              {canEditDocRow && (doc.file || doc.document_url) && (
                                 <Button
                                   variant="subtle"
                                   color="red"
@@ -3561,7 +3684,7 @@ import {
                                   p={4}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (isReadOnly) return;
+                                    if (!canEditDocRow) return;
                                     if (fileErrors[index]) {
                                       const newErrors = { ...fileErrors };
                                       delete newErrors[index];
@@ -3595,7 +3718,7 @@ import {
                           )}
                         </Box>
                       </Grid.Col>
-                      {!isReadOnly && (
+                      {canEditDocRow && (
                         <Grid.Col span={1}>
                           <Button
                           variant="light"
@@ -3638,9 +3761,9 @@ import {
                           </Button>
                         </Grid.Col>
                       )}
+                      {canManageSupportingDocuments && (
                       <Grid.Col span={1} offset={11}>
-                        {!isReadOnly &&
-                          index ===
+                        {index ===
                           form.values.supporting_documents.length - 1 && (
                           <Button
                             variant="light"
@@ -3656,10 +3779,13 @@ import {
                           </Button>
                         )}
                       </Grid.Col>
+                      )}
                     </Grid>
-                  ))}
+                  );
+                  })}
 
-                  {!isReadOnly && form.values.supporting_documents.length === 0 && (
+                  {canManageSupportingDocuments &&
+                    form.values.supporting_documents.length === 0 && (
                     <Button
                       variant="light"
                       color="#105476"
@@ -3697,7 +3823,10 @@ import {
                   },
                 }}
                 onClick={() => {
-                  if (!isReadOnly && form.values.supporting_documents.length === 0) {
+                  if (
+                    canManageSupportingDocuments &&
+                    form.values.supporting_documents.length === 0
+                  ) {
                     form.setFieldValue("supporting_documents", [
                       { name: "", file: null },
                     ]);
@@ -3713,7 +3842,9 @@ import {
                 }}
                 disabled={isSubmitting}
               >
-                {isReadOnly ? "View supporting document(s)" : "Attach supporting document"}
+                {canManageSupportingDocuments
+                  ? "Attach supporting document"
+                  : "View supporting document(s)"}
               </Button>
               <Button
                 variant="outline"
@@ -3722,7 +3853,7 @@ import {
               >
                 Cancel
               </Button>
-              {!isReadOnly && (
+              {(!isReadOnly || isPostedDocumentAttachEdit) && (
                 <>
                   <Button
                     type="submit"

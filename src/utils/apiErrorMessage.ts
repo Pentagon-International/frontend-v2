@@ -33,10 +33,7 @@ export function getServerErrorMessage(
   if (typeof error === "object" && error !== null) {
     const record = error as Record<string, unknown>;
 
-    if (typeof record.message === "string" && record.message.trim()) {
-      return record.message.trim();
-    }
-
+    // Prefer API body message (e.g. axios error.response.data.message)
     const responseData =
       record.response && typeof record.response === "object"
         ? (record.response as Record<string, unknown>).data
@@ -46,10 +43,21 @@ export function getServerErrorMessage(
       const message = getApiResponseMessage(responseData, "");
       if (message) return message;
     }
+
+    if (typeof record.message === "string" && record.message.trim()) {
+      const msg = record.message.trim();
+      // Skip generic Axios transport messages when a better fallback exists
+      if (!/^Request failed with status code \d+$/i.test(msg)) {
+        return msg;
+      }
+    }
   }
 
   if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
+    const msg = error.message.trim();
+    if (!/^Request failed with status code \d+$/i.test(msg)) {
+      return msg;
+    }
   }
 
   return fallback;

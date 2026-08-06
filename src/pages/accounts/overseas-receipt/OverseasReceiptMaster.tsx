@@ -715,7 +715,7 @@ export default function OverseasReceiptMaster() {
                     </Group>
                   </UnstyledButton>
                 </Box>
-                {isUnposted && (
+                {(isUnposted || isPosted) && (
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
@@ -749,16 +749,18 @@ export default function OverseasReceiptMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
-                        const {
-                          documents: _documents,
-                          supporting_documents: _supportingDocuments,
-                          ...overseasReceiptDataWithoutDocuments
-                        } = (row.original as any) ?? {};
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
                         navigate("/overseas-receipt/reversal/create", {
-                          state: overseasReceiptDataWithoutDocuments,
+                          state: (() => {
+                            const {
+                              documents: _documents,
+                              supporting_documents: _supportingDocuments,
+                              ...overseasReceiptDataWithoutDocuments
+                            } = (row.original as any) ?? {};
+                            return overseasReceiptDataWithoutDocuments;
+                          })(),
                         });
                       }}
                     >

@@ -734,16 +734,18 @@ export default function PaymentMaster() {
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
-                        const {
-                          documents: _documents,
-                          supporting_documents: _supportingDocuments,
-                          ...paymentDataWithoutDocuments
-                        } = (row.original as any) ?? {};
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
                         navigate("/payment/reversal/create", {
-                          state: paymentDataWithoutDocuments,
+                          state: (() => {
+                            const {
+                              documents: _documents,
+                              supporting_documents: _supportingDocuments,
+                              ...paymentDataWithoutDocuments
+                            } = (row.original as any) ?? {};
+                            return paymentDataWithoutDocuments;
+                          })(),
                         });
                       }}
                     >

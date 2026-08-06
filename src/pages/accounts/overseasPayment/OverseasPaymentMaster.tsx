@@ -711,14 +711,22 @@ export default function OverseasPaymentMaster() {
                     </Group>
                   </UnstyledButton>
                 </Box>
-                {isUnposted && (
+                {(isUnposted || isPosted) && (
                   <Box px={10} py={5}>
                     <UnstyledButton
                       onClick={() => {
                         setStoreFilters(LIST_KEY, appliedFilters);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate("/overseas-payment/edit", { state: row.original });
+                        navigate("/overseas-payment/edit", {
+                          state: {
+                            ...(row.original as any),
+                            documents:
+                              (row.original as any)?.documents ??
+                              (row.original as any)?.supporting_documents ??
+                              [],
+                          },
+                        });
                       }}
                     >
                       <Group gap="sm">
@@ -741,8 +749,15 @@ export default function OverseasPaymentMaster() {
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
                         navigate("/overseas-payment/reversal/create", {
-                          state: row.original,
-                        })
+                          state: (() => {
+                            const {
+                              documents: _documents,
+                              supporting_documents: _supportingDocuments,
+                              ...overseasPaymentDataWithoutDocuments
+                            } = (row.original as any) ?? {};
+                            return overseasPaymentDataWithoutDocuments;
+                          })(),
+                        });
                       }}
                     >
                       <Group gap="sm">

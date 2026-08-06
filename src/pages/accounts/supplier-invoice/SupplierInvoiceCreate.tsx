@@ -63,6 +63,7 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -501,6 +502,20 @@ function resolveSupplierInvoiceApiRecord(
     : null;
 }
 
+/** API may return boolean, 0/1, or string flags for overseas (agent) CRJ. */
+function parseIsAgentFromInvoiceRecord(record: unknown): boolean | undefined {
+  if (record == null || typeof record !== "object") return undefined;
+  const v = (record as Record<string, unknown>).is_agent;
+  if (v === true || v === 1) return true;
+  if (v === false || v === 0) return false;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true" || s === "1") return true;
+    if (s === "false" || s === "0") return false;
+  }
+  return undefined;
+}
+
 function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => ({
@@ -643,39 +658,53 @@ export default function SupplierInvoiceCreate({
   }, [location.key]);
 
   useEffect(() => {
-    if ((!isViewMode && !isEditMode) || isReversalCreate) {
-      setInvoiceFromRouteFetch(null);
-      return;
-    }
-    const idStr = supplierInvoiceIdFromRoute?.trim();
     const idFromState = (location.state as { id?: number } | null | undefined)
       ?.id;
-    const idNum = idStr
-      ? Number(idStr)
-      : idFromState != null
-        ? Number(idFromState)
-        : NaN;
+    const idFromRoute = supplierInvoiceIdFromRoute?.trim();
+    const resolveSourceId = (): number => {
+      if (isReversalCreate) {
+        return idFromState != null ? Number(idFromState) : NaN;
+      }
+      if (!isViewMode && !isEditMode) return NaN;
+      const idStr = idFromRoute;
+      return idStr
+        ? Number(idStr)
+        : idFromState != null
+          ? Number(idFromState)
+          : NaN;
+    };
+
+    const idNum = resolveSourceId();
     if (!Number.isFinite(idNum) || idNum <= 0) {
       setInvoiceFromRouteFetch(null);
       return;
     }
+
+    // Reversal create: load source invoice for form fields (not attachments). Edit/view: load record.
+    const shouldFetch =
+      isReversalCreate || isViewMode || isEditMode;
+    if (!shouldFetch) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+
+    const detailUrl =
+      isReversal && !isReversalCreate
+        ? `${URL.reverseSupplierInvoice}${idNum}/`
+        : `${URL.supplierInvoice}${idNum}/`;
+
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiCallProtected.get(
-          `${URL.supplierInvoice}${idNum}/`,
-          API_HEADER,
-        );
+        const res = await apiCallProtected.get(detailUrl, API_HEADER);
         const record = resolveSupplierInvoiceApiRecord(res);
         if (!cancelled && record) {
-          // Detail GET is source of truth for document PKs (list row may omit/wrong docs)
           setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
         }
       } catch (e) {
         console.error("Failed to load supplier invoice by id", e);
         if (!cancelled) {
-          // Keep list state as fallback when detail fetch fails
-          if (idStr) {
+          if (idFromRoute) {
             setInvoiceFromRouteFetch(null);
             ToastNotification({
               type: "error",
@@ -693,6 +722,7 @@ export default function SupplierInvoiceCreate({
     isViewMode,
     isEditMode,
     isReversalCreate,
+    isReversal,
     location.key,
     (location.state as { id?: number } | null | undefined)?.id,
   ]);
@@ -720,6 +750,8 @@ export default function SupplierInvoiceCreate({
     null,
   );
   const saveResponseRef = useRef<typeof saveResponse>(null);
+  /** Reversal payloads: is_agent from source/reversal invoice, not reversal daybook. */
+  const reversalIsAgentRef = useRef<boolean | null>(null);
   useEffect(() => {
     saveResponseRef.current = saveResponse;
   }, [saveResponse]);
@@ -1130,6 +1162,16 @@ export default function SupplierInvoiceCreate({
   const selectedDaybookLabelUpper = selectedDaybookLabel.toUpperCase();
   const isOverseasCrjDaybook = selectedDaybookLabelUpper.includes("OVERSEAS");
   const vendorApiEndpoint = isOverseasCrjDaybook ? URL.agent : URL.supplierByType;
+
+  const resolveIsAgentForPayload = (): boolean => {
+    if (!isReversal) {
+      return isOverseasCrjDaybook;
+    }
+    const fromInvoice = parseIsAgentFromInvoiceRecord(invoiceFromState);
+    if (fromInvoice !== undefined) return fromInvoice;
+    if (reversalIsAgentRef.current != null) return reversalIsAgentRef.current;
+    return false;
+  };
 
   const isDaybookSelected = !!form.values.day_book_id;
 
@@ -1562,6 +1604,12 @@ export default function SupplierInvoiceCreate({
     if (!runForViewEdit && !runForReversalCreate) return;
     if (!invoiceFromState || invoiceFromState.id == null) return;
     const data = invoiceFromState as Record<string, unknown>;
+    if (isReversal) {
+      const agentFlag = parseIsAgentFromInvoiceRecord(data);
+      if (agentFlag !== undefined) {
+        reversalIsAgentRef.current = agentFlag;
+      }
+    }
     const chargesArray = Array.isArray(data.charges)
       ? (data.charges as ApiCharge[])
       : Array.isArray(data.charges_data)
@@ -1614,6 +1662,16 @@ export default function SupplierInvoiceCreate({
     setAgentDisplayName(
       (data.creditor_agent ?? data.agent_name ?? null) as string | null,
     );
+    // Reversal create: do not copy source attachments — user uploads manually if needed
+    const mappedSupportingDocuments = runForReversalCreate
+      ? []
+      : mapApiDocumentsToSupportingDocuments(
+          (data.documents ??
+            data.supporting_documents ??
+            (invoiceFromState as { documents?: unknown })?.documents ??
+            (invoiceFromState as { supporting_documents?: unknown })
+              ?.supporting_documents) as Array<Record<string, any>> | undefined,
+        );
     form.setValues({
       cbp_number: (data.cbp_number ?? "") as string,
       cost_center: (data.cost_center ?? "") as string,
@@ -1670,9 +1728,11 @@ export default function SupplierInvoiceCreate({
         : (data.status ?? "UNPOSTED")) as string,
       Dr_Cr: headerDrCr,
       charges_data: mappedCharges,
+      supporting_documents: mappedSupportingDocuments,
     });
     // Force charges to apply (same as ReceiptCreate: setFieldValue after setValues so list array is always shown)
     form.setFieldValue("charges_data", mappedCharges);
+    form.setFieldValue("supporting_documents", mappedSupportingDocuments);
     if (isEditMode) {
       editAmountCalcBaselineRef.current = buildAmountCalcBaseline({
         taxable_amount:
@@ -1702,16 +1762,16 @@ export default function SupplierInvoiceCreate({
         charges_data: mappedCharges,
       });
     }
-    // Support documents for edit/view flows
-    const rawDocs =
-      (invoiceFromState as any)?.documents ??
-      (invoiceFromState as any)?.supporting_documents;
-    form.setFieldValue(
-      "supporting_documents",
-      mapApiDocumentsToSupportingDocuments(rawDocs),
-    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoiceFromState?.id, isViewMode, isEditMode, isReversalCreate, isReversal, location.key]);
+  }, [
+    invoiceFromState?.id,
+    invoiceFromRouteFetch,
+    isViewMode,
+    isEditMode,
+    isReversalCreate,
+    isReversal,
+    location.key,
+  ]);
 
   // Auto-select "LOCAL CRJ" daybook when coming from Payment Request → Create Supplier Invoice
   useEffect(() => {
@@ -2023,6 +2083,7 @@ export default function SupplierInvoiceCreate({
   /**
    * Edit: send PKs of existing docs still on the form (not deleted).
    * New uploads go in FormData only — without document_id.
+   * Create (including reversal create) omits document_ids.
    */
   const buildSupplierInvoiceDocumentIdsPayload = (
     values: SupplierInvoiceFormValues,
@@ -2041,13 +2102,14 @@ export default function SupplierInvoiceCreate({
   const buildSupplierInvoiceFormData = (
     payload: Record<string, unknown>,
     formKey: "supplier_invoice" | "reverse_supplier_invoice",
+    supportingDocuments: SupportingDocument[] = form.values.supporting_documents,
   ): FormData => {
     const fd = new FormData();
     fd.append(formKey, JSON.stringify(payload));
 
     // New documents only — create without document_id
     let fileIndex = 0;
-    form.values.supporting_documents.forEach((doc) => {
+    supportingDocuments.forEach((doc) => {
       if (!doc.file) return;
 
       fd.append(`document_names[${fileIndex}]`, (doc.name ?? "").toString());
@@ -2118,6 +2180,14 @@ export default function SupplierInvoiceCreate({
       charges_data: mappedCharges,
     });
     form.setFieldValue("charges_data", mappedCharges);
+    if (Array.isArray((data as { documents?: unknown }).documents)) {
+      form.setFieldValue(
+        "supporting_documents",
+        mapApiDocumentsToSupportingDocuments(
+          (data as { documents: Array<Record<string, any>> }).documents,
+        ),
+      );
+    }
     setAgentDisplayName(
       (data.creditor_agent ?? data.agent_name ?? null) as string | null,
     );
@@ -2187,7 +2257,7 @@ export default function SupplierInvoiceCreate({
       }
 
       const payload = buildPayload(values);
-      (payload as Record<string, unknown>).is_agent = isOverseasCrjDaybook ? true : false;
+      (payload as Record<string, unknown>).is_agent = resolveIsAgentForPayload();
       const isEdit = saveResponse?.id != null;
       // Reversal create: include source invoice's crj_number (required by API)
       if (isReversal && !isEdit && invoiceFromState) {
@@ -2209,6 +2279,7 @@ export default function SupplierInvoiceCreate({
         const fd = buildSupplierInvoiceFormData(
           payload,
           isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
+          values.supporting_documents,
         );
 
         const raw = (await apiCallProtected.put(
@@ -2219,6 +2290,12 @@ export default function SupplierInvoiceCreate({
 
         const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data) {
+          if (isReversal) {
+            const agentFromResponse = parseIsAgentFromInvoiceRecord(data);
+            if (agentFromResponse !== undefined) {
+              reversalIsAgentRef.current = agentFromResponse;
+            }
+          }
           const dataWithReverse = data as { reverse_crj_number?: string };
           setSaveResponse({
             id: data.id ?? saveResponse?.id,
@@ -2269,9 +2346,15 @@ export default function SupplierInvoiceCreate({
               : null;
         }
       } else {
+        // Reversal create: only send manually attached new files (no source-doc copy)
+        const docsForSubmit =
+          isReversal && !isEdit
+            ? values.supporting_documents.filter((d) => d.file != null)
+            : values.supporting_documents;
         const fd = buildSupplierInvoiceFormData(
           payload,
           isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
+          docsForSubmit,
         );
         const raw = (await apiCallProtected.post(
           reversalUrl,
@@ -2281,6 +2364,12 @@ export default function SupplierInvoiceCreate({
 
         const data = raw?.data?.data ?? raw?.data ?? raw;
         if (data) {
+          if (isReversal) {
+            const agentFromResponse = parseIsAgentFromInvoiceRecord(data);
+            if (agentFromResponse !== undefined) {
+              reversalIsAgentRef.current = agentFromResponse;
+            }
+          }
           const dataWithReverse = data as { reverse_crj_number?: string };
           setSaveResponse({
             id: data.id,
@@ -2326,11 +2415,12 @@ export default function SupplierInvoiceCreate({
         error,
       );
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          (saveResponse?.id != null
+        message: getServerErrorMessage(
+          error,
+          saveResponse?.id != null
             ? "Failed to update supplier invoice"
-            : "Failed to create supplier invoice"),
+            : "Failed to create supplier invoice",
+        ),
         type: "error",
       });
       return null;
@@ -2354,8 +2444,7 @@ export default function SupplierInvoiceCreate({
       }
 
       const payload = buildPayload(form.values, "POSTED");
-      (payload as Record<string, unknown>).is_agent =
-        isOverseasCrjDaybook ? true : false;
+      (payload as Record<string, unknown>).is_agent = resolveIsAgentForPayload();
       const postUrl = isReversal
         ? URL.reverseSupplierInvoice
         : URL.supplierInvoice;
@@ -2363,6 +2452,7 @@ export default function SupplierInvoiceCreate({
       const fd = buildSupplierInvoiceFormData(
         payload,
         isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
+        form.values.supporting_documents,
       );
 
       const raw = (await apiCallProtected.put(
@@ -2373,6 +2463,12 @@ export default function SupplierInvoiceCreate({
 
       const data = raw?.data?.data ?? raw?.data ?? raw;
       if (data) {
+        if (isReversal) {
+          const agentFromResponse = parseIsAgentFromInvoiceRecord(data);
+          if (agentFromResponse !== undefined) {
+            reversalIsAgentRef.current = agentFromResponse;
+          }
+        }
         const statusStr =
           (data as { status?: unknown }).status != null
             ? String((data as { status?: unknown }).status)
@@ -2407,50 +2503,7 @@ export default function SupplierInvoiceCreate({
     } catch (error: unknown) {
       console.error("Error posting supplier invoice:", error);
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          "Failed to post supplier invoice",
-        type: "error",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleChinaPostedFapiaoUpdate = async () => {
-    if (!saveResponse?.id) {
-      ToastNotification({
-        message: "Save the supplier invoice first before updating fapiao number.",
-        type: "error",
-      });
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const supplierInvoiceId = saveResponse.id;
-      const fd = new FormData();
-      fd.append(
-        "supplier_invoice",
-        JSON.stringify({
-          id: supplierInvoiceId,
-          fapiao_no: form.values.fapiao_no?.trim() || null,
-        }),
-      );
-      await apiCallProtected.patch(
-        `${URL.supplierInvoice}${supplierInvoiceId}/`,
-        fd,
-        FORM_DATA_HEADERS,
-      );
-      ToastNotification({
-        message: "Fapiao number updated successfully",
-        type: "success",
-      });
-    } catch (error: unknown) {
-      console.error("Error updating fapiao number:", error);
-      ToastNotification({
-        message:
-          (error as { message?: string })?.message ||
-          "Failed to update fapiao number",
+        message: getServerErrorMessage(error, "Failed to post supplier invoice"),
         type: "error",
       });
     } finally {
@@ -2463,13 +2516,21 @@ export default function SupplierInvoiceCreate({
   const isReadOnly = isViewMode || isInvoicePosted;
   // Reversal create/edit: only daybook and date editable; rest non-editable. Once posted, full read-only.
   const reversalFormDisabled = isReversal;
-  // China: fapiao_no remains editable after POSTED (view/edit); Update saves via PATCH
-  const canEditChinaFapiaoAfterPost =
-    isChinaUser &&
+  // Posted + edit (all branches): allow attaching new supporting docs via PATCH; existing docs cannot be removed
+  // View mode stays fully read-only
+  const canAttachDocumentsAfterPost =
+    isEditMode &&
+    !isViewMode &&
     isInvoicePosted &&
     !isReversal &&
     saveResponse?.id != null &&
     saveResponse.id > 0;
+  // China: fapiao_no remains editable after POSTED on edit; Update saves via PATCH
+  const canEditChinaFapiaoAfterPost =
+    isChinaUser && canAttachDocumentsAfterPost;
+  const canUpdatePostedInvoice = canAttachDocumentsAfterPost;
+  const canManageSupportingDocuments =
+    !isReadOnly || canAttachDocumentsAfterPost;
   const fapiaoFieldDisabled = canEditChinaFapiaoAfterPost
     ? false
     : isReadOnly ||
@@ -2483,6 +2544,120 @@ export default function SupplierInvoiceCreate({
   const fapiaoFieldStyles = canEditChinaFapiaoAfterPost
     ? inputStyles
     : effectiveInputStyles;
+
+  /**
+   * PATCH for posted invoices: China fapiao_no + new supporting documents (all branches).
+   * New files only — document_ids are not sent.
+   */
+  const handlePostedInvoiceUpdate = async () => {
+    if (!saveResponse?.id) {
+      ToastNotification({
+        message: "Save the supplier invoice first before updating.",
+        type: "error",
+      });
+      return;
+    }
+
+    const newDocs = form.values.supporting_documents.filter(
+      (d) => d.document_id == null,
+    );
+    const hasNewFiles = newDocs.some((d) => d.file != null);
+
+    if (hasNewFiles) {
+      const incompleteNewDoc = newDocs.some(
+        (d) =>
+          (Boolean(d.file) && !(d.name ?? "").trim()) ||
+          (Boolean((d.name ?? "").trim()) && !d.file),
+      );
+      if (incompleteNewDoc) {
+        ToastNotification({
+          message: "Each new document must have both a name and a file.",
+          type: "error",
+        });
+        return;
+      }
+
+      const oversized = form.values.supporting_documents.some(
+        (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
+      );
+      if (oversized) {
+        ToastNotification({
+          message: "One or more files exceed the 5MB limit.",
+          type: "error",
+        });
+        return;
+      }
+    }
+
+    if (!canEditChinaFapiaoAfterPost && !hasNewFiles) {
+      ToastNotification({
+        message: "Attach at least one new document before updating.",
+        type: "error",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const supplierInvoiceId = saveResponse.id;
+      const patchBody: Record<string, unknown> = {
+        id: supplierInvoiceId,
+      };
+      if (canEditChinaFapiaoAfterPost) {
+        patchBody.fapiao_no = form.values.fapiao_no?.trim() || null;
+      }
+
+      const fd = new FormData();
+      fd.append("supplier_invoice", JSON.stringify(patchBody));
+
+      // Posted flow: upload new docs only (no document_ids)
+      let fileIndex = 0;
+      form.values.supporting_documents.forEach((doc) => {
+        if (!doc.file) return;
+        fd.append(`document_names[${fileIndex}]`, (doc.name ?? "").toString());
+        fd.append(`document[${fileIndex}]`, doc.file);
+        fileIndex++;
+      });
+
+      const raw = (await apiCallProtected.patch(
+        `${URL.supplierInvoice}${supplierInvoiceId}/`,
+        fd,
+        FORM_DATA_HEADERS,
+      )) as any;
+
+      const data = raw?.data?.data ?? raw?.data ?? raw;
+      if (data) {
+        setAuditPatch((prev) => appendEditPageAuditPatch(prev, data));
+        if (data.fapiao_no != null) {
+          form.setFieldValue("fapiao_no", String(data.fapiao_no));
+        }
+        if (Array.isArray((data as { documents?: unknown }).documents)) {
+          form.setFieldValue(
+            "supporting_documents",
+            mapApiDocumentsToSupportingDocuments(
+              (data as { documents: Array<Record<string, any>> }).documents,
+            ),
+          );
+        }
+      }
+
+      ToastNotification({
+        message: "Supplier invoice updated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      console.error("Error updating posted supplier invoice:", error);
+      ToastNotification({
+        message: getServerErrorMessage(
+          error,
+          "Failed to update supplier invoice",
+        ),
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   // Daybook and date: editable in reversal create/edit when !isReadOnly; read-only when posted or view
   const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
   const daybookDateDisabled = isReadOnly;
@@ -4141,14 +4316,25 @@ export default function SupplierInvoiceCreate({
           <Modal
               opened={documentsModalOpened}
               onClose={closeDocumentsModal}
-              title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
+              title={
+                canManageSupportingDocuments
+                  ? "Attach Supporting Documents"
+                  : "Supporting Documents"
+              }
               size="xl"
               centered
               style={{ fontFamily: "Inter" }}
               styles={{ title: { fontWeight: 600, color: "#105476" } }}
             >
               <Stack gap="xs">
-                {form.values.supporting_documents.map((doc, index) => (
+                {form.values.supporting_documents.map((doc, index) => {
+                  // Posted: existing docs are view-only; only brand-new rows are editable
+                  const isExistingDoc = doc.document_id != null;
+                  const canEditDocRow =
+                    !isReadOnly ||
+                    (canAttachDocumentsAfterPost && !isExistingDoc);
+
+                  return (
                   <Grid
                     key={index}
                     columns={12}
@@ -4163,9 +4349,9 @@ export default function SupplierInvoiceCreate({
                         label="Document Name"
                         placeholder="Enter document name"
                         value={doc.name}
-                        disabled={isReadOnly}
+                        disabled={!canEditDocRow}
                         onChange={(e) => {
-                          if (isReadOnly) return;
+                          if (!canEditDocRow) return;
                           const updatedDocs = [
                             ...form.values.supporting_documents,
                           ];
@@ -4186,8 +4372,9 @@ export default function SupplierInvoiceCreate({
                           File
                         </Text>
                         <Dropzone
+                          disabled={!canEditDocRow}
                           onDrop={(files: File[]) => {
-                            if (isReadOnly) return;
+                            if (!canEditDocRow) return;
                             if (files.length === 0) return;
                             const file = files[0];
                             if (fileErrors[index]) {
@@ -4219,7 +4406,7 @@ export default function SupplierInvoiceCreate({
                             );
                           }}
                           onReject={(files: any[]) => {
-                            if (isReadOnly) return;
+                            if (!canEditDocRow) return;
                             const rejection = files[0];
                             if (
                               rejection?.errors?.some(
@@ -4255,7 +4442,7 @@ export default function SupplierInvoiceCreate({
                             style={{
                               minHeight: "36px",
                               pointerEvents: "none",
-                              cursor: "pointer",
+                              cursor: canEditDocRow ? "pointer" : "default",
                             }}
                           >
                             <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
@@ -4332,7 +4519,7 @@ export default function SupplierInvoiceCreate({
                                 </>
                               )}
                             </Group>
-                            {!isReadOnly && (doc.file || doc.document_url) && (
+                            {canEditDocRow && (doc.file || doc.document_url) && (
                               <Button
                                 variant="subtle"
                                 color="red"
@@ -4373,7 +4560,7 @@ export default function SupplierInvoiceCreate({
                         )}
                       </Box>
                     </Grid.Col>
-                    {!isReadOnly && (
+                    {canEditDocRow && (
                       <Grid.Col span={1}>
                         <Button
                           variant="light"
@@ -4417,7 +4604,7 @@ export default function SupplierInvoiceCreate({
                       </Grid.Col>
                     )}
                     <Grid.Col span={1} offset={11}>
-                      {!isReadOnly &&
+                      {canManageSupportingDocuments &&
                         index ===
                           form.values.supporting_documents.length - 1 && (
                           <Button
@@ -4435,9 +4622,10 @@ export default function SupplierInvoiceCreate({
                         )}
                     </Grid.Col>
                   </Grid>
-                ))}
+                  );
+                })}
 
-                {!isReadOnly &&
+                {canManageSupportingDocuments &&
                   form.values.supporting_documents.length === 0 && (
                     <Button
                       variant="light"
@@ -4475,7 +4663,10 @@ export default function SupplierInvoiceCreate({
                 },
               }}
               onClick={() => {
-                if (!isReadOnly && form.values.supporting_documents.length === 0) {
+                if (
+                  canManageSupportingDocuments &&
+                  form.values.supporting_documents.length === 0
+                ) {
                   form.setFieldValue("supporting_documents", [
                     { name: "", file: null },
                   ]);
@@ -4491,7 +4682,9 @@ export default function SupplierInvoiceCreate({
               }}
               disabled={isSubmitting}
             >
-              {isReadOnly ? "View supporting document(s)" : "Attach supporting document"}
+              {canManageSupportingDocuments
+                ? "Attach supporting document"
+                : "View supporting document(s)"}
             </Button>
 
             {!isReadOnly && (
@@ -4522,13 +4715,13 @@ export default function SupplierInvoiceCreate({
                 )}
               </>
             )}
-            {canEditChinaFapiaoAfterPost && (
+            {canUpdatePostedInvoice && (
               <Button
                 type="button"
                 color="#105476"
                 rightSection={<IconChevronRight size={16} />}
                 loading={isSubmitting}
-                onClick={handleChinaPostedFapiaoUpdate}
+                onClick={handlePostedInvoiceUpdate}
               >
                 Update Supplier Invoice
               </Button>
