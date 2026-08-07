@@ -30,6 +30,7 @@ import {
   IconEye,
   IconFileAnalytics,
   IconFileInvoice,
+  IconPaperclip,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
@@ -51,6 +52,10 @@ import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummar
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
+import JobDocumentsModal from "../../../components/JobDocumentsModal";
+import { useJobDocuments } from "../../../hooks/useJobDocuments";
+import { buildDocumentIdsPayloadField } from "../../../utils/jobDocuments";
+import { isJobClosed } from "../../../utils/closeJob";
 import {
   JobMasterPartyDetailsPanel,
   type JobMasterPartyDetailsValues,
@@ -1282,6 +1287,10 @@ export default function ServiceJobCreate() {
     null,
   );
   const jobData = resolvedJob ?? stateJobFromNav;
+  const isReadOnly = isJobClosed(
+    (jobData as { status?: string | null } | null)?.status,
+  );
+  const jobDocuments = useJobDocuments();
 
   const { getBranchCurrencyDefaults } = useExchangeRateRoe();
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
@@ -1610,9 +1619,38 @@ export default function ServiceJobCreate() {
         String(house?.commodity_description ?? job.commodity_description ?? ""),
       );
       setMarksNo(String(house?.marks_no ?? job.marks_no ?? ""));
+      jobDocuments.initFromJobData(job);
     },
-    [serviceMasterList, chargesForm, form, partyDetailsForm],
+    [
+      serviceMasterList,
+      chargesForm,
+      form,
+      partyDetailsForm,
+      jobDocuments.initFromJobData,
+    ],
   );
+
+  useEffect(() => {
+    const navState = location.state as
+      | {
+          document_ids?: number[];
+          document_display_list?: unknown[];
+          document_modal_rows?: unknown[];
+        }
+      | null;
+    if (
+      navState?.document_ids != null ||
+      navState?.document_display_list != null ||
+      navState?.document_modal_rows != null
+    ) {
+      jobDocuments.restoreFromNavigationState(navState);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    location.state?.document_ids,
+    location.state?.document_display_list,
+    location.state?.document_modal_rows,
+  ]);
 
   useEffect(() => {
     if (!isEditMode || serviceMasterList.length === 0 || !routeId) {
@@ -1762,6 +1800,7 @@ export default function ServiceJobCreate() {
         cargoMode,
       ),
       housing_details: [housingDetail],
+      ...buildDocumentIdsPayloadField(jobDocuments.document_ids),
     };
   };
 
@@ -2247,13 +2286,23 @@ export default function ServiceJobCreate() {
             </Menu>
           )}
           <Button
+            variant="outline"
             color="#105476"
-            leftSection={<IconCheck size={18} />}
-            loading={isSubmitting}
-            onClick={handleSubmit}
+            leftSection={<IconPaperclip size={16} />}
+            onClick={jobDocuments.openDocumentsModal}
           >
-            {isEditMode ? "Update" : "Create"}
+            {isReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
+          {!isReadOnly && (
+            <Button
+              color="#105476"
+              leftSection={<IconCheck size={18} />}
+              loading={isSubmitting}
+              onClick={handleSubmit}
+            >
+              {isEditMode ? "Update" : "Create"}
+            </Button>
+          )}
         </Group>
       </Group>
 
@@ -2640,18 +2689,40 @@ export default function ServiceJobCreate() {
               Back
             </Button>
           </Group>
-          <Box>
-              <Button
-                color="#105476"
-                disabled={activeTab === maxTabIndex}
-                rightSection={<IconChevronRight size={16} />}
-                onClick={handleNextTab}
-              >
-                Next
-              </Button>
-          </Box>
+          <Group gap="md">
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconPaperclip size={16} />}
+              onClick={jobDocuments.openDocumentsModal}
+            >
+              {isReadOnly ? "View Documents" : "Attach Documents"}
+            </Button>
+            <Button
+              color="#105476"
+              disabled={activeTab === maxTabIndex}
+              rightSection={<IconChevronRight size={16} />}
+              onClick={handleNextTab}
+            >
+              Next
+            </Button>
+          </Group>
         </Group>
       </Box>
+
+      <JobDocumentsModal
+        opened={jobDocuments.documentsModalOpen}
+        onClose={() => jobDocuments.setDocumentsModalOpen(false)}
+        rows={jobDocuments.document_modal_rows}
+        readOnly={isReadOnly}
+        uploading={jobDocuments.documentUploading}
+        docTypeOptions={jobDocuments.docTypeOptions}
+        docCodeErrors={jobDocuments.docCodeErrors}
+        onAddRow={jobDocuments.addDocumentRow}
+        onUpdateRow={jobDocuments.updateDocumentRow}
+        onRemoveRow={jobDocuments.removeDocumentRow}
+        onSubmit={jobDocuments.handleSubmitDocumentsModal}
+      />
 
       <Modal
         opened={costSheetPreviewOpen}
