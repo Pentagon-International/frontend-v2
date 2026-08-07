@@ -55,10 +55,12 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
+  clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
   formatMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
@@ -128,11 +130,27 @@ const AMOUNT_MAX = 9999999999999.99;
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
+  const rounded = clampCurrencyMoneyAmountBound(value);
+  if (rounded == null) return null;
+  if (Math.abs(rounded) > AMOUNT_MAX)
+    return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
+  return rounded;
+}
+
+/** Local amounts: whole numbers for Vietnam branch; else 2 decimals. */
+function clampLocalAmount(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value))
+    return value === undefined ? null : value;
   const rounded = clampMoneyAmountBound(value);
   if (rounded == null) return null;
   if (Math.abs(rounded) > AMOUNT_MAX)
     return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
   return rounded;
+}
+
+function toLocalAmount(value: number | string | null | undefined): number | null {
+  const rounded = roundLocalMoneyToDecimals(value);
+  return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
 
 function formatChartOfAccountsLabel(
@@ -530,7 +548,9 @@ export default function PaymentCreate({
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const canPostDocuments = useCanPostDocuments();
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourcePaymentNoRef = useRef<string>("");
@@ -773,7 +793,7 @@ export default function PaymentCreate({
     const chequeDateVal = parseDocumentDate(paymentFromState.cheque_date);
     const roeVal = parseNum(paymentFromState.roe);
     const amountVal = parseNum(paymentFromState.amount);
-    const localAmountVal = parseNum(paymentFromState.local_amount);
+    const localAmountVal = toLocalAmount(paymentFromState.local_amount);
 
     // Map list response parties: subledger_code, subledger_name (list) -> customer_code, customer_display (form)
     const parties = Array.isArray(paymentFromState.parties)
@@ -811,7 +831,7 @@ export default function PaymentCreate({
               currency: (pAny.currency_code ?? localCurrency).toString().trim(),
               roe: parseNum(pAny.roe) ?? 1,
               amount: parseNum(pAny.amount),
-              local_amount: parseNum(pAny.local_amount),
+              local_amount: toLocalAmount(pAny.local_amount),
               dr_cr: mapPaymentPartyDrCr(pAny.dr_cr, isReversalCreate),
             };
           })
@@ -865,7 +885,7 @@ export default function PaymentCreate({
               currency: (aAny.currency_code ?? localCurrency).toString().trim(),
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
-              adj_local_amount: parseNum(aAny.adj_local_amount),
+              adj_local_amount: toLocalAmount(aAny.adj_local_amount),
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
@@ -1059,7 +1079,7 @@ export default function PaymentCreate({
             : 0),
         0,
       );
-      const headerLocal = clampAmount(sum);
+      const headerLocal = clampLocalAmount(sum);
       const roeVal = form.values.roe;
       const derivedHeaderAmount =
         headerLocal != null &&
@@ -1085,7 +1105,7 @@ export default function PaymentCreate({
         Number.isFinite(amt) &&
         roeVal != null &&
         Number.isFinite(roeVal)
-          ? clampAmount(amt * roeVal)
+          ? clampLocalAmount(amt * roeVal)
           : null;
       if (form.values.local_amount !== local) {
         form.setFieldValue("local_amount", local);
@@ -1118,7 +1138,7 @@ export default function PaymentCreate({
             : 0),
         0,
       );
-      const local = clampAmount(sum);
+      const local = clampLocalAmount(sum);
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const derivedAmount =
         local != null &&
@@ -1150,7 +1170,7 @@ export default function PaymentCreate({
       const amt = row.amount;
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
-        amt != null && Number.isFinite(amt) ? clampAmount(amt * roeVal) : null;
+        amt != null && Number.isFinite(amt) ? clampLocalAmount(amt * roeVal) : null;
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
@@ -1386,10 +1406,10 @@ export default function PaymentCreate({
         adj_curr_amount: totalNum,
         adj_local_amount:
           localTotalNum != null
-            ? localTotalNum
+            ? toLocalAmount(localTotalNum)
             : totalNum != null && invRoe != null
-              ? clampAmount(totalNum * invRoe)
-              : totalNum,
+              ? clampLocalAmount(totalNum * invRoe)
+              : toLocalAmount(totalNum),
         invoice_id: inv.id != null ? Number(inv.id) : null,
       };
     });
@@ -1451,7 +1471,7 @@ export default function PaymentCreate({
       currency_id: currencyId,
       roe: parseRoeForPayload(values.roe) ?? 0,
       amount: values.amount ?? 0,
-      local_amount: values.local_amount ?? 0,
+      local_amount: clampLocalAmount(values.local_amount) ?? 0,
       narration: values.narration ?? "",
       bank: values.bank ?? "",
       branch: values.branch ?? "",
@@ -1467,7 +1487,7 @@ export default function PaymentCreate({
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: parseRoeForPayload(d.roe) ?? 0,
         amount: d.amount ?? 0,
-        local_amount: d.local_amount ?? 0,
+        local_amount: clampLocalAmount(d.local_amount) ?? 0,
         dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
@@ -1480,7 +1500,7 @@ export default function PaymentCreate({
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
-        adj_local_amount: a.adj_local_amount ?? 0,
+        adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
       })),
     };
     if (isEdit && options.status != null) {
@@ -1535,7 +1555,7 @@ export default function PaymentCreate({
       account_code: (source?.account_code ?? "").toString(),
       received_from: (source?.received_from ?? "").toString(),
       amount: values.amount ?? 0,
-      local_amount: values.local_amount ?? 0,
+      local_amount: clampLocalAmount(values.local_amount) ?? 0,
       narration: values.narration ?? "",
       note: (source?.note ?? "").toString(),
       bank: values.bank ?? "",
@@ -1551,7 +1571,7 @@ export default function PaymentCreate({
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: parseRoeForPayload(d.roe) ?? 0,
         amount: d.amount ?? 0,
-        local_amount: d.local_amount ?? 0,
+        local_amount: clampLocalAmount(d.local_amount) ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
@@ -1563,7 +1583,7 @@ export default function PaymentCreate({
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
-        adj_local_amount: a.adj_local_amount ?? 0,
+        adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -2494,7 +2514,7 @@ export default function PaymentCreate({
                   )
                 }
                 min={0}
-                decimalScale={amountDecimalScale}
+                decimalScale={currencyAmountDecimalScale}
                 max={AMOUNT_MAX}
                 hideControls
                 styles={headerFieldStyles}
@@ -2509,12 +2529,12 @@ export default function PaymentCreate({
                 onChange={(v) =>
                   form.setFieldValue(
                     "local_amount",
-                    clampAmount(typeof v === "string" ? parseFloat(v) : v) ??
+                    clampLocalAmount(typeof v === "string" ? parseFloat(v) : v) ??
                       null,
                   )
                 }
                 min={0}
-                decimalScale={amountDecimalScale}
+                decimalScale={localAmountDecimalScale}
                 max={AMOUNT_MAX}
                 hideControls
                 styles={headerFieldStyles}
@@ -2819,7 +2839,7 @@ export default function PaymentCreate({
                               ) {
                                 form.setFieldValue(
                                   `details.${idx}.local_amount`,
-                                  clampAmount(amt * newRoe),
+                                  clampLocalAmount(amt * newRoe),
                                 );
                               }
                             }}
@@ -2861,11 +2881,11 @@ export default function PaymentCreate({
                               ) {
                                 form.setFieldValue(
                                   `details.${idx}.local_amount`,
-                                  clampAmount(newAmount * roeVal),
+                                  clampLocalAmount(newAmount * roeVal),
                                 );
                               }
                             }}
-                            decimalScale={amountDecimalScale}
+                            decimalScale={currencyAmountDecimalScale}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
                             disabled={
@@ -2884,12 +2904,12 @@ export default function PaymentCreate({
                             onChange={(v) =>
                               form.setFieldValue(
                                 `details.${idx}.local_amount`,
-                                clampAmount(
+                                clampLocalAmount(
                                   typeof v === "string" ? parseFloat(v) : v,
                                 ) ?? null,
                               )
                             }
-                            decimalScale={amountDecimalScale}
+                            decimalScale={localAmountDecimalScale}
                             max={AMOUNT_MAX}
                             styles={partyFieldStyles}
                             disabled={
@@ -3150,7 +3170,7 @@ export default function PaymentCreate({
                               effectiveAdjustments,
                             );
                           }}
-                          decimalScale={amountDecimalScale}
+                          decimalScale={currencyAmountDecimalScale}
                           max={AMOUNT_MAX}
                           styles={
                             isReadOnly || _isReversal
@@ -3170,7 +3190,7 @@ export default function PaymentCreate({
                             form.values.adjustments[idx].adj_local_amount ??
                             undefined
                           }
-                          decimalScale={amountDecimalScale}
+                          decimalScale={localAmountDecimalScale}
                           max={AMOUNT_MAX}
                           styles={adjustmentFieldStyles}
                         />

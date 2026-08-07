@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -483,7 +484,7 @@ export default function DebitCreditNoteNonTradeMaster() {
           if (!Number.isFinite(total) || total === 0) return <Text size="sm">-</Text>;
           return (
             <Text size="sm">
-              {formatMoneyAmountBound(total)}
+              {formatMoneyAmount(total, false)}
             </Text>
           );
         },
