@@ -18,6 +18,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import {
+  IconArrowLeft,
   IconBook2,
   IconCoin,
   IconFilter,
@@ -1305,6 +1306,15 @@ export default function SubledgerEnquiry() {
                   onClick={() => setShowFilters((s) => !s)}
                 >
                   {showFilters ? "Hide filters" : "Filters"}
+                </Button>
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(erpTheme)}
+                  leftSection={<IconArrowLeft size={14} />}
+                  onClick={() => navigate(-1)}
+                >
+                  Back
                 </Button>
               </>
             ),

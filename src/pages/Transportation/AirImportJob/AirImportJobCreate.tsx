@@ -136,6 +136,7 @@ import {
   housingEventsFromJobPatchData,
 } from "../../../utils/jobHousingEventsFromPatch";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -3232,7 +3233,7 @@ function AirImportJobCreate() {
           </EditPageHeadingRow>
           {jobData?.job_id && (
             <Badge color="#105476" radius="md" size="md">
-              {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
+              {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
           )}
           {jobData?.job_id && (
