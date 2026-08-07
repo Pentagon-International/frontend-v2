@@ -683,16 +683,14 @@ function AirExportJobCreate() {
       ata:
         parseLocalDateTime(jobData?.ata) ??
         (location.state?.mawbDetails?.ata || null),
-      job_date:
-        (jobData as { job_date?: string } | undefined)?.job_date &&
-        dayjs(
-          (jobData as { job_date?: string } | undefined)?.job_date as string,
-        ).isValid()
-          ? dayjs(
-              (jobData as { job_date?: string } | undefined)
-                ?.job_date as string,
-            ).toDate()
-          : (location.state?.mawbDetails?.job_date as Date | null) || null,
+      job_date: (() => {
+        const etdVal =
+          parseLocalDateTime(jobData?.etd) ??
+          (location.state?.mawbDetails?.etd || null);
+        return etdVal && dayjs(etdVal).isValid()
+          ? dayjs(etdVal).startOf("day").toDate()
+          : null;
+      })(),
       shipper_id: location.state?.mawbDetails?.shipper_id || "",
       shipper_name:
         String(
@@ -955,17 +953,12 @@ function AirExportJobCreate() {
           eta: parseLocalDateTime(jobData.eta),
           atd: parseLocalDateTime(jobData.atd),
           ata: parseLocalDateTime(jobData.ata),
-          job_date:
-            (jobData as { job_date?: string } | undefined)?.job_date &&
-            dayjs(
-              (jobData as { job_date?: string } | undefined)
-                ?.job_date as string,
-            ).isValid()
-              ? dayjs(
-                  (jobData as { job_date?: string } | undefined)
-                    ?.job_date as string,
-                ).toDate()
-              : null,
+          job_date: (() => {
+            const etdVal = parseLocalDateTime(jobData.etd);
+            return etdVal && dayjs(etdVal).isValid()
+              ? dayjs(etdVal).startOf("day").toDate()
+              : null;
+          })(),
           shipper_id: "",
           shipper_name: String(jobData.shipper_name || ""),
           shipper_email: String(jobData.shipper_email || ""),
@@ -1010,10 +1003,10 @@ function AirExportJobCreate() {
             atd: savedMawbDetailsFromState.atd || null,
             ata: savedMawbDetailsFromState.ata || null,
             job_date:
-              savedMawbDetailsFromState.job_date &&
-              dayjs(savedMawbDetailsFromState.job_date).isValid()
-                ? dayjs(savedMawbDetailsFromState.job_date).toDate()
-                : savedMawbDetailsFromState.job_date || null,
+              savedMawbDetailsFromState.etd &&
+              dayjs(savedMawbDetailsFromState.etd).isValid()
+                ? dayjs(savedMawbDetailsFromState.etd).startOf("day").toDate()
+                : savedMawbDetailsFromState.etd || null,
             shipper_id: savedMawbDetailsFromState.shipper_id || "",
             shipper_name: savedMawbDetailsFromState.shipper_name || "",
             shipper_email: savedMawbDetailsFromState.shipper_email || "",
@@ -1935,12 +1928,9 @@ function AirExportJobCreate() {
             atd: savedMawbDetails.atd || null,
             ata: savedMawbDetails.ata || null,
             job_date:
-              savedMawbDetails.job_date &&
-              dayjs(savedMawbDetails.job_date).isValid()
-                ? dayjs(savedMawbDetails.job_date).toDate()
-                : savedMawbDetails.job_date ||
-                  mawbDetailsForm.values.job_date ||
-                  null,
+              savedMawbDetails.etd && dayjs(savedMawbDetails.etd).isValid()
+                ? dayjs(savedMawbDetails.etd).startOf("day").toDate()
+                : savedMawbDetails.etd || null,
             shipper_id:
               (savedMawbDetails as { shipper_id?: string } | undefined)
                 ?.shipper_id || "",
@@ -2853,9 +2843,9 @@ function AirExportJobCreate() {
         eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
-        job_date: mawbDetailsForm.values.job_date
-          ? dayjs(mawbDetailsForm.values.job_date).isValid()
-            ? dayjs(mawbDetailsForm.values.job_date).format("YYYY-MM-DD")
+        job_date: mawbDetailsForm.values.etd
+          ? dayjs(mawbDetailsForm.values.etd).isValid()
+            ? dayjs(mawbDetailsForm.values.etd).format("YYYY-MM-DD")
             : null
           : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
@@ -3798,6 +3788,12 @@ function AirExportJobCreate() {
                   value={mawbDetailsForm.values.etd}
                   onChange={(value: Date | null) => {
                     mawbDetailsForm.setFieldValue("etd", value);
+                    mawbDetailsForm.setFieldValue(
+                      "job_date",
+                      value && dayjs(value).isValid()
+                        ? dayjs(value).startOf("day").toDate()
+                        : null,
+                    );
                   }}
                   error={mawbDetailsForm.errors.etd as string}
                   size="sm"
@@ -3848,10 +3844,8 @@ function AirExportJobCreate() {
                 <SingleDateInput
                   label="Job Date"
                   placeholder="YYYY-MM-DD"
+                  readOnly
                   value={mawbDetailsForm.values.job_date}
-                  onChange={(value: Date | null) => {
-                    mawbDetailsForm.setFieldValue("job_date", value);
-                  }}
                   error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />

@@ -656,16 +656,14 @@ function AirImportJobCreate() {
       ata:
         parseLocalDateTime(jobData?.ata) ??
         (location.state?.mawbDetails?.ata || null),
-      job_date:
-        (jobData as { job_date?: string } | undefined)?.job_date &&
-        dayjs(
-          (jobData as { job_date?: string } | undefined)?.job_date as string,
-        ).isValid()
-          ? dayjs(
-              (jobData as { job_date?: string } | undefined)
-                ?.job_date as string,
-            ).toDate()
-          : (location.state?.mawbDetails?.job_date as Date | null) || null,
+      job_date: (() => {
+        const etaVal =
+          parseLocalDateTime(jobData?.eta) ??
+          (location.state?.mawbDetails?.eta || null);
+        return etaVal && dayjs(etaVal).isValid()
+          ? dayjs(etaVal).startOf("day").toDate()
+          : null;
+      })(),
       igm_no:
         (jobData as { igm_no?: string } | undefined)?.igm_no ||
         location.state?.mawbDetails?.igm_no ||
@@ -943,17 +941,12 @@ function AirImportJobCreate() {
           eta: parseLocalDateTime(jobData.eta),
           atd: parseLocalDateTime(jobData.atd),
           ata: parseLocalDateTime(jobData.ata),
-          job_date:
-            (jobData as { job_date?: string } | undefined)?.job_date &&
-            dayjs(
-              (jobData as { job_date?: string } | undefined)
-                ?.job_date as string,
-            ).isValid()
-              ? dayjs(
-                  (jobData as { job_date?: string } | undefined)
-                    ?.job_date as string,
-                ).toDate()
-              : null,
+          job_date: (() => {
+            const etaVal = parseLocalDateTime(jobData.eta);
+            return etaVal && dayjs(etaVal).isValid()
+              ? dayjs(etaVal).startOf("day").toDate()
+              : null;
+          })(),
           igm_no: (jobData as { igm_no?: string } | undefined)?.igm_no || "",
           igm_date:
             (jobData as { igm_date?: string } | undefined)?.igm_date &&
@@ -2067,12 +2060,9 @@ function AirImportJobCreate() {
             atd: savedMawbDetails.atd || null,
             ata: savedMawbDetails.ata || null,
             job_date:
-              savedMawbDetails.job_date &&
-              dayjs(savedMawbDetails.job_date).isValid()
-                ? dayjs(savedMawbDetails.job_date).toDate()
-                : savedMawbDetails.job_date ||
-                  mawbDetailsForm.values.job_date ||
-                  null,
+              savedMawbDetails.eta && dayjs(savedMawbDetails.eta).isValid()
+                ? dayjs(savedMawbDetails.eta).startOf("day").toDate()
+                : savedMawbDetails.eta || null,
             igm_no:
               savedMawbDetails.igm_no != null
                 ? String(savedMawbDetails.igm_no)
@@ -2873,9 +2863,9 @@ function AirImportJobCreate() {
         eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
-        job_date: mawbDetailsForm.values.job_date
-          ? dayjs(mawbDetailsForm.values.job_date).isValid()
-            ? dayjs(mawbDetailsForm.values.job_date).format("YYYY-MM-DD")
+        job_date: mawbDetailsForm.values.eta
+          ? dayjs(mawbDetailsForm.values.eta).isValid()
+            ? dayjs(mawbDetailsForm.values.eta).format("YYYY-MM-DD")
             : null
           : null,
         igm_no: mawbDetailsForm.values.igm_no
@@ -3765,6 +3755,12 @@ function AirImportJobCreate() {
                   value={mawbDetailsForm.values.eta}
                   onChange={(value: Date | null) => {
                     mawbDetailsForm.setFieldValue("eta", value);
+                    mawbDetailsForm.setFieldValue(
+                      "job_date",
+                      value && dayjs(value).isValid()
+                        ? dayjs(value).startOf("day").toDate()
+                        : null,
+                    );
                   }}
                   error={mawbDetailsForm.errors.eta as string}
                   size="sm"
@@ -3801,10 +3797,8 @@ function AirImportJobCreate() {
                 <SingleDateInput
                   label="Job Date"
                   placeholder="YYYY-MM-DD"
+                  readOnly
                   value={mawbDetailsForm.values.job_date}
-                  onChange={(value: Date | null) => {
-                    mawbDetailsForm.setFieldValue("job_date", value);
-                  }}
                   error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />

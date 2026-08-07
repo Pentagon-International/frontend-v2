@@ -182,6 +182,7 @@ type MAWBDetailsForm = {
   eta: Date | null;
   atd: Date | null;
   ata: Date | null;
+  job_date: Date | null;
   shipper_id: string;
   shipper_name: string;
   shipper_email: string;
@@ -374,6 +375,7 @@ const mawbDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
+  job_date: yup.date().nullable(),
 });
 
 const carrierDetailsSchema = yup.object({
@@ -738,6 +740,14 @@ function InlandExportJobCreate() {
       ata:
         parseLocalDateTime(jobData?.ata) ??
         (location.state?.mawbDetails?.ata || null),
+      job_date: (() => {
+        const etdVal =
+          parseLocalDateTime(jobData?.etd) ??
+          (location.state?.mawbDetails?.etd || null);
+        return etdVal && dayjs(etdVal).isValid()
+          ? dayjs(etdVal).startOf("day").toDate()
+          : null;
+      })(),
       shipper_id: location.state?.mawbDetails?.shipper_id || "",
       shipper_name:
         String(
@@ -847,6 +857,7 @@ function InlandExportJobCreate() {
       eta: mawbDetailsForm.values.eta || null,
       atd: mawbDetailsForm.values.atd || null,
       ata: mawbDetailsForm.values.ata || null,
+      job_date: mawbDetailsForm.values.job_date || null,
       agent_data: originAgentDataRef.current || null,
       shipper_id: mawbDetailsForm.values.shipper_id || "",
       shipper_name: mawbDetailsForm.values.shipper_name || "",
@@ -993,6 +1004,12 @@ function InlandExportJobCreate() {
           eta: parseLocalDateTime(jobData.eta),
           atd: parseLocalDateTime(jobData.atd),
           ata: parseLocalDateTime(jobData.ata),
+          job_date: (() => {
+            const etdVal = parseLocalDateTime(jobData.etd);
+            return etdVal && dayjs(etdVal).isValid()
+              ? dayjs(etdVal).startOf("day").toDate()
+              : null;
+          })(),
           shipper_id: "",
           shipper_name: String(jobData.shipper_name || ""),
           shipper_email: String(jobData.shipper_email || ""),
@@ -1037,6 +1054,11 @@ function InlandExportJobCreate() {
             eta: savedMawbDetailsFromState.eta || null,
             atd: savedMawbDetailsFromState.atd || null,
             ata: savedMawbDetailsFromState.ata || null,
+            job_date:
+              savedMawbDetailsFromState.etd &&
+              dayjs(savedMawbDetailsFromState.etd).isValid()
+                ? dayjs(savedMawbDetailsFromState.etd).startOf("day").toDate()
+                : savedMawbDetailsFromState.etd || null,
             shipper_id: savedMawbDetailsFromState.shipper_id || "",
             shipper_name: savedMawbDetailsFromState.shipper_name || "",
             shipper_email: savedMawbDetailsFromState.shipper_email || "",
@@ -1979,6 +2001,10 @@ function InlandExportJobCreate() {
             eta: savedMawbDetails.eta || null,
             atd: savedMawbDetails.atd || null,
             ata: savedMawbDetails.ata || null,
+            job_date:
+              savedMawbDetails.etd && dayjs(savedMawbDetails.etd).isValid()
+                ? dayjs(savedMawbDetails.etd).startOf("day").toDate()
+                : savedMawbDetails.etd || null,
             shipper_id:
               (savedMawbDetails as { shipper_id?: string } | undefined)
                 ?.shipper_id || "",
@@ -2547,6 +2573,11 @@ function InlandExportJobCreate() {
         eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
+        job_date: mawbDetailsForm.values.etd
+          ? dayjs(mawbDetailsForm.values.etd).isValid()
+            ? dayjs(mawbDetailsForm.values.etd).format("YYYY-MM-DD")
+            : null
+          : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
         voyage_number: carrierDetailsForm.values.flight_number || null,
         mbl_date: carrierDetailsForm.values.mawb_date
@@ -3401,6 +3432,12 @@ function InlandExportJobCreate() {
                   value={mawbDetailsForm.values.etd}
                   onChange={(value: Date | null) => {
                     mawbDetailsForm.setFieldValue("etd", value);
+                    mawbDetailsForm.setFieldValue(
+                      "job_date",
+                      value && dayjs(value).isValid()
+                        ? dayjs(value).startOf("day").toDate()
+                        : null,
+                    );
                   }}
                   error={mawbDetailsForm.errors.etd as string}
                   size="sm"
@@ -3443,6 +3480,17 @@ function InlandExportJobCreate() {
                     mawbDetailsForm.setFieldValue("ata", value);
                   }}
                   error={mawbDetailsForm.errors.ata as string}
+                  size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={3}>
+                <SingleDateInput
+                  label="Job Date"
+                  placeholder="YYYY-MM-DD"
+                  readOnly
+                  value={mawbDetailsForm.values.job_date}
+                  error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />
               </Grid.Col>
