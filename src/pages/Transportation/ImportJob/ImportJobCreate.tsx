@@ -966,8 +966,8 @@ function ImportJobCreate() {
               ? dayjs(mblData.ata).toDate()
               : null,
           job_date:
-            mblData.job_date && dayjs(mblData.job_date).isValid()
-              ? dayjs(mblData.job_date).toDate()
+            mblData.eta && dayjs(mblData.eta).isValid()
+              ? dayjs(mblData.eta).startOf("day").toDate()
               : null,
           igm_no:
             mblData.igm_no != null
@@ -1928,9 +1928,9 @@ function ImportJobCreate() {
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
           job_date:
-            mblDetails.job_date && dayjs(mblDetails.job_date).isValid()
-              ? dayjs(mblDetails.job_date).toDate()
-              : mblDetails.job_date || null,
+            mblDetails.eta && dayjs(mblDetails.eta).isValid()
+              ? dayjs(mblDetails.eta).startOf("day").toDate()
+              : mblDetails.eta || null,
           igm_no:
             mblDetails.igm_no != null
               ? String(mblDetails.igm_no)
@@ -3153,9 +3153,9 @@ function ImportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
-        job_date: mblDetailsForm.values.job_date
-          ? dayjs(mblDetailsForm.values.job_date).isValid()
-            ? dayjs(mblDetailsForm.values.job_date).format("YYYY-MM-DD")
+        job_date: mblDetailsForm.values.eta
+          ? dayjs(mblDetailsForm.values.eta).isValid()
+            ? dayjs(mblDetailsForm.values.eta).format("YYYY-MM-DD")
             : null
           : null,
         igm_no: mblDetailsForm.values.igm_no
@@ -4125,6 +4125,7 @@ function ImportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("eta", value);
+                        mblDetailsForm.setFieldValue("job_date", value);
                       },
                     };
                   })()}
@@ -4172,16 +4173,9 @@ function ImportJobCreate() {
                 <SingleDateInput
                   label="Job Date"
                   placeholder="YYYY-MM-DD"
-                  {...(() => {
-                    const inputProps = mblDetailsForm.getInputProps("job_date");
-                    return {
-                      value: inputProps.value as Date | null,
-                      error: inputProps.error as string | undefined,
-                      onChange: (value: Date | null) => {
-                        mblDetailsForm.setFieldValue("job_date", value);
-                      },
-                    };
-                  })()}
+                  readOnly
+                  value={mblDetailsForm.values.job_date}
+                  error={mblDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />
               </Grid.Col>

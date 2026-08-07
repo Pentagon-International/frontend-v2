@@ -16,6 +16,7 @@ import {
   Tooltip,
   Center,
   Loader,
+  Flex,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -29,6 +30,7 @@ import {
   IconClock,
   IconStack2,
   IconBriefcase,
+  IconCalendar,
   IconArrowRight,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -278,6 +280,23 @@ function InlandExportJobMaster() {
     },
     [dateFormat],
   );
+  const appliedJobDateFilterLabel = useMemo(() => {
+    const exact = appliedFilters.job_date?.trim();
+    if (exact) return formatFilterDateLabel(exact);
+    const from = appliedFilters.job_date_from?.trim();
+    const to = appliedFilters.job_date_to?.trim();
+    if (!from && !to) return "";
+    if (from && to) {
+      return `${formatFilterDateLabel(from)} → ${formatFilterDateLabel(to)}`;
+    }
+    if (from) return `From ${formatFilterDateLabel(from)}`;
+    return `To ${formatFilterDateLabel(to)}`;
+  }, [
+    appliedFilters.job_date,
+    appliedFilters.job_date_from,
+    appliedFilters.job_date_to,
+    formatFilterDateLabel,
+  ]);
 
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
   const openHeaderEditor = useCallback(
@@ -642,31 +661,48 @@ function InlandExportJobMaster() {
               </>
             ),
             secondary: (
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2
-                    size={16}
-                    color={muted}
-                    style={{ flexShrink: 0 }}
-                  />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {exportJobData.length}
-                  </Text>
+              <Flex gap={8} align="flex-start" direction={"column"} wrap="nowrap">
+                <Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconStack2
+                      size={16}
+                      color={muted}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {exportJobData.length}
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconBriefcase
+                      size={16}
+                      color={muted}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {totalRecords.toLocaleString()}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      total
+                    </Text>
+                  </Group>
                 </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconBriefcase
-                    size={16}
-                    color={muted}
-                    style={{ flexShrink: 0 }}
-                  />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {totalRecords.toLocaleString()}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    total
-                  </Text>
-                </Group>
-              </>
+                {appliedJobDateFilterLabel ? (
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconCalendar
+                      size={16}
+                      color={muted}
+                      style={{ flexShrink: 0 }}
+                    />
+                    <Text size="xs" c={muted} component="span">
+                      Job Date
+                    </Text>
+                    <Text fw={600} size="xs" c={fg} component="span">
+                      {appliedJobDateFilterLabel}
+                    </Text>
+                  </Group>
+                ) : null}
+              </Flex>
             ),
             actions: (
               <>
@@ -906,6 +942,36 @@ function InlandExportJobMaster() {
                 </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      label="Status"
+                      placeholder="Select status"
+                      size="xs"
+                      searchable
+                      clearable
+                      data={[
+                        { value: "Active", label: "Active" },
+                        { value: "Closed", label: "Closed" },
+                        { value: "Cancel", label: "Cancel" },
+                      ]}
+                      value={draftFilters.status || null}
+                      onChange={(value) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          status: value || "",
+                        }))
+                      }
+                      styles={filterFieldStyles}
+                      classNames={{
+                        label: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        option: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       label="Job Date From"
                       size="xs"
@@ -991,36 +1057,6 @@ function InlandExportJobMaster() {
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <Dropdown
-                      label="Status"
-                      placeholder="Select status"
-                      size="xs"
-                      searchable
-                      clearable
-                      data={[
-                        { value: "Active", label: "Active" },
-                        { value: "Closed", label: "Closed" },
-                        { value: "Cancel", label: "Cancel" },
-                      ]}
-                      value={draftFilters.status || null}
-                      onChange={(value) =>
-                        setDraftFilters((prev) => ({
-                          ...prev,
-                          status: value || "",
-                        }))
-                      }
-                      styles={filterFieldStyles}
-                      classNames={{
-                        label: ERP_LIST_GEIST_ROOT_CLASS,
-                        input: ERP_LIST_GEIST_ROOT_CLASS,
-                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
-                        option: ERP_LIST_GEIST_ROOT_CLASS,
-                      }}
                     />
                   </Box>
                 </Grid.Col>

@@ -16,6 +16,7 @@ import {
   Tooltip,
   Center,
   Loader,
+  Flex,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -28,6 +29,7 @@ import {
   IconCircleCheck,
   IconClock,
   IconStack2,
+  IconCalendar,
   IconArrowRight,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -277,6 +279,23 @@ function ImportJobMaster() {
     },
     [dateFormat],
   );
+  const appliedJobDateFilterLabel = useMemo(() => {
+    const exact = appliedFilters.job_date?.trim();
+    if (exact) return formatFilterDateLabel(exact);
+    const from = appliedFilters.job_date_from?.trim();
+    const to = appliedFilters.job_date_to?.trim();
+    if (!from && !to) return "";
+    if (from && to) {
+      return `${formatFilterDateLabel(from)} → ${formatFilterDateLabel(to)}`;
+    }
+    if (from) return `From ${formatFilterDateLabel(from)}`;
+    return `To ${formatFilterDateLabel(to)}`;
+  }, [
+    appliedFilters.job_date,
+    appliedFilters.job_date_from,
+    appliedFilters.job_date_to,
+    formatFilterDateLabel,
+  ]);
   const [isCancelling, setIsCancelling] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
@@ -675,23 +694,36 @@ function ImportJobMaster() {
               </>
             ),
             secondary: (
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {importJobData.length}
-                  </Text>
+              <Flex gap={8} align="flex-start" direction={"column"} wrap="nowrap">
+                <Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {importJobData.length}
+                    </Text>
+                  </Group>
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text fw={600} size="sm" c={fg} component="span">
+                      {totalRecords.toLocaleString()}
+                    </Text>
+                    <Text size="xs" c={muted} component="span">
+                      total
+                    </Text>
+                  </Group>
                 </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {totalRecords.toLocaleString()}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    total
-                  </Text>
-                </Group>
-              </>
+                {appliedJobDateFilterLabel ? (
+                  <Group gap={8} wrap="nowrap" align="center">
+                    <IconCalendar size={16} color={muted} style={{ flexShrink: 0 }} />
+                    <Text size="xs" c={muted} component="span">
+                      Job Date
+                    </Text>
+                    <Text fw={600} size="xs" c={fg} component="span">
+                      {appliedJobDateFilterLabel}
+                    </Text>
+                  </Group>
+                ) : null}
+              </Flex>
             ),
             actions: (
               <>
