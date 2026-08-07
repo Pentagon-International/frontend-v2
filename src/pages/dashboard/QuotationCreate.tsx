@@ -95,7 +95,9 @@ import {
 } from "../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
+  clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
@@ -107,8 +109,13 @@ import {
   type OtherServiceOption,
 } from "../../utils/otherServiceType";
 
-/** Round monetary amounts (2 dp, or whole numbers for Vietnam — see nonDecimalMoneyAmount). */
-function clampAmount(value: number | null | undefined): number | null {
+/** Currency / per-unit amounts: always 2 decimal places. */
+function clampCurrencyAmount(value: number | null | undefined): number | null {
+  return clampCurrencyMoneyAmountBound(value);
+}
+
+/** Local totals (Total Sell/Cost in branch currency): whole numbers for Vietnam. */
+function clampLocalAmount(value: number | null | undefined): number | null {
   return clampMoneyAmountBound(value);
 }
 
@@ -121,31 +128,54 @@ function moneyFormValueToNumber(
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** NumberInput onChange → form money string (respects Vietnam whole-number mode). */
-function moneyNumberInputToFormString(value: string | number): string {
+/** NumberInput onChange → form string for currency / per-unit fields (always 2 dp). */
+function currencyNumberInputToFormString(value: string | number): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmount(n, false);
+}
+
+/** API/rate value → form string for currency / per-unit fields (always 2 dp). */
+function currencyApiValueToFormString(value: unknown): string {
+  if (value === "" || value === null || value === undefined) return "";
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return "";
+  return formatMoneyAmount(n, false);
+}
+
+/** API value → form string for Total Sell/Cost (Vietnam whole-number mode). */
+function localApiValueToFormString(value: unknown): string {
   if (value === "" || value === null || value === undefined) return "";
   const n = typeof value === "number" ? value : parseFloat(String(value));
   if (!Number.isFinite(n)) return "";
   return formatMoneyAmountBound(n);
 }
 
-/** API/rate value → form money string (respects Vietnam whole-number mode). Empty stays empty. */
-function moneyApiValueToFormString(value: unknown): string {
-  if (value === "" || value === null || value === undefined) return "";
-  const n = typeof value === "number" ? value : parseFloat(String(value));
-  if (!Number.isFinite(n)) return "";
-  return formatMoneyAmountBound(n);
-}
-
-/** Form money string/number → clamped number for API payload (0 when empty/invalid). */
-function parseMoneyForPayload(value: unknown): number {
+/** Currency / per-unit → payload number (always 2 dp). */
+function parseCurrencyMoneyForPayload(value: unknown): number {
   if (value === "" || value === null || value === undefined) return 0;
   const n = typeof value === "number" ? value : parseFloat(String(value));
   if (!Number.isFinite(n)) return 0;
-  return clampAmount(n) ?? 0;
+  return clampCurrencyAmount(n) ?? 0;
 }
 
-function formatHistoryMoney(raw: unknown): string {
+/** Total Sell/Cost → payload number (Vietnam whole-number mode). */
+function parseLocalMoneyForPayload(value: unknown): number {
+  if (value === "" || value === null || value === undefined) return 0;
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return 0;
+  return clampLocalAmount(n) ?? 0;
+}
+
+function formatHistoryCurrencyMoney(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "-";
+  const n = parseFloat(String(raw));
+  if (!Number.isFinite(n)) return "-";
+  return formatMoneyAmount(n, false);
+}
+
+function formatHistoryLocalMoney(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "-";
   const n = parseFloat(String(raw));
   if (!Number.isFinite(n)) return "-";
@@ -571,7 +601,9 @@ function QuotationCreate({
     [user],
   );
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+  // Total Sell/Cost are VND (branch) local amounts — whole numbers for Vietnam.
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const queryClient = useQueryClient();
   const [chargesData, setCharges] = useState<ChargesDataItem[]>([]);
   const {
@@ -1248,7 +1280,7 @@ function QuotationCreate({
         ),
         error: formError,
         onChange: (value: string | number) => {
-          const stored = moneyNumberInputToFormString(value);
+          const stored = currencyNumberInputToFormString(value);
           dynamicForm.setFieldValue(`charges.${index}.${field}`, stored);
           if (field === "sell_per_unit" || field === "cost_per_unit") {
             syncChargeTotalsAtIndex(index, { [field]: stored });
@@ -1310,11 +1342,11 @@ function QuotationCreate({
           roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
-          sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
-          min_sell: moneyApiValueToFormString(charge.min_sell),
-          cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
-          total_cost: moneyApiValueToFormString(charge.total_cost),
-          total_sell: moneyApiValueToFormString(charge.total_sell),
+          sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
+          min_sell: currencyApiValueToFormString(charge.min_sell),
+          cost_per_unit: currencyApiValueToFormString(charge.cost_per_unit),
+          total_cost: localApiValueToFormString(charge.total_cost),
+          total_sell: localApiValueToFormString(charge.total_sell),
         }));
 
         dynamicForm.setValues({ charges: formattedCharges });
@@ -1648,12 +1680,12 @@ function QuotationCreate({
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
                   ),
-                  sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
-                  min_sell: moneyApiValueToFormString(charge.min_sell),
-                  cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
-                  min_cost: moneyApiValueToFormString(charge.min_cost),
-                  total_sell: moneyApiValueToFormString(charge.total_sell),
-                  total_cost: moneyApiValueToFormString(charge.total_cost),
+                  sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
+                  min_sell: currencyApiValueToFormString(charge.min_sell),
+                  cost_per_unit: currencyApiValueToFormString(charge.cost_per_unit),
+                  min_cost: currencyApiValueToFormString(charge.min_cost),
+                  total_sell: localApiValueToFormString(charge.total_sell),
+                  total_cost: localApiValueToFormString(charge.total_cost),
                   // preserve existing quotation charge id (fallbacks)
                   id:
                     charge.id ?? charge.charge_id ?? charge.quotation_charge_id,
@@ -1730,13 +1762,13 @@ function QuotationCreate({
           roe: formatRoeAsString(charge.roe) || "1",
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
-          sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
-          min_sell: moneyApiValueToFormString(charge.min_sell),
-          cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
+          sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
+          min_sell: currencyApiValueToFormString(charge.min_sell),
+          cost_per_unit: currencyApiValueToFormString(charge.cost_per_unit),
           ...computeChargeLineTotals({
             no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
-            sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
-            cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
+            sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
+            cost_per_unit: currencyApiValueToFormString(charge.cost_per_unit),
             roe: parseRoeForPayload(charge.roe) ?? 1,
           }),
           // preserve existing quotation charge id (fallbacks)
@@ -1819,8 +1851,8 @@ function QuotationCreate({
           roe: roe,
           unit: unit,
           no_of_units: calculatedNoOfUnits,
-          sell_per_unit: isLCL ? moneyApiValueToFormString(rate) : "",
-          cost_per_unit: isLCL ? "" : moneyApiValueToFormString(rate),
+          sell_per_unit: isLCL ? currencyApiValueToFormString(rate) : "",
+          cost_per_unit: isLCL ? "" : currencyApiValueToFormString(rate),
           min_sell: "",
           toBeDisabled: false,
         };
@@ -1904,7 +1936,7 @@ function QuotationCreate({
         const mappedCharges = quotationData.charges.map((charge: any) => {
           const noOfContainers =
             quotationData.no_of_containers?.toString() || "1";
-          const rate = moneyApiValueToFormString(charge.rate ?? 0) || "0";
+          const rate = currencyApiValueToFormString(charge.rate ?? 0) || "0";
 
           const mappedCharge = {
             charge_name: charge.charge_name || "",
@@ -2095,17 +2127,17 @@ function QuotationCreate({
               : "1",
           // sell_per_unit: isLCL ? rate.toString() : charge.sell_per_unit || "0",
           sell_per_unit: isLCL
-            ? moneyApiValueToFormString(charge.sell_per_unit)
+            ? currencyApiValueToFormString(charge.sell_per_unit)
             : "",
-          min_sell: moneyApiValueToFormString(charge.min_sell),
+          min_sell: currencyApiValueToFormString(charge.min_sell),
           // cost_per_unit: isLCL ? charge.cost_per_unit || "0" : rate.toString(),
           cost_per_unit: isLCL
             ? ""
-            : moneyApiValueToFormString(charge.sell_per_unit),
-          total_cost: moneyApiValueToFormString(
+            : currencyApiValueToFormString(charge.sell_per_unit),
+          total_cost: localApiValueToFormString(
             charge.total_cost != null ? charge.total_cost : 0,
           ),
-          total_sell: moneyApiValueToFormString(
+          total_sell: localApiValueToFormString(
             charge.total_sell != null ? charge.total_sell : 0,
           ),
         };
@@ -2785,15 +2817,15 @@ function QuotationCreate({
     // Calculate totals from charges (clamped like InvoiceCreate money payload)
     const charges = dynamicForm.values.charges || [];
     const netCost =
-      clampAmount(
-        charges.reduce((sum, item) => sum + parseMoneyForPayload(item.total_cost), 0),
+      clampLocalAmount(
+        charges.reduce((sum, item) => sum + parseLocalMoneyForPayload(item.total_cost), 0),
       ) ?? 0;
 
     const netSell =
-      clampAmount(
-        charges.reduce((sum, item) => sum + parseMoneyForPayload(item.total_sell), 0),
+      clampLocalAmount(
+        charges.reduce((sum, item) => sum + parseLocalMoneyForPayload(item.total_sell), 0),
       ) ?? 0;
-    const profit = clampAmount(netSell - netCost) ?? 0;
+    const profit = clampLocalAmount(netSell - netCost) ?? 0;
 
     // Transform charges for CURRENT service to API format
     const transformedCharges = charges.map((charge: any) => {
@@ -2807,12 +2839,12 @@ function QuotationCreate({
         roe: parseRoeForPayload(charge.roe) ?? 1,
         unit: charge.unit,
         no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
-        sell_per_unit: parseMoneyForPayload(charge.sell_per_unit),
-        min_sell: parseMoneyForPayload(charge.min_sell),
-        cost_per_unit: parseMoneyForPayload(charge.cost_per_unit),
-        total_sell: parseMoneyForPayload(charge.total_sell),
-        total_cost: parseMoneyForPayload(charge.total_cost),
-        // min_cost: parseMoneyForPayload(charge.min_cost),
+        sell_per_unit: parseCurrencyMoneyForPayload(charge.sell_per_unit),
+        min_sell: parseCurrencyMoneyForPayload(charge.min_sell),
+        cost_per_unit: parseCurrencyMoneyForPayload(charge.cost_per_unit),
+        total_sell: parseLocalMoneyForPayload(charge.total_sell),
+        total_cost: parseLocalMoneyForPayload(charge.total_cost),
+        // min_cost: parseCurrencyMoneyForPayload(charge.min_cost),
       };
       // Include the quotation charge line id only for existing charges
       if (charge.id !== undefined && charge.id !== null) base.id = charge.id;
@@ -2893,22 +2925,22 @@ function QuotationCreate({
       ([originalServiceId, data]) => {
         const serviceCharges = data.dynamicForm.charges || [];
         const serviceNetCost =
-          clampAmount(
+          clampLocalAmount(
             serviceCharges.reduce(
               (sum: number, item: any) =>
-                sum + parseMoneyForPayload(item.total_cost),
+                sum + parseLocalMoneyForPayload(item.total_cost),
               0,
             ),
           ) ?? 0;
         const serviceNetSell =
-          clampAmount(
+          clampLocalAmount(
             serviceCharges.reduce(
               (sum: number, item: any) =>
-                sum + parseMoneyForPayload(item.total_sell),
+                sum + parseLocalMoneyForPayload(item.total_sell),
               0,
             ),
           ) ?? 0;
-        const serviceProfit = clampAmount(serviceNetSell - serviceNetCost) ?? 0;
+        const serviceProfit = clampLocalAmount(serviceNetSell - serviceNetCost) ?? 0;
 
         // For destination or direct quotation-list create flow, use service_id from enquiry response
         let finalServiceId = parseInt(originalServiceId);
@@ -2975,11 +3007,11 @@ function QuotationCreate({
               roe: parseRoeForPayload(charge.roe) ?? 1,
               unit: charge.unit,
               no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
-              sell_per_unit: parseMoneyForPayload(charge.sell_per_unit),
-              min_sell: parseMoneyForPayload(charge.min_sell),
-              cost_per_unit: parseMoneyForPayload(charge.cost_per_unit),
-              total_sell: parseMoneyForPayload(charge.total_sell),
-              total_cost: parseMoneyForPayload(charge.total_cost),
+              sell_per_unit: parseCurrencyMoneyForPayload(charge.sell_per_unit),
+              min_sell: parseCurrencyMoneyForPayload(charge.min_sell),
+              cost_per_unit: parseCurrencyMoneyForPayload(charge.cost_per_unit),
+              total_sell: parseLocalMoneyForPayload(charge.total_sell),
+              total_cost: parseLocalMoneyForPayload(charge.total_cost),
               // min_cost: parseFloat(charge.min_cost) || 0.0,
             };
             // Include the quotation charge line id when present (existing charge)
@@ -3070,25 +3102,9 @@ function QuotationCreate({
             type: "success",
             message: "Quotation created successfully",
           });
-          // Navigate back to appropriate list page with preserved filters if available
+          // After create (including from enquiry "Create Quotation"), go to quotation list
           const preserveFilters = location.state?.preserveFilters;
-          const fromEnquiry = location.state?.fromEnquiry;
-
-          if (fromEnquiry) {
-            // Navigate back to enquiry page with preserved filters
-            if (preserveFilters) {
-              navigate("/enquiry", {
-                state: {
-                  restoreFilters: preserveFilters,
-                  refreshData: true,
-                },
-              });
-            } else {
-              navigate("/enquiry", { state: { refreshData: true } });
-            }
-          } else {
-            navigateToPreferredList(preserveFilters);
-          }
+          navigateToPreferredList(preserveFilters);
         }
       }
     } catch (error) {
@@ -3490,11 +3506,11 @@ function QuotationCreate({
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
                   ),
-                  sell_per_unit: moneyApiValueToFormString(charge.sell_per_unit),
-                  min_sell: moneyApiValueToFormString(charge.min_sell),
-                  cost_per_unit: moneyApiValueToFormString(charge.cost_per_unit),
-                  total_cost: moneyApiValueToFormString(charge.total_cost),
-                  total_sell: moneyApiValueToFormString(charge.total_sell),
+                  sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
+                  min_sell: currencyApiValueToFormString(charge.min_sell),
+                  cost_per_unit: currencyApiValueToFormString(charge.cost_per_unit),
+                  total_cost: localApiValueToFormString(charge.total_cost),
+                  total_sell: localApiValueToFormString(charge.total_sell),
                   // preserve charge line id from API
                   id:
                     charge.id ?? charge.charge_id ?? charge.quotation_charge_id,
@@ -6152,7 +6168,7 @@ function QuotationCreate({
                               key={`unit-${index}-sell_per_unit`}
                               min={0}
                               hideControls
-                              decimalScale={amountDecimalScale}
+                              decimalScale={currencyAmountDecimalScale}
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -6175,7 +6191,7 @@ function QuotationCreate({
                               readOnly={isViewMode}
                               min={0}
                               hideControls
-                              decimalScale={amountDecimalScale}
+                              decimalScale={currencyAmountDecimalScale}
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -6196,7 +6212,7 @@ function QuotationCreate({
                               readOnly={isViewMode}
                               min={0}
                               hideControls
-                              decimalScale={amountDecimalScale}
+                              decimalScale={currencyAmountDecimalScale}
                               styles={{
                                 input: {
                                   fontSize: "14px",
@@ -6272,7 +6288,7 @@ function QuotationCreate({
                                 dynamicForm.values.charges[index]?.total_sell ??
                                   formatMoneyAmountBound(0),
                               )}
-                              decimalScale={amountDecimalScale}
+                              decimalScale={localAmountDecimalScale}
                               hideControls
                               readOnly
                               disabled={isViewMode}
@@ -6298,7 +6314,7 @@ function QuotationCreate({
                                 dynamicForm.values.charges[index]?.total_cost ??
                                   formatMoneyAmountBound(0),
                               )}
-                              decimalScale={amountDecimalScale}
+                              decimalScale={localAmountDecimalScale}
                               hideControls
                               readOnly
                               disabled={isViewMode}
@@ -6436,121 +6452,6 @@ function QuotationCreate({
               >
                 <Group justify="space-between">
                   <Group>
-                    {isDirectQuoteFromList && (
-                      <>
-                        <Button
-                          variant="outline"
-                          color="gray"
-                          size="sm"
-                          styles={{
-                            root: {
-                              borderColor: "#d0d0d0",
-                              color: "#666",
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                          }}
-                          onClick={() => {
-                            const preserveFilters =
-                              location.state?.preserveFilters;
-                            if (preserveFilters) {
-                              navigate("/quotation", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/quotation", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </>
-                    )}
-                    {/* Show Cancel and Clear all for createQuote flow */}
-                    {goToStep && enquiryData?.actionType === "createQuote" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          color="gray"
-                          size="sm"
-                          styles={{
-                            root: {
-                              borderColor: "#d0d0d0",
-                              color: "#666",
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                          }}
-                          onClick={() => {
-                            // Navigate back to quotation list
-                            const preserveFilters =
-                              location.state?.preserveFilters;
-                            if (preserveFilters) {
-                              navigate("/quotation", {
-                                state: {
-                                  restoreFilters: preserveFilters,
-                                  refreshData: true,
-                                },
-                              });
-                            } else {
-                              navigate("/quotation", {
-                                state: { refreshData: true },
-                              });
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          variant="outline"
-                          color="gray"
-                          size="sm"
-                          styles={{
-                            root: {
-                              borderColor: "#d0d0d0",
-                              color: "#666",
-                              fontSize: "13px",
-                              fontFamily: "Inter",
-                              fontStyle: "medium",
-                            },
-                          }}
-                          onClick={() => {
-                            resetFormsToDefaults();
-                          }}
-                        >
-                          Clear all
-                        </Button>
-                      </>
-                    )}
-                    {/* Show Clear all for standalone edit mode */}
-                    {isStandaloneEdit && !goToStep && (
-                      <Button
-                        variant="outline"
-                        color="gray"
-                        size="sm"
-                        styles={{
-                          root: {
-                            borderColor: "#d0d0d0",
-                            color: "#666",
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            fontStyle: "medium",
-                          },
-                        }}
-                        onClick={() => {
-                          resetFormsToDefaults();
-                        }}
-                      >
-                        Clear all
-                      </Button>
-                    )}
                     <Button
                       variant="outline"
                       color="#000"
@@ -6616,6 +6517,120 @@ function QuotationCreate({
                     >
                       {isViewMode ? "Back to Dashboard" : "Back"}
                     </Button>
+                    {/* Show Clear all for createQuote flow */}
+                    {goToStep && enquiryData?.actionType === "createQuote" && (
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{
+                          root: {
+                            borderColor: "#d0d0d0",
+                            color: "#666",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        onClick={() => {
+                          resetFormsToDefaults();
+                        }}
+                      >
+                        Clear all
+                      </Button>
+                    )}
+                    {/* Show Clear all for standalone edit mode */}
+                    {isStandaloneEdit && !goToStep && (
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{
+                          root: {
+                            borderColor: "#d0d0d0",
+                            color: "#666",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        onClick={() => {
+                          resetFormsToDefaults();
+                        }}
+                      >
+                        Clear all
+                      </Button>
+                    )}
+                    {isDirectQuoteFromList && (
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{
+                          root: {
+                            borderColor: "#d0d0d0",
+                            color: "#666",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        onClick={() => {
+                          const preserveFilters =
+                            location.state?.preserveFilters;
+                          if (preserveFilters) {
+                            navigate("/quotation", {
+                              state: {
+                                restoreFilters: preserveFilters,
+                                refreshData: true,
+                              },
+                            });
+                          } else {
+                            navigate("/quotation", {
+                              state: { refreshData: true },
+                            });
+                          }
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                    {/* Show Cancel for createQuote flow */}
+                    {goToStep && enquiryData?.actionType === "createQuote" && (
+                      <Button
+                        variant="outline"
+                        color="gray"
+                        size="sm"
+                        styles={{
+                          root: {
+                            borderColor: "#d0d0d0",
+                            color: "#666",
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            fontStyle: "medium",
+                          },
+                        }}
+                        onClick={() => {
+                          // Navigate back to quotation list
+                          const preserveFilters =
+                            location.state?.preserveFilters;
+                          if (preserveFilters) {
+                            navigate("/quotation", {
+                              state: {
+                                restoreFilters: preserveFilters,
+                                refreshData: true,
+                              },
+                            });
+                          } else {
+                            navigate("/quotation", {
+                              state: { refreshData: true },
+                            });
+                          }
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
                   </Group>
                   {!isViewMode && (
                     <Group>
@@ -7520,7 +7535,7 @@ function QuotationCreate({
                             key={`unit-${index}-sell_per_unit`}
                             min={0}
                             hideControls
-                            decimalScale={amountDecimalScale}
+                            decimalScale={currencyAmountDecimalScale}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -7539,7 +7554,7 @@ function QuotationCreate({
                             }
                             min={0}
                             hideControls
-                            decimalScale={amountDecimalScale}
+                            decimalScale={currencyAmountDecimalScale}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -7558,7 +7573,7 @@ function QuotationCreate({
                             }
                             min={0}
                             hideControls
-                            decimalScale={amountDecimalScale}
+                            decimalScale={currencyAmountDecimalScale}
                             styles={{
                               input: {
                                 fontSize: "14px",
@@ -7576,7 +7591,7 @@ function QuotationCreate({
                               dynamicForm.values.charges[index]?.total_sell ??
                                 formatMoneyAmountBound(0),
                             )}
-                            decimalScale={amountDecimalScale}
+                            decimalScale={localAmountDecimalScale}
                             hideControls
                             readOnly
                             disabled={isViewMode}
@@ -7600,7 +7615,7 @@ function QuotationCreate({
                               dynamicForm.values.charges[index]?.total_cost ??
                                 formatMoneyAmountBound(0),
                             )}
-                            decimalScale={amountDecimalScale}
+                            decimalScale={localAmountDecimalScale}
                             hideControls
                             readOnly
                             disabled={isViewMode}
@@ -8831,22 +8846,22 @@ function QuotationCreate({
                         {historyItem.no_of_units || "-"}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {formatHistoryMoney(historyItem.sell_per_unit)}
+                        {formatHistoryCurrencyMoney(historyItem.sell_per_unit)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {formatHistoryMoney(historyItem.min_sell)}
+                        {formatHistoryCurrencyMoney(historyItem.min_sell)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {formatHistoryMoney(historyItem.cost_per_unit)}
+                        {formatHistoryCurrencyMoney(historyItem.cost_per_unit)}
                       </Table.Td>
                       {/* <Table.Td style={{ textAlign: "center" }}>
-                        {formatHistoryMoney(historyItem.min_cost)}
+                        {formatHistoryCurrencyMoney(historyItem.min_cost)}
                       </Table.Td> */}
                       <Table.Td style={{ textAlign: "center" }}>
-                        {formatHistoryMoney(historyItem.total_cost)}
+                        {formatHistoryLocalMoney(historyItem.total_cost)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
-                        {formatHistoryMoney(historyItem.total_sell)}
+                        {formatHistoryLocalMoney(historyItem.total_sell)}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
                         {historyItem.action_type === "CREATED"

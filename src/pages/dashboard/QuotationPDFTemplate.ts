@@ -7,7 +7,8 @@ import cargoConsolidators from "../../assets/images/CCIPL.png";
 import {
   computePdfPreviewChargeTotalInQuoteCurrency,
   formatPdfChargeTotalAmount,
-  formatPdfChargeUnitAmount,
+  getChargeUnitDisplayAmount,
+  shouldUseExactPdfQuoteCurrencyDecimals,
 } from "../../components/PdfEditor/quotationTermsHelpers";
 import {
   CCT_BRANCH_INFO,
@@ -1253,14 +1254,20 @@ export const generateNewQuotationPDF = async (
 
             let totalAmount = 0;
             const branchBaseCurrency = String(baseCurrency ?? "");
+            const exactQuoteDecimals = shouldUseExactPdfQuoteCurrencyDecimals(
+              quoteCurrency,
+              branchBaseCurrency,
+              amountCountryCode,
+            );
 
             validCharges.forEach((charge: any) => {
               const description = String(charge.charge_name || "N/A");
               const currency = String(charge.currency || "N/A");
-              const unitAmount = formatPdfChargeUnitAmount(
-                charge.sell_per_unit,
+              const unitAmount = getChargeUnitDisplayAmount(
+                charge,
+                quoteCurrency,
+                branchBaseCurrency,
                 amountCountryCode,
-                amountCurrencyCode,
               );
               const minSellRaw = charge.min_sell;
               const minAmount =
@@ -1283,6 +1290,7 @@ export const generateNewQuotationPDF = async (
                 finalAmount,
                 amountCountryCode,
                 amountCurrencyCode,
+                { exactDecimals: exactQuoteDecimals },
               );
 
               // Handle text wrapping for description
@@ -1334,6 +1342,7 @@ export const generateNewQuotationPDF = async (
               finalTotal,
               amountCountryCode,
               amountCurrencyCode,
+              { exactDecimals: exactQuoteDecimals },
             );
 
             doc.text("Total Amount:", margin + 2, yPos + 4);

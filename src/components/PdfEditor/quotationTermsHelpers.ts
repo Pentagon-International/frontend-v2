@@ -161,19 +161,71 @@ export function computePdfPreviewChargeTotalInQuoteCurrency(
   return amount / effectiveRoe;
 }
 
+/**
+ * Amount/Unit for PDF.
+ * Vietnam + quote ≠ base: total_sell / no_of_units / roe
+ * (inverse of roe × no_of_units × sell_per_unit).
+ * Otherwise: sell_per_unit.
+ */
+export function computePdfPreviewChargeUnitAmountInQuoteCurrency(
+  charge: Record<string, unknown>,
+  quoteCurrency: string,
+  baseCurrency: string,
+  branchCountryCode?: string | null,
+): number {
+  const sellPerUnit = Number(charge.sell_per_unit ?? 0);
+  const convert =
+    isVietnameseUserCountry(branchCountryCode) &&
+    shouldConvertPdfChargeTotalToQuoteCurrency(quoteCurrency, baseCurrency);
+
+  if (!convert) {
+    return Number.isFinite(sellPerUnit) ? sellPerUnit : 0;
+  }
+
+  const totalSell = Number(charge.total_sell || 0);
+  const noOfUnits = Number(charge.no_of_units || 0);
+  const roe = Number(charge.roe || 1);
+  const effectiveRoe = roe > 0 ? roe : 1;
+
+  if (Number.isFinite(totalSell) && noOfUnits > 0 && effectiveRoe > 0) {
+    return totalSell / noOfUnits / effectiveRoe;
+  }
+
+  // Fallback when units are missing: total_sell / roe, else stored sell_per_unit.
+  if (Number.isFinite(totalSell) && effectiveRoe > 0) {
+    return totalSell / effectiveRoe;
+  }
+  return Number.isFinite(sellPerUnit) ? sellPerUnit : 0;
+}
+
+/** Vietnam: use exact (2 dp) decimals when PDF shows converted quote-currency amounts. */
+export function shouldUseExactPdfQuoteCurrencyDecimals(
+  quoteCurrency: string,
+  baseCurrency: string,
+  branchCountryCode?: string | null,
+): boolean {
+  return (
+    isVietnameseUserCountry(branchCountryCode) &&
+    shouldConvertPdfChargeTotalToQuoteCurrency(quoteCurrency, baseCurrency)
+  );
+}
+
 /** Amount/Unit column: numeric value only, India en-IN / foreign en-US grouping. */
 export function formatPdfChargeUnitAmount(
   value: unknown,
   branchCountryCode?: string | null,
   branchCurrencyCode?: string | null,
+  options?: { exactDecimals?: boolean },
 ): string {
   if (value === null || value === undefined || value === "") return "N/A";
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value);
   const isVietnam = isVietnameseUserCountry(branchCountryCode);
+  const exactDecimals = Boolean(options?.exactDecimals);
+  const useWholeNumbers = isVietnam && !exactDecimals;
   return formatUserDecimal(n, branchCountryCode, branchCurrencyCode, {
-    maximumFractionDigits: isVietnam ? 0 : 2,
-    minimumFractionDigits: 0,
+    maximumFractionDigits: useWholeNumbers ? 0 : 2,
+    minimumFractionDigits: exactDecimals ? 2 : 0,
   });
 }
 
@@ -182,13 +234,16 @@ export function formatPdfChargeTotalAmount(
   value: string | number | null | undefined,
   branchCountryCode?: string | null,
   branchCurrencyCode?: string | null,
+  options?: { exactDecimals?: boolean },
 ): string {
   const n = Number(value ?? 0);
   const safe = Number.isFinite(n) ? n : 0;
   const isVietnam = isVietnameseUserCountry(branchCountryCode);
+  const exactDecimals = Boolean(options?.exactDecimals);
+  const useWholeNumbers = isVietnam && !exactDecimals;
   return formatUserDecimal(safe, branchCountryCode, branchCurrencyCode, {
-    minimumFractionDigits: isVietnam ? 0 : 2,
-    maximumFractionDigits: isVietnam ? 0 : 2,
+    minimumFractionDigits: useWholeNumbers ? 0 : 2,
+    maximumFractionDigits: useWholeNumbers ? 0 : 2,
   });
 }
 
@@ -200,6 +255,11 @@ export function getChargeTotalDisplayAmount(
   _roeForQuote?: number,
   branchCountryCode?: string | null,
 ): string {
+  const exactDecimals = shouldUseExactPdfQuoteCurrencyDecimals(
+    quoteCurrency,
+    baseCurrency,
+    branchCountryCode,
+  );
   return formatPdfChargeTotalAmount(
     computePdfPreviewChargeTotalInQuoteCurrency(
       charge,
@@ -208,6 +268,32 @@ export function getChargeTotalDisplayAmount(
     ),
     branchCountryCode,
     baseCurrency,
+    { exactDecimals },
+  );
+}
+
+/** Display value for the charge Amount/Unit column in the PDF. */
+export function getChargeUnitDisplayAmount(
+  charge: Record<string, unknown>,
+  quoteCurrency: string,
+  baseCurrency: string,
+  branchCountryCode?: string | null,
+): string {
+  const exactDecimals = shouldUseExactPdfQuoteCurrencyDecimals(
+    quoteCurrency,
+    baseCurrency,
+    branchCountryCode,
+  );
+  return formatPdfChargeUnitAmount(
+    computePdfPreviewChargeUnitAmountInQuoteCurrency(
+      charge,
+      quoteCurrency,
+      baseCurrency,
+      branchCountryCode,
+    ),
+    branchCountryCode,
+    baseCurrency,
+    { exactDecimals },
   );
 }
 

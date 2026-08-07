@@ -903,7 +903,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     });
   }, [eventMasterData]);
 
-  // Trigger type has no master data – static options
+  // Trigger type has no master data ? static options
   const triggerTypeOptions = useMemo(
     () => [
       { value: "Customer", label: "Customer" },
@@ -1434,7 +1434,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     );
   }, [unitOptions, form.values.service, form.values.cargo_details]);
 
-  // Events, Documents, Trigger Updates – form-based handlers
+  // Events, Documents, Trigger Updates ? form-based handlers
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [freightCertificatePreviewOpen, setFreightCertificatePreviewOpen] =
@@ -3052,7 +3052,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         updateTriggerRow(index, "description", "");
                       }
                     } else {
-                      // Code cleared via clearable button – also clear description
+                      // Code cleared via clearable button ? also clear description
                       updateTriggerRow(index, "description", "");
                     }
                   }}

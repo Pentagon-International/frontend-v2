@@ -6,8 +6,8 @@ import { getByPath, setByPath } from "./utils/setByPath";
 import {
   buildNumberedNoteDisplayLines,
   formatPdfChargeTotalAmount,
-  formatPdfChargeUnitAmount,
   getChargeTotalDisplayAmount,
+  getChargeUnitDisplayAmount,
   getEffectiveConditions,
   getEffectiveNotes,
   getRoeForQuoteCurrency,
@@ -520,10 +520,14 @@ export function buildQuotationFieldRegistry(
           const q = getQuotationAt(data, serviceIndex);
           const chargeList = Array.isArray(q.charges) ? q.charges : [];
           const c = chargeList[chargeIndex] as Record<string, unknown> | undefined;
-          return formatPdfChargeUnitAmount(
-            c?.sell_per_unit,
+          if (!c) return "";
+          const quoteCurrency = String(q.quote_currency ?? "");
+          const userCurrency = String(ctx.userCurrency ?? quoteCurrency);
+          return getChargeUnitDisplayAmount(
+            c,
+            quoteCurrency,
+            userCurrency,
             ctx.branchCountryCode,
-            ctx.userCurrency,
           );
         },
         parseInput: (raw) => {
