@@ -1,4 +1,5 @@
 "use client";
+import type { ReactNode } from "react";
 import { Group, Text, Select, ActionIcon } from "@mantine/core";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 
@@ -9,6 +10,8 @@ interface PaginationBarProps {
   onPageSizeChange: (size: number) => void;
   onPageChange: (page: number) => void;
   pageSizeOptions?: string[];
+  /** Rendered after page nav on the same row (e.g. Submit button). */
+  trailing?: ReactNode;
 }
 
 export default function PaginationBar({
@@ -18,6 +21,7 @@ export default function PaginationBar({
   onPageSizeChange,
   onPageChange,
   pageSizeOptions = ["10", "25", "50"],
+  trailing,
 }: PaginationBarProps) {
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
@@ -33,9 +37,9 @@ export default function PaginationBar({
       w="100%"
       justify="space-between"
       align="center"
-      p="xs"
+      px="xs"
+      py={4}
       wrap="nowrap"
-      pt="sm"
     >
       {/* Rows per page + range */}
       <Group gap="sm" align="center" wrap="nowrap">
@@ -60,33 +64,36 @@ export default function PaginationBar({
         </Text>
       </Group>
 
-      {/* Navigation */}
-      <Group gap="xs" align="center" wrap="nowrap" pr={50}>
-        <ActionIcon
-          variant="default"
-          size="sm"
-          onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-          disabled={currentPage === 1}
-        >
-          <IconChevronLeft size={16} />
-        </ActionIcon>
+      {/* Navigation (+ optional trailing action) */}
+      <Group gap="sm" align="center" wrap="nowrap" pr={trailing ? 0 : 50}>
+        <Group gap="xs" align="center" wrap="nowrap">
+          <ActionIcon
+            variant="default"
+            size="sm"
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+          >
+            <IconChevronLeft size={16} />
+          </ActionIcon>
 
-        <Text size="sm" ta="center" style={{ width: 26 }}>
-          {currentPage}
-        </Text>
+          <Text size="sm" ta="center" style={{ width: 26 }}>
+            {currentPage}
+          </Text>
 
-        <Text size="sm" c="dimmed">
-          of {totalPages}
-        </Text>
+          <Text size="sm" c="dimmed">
+            of {totalPages}
+          </Text>
 
-        <ActionIcon
-          variant="default"
-          size="sm"
-          onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-          disabled={currentPage >= totalPages}
-        >
-          <IconChevronRight size={16} />
-        </ActionIcon>
+          <ActionIcon
+            variant="default"
+            size="sm"
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage >= totalPages}
+          >
+            <IconChevronRight size={16} />
+          </ActionIcon>
+        </Group>
+        {trailing}
       </Group>
     </Group>
   );

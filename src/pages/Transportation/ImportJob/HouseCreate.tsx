@@ -33,6 +33,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCalendar,
+  IconSend,
 } from "@tabler/icons-react";
 import {
   useState,
@@ -42,7 +43,8 @@ import {
   Fragment,
   useRef,
 } from "react";
-import { useDebouncedCallback } from "@mantine/hooks";
+import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useExchangeRateRoe } from "../../../hooks/useExchangeRateRoe";
@@ -460,6 +462,11 @@ function HouseCreate() {
   );
   const [doDeliverToSelection, setDoDeliverToSelection] =
     useState<DoDeliverToOption | null>(null);
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [
@@ -3210,6 +3217,17 @@ function HouseCreate() {
         message: "PDF downloaded successfully",
       });
     }
+  };
+
+  const handleOpenSendEmailForPdf = (
+    pdfBlobUrl: string | null,
+    fileName: string,
+    documentLabel: string,
+  ) => {
+    setActivePdfBlob(pdfBlobUrl);
+    setActiveFileName(fileName);
+    setActiveDocumentLabel(documentLabel);
+    openSendEmail();
   };
 
   return (
@@ -6561,6 +6579,20 @@ function HouseCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      pdfBlob,
+                      `Cargo-Arrival-Notice-${form.values.hbl_number || "HBL"}.pdf`,
+                      "Cargo Arrival Notice",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -6669,6 +6701,20 @@ function HouseCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      doPdfBlob,
+                      `Delivery-Order-${form.values.hbl_number || "HBL"}.pdf`,
+                      "Delivery Order",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -6681,6 +6727,14 @@ function HouseCreate() {
           )}
         </Stack>
       </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
 
       <VendorInvoiceAutomationModal
         opened={vendorInvoiceAutomationShipmentNo != null}

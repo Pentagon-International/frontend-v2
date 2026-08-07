@@ -39,6 +39,7 @@ import {
   IconFileInvoice,
   IconRefresh,
   IconPaperclip,
+  IconSend,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -126,6 +127,8 @@ import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreate
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
+import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
@@ -586,6 +589,11 @@ function ImportJobCreate() {
   );
   const [doDeliverToSelection, setDoDeliverToSelection] =
     useState<DoDeliverToOption | null>(null);
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
 
   // Accounts tab: invoice list from filter/invoice API
   const {
@@ -3063,6 +3071,17 @@ function ImportJobCreate() {
         message: "PDF downloaded successfully",
       });
     }
+  };
+
+  const handleOpenSendEmailForPdf = (
+    pdfBlobUrl: string | null,
+    fileName: string,
+    documentLabel: string,
+  ) => {
+    setActivePdfBlob(pdfBlobUrl);
+    setActiveFileName(fileName);
+    setActiveDocumentLabel(documentLabel);
+    openSendEmail();
   };
 
   const handleSubmit = async () => {
@@ -7080,6 +7099,20 @@ function ImportJobCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      pdfBlob,
+                      `Cargo-Arrival-Notice-${currentHousingForPreview?.hbl_number || "HBL"}.pdf`,
+                      "Cargo Arrival Notice",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -7189,6 +7222,20 @@ function ImportJobCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      doPdfBlob,
+                      `Delivery-Order-${currentHousingForDoPreview?.hbl_number || "HBL"}.pdf`,
+                      "Delivery Order",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -7201,6 +7248,14 @@ function ImportJobCreate() {
           )}
         </Stack>
       </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
 
       <VendorInvoiceAutomationModal
         opened={vendorInvoiceAutomationShipmentNo != null}

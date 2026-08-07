@@ -99,7 +99,7 @@ const collectBolCountryHints = (
   return { codes, names };
 };
 
-// USA logo for India, USA, and Vietnam branches; empty otherwise (no fallback)
+// USA logo for India, USA, Vietnam, and China branches; empty otherwise (no fallback)
 const getLogoByCountry = (country: any): string | null => {
   try {
     let countryName = "";
@@ -133,8 +133,12 @@ const getLogoByCountry = (country: any): string | null => {
       countryName.includes("VIET NAM") ||
       countryCode === "VN" ||
       countryCode === "VNM";
+    const isChina =
+      countryName.includes("CHINA") ||
+      countryCode === "CN" ||
+      countryCode === "CHN";
 
-    if (isIndia || isUSA || isVietnam) {
+    if (isIndia || isUSA || isVietnam || isChina) {
       return pentagonPrimeAmericas;
     }
     return null;
@@ -505,7 +509,12 @@ export const generateBillOfLadingPDF = (
   housingData: any,
   defaultBranch: any,
   country?: any,
-  options?: { draft?: boolean; blType?: string; houseIndex?: number },
+  options?: {
+    draft?: boolean;
+    blType?: string;
+    houseIndex?: number;
+    documentTitle?: string;
+  },
 ): string => {
   try {
     if (isUsBranchForBillOfLading(country, defaultBranch)) {
@@ -762,7 +771,8 @@ export const generateBillOfLadingPDF = (
     // yPos = margin + 5;
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    const docTitle = "MULTIMODAL TRANSPORT DOCUMENT";
+    const docTitle =
+      options?.documentTitle?.trim() || "MULTIMODAL TRANSPORT DOCUMENT";
     if (titleSuffix) {
       const titleWidth = doc.getTextWidth(docTitle);
       const titleGap = 3;

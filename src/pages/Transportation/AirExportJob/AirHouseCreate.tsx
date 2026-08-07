@@ -34,6 +34,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCalendar,
+  IconSend,
 } from "@tabler/icons-react";
 import {
   useState,
@@ -43,7 +44,8 @@ import {
   useRef,
   Fragment,
 } from "react";
-import { useDebouncedCallback } from "@mantine/hooks";
+import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useExchangeRateRoe } from "../../../hooks/useExchangeRateRoe";
@@ -461,6 +463,11 @@ function HouseCreate() {
   );
   const [airWayBillPreviewTitle, setAirWayBillPreviewTitle] =
     useState("Air Way Bill");
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
 
 
   // Charges Form - Using useForm similar to routings in ExportJobCreate
@@ -2587,6 +2594,17 @@ function HouseCreate() {
       link.click();
       document.body.removeChild(link);
     }
+  };
+
+  const handleOpenSendEmailForPdf = (
+    pdfBlobUrl: string | null,
+    fileName: string,
+    documentLabel: string,
+  ) => {
+    setActivePdfBlob(pdfBlobUrl);
+    setActiveFileName(fileName);
+    setActiveDocumentLabel(documentLabel);
+    openSendEmail();
   };
 
   return (
@@ -5847,6 +5865,20 @@ function HouseCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      airWayBillPdfBlob,
+                      `${airWayBillPreviewTitle.replace(/\s+/g, "-")}.pdf`,
+                      airWayBillPreviewTitle,
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -5904,6 +5936,20 @@ function HouseCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      pdfBlob,
+                      `Cargo-Arrival-Notice-${form.values.hawb_number || "HAWB"}.pdf`,
+                      "Cargo Arrival Notice",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -5916,6 +5962,14 @@ function HouseCreate() {
           )}
         </Stack>
       </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
 
       <VendorInvoiceAutomationModal
         opened={vendorInvoiceAutomationShipmentNo != null}

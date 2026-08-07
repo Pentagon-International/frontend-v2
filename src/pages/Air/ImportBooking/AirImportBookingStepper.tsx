@@ -42,6 +42,7 @@ import {
   IconBellRinging,
   IconCertificate2,
   IconPrinter,
+  IconSend,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
@@ -61,7 +62,8 @@ import {
   roundRoeForPayload,
 } from "../../../utils/exchangeRateRoe";
 import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
-import { useDebouncedCallback } from "@mantine/hooks";
+import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
@@ -1442,6 +1444,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [freightCertificatePdfBlob, setFreightCertificatePdfBlob] = useState<
     string | null
   >(null);
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
 
   const addEventRow = () => {
     form.insertListItem("event_modal_rows", {
@@ -1608,6 +1615,15 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       link.click();
       document.body.removeChild(link);
     }
+  };
+
+  const handleOpenSendEmailForFreightCertificate = () => {
+    setActivePdfBlob(freightCertificatePdfBlob);
+    setActiveFileName(
+      `FreightCertificate-${jobData?.shipment_code ?? "shipment"}.pdf`,
+    );
+    setActiveDocumentLabel("Freight Certificate");
+    openSendEmail();
   };
 
   const handleFreightCertificatePrint = () => {
@@ -3179,6 +3195,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={handleOpenSendEmailForFreightCertificate}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -3191,6 +3215,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
           )}
         </Stack>
       </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
 
       <Box
         style={{

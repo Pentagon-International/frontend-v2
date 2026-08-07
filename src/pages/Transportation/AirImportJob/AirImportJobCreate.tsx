@@ -39,6 +39,7 @@ import {
   IconFileInvoice,
   IconRefresh,
   IconPaperclip,
+  IconSend,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -110,6 +111,8 @@ import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreate
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
+import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
@@ -511,6 +514,11 @@ function AirImportJobCreate() {
   const [pendingHawbForCan, setPendingHawbForCan] = useState<HAWBDetail | null>(
     null,
   );
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
   const { user } = useAuthStore();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -2631,6 +2639,15 @@ function AirImportJobCreate() {
         message: "PDF downloaded successfully",
       });
     }
+  };
+
+  const handleOpenSendEmailForCan = () => {
+    setActivePdfBlob(pdfBlob);
+    setActiveFileName(
+      `Cargo-Arrival-Notice-${currentHawbForPreview?.hawb_number || "HAWB"}.pdf`,
+    );
+    setActiveDocumentLabel("Cargo Arrival Notice");
+    openSendEmail();
   };
 
   // EDI checklist preview state (Air Import Job)
@@ -6620,6 +6637,14 @@ function AirImportJobCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={handleOpenSendEmailForCan}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -6632,6 +6657,14 @@ function AirImportJobCreate() {
           )}
         </Stack>
       </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
 
       <VendorInvoiceAutomationModal
         opened={vendorInvoiceAutomationShipmentNo != null}

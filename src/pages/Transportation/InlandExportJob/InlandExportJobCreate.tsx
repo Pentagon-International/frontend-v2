@@ -41,6 +41,7 @@ import {
   IconDownload,
   IconX,
   IconPaperclip,
+  IconSend,
 } from "@tabler/icons-react";
 import {
   useEffect,
@@ -109,6 +110,8 @@ import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreate
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
+import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
@@ -511,6 +514,11 @@ function InlandExportJobCreate() {
   // Proforma PDF preview state
   const [proformaPreviewOpen, setProformaPreviewOpen] = useState(false);
   const [proformaPdfBlob, setProformaPdfBlob] = useState<string | null>(null);
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
   const [proformaCurrencyModalOpen, setProformaCurrencyModalOpen] =
     useState(false);
   const [selectedProformaCurrency, setSelectedProformaCurrency] =
@@ -2414,6 +2422,17 @@ function InlandExportJobCreate() {
       link.click();
       document.body.removeChild(link);
     }
+  };
+
+  const handleOpenSendEmailForPdf = (
+    pdfBlobUrl: string | null,
+    fileName: string,
+    documentLabel: string,
+  ) => {
+    setActivePdfBlob(pdfBlobUrl);
+    setActiveFileName(fileName);
+    setActiveDocumentLabel(documentLabel);
+    openSendEmail();
   };
 
   // Check if all requirements are met for Create button
@@ -5182,6 +5201,20 @@ function InlandExportJobCreate() {
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      pdfBlob,
+                      `CargoManifest-${jobData?.id || "draft"}.pdf`,
+                      "Cargo Manifest",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -5294,6 +5327,20 @@ function InlandExportJobCreate() {
                   color="#105476"
                 >
                   Download PDF
+                </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      proformaPdfBlob,
+                      "Proforma.pdf",
+                      "Proforma",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
                 </Button>
               </Group>
             </>
@@ -5518,6 +5565,13 @@ function InlandExportJobCreate() {
           </Stack>
         </Box>
       )}
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
       <VendorInvoiceAutomationModal
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}

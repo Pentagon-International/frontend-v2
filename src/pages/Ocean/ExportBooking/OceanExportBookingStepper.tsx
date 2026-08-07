@@ -43,6 +43,7 @@ import {
   IconFileDescription,
   IconBellRinging,
   IconFileInvoice,
+  IconSend,
 } from "@tabler/icons-react";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { mapOceanExportBookingToBillOfLadingData } from "../../jobs/pdf/mapOceanExportBookingToBillOfLading";
@@ -77,7 +78,8 @@ import {
   roundRoeForPayload,
 } from "../../../utils/exchangeRateRoe";
 import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
-import { useDebouncedCallback } from "@mantine/hooks";
+import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
@@ -774,6 +776,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [bolPreviewHasUnsavedChanges, setBolPreviewHasUnsavedChanges] =
     useState(false);
   const [bolPreviewLabel, setBolPreviewLabel] = useState("HBL");
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
 
   // State for display values
   const [shipperDisplayName, setShipperDisplayName] = useState<string | null>(
@@ -3193,7 +3200,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         housingData,
         defaultBranch,
         country,
-        { draft: true },
+        { draft: true, documentTitle: "SHIPPING LINE OF LADING" },
       );
 
       setBolPreviewLabel(
@@ -3205,6 +3212,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         defaultBranch,
         country,
         draft: true,
+        documentTitle: "SHIPPING LINE OF LADING",
       });
       setBolPreviewHasUnsavedChanges(false);
       setBolPdfBlob(blobUrl);
@@ -3224,7 +3232,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       rowData.housingData,
       rowData.defaultBranch,
       rowData.country,
-      { draft: rowData.draft === true },
+      {
+        draft: rowData.draft === true,
+        documentTitle:
+          typeof rowData.documentTitle === "string"
+            ? rowData.documentTitle
+            : undefined,
+      },
     );
   };
 
@@ -3257,6 +3271,13 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       type: "success",
       message: "PDF downloaded successfully",
     });
+  };
+
+  const handleOpenSendEmailForBol = () => {
+    setActivePdfBlob(bolPdfBlob);
+    setActiveFileName(`Bill-Of-Lading-${bolPreviewLabel || "HBL"}.pdf`);
+    setActiveDocumentLabel("Draft Bill Of Lading");
+    openSendEmail();
   };
 
   return (
@@ -3569,6 +3590,15 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={handleOpenSendEmailForBol}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                  disabled={bolPreviewHasUnsavedChanges}
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : bolPdfBlob ? (
@@ -3602,6 +3632,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 >
                   Download PDF
                 </Button>
+                <Button
+                  onClick={handleOpenSendEmailForBol}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
               </Group>
             </>
           ) : (
@@ -3614,6 +3652,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           )}
         </Stack>
       </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
 
       <Box
         style={{

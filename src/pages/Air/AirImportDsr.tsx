@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type CSSProperties } from "react";
-import { Box, Center, Flex, Group, Text, Button, TextInput, ActionIcon, Loader } from "@mantine/core";
+import { Box, Center, Flex, Group, Text, Button, TextInput, ActionIcon, Loader, Tooltip } from "@mantine/core";
 import toast from "react-hot-toast";
 import dayjs from "dayjs";
-import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX } from "@tabler/icons-react";
+import { IconSearch, IconFilter, IconStack2, IconCircleCheck, IconClock, IconX, IconDownload } from "@tabler/icons-react";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../api/axios";
@@ -25,6 +25,7 @@ import {
 } from "../../components";
 import { useListFilterStore } from "../../store/listFilterStore";
 import useDateFormat from "../../hooks/useDateFormat";
+import { downloadDsrCsv } from "../../utils/dsrCsvDownload";
 
 const LIST_KEY = "AIR_IMPORT_DSR";
 
@@ -75,6 +76,11 @@ const AIR_IMPORT_DSR_COLUMNS = [
 }>;
 
 type AirImportDsrColumnKey = (typeof AIR_IMPORT_DSR_COLUMNS)[number]["key"];
+
+const IMPORT_NAME_TOOLTIP_KEYS = new Set<AirImportDsrColumnKey>([
+  "shipper",
+  "actual_consignee",
+]);
 
 /**
  * Backend `filters` keys for air-import-booked (matches API).
@@ -326,6 +332,7 @@ export default function AirImportDsr() {
   const [airImportDsrRows, setAirImportDsrRows] = useState<AirImportDsrRow[]>([]);
   const [isLoadingAirImportDsr, setIsLoadingAirImportDsr] = useState(false);
   const [isSubmittingAirImportDsr, setIsSubmittingAirImportDsr] = useState(false);
+  const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
   const [airImportDsrPage, setAirImportDsrPage] = useState(1);
   const [airImportDsrPageSize, setAirImportDsrPageSize] = useState(25);
   const [airImportDsrTotalRecords, setAirImportDsrTotalRecords] = useState(0);
@@ -543,6 +550,35 @@ export default function AirImportDsr() {
     debouncedColumnFilters,
   ]);
 
+  const downloadCsv = useCallback(async () => {
+    if (!fromDate || !toDate) {
+      toast.error("Please select date range");
+      return;
+    }
+    setIsDownloadingCsv(true);
+    try {
+      await downloadDsrCsv({
+        endpoint: URL.airImportBooked,
+        fileNamePrefix: "air-import-dsr",
+        payload: {
+          service_type: "import",
+          date_from: dayjs(fromDate).format("YYYY-MM-DD"),
+          date_to: dayjs(toDate).format("YYYY-MM-DD"),
+          search: debouncedSearch.trim(),
+          filters: buildImportBackendFiltersPayload(
+            columnFiltersForApiRequest(appliedColumnFilters, debouncedColumnFilters),
+          ),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to download air import DSR CSV:", error);
+      const err = error as { message?: string };
+      toast.error(err?.message || "Failed to download CSV");
+    } finally {
+      setIsDownloadingCsv(false);
+    }
+  }, [fromDate, toDate, debouncedSearch, appliedColumnFilters, debouncedColumnFilters]);
+
   useEffect(() => {
     setAirImportDsrPage(1);
   }, [fromDate, toDate]);
@@ -731,6 +767,17 @@ export default function AirImportDsr() {
             >
               Filters
             </Button>
+            <Button
+              variant="default"
+              size="xs"
+              leftSection={<IconDownload size={14} />}
+              styles={erpToolbarOutlineButtonStyles(theme)}
+              onClick={() => void downloadCsv()}
+              loading={isDownloadingCsv}
+              disabled={isLoadingAirImportDsr || !fromDate || !toDate}
+            >
+              Download
+            </Button>
           </>
         ),
       }}
@@ -804,30 +851,27 @@ export default function AirImportDsr() {
               marginTop: 4,
             }}
           >
-            <Group justify="space-between" align="center" wrap="wrap" gap="sm">
-              <Box style={{ flex: "1 1 320px", minWidth: 0 }}>
-                <PaginationBar
-                  pageSize={airImportDsrPageSize}
-                  currentPage={airImportDsrPage}
-                  totalRecords={airImportDsrTotalRecords}
-                  onPageSizeChange={(size) => {
-                    setAirImportDsrPageSize(size);
-                    setAirImportDsrPage(1);
-                  }}
-                  onPageChange={setAirImportDsrPage}
-                />
-              </Box>
-              <Button
-                size="xs"
-                color={DSR_PRIMARY}
-                onClick={() => void submitAirImportDsrUpdates()}
-                loading={isSubmittingAirImportDsr}
-                disabled={isLoadingAirImportDsr || airImportDsrRows.length === 0}
-                style={{ flexShrink: 0, marginRight: 56 }}
-              >
-                Submit changes
-              </Button>
-            </Group>
+            <PaginationBar
+              pageSize={airImportDsrPageSize}
+              currentPage={airImportDsrPage}
+              totalRecords={airImportDsrTotalRecords}
+              onPageSizeChange={(size) => {
+                setAirImportDsrPageSize(size);
+                setAirImportDsrPage(1);
+              }}
+              onPageChange={setAirImportDsrPage}
+              trailing={
+                <Button
+                  size="xs"
+                  color={DSR_PRIMARY}
+                  onClick={() => void submitAirImportDsrUpdates()}
+                  loading={isSubmittingAirImportDsr}
+                  disabled={isLoadingAirImportDsr || airImportDsrRows.length === 0}
+                >
+                  Submit changes
+                </Button>
+              }
+            />
           </Box>
         ),
         children: (
@@ -942,7 +986,7 @@ export default function AirImportDsr() {
                         }}
                       >
                         <Text size="sm" c="dimmed">
-                          No data available for this criteria.
+                          No data available
                         </Text>
                       </Flex>
                     </td>
@@ -1034,23 +1078,48 @@ export default function AirImportDsr() {
                                 }}
                               />
                             ) : (
-                              <FormTextInput
-                                value={airImportDsrRowScalar(row, column.key)}
-                                format="normal"
-                                size="xs"
-                                readOnly
-                                styles={{
-                                  input: {
-                                    width: column.width ?? 120,
-                                    minWidth: column.width ?? 120,
-                                    fontSize: 11,
-                                    height: 26,
-                                    textAlign: column.key === "sr_no" ? "center" : "left",
-                                    backgroundColor: "#f8fafc",
-                                    borderColor: "#dbe4ff",
-                                  },
-                                }}
-                              />
+                              (() => {
+                                const cellValue = airImportDsrRowScalar(row, column.key);
+                                const input = (
+                                  <FormTextInput
+                                    value={cellValue}
+                                    format="normal"
+                                    size="xs"
+                                    readOnly
+                                    styles={{
+                                      input: {
+                                        width: column.width ?? 120,
+                                        minWidth: column.width ?? 120,
+                                        fontSize: 11,
+                                        height: 26,
+                                        textAlign: column.key === "sr_no" ? "center" : "left",
+                                        backgroundColor: "#f8fafc",
+                                        borderColor: "#dbe4ff",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      },
+                                    }}
+                                  />
+                                );
+                                if (
+                                  IMPORT_NAME_TOOLTIP_KEYS.has(column.key) &&
+                                  cellValue.trim()
+                                ) {
+                                  return (
+                                    <Tooltip
+                                      label={cellValue}
+                                      withArrow
+                                      multiline
+                                      maw={420}
+                                      openDelay={300}
+                                    >
+                                      <Box style={{ maxWidth: "100%" }}>{input}</Box>
+                                    </Tooltip>
+                                  );
+                                }
+                                return input;
+                              })()
                             )}
                           </td>
                         ))}
