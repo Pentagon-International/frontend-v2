@@ -96,6 +96,7 @@ type SubledgerEntryRow = {
   party_name?: string | null;
   date_document?: string | null;
   due_date?: string | null;
+  inv_crn_no?: string | null;
   inv_crn_date?: string | null;
   shipment_no?: string | null;
   service?: string | null;
@@ -133,6 +134,7 @@ const ENTRY_COLUMNS: EntryColumn[] = [
   { key: "party_name", label: "Party Name", span: 1.5 },
   { key: "date_document", label: "Doc Date", span: 0.9 },
   { key: "due_date", label: "Due Date", span: 0.9 },
+  { key: "inv_crn_no", label: "Supplier Doc No", span: 1.0 },
   { key: "inv_crn_date", label: "Supplier Doc Date", span: 0.9 },
   { key: "service", label: "Service", span: 0.55 },
   { key: "job_id", label: "Job Id", span: 0.95 },
@@ -208,6 +210,8 @@ function subledgerMrtColumnSize(key: keyof SubledgerEntryRow): number {
     case "due_date":
     case "inv_crn_date":
       return 100;
+    case "inv_crn_no":
+      return 130;
     case "service":
       return 80;
     case "job_id":
