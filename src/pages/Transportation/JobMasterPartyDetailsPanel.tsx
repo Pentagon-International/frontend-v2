@@ -50,6 +50,7 @@ export const getJobMasterAddressOptions = (
 
 type JobMasterPartyDetailsPanelProps = {
   idPrefix: string;
+  disabled?: boolean;
   partyDetailsForm: UseFormReturnType<JobMasterPartyDetailsValues>;
   shipperAddressOptions: PartyAddressOption[];
   setShipperAddressOptions: (options: PartyAddressOption[]) => void;
@@ -73,6 +74,7 @@ type JobMasterPartyDetailsPanelProps = {
 
 export function JobMasterPartyDetailsPanel({
   idPrefix,
+  disabled = false,
   partyDetailsForm,
   shipperAddressOptions,
   setShipperAddressOptions,
@@ -94,7 +96,10 @@ export function JobMasterPartyDetailsPanel({
   setCarrierAgentAddressCustom,
 }: JobMasterPartyDetailsPanelProps) {
   return (
-    <>
+    <fieldset
+      disabled={disabled}
+      style={{ border: "none", margin: 0, padding: 0, minInlineSize: 0 }}
+    >
       <Text size="lg" fw={600} c="#105476" mb="md">
         Party Details
       </Text>
@@ -120,6 +125,7 @@ export function JobMasterPartyDetailsPanel({
             })}
             value={partyDetailsForm.values.shipper_id || null}
             displayValue={partyDetailsForm.values.shipper_name || null}
+            disabled={disabled}
             onChange={(value, selectedData, originalData) => {
               const options = getJobMasterAddressOptions(originalData);
               const primary = options[0];
@@ -145,6 +151,7 @@ export function JobMasterPartyDetailsPanel({
         <Grid.Col span={4}>
           <FormTextInput
             label="Shipper Email"
+            readOnly={disabled}
             value={partyDetailsForm.values.shipper_email}
             onChange={(e) =>
               partyDetailsForm.setFieldValue("shipper_email", e.currentTarget.value)
@@ -160,6 +167,7 @@ export function JobMasterPartyDetailsPanel({
               ))) ? (
             <FormTextInput
               label="Shipper Address"
+              readOnly={disabled}
               value={partyDetailsForm.values.shipper_address}
               onChange={(e) => {
                 const nextValue = e.currentTarget.value;
@@ -175,6 +183,7 @@ export function JobMasterPartyDetailsPanel({
             <Dropdown
               size="sm"
               label="Shipper Address"
+              disabled={disabled}
               data={shipperAddressOptions.map((item) => ({
                 value: item.value,
                 label: item.label,
@@ -224,6 +233,7 @@ export function JobMasterPartyDetailsPanel({
             })}
             value={partyDetailsForm.values.consignee_id || null}
             displayValue={partyDetailsForm.values.consignee_name || null}
+            disabled={disabled}
             onChange={(value, selectedData, originalData) => {
               const options = getJobMasterAddressOptions(originalData);
               const primary = options[0];
@@ -249,6 +259,7 @@ export function JobMasterPartyDetailsPanel({
         <Grid.Col span={4}>
           <FormTextInput
             label="Consignee Email"
+            readOnly={disabled}
             value={partyDetailsForm.values.consignee_email}
             onChange={(e) =>
               partyDetailsForm.setFieldValue("consignee_email", e.currentTarget.value)
@@ -264,6 +275,7 @@ export function JobMasterPartyDetailsPanel({
               ))) ? (
             <FormTextInput
               label="Consignee Address"
+              readOnly={disabled}
               value={partyDetailsForm.values.consignee_address}
               onChange={(e) => {
                 const nextValue = e.currentTarget.value;
@@ -279,6 +291,7 @@ export function JobMasterPartyDetailsPanel({
             <Dropdown
               size="sm"
               label="Consignee Address"
+              disabled={disabled}
               data={consigneeAddressOptions.map((item) => ({
                 value: item.value,
                 label: item.label,
@@ -330,6 +343,7 @@ export function JobMasterPartyDetailsPanel({
             })}
             value={partyDetailsForm.values.carrier_agent_id || null}
             displayValue={partyDetailsForm.values.carrier_agent_name || null}
+            disabled={disabled}
             onChange={(value, selectedData, originalData) => {
               const options = getJobMasterAddressOptions(originalData);
               const primary = options[0];
@@ -367,6 +381,7 @@ export function JobMasterPartyDetailsPanel({
         <Grid.Col span={4}>
           <FormTextInput
             label="Carrier Agent Email"
+            readOnly={disabled}
             value={partyDetailsForm.values.carrier_agent_email}
             onChange={(e) =>
               partyDetailsForm.setFieldValue(
@@ -386,6 +401,7 @@ export function JobMasterPartyDetailsPanel({
               ))) ? (
             <FormTextInput
               label="Carrier Agent Address"
+              readOnly={disabled}
               value={partyDetailsForm.values.carrier_agent_address}
               onChange={(e) => {
                 const nextValue = e.currentTarget.value;
@@ -401,6 +417,7 @@ export function JobMasterPartyDetailsPanel({
             <Dropdown
               size="sm"
               label="Carrier Agent Address"
+              disabled={disabled}
               data={carrierAgentAddressOptions.map((item) => ({
                 value: item.value,
                 label: item.label,
@@ -434,6 +451,6 @@ export function JobMasterPartyDetailsPanel({
           )}
         </Grid.Col>
       </Grid>
-    </>
+    </fieldset>
   );
 }

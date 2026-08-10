@@ -11,7 +11,6 @@ import {
   Menu,
   Modal,
   ScrollArea,
-  Select,
   Stack,
   Table,
   Tabs,
@@ -38,7 +37,10 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
+import { ERPListJobStatusPill } from "../../../components";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import { formatDisplayJobId } from "../../../utils/displayJobId";
 import {
   Dropdown,
   SearchableSelect,
@@ -1076,11 +1078,13 @@ function ServiceJobAccountsSection({
   accountsTabIndex,
   jobData,
   editPath,
+  isReadOnly = false,
 }: {
   activeTab: number;
   accountsTabIndex: number;
   jobData: Record<string, unknown> | null;
   editPath: string;
+  isReadOnly?: boolean;
 }) {
   const navigate = useNavigate();
   const shipmentNo = jobData?.job_id ? String(jobData.job_id) : null;
@@ -1209,7 +1213,7 @@ function ServiceJobAccountsSection({
                               >
                                 View
                               </Menu.Item>
-                              {isUnposted && (
+                              {isUnposted && !isReadOnly && (
                                 <>
                                   <Menu.Item
                                     leftSection={
@@ -1247,7 +1251,7 @@ function ServiceJobAccountsSection({
                                   />
                                 </>
                               )}
-                              {isPosted && (
+                              {isPosted && !isReadOnly && (
                                 <Menu.Item
                                   leftSection={
                                     <ServiceJobInvoiceMenuIcon backgroundColor="#E7F5FF">
@@ -1316,9 +1320,35 @@ export default function ServiceJobCreate() {
     null,
   );
   const jobData = resolvedJob ?? stateJobFromNav;
-  const isReadOnly = isJobClosed(
-    (jobData as { status?: string | null } | null)?.status,
-  );
+  const mode = useMemo(() => {
+    const pathname = location.pathname.toLowerCase();
+    const state = location.state as
+      | {
+          job?: { status?: string | null };
+          viewMode?: boolean;
+          actionType?: string;
+        }
+      | null
+      | undefined;
+    if (
+      pathname.includes("/view") ||
+      state?.viewMode === true ||
+      String(state?.actionType ?? "").toLowerCase() === "view" ||
+      isJobClosed(state?.job?.status) ||
+      isJobClosed(
+        (jobData as { status?: string | null } | null)?.status,
+      )
+    ) {
+      return "view";
+    }
+    if (pathname.includes("/edit") || routeId) {
+      return "edit";
+    }
+    return "create";
+  }, [location.pathname, location.state, jobData, routeId]);
+  const isReadOnly =
+    mode === "view" ||
+    isJobClosed((jobData as { status?: string | null } | null)?.status);
   const jobDocuments = useJobDocuments();
 
   const { getBranchCurrencyDefaults } = useExchangeRateRoe();
@@ -1866,7 +1896,11 @@ export default function ServiceJobCreate() {
     transportMode,
   ]);
 
-  const editPath = routeId ? `/service-job/edit/${routeId}` : "/service-job";
+  const editPath = routeId
+    ? isReadOnly
+      ? `/service-job/view/${routeId}`
+      : `/service-job/edit/${routeId}`
+    : "/service-job";
 
   const maxTabIndex = useMemo(() => {
     if (isEditMode && jobData?.id != null) return ACCOUNTS_TAB;
@@ -2190,16 +2224,38 @@ export default function ServiceJobCreate() {
 
   return (
     <Box p="md" mx="auto" style={{display: "flex", flexDirection: "column", height: "100%"}}>
-      <Group justify="space-between" mb="md">
-        <EditPageHeadingRow
-          visible={isEditMode && Boolean(jobData)}
-          auditSource={serviceJobAuditSource}
-          animateKey={(jobData as { id?: number })?.id}
-        >
-          <Text size="xl" fw={600} c="#105476">
-            {isEditMode ? "Edit Service Job" : "Create Service Job"}
-          </Text>
-        </EditPageHeadingRow>
+      <Group justify="space-between" align="center" mb="md">
+        <Group gap="md">
+          <EditPageHeadingRow
+            visible={isEditMode && Boolean(jobData)}
+            auditSource={serviceJobAuditSource}
+            animateKey={(jobData as { id?: number })?.id}
+          >
+            <Text size="xl" fw={600} c="#105476">
+              {isReadOnly
+                ? "View Service Job"
+                : isEditMode
+                  ? "Edit Service Job"
+                  : "Create Service Job"}
+            </Text>
+          </EditPageHeadingRow>
+          {String(jobData?.job_id ?? "").trim() !== "" && (
+            <Badge color="#105476" radius="md" size="md">
+              {`Job ID: ${formatDisplayJobId(
+                jobData?.job_id as string | number | null | undefined,
+                jobData?.service_code as string | null | undefined,
+              )}`}
+            </Badge>
+          )}
+          {String(jobData?.job_id ?? "").trim() !== "" && (
+            <ERPListJobStatusPill
+              status={
+                (jobData as { status?: string | null } | null)?.status
+              }
+            />
+          )}
+        </Group>
+        {!isReadOnly ? (
         <Group gap="sm">
           {isEditMode && String(jobData?.job_id ?? "").trim() !== "" && (
             <Menu shadow="md" width={240} position="bottom-end">
@@ -2320,19 +2376,25 @@ export default function ServiceJobCreate() {
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
-            {isReadOnly ? "View Documents" : "Attach Documents"}
+            Attach Documents
           </Button>
-          {!isReadOnly && (
-            <Button
-              color="#105476"
-              leftSection={<IconCheck size={18} />}
-              loading={isSubmitting}
-              onClick={handleSubmit}
-            >
-              {isEditMode ? "Update" : "Create"}
-            </Button>
-          )}
+          <Button
+            color="#105476"
+            leftSection={<IconCheck size={18} />}
+            loading={isSubmitting}
+            onClick={handleSubmit}
+          >
+            {isEditMode ? "Update" : "Create"}
+          </Button>
         </Group>
+        ) : (
+          <ClosedJobMasterLedgerMenu
+            jobId={jobData?.job_id as string | number | null | undefined}
+            serviceName="Service Job"
+            returnTo={location.pathname}
+            returnToState={location.state}
+          />
+        )}
       </Group>
 
       <Tabs
@@ -2434,6 +2496,7 @@ export default function ServiceJobCreate() {
                   label="Service"
                   placeholder="Select service"
                   searchable
+                  disabled={isReadOnly}
                   data={serviceOptions}
                   value={form.values.service_id || null}
                   onChange={(value) => {
@@ -2465,7 +2528,7 @@ export default function ServiceJobCreate() {
                   label="Origin"
                   portCode={form.values.origin_code}
                   portName={form.values.origin_name}
-                  disabled={!portsEnabled}
+                  disabled={isReadOnly || !portsEnabled}
                   portKey={`origin-${portSelectKey}`}
                   additionalParams={portTransportParams}
                   onPortChange={handleOriginPortChange}
@@ -2477,7 +2540,7 @@ export default function ServiceJobCreate() {
                   label="Destination"
                   portCode={form.values.destination_code}
                   portName={form.values.destination_name}
-                  disabled={!portsEnabled}
+                  disabled={isReadOnly || !portsEnabled}
                   portKey={`destination-${portSelectKey}`}
                   additionalParams={portTransportParams}
                   onPortChange={handleDestinationPortChange}
@@ -2489,6 +2552,7 @@ export default function ServiceJobCreate() {
                   label="Freight"
                   placeholder="Select Freight"
                   searchable
+                  disabled={isReadOnly}
                   data={[
                     { value: "Prepaid", label: "Prepaid" },
                     { value: "Collect", label: "Collect" },
@@ -2505,6 +2569,7 @@ export default function ServiceJobCreate() {
                   label="Routed"
                   placeholder="Select routed"
                   searchable
+                  disabled={isReadOnly}
                   data={[
                     { value: "self", label: "Self" },
                     { value: "agent", label: "Agent" },
@@ -2523,6 +2588,7 @@ export default function ServiceJobCreate() {
                       label="Routed By"
                       placeholder="Select salesperson"
                       searchable
+                      disabled={isReadOnly}
                       data={salespersonsData}
                       value={form.values.routed_by || null}
                       onChange={(value) =>
@@ -2533,6 +2599,7 @@ export default function ServiceJobCreate() {
                     <FormTextInput
                       label="Routed By"
                       placeholder="Enter routed by"
+                      readOnly={isReadOnly}
                       {...form.getInputProps("routed_by")}
                     />
                   )
@@ -2545,6 +2612,8 @@ export default function ServiceJobCreate() {
                     displayFormat={AGENT_DISPLAY_FORMAT}
                     value={form.values.routed_by || null}
                     displayValue={form.values.routed_by || undefined}
+                    disabled={isReadOnly}
+                    dropdownZIndex={10}
                     onChange={(value) =>
                       form.setFieldValue("routed_by", value || "")
                     }
@@ -2554,6 +2623,7 @@ export default function ServiceJobCreate() {
                   <FormTextInput
                     label="Routed By"
                     placeholder="Enter routed by"
+                    readOnly={isReadOnly}
                     {...form.getInputProps("routed_by")}
                   />
                 )}
@@ -2563,6 +2633,7 @@ export default function ServiceJobCreate() {
                 <FormTextInput
                   label={awbFieldLabel}
                   placeholder={awbFieldPlaceholder}
+                  readOnly={isReadOnly}
                   {...form.getInputProps("awb_number")}
                 />
               </Grid.Col>
@@ -2578,6 +2649,7 @@ export default function ServiceJobCreate() {
                     }}
                     error={form.errors.etd as string | undefined}
                     size="sm"
+                    disabled={isReadOnly}
                   />
                 ) : (
                   <DateTimeInput
@@ -2589,6 +2661,7 @@ export default function ServiceJobCreate() {
                     }}
                     error={form.errors.etd as string | undefined}
                     size="sm"
+                    disabled={isReadOnly}
                   />
                 )}
               </Grid.Col>
@@ -2604,6 +2677,7 @@ export default function ServiceJobCreate() {
                     }}
                     error={form.errors.eta as string | undefined}
                     size="sm"
+                    disabled={isReadOnly}
                   />
                 ) : (
                   <DateTimeInput
@@ -2615,6 +2689,7 @@ export default function ServiceJobCreate() {
                     }}
                     error={form.errors.eta as string | undefined}
                     size="sm"
+                    disabled={isReadOnly}
                   />
                 )}
               </Grid.Col>
@@ -2626,6 +2701,7 @@ export default function ServiceJobCreate() {
           <Box mt="md">
             <JobMasterPartyDetailsPanel
               idPrefix="service-job-party"
+              disabled={isReadOnly}
               partyDetailsForm={partyDetailsForm}
               shipperAddressOptions={shipperAddressOptions}
               setShipperAddressOptions={setShipperAddressOptions}
@@ -2652,6 +2728,7 @@ export default function ServiceJobCreate() {
         <Tabs.Panel value={String(CARGO_DETAILS_TAB)}>
           <ServiceJobCargoDetailsSection
             cargoMode={cargoMode}
+            readOnly={isReadOnly}
             containers={containers}
             onContainersChange={setContainers}
             cargoDetails={cargoDetails}
@@ -2668,11 +2745,16 @@ export default function ServiceJobCreate() {
             form={chargesForm}
             transportMode={transportMode}
             defaultPpCc={defaultPpCc}
-            showCreateInvoice={isEditMode && jobData?.id != null}
+            readOnly={isReadOnly}
+            showCreateInvoice={
+              isEditMode && jobData?.id != null && !isReadOnly
+            }
             onCreateInvoice={handleCreateInvoice}
-            showCreateSupplierInvoice={isEditMode && jobData?.id != null}
+            showCreateSupplierInvoice={
+              isEditMode && jobData?.id != null && !isReadOnly
+            }
             onCreateSupplierInvoice={handleCreateSupplierInvoice}
-            showCreatePrq={isEditMode && jobData?.id != null}
+            showCreatePrq={isEditMode && jobData?.id != null && !isReadOnly}
             onCreatePrq={handleCreatePrq}
           />
         </Tabs.Panel>
@@ -2684,6 +2766,7 @@ export default function ServiceJobCreate() {
               accountsTabIndex={ACCOUNTS_TAB}
               jobData={jobData}
               editPath={editPath}
+              isReadOnly={isReadOnly}
             />
           </Tabs.Panel>
         )}

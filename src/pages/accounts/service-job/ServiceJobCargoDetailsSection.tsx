@@ -32,6 +32,7 @@ import {
 
 type ServiceJobCargoDetailsSectionProps = {
   cargoMode: ServiceJobCargoMode;
+  readOnly?: boolean;
   containers: ServiceJobContainerDetail[];
   onContainersChange: (next: ServiceJobContainerDetail[]) => void;
   cargoDetails: ServiceJobCargoDetail[];
@@ -44,6 +45,7 @@ type ServiceJobCargoDetailsSectionProps = {
 
 export function ServiceJobCargoDetailsSection({
   cargoMode,
+  readOnly = false,
   containers,
   onContainersChange,
   cargoDetails,
@@ -127,6 +129,10 @@ export function ServiceJobCargoDetailsSection({
   );
 
   return (
+    <fieldset
+      disabled={readOnly}
+      style={{ border: "none", margin: 0, padding: 0, minInlineSize: 0 }}
+    >
     <Box mt="md">
       {showContainers && (
         <Box mb="xl">
@@ -135,16 +141,18 @@ export function ServiceJobCargoDetailsSection({
               Container Details
               {containers.length > 1 ? ` (${containers.length})` : ""}
             </Text>
-            <Button
-              variant="light"
-              color="#105476"
-              leftSection={<IconPlus size={16} />}
-              onClick={() =>
-                onContainersChange([...containers, { ...EMPTY_SERVICE_JOB_CONTAINER }])
-              }
-            >
-              Add Container
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="light"
+                color="#105476"
+                leftSection={<IconPlus size={16} />}
+                onClick={() =>
+                  onContainersChange([...containers, { ...EMPTY_SERVICE_JOB_CONTAINER }])
+                }
+              >
+                Add Container
+              </Button>
+            )}
           </Group>
 
           {containers.length > 0 && (
@@ -172,7 +180,7 @@ export function ServiceJobCargoDetailsSection({
                 <RequiredLabel label="Unloading Date" required={false} />
               </Grid.Col>
               <Grid.Col span={0.9}>
-                {containers.length > 1 && (
+                {!readOnly && containers.length > 1 && (
                   <RequiredLabel label="Actions" required={false} />
                 )}
               </Grid.Col>
@@ -185,6 +193,7 @@ export function ServiceJobCargoDetailsSection({
                 <Dropdown
                   placeholder="Container Type"
                   searchable
+                  disabled={readOnly}
                   data={containerTypeData}
                   nothingFoundMessage="No container types found"
                   value={container.container_type || null}
@@ -197,6 +206,7 @@ export function ServiceJobCargoDetailsSection({
                 <FormTextInput
                   placeholder="Container number"
                   maxLength={11}
+                  readOnly={readOnly}
                   value={container.container_no || ""}
                   onChange={(e) => {
                     const next = e.currentTarget.value.toUpperCase().slice(0, 11);
@@ -207,6 +217,7 @@ export function ServiceJobCargoDetailsSection({
               <Grid.Col span={1.8}>
                 <FormTextInput
                   placeholder="Actual seal number"
+                  readOnly={readOnly}
                   value={container.actual_seal_no || ""}
                   onChange={(e) =>
                     updateContainer(index, {
@@ -218,6 +229,7 @@ export function ServiceJobCargoDetailsSection({
               <Grid.Col span={1.8}>
                 <FormTextInput
                   placeholder="Customs seal number"
+                  readOnly={readOnly}
                   value={container.customs_seal_no || ""}
                   onChange={(e) =>
                     updateContainer(index, {
@@ -234,6 +246,7 @@ export function ServiceJobCargoDetailsSection({
                     updateContainer(index, { loading_date: value })
                   }
                   size="sm"
+                  disabled={readOnly}
                 />
               </Grid.Col>
               <Grid.Col span={1.7}>
@@ -244,10 +257,11 @@ export function ServiceJobCargoDetailsSection({
                     updateContainer(index, { unloading_date: value })
                   }
                   size="sm"
+                  disabled={readOnly}
                 />
               </Grid.Col>
               <Grid.Col span={0.9}>
-                {containers.length > 1 && (
+                {!readOnly && containers.length > 1 && (
                   <ActionIcon
                     variant="light"
                     color="red"
@@ -282,6 +296,7 @@ export function ServiceJobCargoDetailsSection({
               minRows={3}
               size="sm"
               radius="sm"
+              readOnly={readOnly}
               value={commodityDescription}
               onChange={(e) =>
                 onCommodityDescriptionChange(e.currentTarget.value)
@@ -295,6 +310,7 @@ export function ServiceJobCargoDetailsSection({
               minRows={3}
               size="sm"
               radius="sm"
+              readOnly={readOnly}
               value={marksNo}
               onChange={(e) => onMarksNoChange(e.currentTarget.value)}
             />
@@ -340,7 +356,9 @@ export function ServiceJobCargoDetailsSection({
             <RequiredLabel label="Haz" required={false} />
           </Grid.Col>
           <Grid.Col span={showContainers ? 0.7 : 1}>
-            <RequiredLabel label="Actions" required={false} />
+            {!readOnly && (
+              <RequiredLabel label="Actions" required={false} />
+            )}
           </Grid.Col>
         </Grid>
 
@@ -357,7 +375,7 @@ export function ServiceJobCargoDetailsSection({
                   searchable
                   data={containerNumberOptions}
                   value={cargo.container_number || null}
-                  disabled={containerNumberOptions.length === 0}
+                  disabled={readOnly || containerNumberOptions.length === 0}
                   clearable
                   onChange={(value) => {
                     const matched = containers.find(
@@ -376,6 +394,7 @@ export function ServiceJobCargoDetailsSection({
               <Dropdown
                 placeholder="Package Type"
                 searchable
+                disabled={readOnly}
                 data={packageTypeOptions}
                 value={cargo.package_type || null}
                 clearable
@@ -389,6 +408,7 @@ export function ServiceJobCargoDetailsSection({
                 placeholder="Enter No of Packages"
                 min={0}
                 hideControls
+                readOnly={readOnly}
                 value={cargo.no_of_packages ?? undefined}
                 onChange={(value) =>
                   updateCargo(index, {
@@ -403,6 +423,7 @@ export function ServiceJobCargoDetailsSection({
                 placeholder="Enter Gross Weight"
                 min={0}
                 hideControls
+                readOnly={readOnly}
                 {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
                 value={cargo.gross_weight ?? undefined}
                 onChange={(value) =>
@@ -434,6 +455,7 @@ export function ServiceJobCargoDetailsSection({
                 }
                 min={0}
                 hideControls
+                readOnly={readOnly}
                 {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
                 value={cargo.volume ?? undefined}
                 onChange={(value) =>
@@ -463,6 +485,7 @@ export function ServiceJobCargoDetailsSection({
               <Dropdown
                 placeholder="Select Haz"
                 searchable
+                disabled={readOnly}
                 data={[
                   { value: "Yes", label: "Yes" },
                   { value: "No", label: "No" },
@@ -487,39 +510,42 @@ export function ServiceJobCargoDetailsSection({
               />
             </Grid.Col>
             <Grid.Col span={showContainers ? 0.7 : 1}>
-              <Group gap="xs">
-                {cargoDetails.length > 1 && (
-                  <ActionIcon
-                    variant="light"
-                    color="red"
-                    onClick={() =>
-                      onCargoDetailsChange(
-                        cargoDetails.filter((_, i) => i !== index),
-                      )
-                    }
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                )}
-                {index === cargoDetails.length - 1 && (
-                  <ActionIcon
-                    variant="light"
-                    color="#105476"
-                    onClick={() =>
-                      onCargoDetailsChange([
-                        ...cargoDetails,
-                        { ...EMPTY_SERVICE_JOB_CARGO },
-                      ])
-                    }
-                  >
-                    <IconPlus size={16} />
-                  </ActionIcon>
-                )}
-              </Group>
+              {!readOnly && (
+                <Group gap="xs">
+                  {cargoDetails.length > 1 && (
+                    <ActionIcon
+                      variant="light"
+                      color="red"
+                      onClick={() =>
+                        onCargoDetailsChange(
+                          cargoDetails.filter((_, i) => i !== index),
+                        )
+                      }
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  )}
+                  {index === cargoDetails.length - 1 && (
+                    <ActionIcon
+                      variant="light"
+                      color="#105476"
+                      onClick={() =>
+                        onCargoDetailsChange([
+                          ...cargoDetails,
+                          { ...EMPTY_SERVICE_JOB_CARGO },
+                        ])
+                      }
+                    >
+                      <IconPlus size={16} />
+                    </ActionIcon>
+                  )}
+                </Group>
+              )}
             </Grid.Col>
           </Grid>
         ))}
       </Box>
     </Box>
+    </fieldset>
   );
 }

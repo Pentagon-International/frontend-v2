@@ -141,8 +141,8 @@ function normalizeFreightTerm(value: unknown): string {
     .trim()
     .toUpperCase();
   if (!raw) return "";
-  if (raw.includes("PREPAID")) return "PREPAID";
-  if (raw.includes("COLLECT")) return "COLLECT";
+  if (raw === "PP" || raw.includes("PREPAID")) return "PREPAID";
+  if (raw === "CC" || raw.includes("COLLECT")) return "COLLECT";
   return raw;
 }
 
@@ -1063,7 +1063,9 @@ function buildUsBolFieldRegistry(
       editable: true,
       columnWidthRatio: COL.footer,
       getDisplayValue: (data) => {
-        const freight = normalizeFreightTerm(getHousing(data).pp_cc);
+        const freight = normalizeFreightTerm(
+          getHousing(data).pp_cc ?? getHousing(data).freight,
+        );
         return freight ? `FREIGHT ${freight}` : "";
       },
       parseInput: (raw) => {
@@ -1508,6 +1510,23 @@ function buildIndiaBolFieldRegistry(
       parseInput: (raw) => {
         const num = parseFloat(stripPrefix(raw, /\s*CBM\s*$/i));
         return Number.isFinite(num) ? num : raw.trim();
+      },
+    }),
+    field({
+      id: "bol_freight_amount",
+      path: "housingData.pp_cc",
+      editable: true,
+      columnWidthRatio: INDIA_COL.footerThird,
+      getDisplayValue: (data) => {
+        const h = getHousing(data);
+        const freight = normalizeFreightTerm(h.pp_cc ?? h.freight);
+        return freight ? `FREIGHT ${freight}` : "";
+      },
+      parseInput: (raw) => {
+        const normalized = normalizeFreightTerm(
+          raw.replace(/^FREIGHT\s+/i, ""),
+        );
+        return normalized || raw.trim();
       },
     }),
     field({

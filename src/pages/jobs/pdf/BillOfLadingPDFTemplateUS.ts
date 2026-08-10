@@ -724,8 +724,8 @@ export const generateUsBillOfLadingPDF = (
       .trim()
       .toUpperCase();
     if (!raw) return "";
-    if (raw.includes("PREPAID")) return "PREPAID";
-    if (raw.includes("COLLECT")) return "COLLECT";
+    if (raw === "PP" || raw.includes("PREPAID")) return "PREPAID";
+    if (raw === "CC" || raw.includes("COLLECT")) return "COLLECT";
     return raw;
   };
 
@@ -746,11 +746,14 @@ export const generateUsBillOfLadingPDF = (
     (housingDetailsArray.length === 1 ? housingDetailsArray[0] : null);
 
   const freightValue = String(
-    housingData?.pp_cc || matchingHousing?.pp_cc || "",
+    housingData?.pp_cc ||
+      housingData?.freight ||
+      matchingHousing?.pp_cc ||
+      matchingHousing?.freight ||
+      "",
   ).trim();
-  const paymentTerms = freightValue
-    ? `FREIGHT ${normalizeFreightTerm(freightValue)}`
-    : "";
+  const freightTerm = normalizeFreightTerm(freightValue);
+  const paymentTerms = freightTerm ? `FREIGHT ${freightTerm}` : "";
 
   const cargoDetailsFromHousing = housingData?.cargo_details || [];
   const containerDetailsFromJob = jobData?.container_details || [];

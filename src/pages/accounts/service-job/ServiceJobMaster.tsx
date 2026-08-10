@@ -776,6 +776,17 @@ export default function ServiceJobMaster() {
                                     { job: row },
                                   )
                                 }
+                                onView={() =>
+                                  persistListAndNavigate(
+                                    `/service-job/view/${row.id}`,
+                                    {
+                                      job: row,
+                                      jobId: row.id,
+                                      actionType: "view",
+                                      viewMode: true,
+                                    },
+                                  )
+                                }
                                 onCancel={() => setCancelConfirmRow(row)}
                               />
                             </td>

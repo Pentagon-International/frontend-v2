@@ -874,6 +874,7 @@ const NavigationRoutes = () => {
           <Route index element={<ServiceJobMaster />} />
           <Route path="create" element={<ServiceJobCreate />} />
           <Route path="edit/:id" element={<ServiceJobCreate />} />
+          <Route path="view/:id" element={<ServiceJobCreate />} />
           <Route path="invoice" element={<InvoiceCreate />} />
           <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
           <Route path="invoice/view/:id" element={<InvoiceCreate />} />

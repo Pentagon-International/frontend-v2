@@ -721,8 +721,44 @@ export const generateBillOfLadingPDF = (
       };
     });
 
-    // Financial and Other Particulars (editable overrides from preview)
-    const freightAmount = housingData?.freight_amount || "";
+    // Financial and Other Particulars — Freight Amount from house pp_cc (all non-US branches)
+    const normalizeFreightAmountTerm = (
+      value: unknown,
+    ): "PREPAID" | "COLLECT" | "" => {
+      const raw = String(value ?? "")
+        .trim()
+        .toUpperCase();
+      if (!raw) return "";
+      if (raw === "PP" || raw.includes("PREPAID")) return "PREPAID";
+      if (raw === "CC" || raw.includes("COLLECT")) return "COLLECT";
+      return "";
+    };
+    const housingDetailsArray = Array.isArray(jobData?.housing_details)
+      ? jobData.housing_details
+      : [];
+    const housingId = housingData?.id;
+    const housingHbl = housingData?.hbl_number;
+    const matchingHousing =
+      housingDetailsArray.find((house: { id?: unknown }) => {
+        if (!housingId) return false;
+        return (
+          house.id === housingId || Number(house.id) === Number(housingId)
+        );
+      }) ??
+      housingDetailsArray.find(
+        (house: { hbl_number?: unknown }) =>
+          housingHbl &&
+          String(house.hbl_number ?? "") === String(housingHbl),
+      ) ??
+      (housingDetailsArray.length === 1 ? housingDetailsArray[0] : null);
+    const freightTerm = normalizeFreightAmountTerm(
+      housingData?.pp_cc ??
+        housingData?.freight ??
+        matchingHousing?.pp_cc ??
+        matchingHousing?.freight ??
+        "",
+    );
+    const freightAmount = freightTerm ? `FREIGHT ${freightTerm}` : "";
     const freightPayableAt =
       housingData?.freight_payable_at || "DESTINATION";
     const numberOfOriginalMTD =
@@ -1810,7 +1846,7 @@ export const generateBillOfLadingPDF = (
     footerY += 4;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6);
-    doc.text(freightAmount || "FREIGHT TO COLLECT", footerCol1X + boxPadding, footerY);
+    doc.text(freightAmount, footerCol1X + boxPadding, footerY);
     doc.text(freightPayableAt || "DESTINATION", footerCol2X + boxPadding, footerY);
     doc.text(numberOfOriginalMTD || "3 / THREE", footerCol3X + boxPadding, footerY);
     doc.text(placeAndDateOfIssue || "", footerCol4X + boxPadding, footerY);

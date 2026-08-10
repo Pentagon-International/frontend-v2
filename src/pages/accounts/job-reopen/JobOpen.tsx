@@ -377,7 +377,7 @@ function JobOpen() {
 
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
-    return { status: "CLOSED", ...cleaned };
+    return { status: "CLOSED", type: "All", ...cleaned };
   };
 
   const {

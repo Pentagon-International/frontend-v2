@@ -237,8 +237,9 @@ export const openGlobalSearchItem = async (
       (record as Record<string, unknown>)?.status as string | null | undefined,
     );
     // Closed jobs open in view-only: details + document download, no edit/create.
+    // Handles both `/edit` and `/edit/:id` → `/view` / `/view/:id`.
     const path = closed
-      ? target.path.replace(/\/edit\/?$/, "/view")
+      ? target.path.replace(/\/edit(?=\/|$)/, "/view")
       : target.path;
     navigate(path, {
       state: {

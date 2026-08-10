@@ -1571,37 +1571,8 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.state, form.values.charges, applyGst]);
 
-  // When charges lack SAC, fetch effective SAC for India GST invoices (incl. SEZ)
-  useEffect(() => {
-    if (!isGstInvoiceUser || !jobServiceId) return;
-
-    const chargesWithIds = form.values.charges
-      .map((c, originalIdx) => ({ charge: c, originalIdx }))
-      .filter(
-        ({ charge }) =>
-          charge.charge_id != null && !String(charge.tax_code ?? "").trim(),
-      );
-    if (!chargesWithIds.length) return;
-
-    void fetchGetEffectiveSac(
-      chargesWithIds.map(({ charge }) => ({
-        charge_id: charge.charge_id!,
-        service_id: jobServiceId,
-      })),
-    ).then((data) => {
-      data.forEach((item, responseIdx) => {
-        const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
-        if (
-          originalIdx !== undefined &&
-          item.sac_code != null &&
-          item.sac_code !== ""
-        ) {
-          form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
-        }
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGstInvoiceUser, hasSez, jobServiceId]);
+  // Reverse keeps source invoice tax_code as-is (including empty). Do not auto-fill SAC.
+  // When charges lack SAC, InvoiceCreate may fetch get-effective-sac; reverse must not.
 
   // Auto-calculate header_amount: same currency → header_amount = amount_in_local; different → amount_in_local / header ROE
   const headerBillingCurrency = form.values.currency;
@@ -2135,7 +2106,8 @@ function InvoiceReverse() {
       });
       return;
     }
-    // Validate charges: charge, currency, roe, amount, amount_in_local, SAC (India GST only)
+    // Validate charges: charge, currency, roe, amount, amount_in_local
+    // SAC is optional — reverse keeps source invoice tax_code as-is (may be empty).
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
       const err: Record<string, string> = {};
@@ -2151,8 +2123,6 @@ function InvoiceReverse() {
         charge.amount_in_local === undefined
       )
         err.amount_in_local = "Local Amount is required";
-      if (isGstInvoiceUser && !charge.tax_code?.trim())
-        err.tax_code = "SAC Code is required";
       if (Object.keys(err).length > 0) {
         chargeErrs[index] = err;
         return true;
@@ -2162,9 +2132,8 @@ function InvoiceReverse() {
     if (invalidCharges) {
       setChargeErrors(chargeErrs);
       ToastNotification({
-        message: isGstInvoiceUser
-          ? "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount, SAC Code)."
-          : "Please fill all required fields in charges section.",
+        message:
+          "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount).",
         type: "error",
       });
       return;
@@ -3214,7 +3183,6 @@ function InvoiceReverse() {
                         <Grid.Col span={0.8}>
                           <FormTextInput
                             placeholder="SAC Code"
-                            withAsterisk
                             value={charge.tax_code}
                             readOnly={isReadOnly}
                             error={chargeErrors[index]?.tax_code}

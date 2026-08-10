@@ -55,8 +55,8 @@ const sumNumericCargoField = (
 const normalizeFreightValue = (value: unknown): string => {
   const raw = String(value ?? "").trim().toUpperCase();
   if (!raw) return "";
-  if (raw.includes("PREPAID")) return "PREPAID";
-  if (raw.includes("COLLECT")) return "COLLECT";
+  if (raw === "PP" || raw.includes("PREPAID")) return "Prepaid";
+  if (raw === "CC" || raw.includes("COLLECT")) return "Collect";
   return raw;
 };
 
@@ -157,6 +157,7 @@ export const mapOceanExportBookingToBillOfLadingData = (
     destination_name: formValues.destination_name,
     place_of_acceptance: formValues.origin_name,
     place_of_delivery: formValues.destination_name,
+    pp_cc: normalizeFreightValue(formValues.freight),
     freight: normalizeFreightValue(formValues.freight),
     commodity_description: formValues.commodity_description,
     marks_no: formValues.marks_no,

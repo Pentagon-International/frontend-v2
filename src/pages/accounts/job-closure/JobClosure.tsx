@@ -415,7 +415,7 @@ function JobClosure() {
 
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
-    return { status: "ACTIVE", ...cleaned };
+    return { status: "ACTIVE", type: "All", ...cleaned };
   };
 
   const {
