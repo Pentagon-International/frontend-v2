@@ -56,10 +56,13 @@ import {
 } from "../../../utils/userNumberFormat";
 import {
   bindMoneyWholeNumberMode,
+  clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
@@ -266,11 +269,27 @@ const AMOUNT_MAX = 9999999999999.99; // 13 digits + 2 decimals = 15 digits max
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
+  const rounded = clampCurrencyMoneyAmountBound(value);
+  if (rounded == null) return null;
+  if (Math.abs(rounded) > AMOUNT_MAX)
+    return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
+  return rounded;
+}
+
+/** Local amounts: whole numbers for Vietnam branch; else 2 decimals. */
+function clampLocalAmount(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value))
+    return value === undefined ? null : value;
   const rounded = clampMoneyAmountBound(value);
   if (rounded == null) return null;
   if (Math.abs(rounded) > AMOUNT_MAX)
     return rounded > 0 ? AMOUNT_MAX : -AMOUNT_MAX;
   return rounded;
+}
+
+function toLocalAmount(value: number | string | null | undefined): number | null {
+  const rounded = roundLocalMoneyToDecimals(value);
+  return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
 
 type AmountCalcBaselineInput = {
@@ -303,9 +322,17 @@ function buildAmountCalcBaseline(values: AmountCalcBaselineInput): string {
 
 function formatAmountToTwoDecimals(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) {
-    return formatMoneyAmountBound(0);
+    return formatMoneyAmount(0, false);
   }
   const clamped = clampAmount(value);
+  return formatMoneyAmount(clamped ?? 0, false);
+}
+
+function formatLocalAmount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return formatMoneyAmountBound(0);
+  }
+  const clamped = clampLocalAmount(value);
   return formatMoneyAmountBound(clamped ?? 0);
 }
 
@@ -535,10 +562,7 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
       typeof c.amount === "string"
         ? parseFloat(c.amount) || null
         : (c.amount ?? null),
-    amount_in_local:
-      typeof c.amount_in_local === "string"
-        ? parseFloat(c.amount_in_local) || null
-        : (c.amount_in_local ?? null),
+    amount_in_local: toLocalAmount(c.amount_in_local),
     tax_code: c.tax_code ?? "",
     Dr_Cr: (() => {
       const v = (c.Dr_Cr ?? "").toString().toUpperCase();
@@ -830,7 +854,8 @@ export default function SupplierInvoiceCreate({
     [user],
   );
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const cjvColSpans = useMemo(() => {
     if (isIndiaUser) {
@@ -1495,7 +1520,7 @@ export default function SupplierInvoiceCreate({
     const next = charges.map((c) => {
       const amount = c.amount ?? 0;
       const roe = c.roe ?? 0;
-      const local = clampAmount(amount * roe);
+      const local = clampLocalAmount(amount * roe);
       if (local !== (c.amount_in_local ?? null)) changed = true;
       return { ...c, amount_in_local: local };
     });
@@ -1559,7 +1584,7 @@ export default function SupplierInvoiceCreate({
           (parseNum(form.values.igst_amount) ?? 0)
         : parseNum(form.values.igst_amount) ?? 0);
     const roe = parseNum(form.values.roe) ?? 1;
-    const nextInv = clampAmount(baseSum * roe);
+    const nextInv = clampLocalAmount(baseSum * roe);
     if (nextInv !== (form.values.Inv_crn_amount ?? null)) {
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
@@ -1583,14 +1608,14 @@ export default function SupplierInvoiceCreate({
       }, 0),
     );
     // Absolute difference so approved stays non-negative for INV and CRN
-    const nextApproved = clampAmount(Math.abs(netLocal));
+    const nextApproved = clampLocalAmount(Math.abs(netLocal));
     if (nextApproved !== (form.values.approved_amount ?? null)) {
       form.setFieldValue("approved_amount", nextApproved);
     }
 
     const inv = parseNum(form.values.Inv_crn_amount) ?? 0;
     const approved = nextApproved ?? 0;
-    const diff = clampAmount(round2(inv - approved));
+    const diff = clampLocalAmount(round2(inv - approved));
     if (diff !== (form.values.difference_amount ?? null)) {
       form.setFieldValue("difference_amount", diff);
     }
@@ -1711,18 +1736,9 @@ export default function SupplierInvoiceCreate({
         data.sgst_amount != null ? parseFloat(String(data.sgst_amount)) : null,
       igst_amount:
         data.igst_amount != null ? parseFloat(String(data.igst_amount)) : null,
-      Inv_crn_amount:
-        data.Inv_crn_amount != null
-          ? parseFloat(String(data.Inv_crn_amount))
-          : null,
-      approved_amount:
-        data.approved_amount != null
-          ? parseFloat(String(data.approved_amount))
-          : null,
-      difference_amount:
-        data.difference_amount != null
-          ? parseFloat(String(data.difference_amount))
-          : null,
+      Inv_crn_amount: toLocalAmount(data.Inv_crn_amount),
+      approved_amount: toLocalAmount(data.approved_amount),
+      difference_amount: toLocalAmount(data.difference_amount),
       status: (runForReversalCreate
         ? "UNPOSTED"
         : (data.status ?? "UNPOSTED")) as string,
@@ -1990,7 +2006,7 @@ export default function SupplierInvoiceCreate({
         currency_id: c.currency_id ?? null,
         roe: formatRoeForAccountsPayload(c.roe),
         amount: formatAmountToTwoDecimals(c.amount ?? 0),
-        amount_in_local: formatAmountToTwoDecimals(c.amount_in_local ?? 0),
+        amount_in_local: formatLocalAmount(c.amount_in_local ?? 0),
         tax_code: c.tax_code || "",
         Dr_Cr: c.Dr_Cr,
       };
@@ -2024,9 +2040,9 @@ export default function SupplierInvoiceCreate({
       cgst_amount: formatAmountToTwoDecimals(values.cgst_amount ?? 0),
       sgst_amount: formatAmountToTwoDecimals(values.sgst_amount ?? 0),
       igst_amount: formatAmountToTwoDecimals(values.igst_amount ?? 0),
-      Inv_crn_amount: formatAmountToTwoDecimals(values.Inv_crn_amount ?? 0),
-      approved_amount: formatAmountToTwoDecimals(values.approved_amount ?? 0),
-      difference_amount: formatAmountToTwoDecimals(
+      Inv_crn_amount: formatLocalAmount(values.Inv_crn_amount ?? 0),
+      approved_amount: formatLocalAmount(values.approved_amount ?? 0),
+      difference_amount: formatLocalAmount(
         values.difference_amount ?? 0,
       ),
       due_date: values.due_date
@@ -2163,18 +2179,9 @@ export default function SupplierInvoiceCreate({
         data.sgst_amount != null ? parseFloat(String(data.sgst_amount)) : null,
       igst_amount:
         data.igst_amount != null ? parseFloat(String(data.igst_amount)) : null,
-      Inv_crn_amount:
-        data.Inv_crn_amount != null
-          ? parseFloat(String(data.Inv_crn_amount))
-          : null,
-      approved_amount:
-        data.approved_amount != null
-          ? parseFloat(String(data.approved_amount))
-          : null,
-      difference_amount:
-        data.difference_amount != null
-          ? parseFloat(String(data.difference_amount))
-          : null,
+      Inv_crn_amount: toLocalAmount(data.Inv_crn_amount),
+      approved_amount: toLocalAmount(data.approved_amount),
+      difference_amount: toLocalAmount(data.difference_amount),
       status: (data.status ?? "UNPOSTED") as string,
       Dr_Cr: (data.Dr_Cr ?? "Cr") as "Cr" | "Dr",
       charges_data: mappedCharges,
@@ -3271,7 +3278,7 @@ export default function SupplierInvoiceCreate({
                   )
                 }
                 min={0}
-                decimalScale={amountDecimalScale}
+                decimalScale={currencyAmountDecimalScale}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3289,7 +3296,7 @@ export default function SupplierInvoiceCreate({
                   )
                 }
                 min={0}
-                decimalScale={amountDecimalScale}
+                decimalScale={currencyAmountDecimalScale}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3307,7 +3314,7 @@ export default function SupplierInvoiceCreate({
                     )
                   }
                   min={0}
-                  decimalScale={amountDecimalScale}
+                  decimalScale={currencyAmountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                   disabled={isReadOnly || reversalFormDisabled}
@@ -3328,7 +3335,7 @@ export default function SupplierInvoiceCreate({
                     )
                   }
                   min={0}
-                  decimalScale={amountDecimalScale}
+                  decimalScale={currencyAmountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -3348,7 +3355,7 @@ export default function SupplierInvoiceCreate({
                     )
                   }
                   min={0}
-                  decimalScale={amountDecimalScale}
+                  decimalScale={currencyAmountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -3367,7 +3374,7 @@ export default function SupplierInvoiceCreate({
                     )
                   }
                   min={0}
-                  decimalScale={amountDecimalScale}
+                  decimalScale={currencyAmountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                   disabled={isReadOnly || reversalFormDisabled}
@@ -3383,7 +3390,7 @@ export default function SupplierInvoiceCreate({
                 value={form.values.Inv_crn_amount ?? undefined}
                 onChange={() => {}}
                 min={0}
-                decimalScale={amountDecimalScale}
+                decimalScale={localAmountDecimalScale}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3396,7 +3403,7 @@ export default function SupplierInvoiceCreate({
                 value={form.values.approved_amount ?? undefined}
                 onChange={() => {}}
                 min={0}
-                decimalScale={amountDecimalScale}
+                decimalScale={localAmountDecimalScale}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3408,7 +3415,7 @@ export default function SupplierInvoiceCreate({
                 placeholder="0"
                 value={form.values.difference_amount ?? undefined}
                 onChange={() => {}}
-                decimalScale={amountDecimalScale}
+                decimalScale={localAmountDecimalScale}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3532,7 +3539,10 @@ export default function SupplierInvoiceCreate({
                                     currencyId != null ? Number(currencyId) : null,
                                     roe: parseRoeForPayload(roe),
                                   amount: amount != null ? Number(amount) : null,
-                                  amount_in_local: amount != null ? Number(amount) : null,
+                                  amount_in_local:
+                                    amount != null
+                                      ? clampLocalAmount(Number(amount))
+                                      : null,
                                   // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
                                   tax_code: "",
                                   Dr_Cr,
@@ -3669,7 +3679,7 @@ export default function SupplierInvoiceCreate({
                                   currencyId != null ? Number(currencyId) : null,
                                     roe: parseRoeForPayload(roe),
                                 amount: Number(amount),
-                                amount_in_local: Number(amount),
+                                amount_in_local: clampLocalAmount(Number(amount)),
                                 tax_code: "",
                                 Dr_Cr: normalizeDrCr(
                                   (r.Dr_cr as unknown) ??
@@ -4191,7 +4201,7 @@ export default function SupplierInvoiceCreate({
                           )
                         }
                         min={0}
-                        decimalScale={amountDecimalScale}
+                        decimalScale={currencyAmountDecimalScale}
                         hideControls
                         disabled={isReadOnly || reversalFormDisabled}
                         styles={{
@@ -4210,11 +4220,11 @@ export default function SupplierInvoiceCreate({
                         onChange={(v) =>
                           form.setFieldValue(
                             `charges_data.${index}.amount_in_local`,
-                            typeof v === "number" ? clampAmount(v) : null,
+                            typeof v === "number" ? clampLocalAmount(v) : null,
                           )
                         }
                         min={0}
-                        decimalScale={amountDecimalScale}
+                        decimalScale={localAmountDecimalScale}
                         hideControls
                         disabled={isReadOnly || reversalFormDisabled}
                         styles={{

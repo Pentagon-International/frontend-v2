@@ -46,8 +46,10 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
+  clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
   isVietnamBranchFromUser,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import useAuthStore from "../../../store/authStore";
 
@@ -434,7 +436,7 @@ export function DebitCreditNoteCreateBase({
     if (!Number.isFinite(Number(amount)) || !Number.isFinite(Number(headerRoe)))
       return "";
     return (
-      clampMoneyAmountBound(Number(amount) * Number(headerRoe)) ?? ""
+      clampCurrencyMoneyAmountBound(Number(amount) * Number(headerRoe)) ?? ""
     );
   };
 
@@ -775,7 +777,10 @@ export function DebitCreditNoteCreateBase({
           : null,
         roe: l.roe === "" ? "" : formatRoeAsString(l.roe),
         amount: l.amount === "" ? "" : String(l.amount),
-        local_amount: l.local_amount === "" ? "" : String(l.local_amount),
+        local_amount:
+          l.local_amount === ""
+            ? ""
+            : String(roundLocalMoneyToDecimals(Number(l.local_amount)) ?? l.local_amount),
         amount_in_inr: l.amount_in_inr === "" ? "" : String(l.amount_in_inr),
         dr_cr: l.dr_cr || "Dr",
         sac_code: l.sac_code,
@@ -908,7 +913,10 @@ export function DebitCreditNoteCreateBase({
         roe: d.roe != null ? parseRoeForPayload(d.roe) ?? "" : "",
         amount: d.amount != null ? Number(d.amount) : "",
         amount_in_inr: d.amount_in_inr != null ? Number(d.amount_in_inr) : "",
-        local_amount: d.local_amount != null ? Number(d.local_amount) : "",
+        local_amount:
+          d.local_amount != null && d.local_amount !== ""
+            ? (roundLocalMoneyToDecimals(Number(d.local_amount)) ?? "")
+            : "",
         dr_cr: d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "",
         sac_code: String(d.sac_code ?? "").trim(),
         narration: String(d.narration ?? ""),

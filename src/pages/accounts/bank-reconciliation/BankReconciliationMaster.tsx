@@ -66,6 +66,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -202,7 +203,7 @@ function formatAmount(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value);
-  return formatMoneyAmountBound(n);
+  return formatMoneyAmount(n, false);
 }
 
 function receiptStatusBadgeColor(status?: string): string {

@@ -42,7 +42,7 @@ import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmount,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -246,7 +246,7 @@ function sumAmounts(
 }
 
 function formatAmount(value: number): string {
-  return formatMoneyAmountBound(value);
+  return formatMoneyAmount(value, false);
 }
 
 function formatChartOfAccountsLabel(
@@ -487,7 +487,7 @@ export default function BankReconciliationCreate() {
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const amountDecimalScale = getAmountDecimalScale(false);
   const appliedRecordIdRef = useRef<number | null>(null);
   // const [fileInputKey, setFileInputKey] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);

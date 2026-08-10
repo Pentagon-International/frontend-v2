@@ -57,10 +57,13 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
+  clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
+  roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
@@ -156,10 +159,23 @@ const emptyRow = (): JVChargeRow => ({
 
 function clampAmt(v: number | null | undefined): number | null {
   if (v == null || !Number.isFinite(v)) return null;
+  const r = clampCurrencyMoneyAmountBound(v);
+  if (r == null) return null;
+  const MAX = 99999999.99;
+  return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
+}
+
+function clampLocalAmt(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null;
   const r = clampMoneyAmountBound(v);
   if (r == null) return null;
   const MAX = 99999999.99;
   return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
+}
+
+function toLocalAmount(value: number | string | null | undefined): number | null {
+  const rounded = roundLocalMoneyToDecimals(value);
+  return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
 
 const STATUS_OPTIONS = [
@@ -206,7 +222,8 @@ function JournalVoucherReversal() {
   const user = useAuthStore((s) => s.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const canPostDocuments = useCanPostDocuments();
 
   const isViewMode = location.pathname.includes("/view/");
@@ -415,8 +432,7 @@ function JournalVoucherReversal() {
             currency_code: "",
             roe: parseRoeForPayload(c.roe),
             amount: c.amount != null ? Number(c.amount) : null,
-            local_amount:
-              c.local_amount != null ? Number(c.local_amount) : null,
+            local_amount: toLocalAmount(c.local_amount),
             dr_cr: shouldFlipDrCr ? (c.dr_cr === "Dr" ? "Cr" : "Dr") : c.dr_cr,
             narration: c.narration ?? "",
           }))
@@ -533,8 +549,8 @@ function JournalVoucherReversal() {
         roe: formatRoeForAccountsPayload(c.roe),
         amount:
           c.amount != null
-            ? formatMoneyAmountBound(Number(c.amount))
-            : formatMoneyAmountBound(0),
+            ? formatMoneyAmount(Number(c.amount), false)
+            : formatMoneyAmount(0, false),
         local_amount:
           c.local_amount != null
             ? formatMoneyAmountBound(Number(c.local_amount))
@@ -1656,7 +1672,7 @@ function JournalVoucherReversal() {
                                   ) {
                                     form.setFieldValue(
                                       `charges.${index}.local_amount`,
-                                      clampAmt(amt * roe),
+                                      clampLocalAmt(amt * roe),
                                     );
                                   }
                                 },
@@ -1703,7 +1719,7 @@ function JournalVoucherReversal() {
                               ) {
                                 form.setFieldValue(
                                   `charges.${index}.local_amount`,
-                                  clampAmt(amt * roe),
+                                  clampLocalAmt(amt * roe),
                                 );
                               }
                             }}
@@ -1718,11 +1734,11 @@ function JournalVoucherReversal() {
                             placeholder="Amount"
                             min={0}
                             hideControls
-                            decimalScale={amountDecimalScale}
+                            decimalScale={currencyAmountDecimalScale}
                             readOnly={isReadOnly}
                             value={row.amount ?? undefined}
                             onChange={(v) => {
-                              const amt = v as number | null;
+                              const amt = clampAmt(v as number | null);
                               form.setFieldValue(
                                 `charges.${index}.amount`,
                                 amt,
@@ -1731,7 +1747,7 @@ function JournalVoucherReversal() {
                               if (amt != null && roe != null && roe > 0) {
                                 form.setFieldValue(
                                   `charges.${index}.local_amount`,
-                                  clampAmt(amt * roe),
+                                  clampLocalAmt(amt * roe),
                                 );
                               }
                             }}
@@ -1744,7 +1760,7 @@ function JournalVoucherReversal() {
                           <NumberInput
                             placeholder="Local Amt"
                             hideControls
-                            decimalScale={amountDecimalScale}
+                            decimalScale={localAmountDecimalScale}
                             readOnly
                             value={row.local_amount ?? undefined}
                             styles={{

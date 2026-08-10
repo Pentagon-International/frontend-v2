@@ -66,6 +66,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -667,7 +668,7 @@ function SupplierInvoiceMaster() {
           const total = getSupplierInvoiceCurrencyAmount(row.original);
           return (
             <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              {total == null ? "-" : formatMoneyAmountBound(total)}
+              {total == null ? "-" : formatMoneyAmount(total, false)}
             </Text>
           );
         },

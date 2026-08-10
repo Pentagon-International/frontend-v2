@@ -77,9 +77,10 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
-  clampMoneyAmountBound,
+  clampCurrencyMoneyAmountBound,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
+  roundLocalMoneyToDecimals,
   roundMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
@@ -333,12 +334,12 @@ function mapChargesForPayload(
     amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
     amount: roundMoneyToDecimals(charge.amount) ?? null,
     sell_local_amount:
-      roundMoneyToDecimals(charge.local_amount) ??
-      roundMoneyToDecimals(charge.amount) ??
+      roundLocalMoneyToDecimals(charge.local_amount) ??
+      roundLocalMoneyToDecimals(charge.amount) ??
       null,
     unit_cost: roundMoneyToDecimals(charge.cost_per_unit) ?? null,
     total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
-    cost_local_amount: roundMoneyToDecimals(charge.cost_local_amount) ?? null,
+    cost_local_amount: roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
   }));
 }
 
@@ -391,10 +392,13 @@ function mapChargeFromApi(
     roe: toNum(charge.roe),
     amount_per_unit: toNum(charge.amount_per_unit),
     amount: toNum(charge.amount),
-    local_amount: toNum(charge.sell_local_amount ?? charge.local_amount),
+    local_amount:
+      roundLocalMoneyToDecimals(charge.sell_local_amount ?? charge.local_amount) ??
+      null,
     cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
     total_cost: toNum(charge.total_cost),
-    cost_local_amount: toNum(charge.cost_local_amount),
+    cost_local_amount:
+      roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
   };
 }
 
@@ -565,7 +569,8 @@ function ServiceJobChargesSection({
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
+  const currencyAmountDecimalScale = getAmountDecimalScale(false);
+  const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
   >({});
@@ -628,13 +633,14 @@ function ServiceJobChargesSection({
         charge.no_of_unit > 0
       ) {
         const calculatedAmount =
-          clampMoneyAmountBound(
+          clampCurrencyMoneyAmountBound(
             charge.no_of_unit * charge.amount_per_unit,
           ) ?? 0;
         if (calculatedAmount > 0) next.amount = calculatedAmount;
       }
       if (next.amount != null && next.amount > 0 && next.roe != null && next.roe > 0) {
-        next.local_amount = next.amount * next.roe;
+        next.local_amount =
+          roundLocalMoneyToDecimals(next.amount * next.roe) ?? null;
       } else {
         next.local_amount = null;
       }
@@ -644,7 +650,8 @@ function ServiceJobChargesSection({
         next.roe != null &&
         next.roe > 0
       ) {
-        next.cost_local_amount = next.total_cost * next.roe;
+        next.cost_local_amount =
+          roundLocalMoneyToDecimals(next.total_cost * next.roe) ?? null;
       } else {
         next.cost_local_amount = null;
       }
@@ -898,7 +905,7 @@ function ServiceJobChargesSection({
               placeholder="Amount/Unit"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
               value={charge.amount_per_unit || undefined}
               onChange={(value) => {
@@ -916,7 +923,7 @@ function ServiceJobChargesSection({
               placeholder="Amount"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
               value={charge.amount || undefined}
               onChange={(value) => {
@@ -929,7 +936,7 @@ function ServiceJobChargesSection({
               placeholder="Local Amount"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={localAmountDecimalScale}
               readOnly={readOnly}
               value={charge.local_amount || undefined}
               onChange={(value) => {
@@ -942,7 +949,7 @@ function ServiceJobChargesSection({
               placeholder="Cost/Unit"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
               value={charge.cost_per_unit || undefined}
               onChange={(value) => {
@@ -960,7 +967,7 @@ function ServiceJobChargesSection({
               placeholder="Total Cost"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
               value={charge.total_cost || undefined}
               onChange={(value) => {
@@ -973,7 +980,7 @@ function ServiceJobChargesSection({
               placeholder="Local Amount"
               min={0}
               hideControls
-              decimalScale={amountDecimalScale}
+              decimalScale={localAmountDecimalScale}
               readOnly={readOnly}
               value={charge.cost_local_amount || undefined}
               onChange={(value) => {

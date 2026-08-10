@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
+  formatMoneyAmount,
   formatMoneyAmountBound,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -174,7 +175,7 @@ export default function PaymentReversalMaster() {
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
           if (val == null) return "-";
-          return typeof val === "number" ? formatMoneyAmountBound(val) : String(val);
+          return typeof val === "number" ? formatMoneyAmount(val, false) : String(val);
         },
       },
       {
