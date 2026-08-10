@@ -32,6 +32,7 @@ import {
   IconFileInvoice,
   IconPaperclip,
   IconPlus,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -83,10 +84,7 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { buildJobUnitOptions } from "../../../utils/houseCargoChargeableWeight";
-import {
-  formatInvoiceDocumentNo,
-  getInvoiceDocumentNo,
-} from "../../../utils/invoiceDocumentNumber";
+import { formatInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import dayjs from "dayjs";
 import {
@@ -1126,6 +1124,8 @@ function ServiceJobAccountsSection({
               ) : (
                 invoiceList.map((row, idx) => {
                   const statusUpper = (row.status ?? "").toUpperCase();
+                  const isPosted =
+                    statusUpper === "POSTED" || row.status === "posted";
                   const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
                   const rowKey = `${row.id}-${idx}`;
                   const isExpanded = expandedInvoiceRowId === rowKey;
@@ -1150,7 +1150,7 @@ function ServiceJobAccountsSection({
                             {row.day_book_name ?? "-"}
                           </Group>
                         </Table.Td>
-                        <Table.Td>{formatInvoiceDocumentNo(getInvoiceDocumentNo(row)) || row.document_no || "-"}</Table.Td>
+                        <Table.Td>{formatInvoiceDocumentNo(row)}</Table.Td>
                         <Table.Td>{row.document_date ?? "-"}</Table.Td>
                         <Table.Td>{row.total ?? "-"}</Table.Td>
                         <Table.Td>
@@ -1239,6 +1239,28 @@ function ServiceJobAccountsSection({
                                     }
                                   />
                                 </>
+                              )}
+                              {isPosted && (
+                                <Menu.Item
+                                  leftSection={
+                                    <ServiceJobInvoiceMenuIcon backgroundColor="#E7F5FF">
+                                      <IconRefresh size={16} color="#105476" />
+                                    </ServiceJobInvoiceMenuIcon>
+                                  }
+                                  styles={serviceJobInvoiceMenuItemStyles}
+                                  onClick={() =>
+                                    navigate("/service-job/invoice/reverse", {
+                                      state: {
+                                        document_no: row.document_no ?? "",
+                                        returnTo: editPath,
+                                        returnToState: { job: jobData },
+                                        ...(jobData && { job: jobData }),
+                                      },
+                                    })
+                                  }
+                                >
+                                  Invoice Reversal
+                                </Menu.Item>
                               )}
                             </Menu.Dropdown>
                           </Menu>

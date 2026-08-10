@@ -125,6 +125,12 @@ export const globalSearchModuleToRoute = (
         return { path: "/air/import-job/edit", needsState: true };
       if (sub === "ocean_import")
         return { path: "/SeaExport/import-job/edit", needsState: true };
+      if (sub === "inland_export")
+        return { path: "/inland/export-job/edit", needsState: true };
+      if (sub === "inland_import")
+        return { path: "/inland/import-job/edit", needsState: true };
+      if (sub === "service_job")
+        return { path: `/service-job/edit/${id}`, needsState: true };
       return null;
     case "invoice":
       if (sub === "air_export")
@@ -135,6 +141,12 @@ export const globalSearchModuleToRoute = (
         return { path: `/SeaExport/export-job/invoice/edit/${id}`, needsState: false };
       if (sub === "ocean_import")
         return { path: `/SeaExport/import-job/invoice/edit/${id}`, needsState: false };
+      if (sub === "inland_export")
+        return { path: `/inland/export-job/invoice/edit/${id}`, needsState: false };
+      if (sub === "inland_import")
+        return { path: `/inland/import-job/invoice/edit/${id}`, needsState: false };
+      if (sub === "service_job")
+        return { path: `/service-job/invoice/edit/${id}`, needsState: false };
       return null;
     case "reverse_invoice":
       return { path: "/invoice-reverse", needsState: true };
