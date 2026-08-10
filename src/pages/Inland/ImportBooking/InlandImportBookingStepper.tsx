@@ -60,6 +60,10 @@ import {
 import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  applyShipmentTermsSelection,
+  normalizeShipmentTermsFreight,
+} from "../../../utils/shipmentTermsFreight";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -925,6 +929,7 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   type TermsOfShipmentData = {
     tos_code: string;
     tos_name: string;
+    freight?: string;
   };
 
   // Memoized shipment options
@@ -1105,7 +1110,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         data.shipment_terms_code_read || data.shipment_terms_code || "",
       ),
       shipment_terms_name: String(data.shipment_terms_name || ""),
-      freight: String(data.freight || ""),
+      freight:
+        normalizeShipmentTermsFreight(data.freight) ||
+        String(data.freight || ""),
       routed: String(data.routed || ""),
       routed_by: String(data.routed_by || ""),
       customer_service_name: String(data.customer_service_name || ""),
@@ -3573,7 +3580,15 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     withAsterisk
                     searchable
                     data={shipmentOptions}
-                    {...form.getInputProps("shipment_terms_code")}
+                    value={form.values.shipment_terms_code}
+                    onChange={(value) => {
+                      applyShipmentTermsSelection(
+                        form.setFieldValue,
+                        termsOfShipment,
+                        value,
+                      );
+                    }}
+                    error={form.errors.shipment_terms_code as string}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>

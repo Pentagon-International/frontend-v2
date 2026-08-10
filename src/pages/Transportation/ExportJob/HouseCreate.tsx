@@ -59,6 +59,7 @@ import dayjs from "dayjs";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { applyShipmentTermsSelection } from "../../../utils/shipmentTermsFreight";
 import { isJobClosed } from "../../../utils/closeJob";
 import {
   bindMoneyWholeNumberMode,
@@ -3447,7 +3448,15 @@ function HouseCreate() {
                   placeholder="Select Shipment Terms"
                   searchable
                   data={shipmentOptions}
-                  {...form.getInputProps("shipment_terms_code")}
+                  value={form.values.shipment_terms_code}
+                  onChange={(value) => {
+                    applyShipmentTermsSelection(
+                      form.setFieldValue,
+                      termsOfShipment,
+                      value,
+                      { freightField: "pp_cc" },
+                    );
+                  }}
                   error={form.errors.shipment_terms_code}
                 />
               </Grid.Col>

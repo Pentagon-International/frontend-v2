@@ -45,6 +45,10 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../utils/textFormatter";
+import {
+  applyShipmentTermsSelection,
+  normalizeShipmentTermsFreight,
+} from "../../utils/shipmentTermsFreight";
 import { parseRoeForPayload, sanitizeRoeInput } from "../../utils/exchangeRateRoe";
 
 interface ExportShipmentStepperProps {
@@ -392,6 +396,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
   type TermsOfShipmentData = {
     tos_code: string;
     tos_name: string;
+    freight?: string;
   };
 
   // Memoized shipment options
@@ -488,7 +493,9 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
       destination_name: String(data.destination_name || ""),
       shipment_terms_code: String(data.shipment_terms_code || ""),
       shipment_terms_name: String(data.shipment_terms_name || ""),
-      freight: String(data.freight || ""),
+      freight:
+        normalizeShipmentTermsFreight(data.freight) ||
+        String(data.freight || ""),
       routed: String(data.routed || ""),
       routed_by: String(data.routed_by || ""),
       customer_service_name: String(data.customer_service_name || ""),
@@ -1373,7 +1380,15 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                   withAsterisk
                   searchable
                   data={shipmentOptions}
-                  {...form.getInputProps("shipment_terms_code")}
+                  value={form.values.shipment_terms_code}
+                  onChange={(value) => {
+                    applyShipmentTermsSelection(
+                      form.setFieldValue,
+                      termsOfShipment,
+                      value,
+                    );
+                  }}
+                  error={form.errors.shipment_terms_code as string}
                 />
               </Grid.Col>
               <Grid.Col span={4}>

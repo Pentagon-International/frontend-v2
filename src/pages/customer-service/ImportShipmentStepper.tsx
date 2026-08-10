@@ -44,6 +44,10 @@ import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../store/authStore";
 import { useDebouncedCallback } from "@mantine/hooks";
 import { toTitleCase } from "../../utils/textFormatter";
+import {
+  applyShipmentTermsSelection,
+  normalizeShipmentTermsFreight,
+} from "../../utils/shipmentTermsFreight";
 import { parseRoeForPayload, sanitizeRoeInput } from "../../utils/exchangeRateRoe";
 
 interface ImportShipmentStepperProps {
@@ -366,6 +370,7 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
   type TermsOfShipmentData = {
     tos_code: string;
     tos_name: string;
+    freight?: string;
   };
 
   // Memoized shipment options
@@ -466,7 +471,9 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
       destination_name: String(data.destination_name || ""),
       shipment_terms_code: String(data.shipment_terms_code_read || ""),
       shipment_terms_name: String(data.shipment_terms_name || ""),
-      freight: String(data.freight || ""),
+      freight:
+        normalizeShipmentTermsFreight(data.freight) ||
+        String(data.freight || ""),
       routed: String(data.routed || ""),
       routed_by: String(data.routed_by || ""),
       customer_service_name: String(data.customer_service_name || ""),
@@ -1344,17 +1351,11 @@ const ImportShipmentStepper: React.FC<ImportShipmentStepperProps> = ({
                   data={shipmentOptions}
                   value={form.values.shipment_terms_code}
                   onChange={(value) => {
-                    form.setFieldValue("shipment_terms_code", value || "");
-                    // Also update the shipment_terms_name based on selected option
-                    const selectedOption = shipmentOptions.find(
-                      (option) => option.value === value,
+                    applyShipmentTermsSelection(
+                      form.setFieldValue,
+                      termsOfShipment,
+                      value,
                     );
-                    if (selectedOption) {
-                      form.setFieldValue(
-                        "shipment_terms_name",
-                        selectedOption.label.split(" (")[0],
-                      );
-                    }
                   }}
                   error={form.errors.shipment_terms_code}
                 />

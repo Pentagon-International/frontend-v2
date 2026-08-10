@@ -65,6 +65,10 @@ import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
 import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  applyShipmentTermsSelection,
+  normalizeShipmentTermsFreight,
+} from "../../../utils/shipmentTermsFreight";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -863,6 +867,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   type TermsOfShipmentData = {
     tos_code: string;
     tos_name: string;
+    freight?: string;
   };
 
   // Memoized shipment options
@@ -1051,7 +1056,9 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         data.shipment_terms_code_read || data.shipment_terms_code || "",
       ),
       shipment_terms_name: String(data.shipment_terms_name || ""),
-      freight: String(data.freight || ""),
+      freight:
+        normalizeShipmentTermsFreight(data.freight) ||
+        String(data.freight || ""),
       routed: String(data.routed || ""),
       routed_by: String(data.routed_by || ""),
       customer_service_name: String(data.customer_service_name || ""),
@@ -3534,7 +3541,15 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     withAsterisk
                     searchable
                     data={shipmentOptions}
-                    {...form.getInputProps("shipment_terms_code")}
+                    value={form.values.shipment_terms_code}
+                    onChange={(value) => {
+                      applyShipmentTermsSelection(
+                        form.setFieldValue,
+                        termsOfShipment,
+                        value,
+                      );
+                    }}
+                    error={form.errors.shipment_terms_code as string}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
