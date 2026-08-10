@@ -120,6 +120,46 @@ function cloneApprovalRow(row: CustomerPanApprovalRow): CustomerPanApprovalRow {
   };
 }
 
+/** Client-side checks before saving an approval-edit row. */
+function getApprovalEditValidationError(
+  row: CustomerPanApprovalRow,
+  requireIndiaTaxIds: boolean,
+): string | null {
+  const term = String(row.term_code ?? "").trim().toUpperCase();
+  if (term === "CREDIT") {
+    const days =
+      row.credit_day === null || row.credit_day === undefined
+        ? ""
+        : String(row.credit_day).trim();
+    const amount = String(row.credit_amount ?? "").trim();
+    if (!days) return "Credit days is required when Credit Type is Credit";
+    if (!/^\d+$/.test(days)) return "Enter a valid number of credit days";
+    if (!amount) return "Credit amount is required when Credit Type is Credit";
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) && !/^\d+$/.test(amount)) {
+      return "Enter a valid credit amount";
+    }
+  }
+
+  if (requireIndiaTaxIds) {
+    const addresses = row.addresses_data ?? [];
+    for (let i = 0; i < addresses.length; i += 1) {
+      const address = addresses[i];
+      const label = addresses.length > 1 ? ` (address ${i + 1})` : "";
+      if (!String(address.iec_code ?? "").trim()) {
+        return `IEC Code is required${label}`;
+      }
+      if (!String(address.tan_no ?? "").trim()) {
+        return `TAN is required${label}`;
+      }
+      if (!String(address.arn_no ?? "").trim()) {
+        return `ARN is required${label}`;
+      }
+    }
+  }
+
+  return null;
+}
+
 function buildCustomerVerificationPayload(
   row: CustomerPanApprovalRow,
 ): Record<string, unknown> {
@@ -268,11 +308,14 @@ export function CustomerPanApprovalDetails({
   editable = false,
   onChange,
   partyType = "customer",
+  requireIndiaTaxIds = true,
 }: {
   row: CustomerPanApprovalRow;
   editable?: boolean;
   onChange?: (next: CustomerPanApprovalRow) => void;
   partyType?: ApprovalPartyType;
+  /** When true (India users), IEC/TAN/ARN are marked required in edit mode. */
+  requireIndiaTaxIds?: boolean;
 }) {
   const addresses = row.addresses_data ?? [];
   const isVendor = partyType === "vendor";
@@ -555,6 +598,9 @@ export function CustomerPanApprovalDetails({
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
             <FormTextInput format="normal"
               label="Credit Days"
+              withAsterisk={
+                String(row.term_code ?? "").trim().toUpperCase() === "CREDIT"
+              }
               value={
                 row.credit_day === null || row.credit_day === undefined
                   ? ""
@@ -569,6 +615,9 @@ export function CustomerPanApprovalDetails({
             />
             <FormTextInput format="normal"
               label="Credit Amount"
+              withAsterisk={
+                String(row.term_code ?? "").trim().toUpperCase() === "CREDIT"
+              }
               value={
                 row.credit_amount === null || row.credit_amount === undefined
                   ? ""
@@ -1139,16 +1188,19 @@ function CustomerPanAddressDetails({
           />
           <FormTextInput format="normal"
             label="IEC Code"
+            withAsterisk={requireIndiaTaxIds}
             value={address.iec_code ?? ""}
             onChange={(e) => onChange?.({ iec_code: e.target.value })}
           />
           <FormTextInput format="normal"
             label="TAN"
+            withAsterisk={requireIndiaTaxIds}
             value={address.tan_no ?? ""}
             onChange={(e) => onChange?.({ tan_no: e.target.value })}
           />
           <FormTextInput format="normal"
             label="ARN"
+            withAsterisk={requireIndiaTaxIds}
             value={address.arn_no ?? ""}
             onChange={(e) => onChange?.({ arn_no: e.target.value })}
           />
@@ -1410,6 +1462,15 @@ export default function ApproveCustomerPanMaster({
     if (!pendingAction || pendingAction.type !== "approve") return;
 
     const rowToUpdate = editableApprovalRow ?? pendingAction.row;
+    const validationError = getApprovalEditValidationError(
+      rowToUpdate,
+      isIndiaUser,
+    );
+    if (validationError) {
+      ToastNotification({ type: "error", message: validationError });
+      return;
+    }
+
     setIsUpdatingCustomer(true);
     try {
       await updateCustomerVerification(
@@ -1517,6 +1578,16 @@ export default function ApproveCustomerPanMaster({
             </Badge>
           );
         },
+      },
+      {
+        accessorKey: "approved_by",
+        header: "Approved By",
+        size: 180,
+        Cell: ({ row }) => (
+          <Text size="sm" lineClamp={2}>
+            {row.original.approved_by?.trim() || "—"}
+          </Text>
+        ),
       },
       {
         id: "actions",
@@ -1965,6 +2036,7 @@ export default function ApproveCustomerPanMaster({
                     : undefined
                 }
                 partyType={partyType}
+                requireIndiaTaxIds={isIndiaUser}
               />
             </ScrollArea.Autosize>
           )}

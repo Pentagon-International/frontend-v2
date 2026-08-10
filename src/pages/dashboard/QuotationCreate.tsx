@@ -5434,6 +5434,10 @@ function QuotationCreate({
                               "carrier_code",
                               value || "",
                             );
+                            if (!value) {
+                              setSelectedCarrierCode("");
+                              setTempSelectedCarrier(null);
+                            }
                           }}
                           minSearchLength={2}
                           dropdownZIndex={10}
@@ -6847,6 +6851,10 @@ function QuotationCreate({
                             "carrier_code",
                             value || "",
                           );
+                          if (!value) {
+                            setSelectedCarrierCode("");
+                            setTempSelectedCarrier(null);
+                          }
                         }}
                         minSearchLength={2}
                         dropdownZIndex={10}

@@ -214,15 +214,30 @@ function validateAdditionalDetails(
   if (!form.assigned_to.trim()) {
     errors.assigned_to = "Assign To is required";
   }
-  if (
+  const isCredit =
+    form.term_code.trim().toUpperCase() === "CREDIT";
+  if (isCredit && !form.credit_amount.trim()) {
+    errors.credit_amount = "Credit amount is required";
+  } else if (
     form.credit_amount.trim() &&
     !/^\d+(\.\d{1,2})?$/.test(form.credit_amount.trim()) &&
     !/^\d+$/.test(form.credit_amount.trim())
   ) {
     errors.credit_amount = "Enter a valid credit amount";
   }
-  if (form.credit_day.trim() && !/^\d+$/.test(form.credit_day.trim())) {
+  if (isCredit && !form.credit_day.trim()) {
+    errors.credit_day = "Credit days is required";
+  } else if (form.credit_day.trim() && !/^\d+$/.test(form.credit_day.trim())) {
     errors.credit_day = "Enter a valid number of days";
+  }
+  if (!form.iec_code.trim()) {
+    errors.iec_code = "IEC Code is required";
+  }
+  if (!form.tan_no.trim()) {
+    errors.tan_no = "TAN is required";
+  }
+  if (!form.arn_no.trim()) {
+    errors.arn_no = "ARN is required";
   }
   if (
     form.email.trim() &&
@@ -897,6 +912,10 @@ export default function CustomerPanMaster({
                   <Grid.Col span={{ base: 12, sm: 6 }}>
                     <FormTextInput
                       label="Credit Amount"
+                      withAsterisk={
+                        additionalDetails.term_code.trim().toUpperCase() ===
+                        "CREDIT"
+                      }
                       placeholder="Enter credit amount"
                       format="normal"
                       value={additionalDetails.credit_amount}
@@ -912,6 +931,10 @@ export default function CustomerPanMaster({
                   <Grid.Col span={{ base: 12, sm: 6 }}>
                     <FormTextInput
                       label="Credit Day"
+                      withAsterisk={
+                        additionalDetails.term_code.trim().toUpperCase() ===
+                        "CREDIT"
+                      }
                       placeholder="Enter credit days"
                       format="normal"
                       value={additionalDetails.credit_day}
@@ -998,34 +1021,40 @@ export default function CustomerPanMaster({
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <FormTextInput
                       label="IEC Code"
+                      withAsterisk
                       placeholder="Enter IEC Code"
                       format="capital"
                       value={additionalDetails.iec_code}
                       onChange={(e) =>
                         updateAdditionalDetails("iec_code", e.target.value)
                       }
+                      error={detailsErrors.iec_code}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <FormTextInput
                       label="TAN No"
+                      withAsterisk
                       placeholder="Enter TAN number"
                       format="capital"
                       value={additionalDetails.tan_no}
                       onChange={(e) =>
                         updateAdditionalDetails("tan_no", e.target.value)
                       }
+                      error={detailsErrors.tan_no}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <FormTextInput
                       label="ARN No"
+                      withAsterisk
                       placeholder="Enter ARN number"
                       format="normal"
                       value={additionalDetails.arn_no}
                       onChange={(e) =>
                         updateAdditionalDetails("arn_no", e.target.value)
                       }
+                      error={detailsErrors.arn_no}
                     />
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 4 }}>

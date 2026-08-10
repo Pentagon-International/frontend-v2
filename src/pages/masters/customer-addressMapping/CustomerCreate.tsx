@@ -430,21 +430,51 @@ const customerValidationSchema = yup.object({
     .oneOf(["true", "false"], "Please select a valid option"),
   credit_amount: yup
     .string()
-    .optional()
-    .test(
-      "valid-credit-amount",
-      "Enter a valid credit amount",
-      (v) =>
-        !v || twoDecimalRequiredRegex.test(v.trim()) || /^\d+$/.test(v.trim()),
-    ),
-  credit_day: yup
-    .string()
-    .optional()
-    .test(
-      "valid-credit-day",
-      "Enter a valid number of days",
-      (v) => !v || /^\d+$/.test(v.trim()),
-    ),
+    .when("term_code", {
+      is: (v: string | undefined) =>
+        String(v ?? "").trim().toUpperCase() === "CREDIT",
+      then: (schema) =>
+        schema
+          .required("Credit amount is required")
+          .test(
+            "valid-credit-amount",
+            "Enter a valid credit amount",
+            (v) =>
+              !!v &&
+              (twoDecimalRequiredRegex.test(v.trim()) || /^\d+$/.test(v.trim())),
+          ),
+      otherwise: (schema) =>
+        schema
+          .optional()
+          .test(
+            "valid-credit-amount",
+            "Enter a valid credit amount",
+            (v) =>
+              !v ||
+              twoDecimalRequiredRegex.test(v.trim()) ||
+              /^\d+$/.test(v.trim()),
+          ),
+    }),
+  credit_day: yup.string().when("term_code", {
+    is: (v: string | undefined) =>
+      String(v ?? "").trim().toUpperCase() === "CREDIT",
+    then: (schema) =>
+      schema
+        .required("Credit days is required")
+        .test(
+          "valid-credit-day",
+          "Enter a valid number of days",
+          (v) => !!v && /^\d+$/.test(v.trim()),
+        ),
+    otherwise: (schema) =>
+      schema
+        .optional()
+        .test(
+          "valid-credit-day",
+          "Enter a valid number of days",
+          (v) => !v || /^\d+$/.test(v.trim()),
+        ),
+  }),
   assigned_to: yup
     .string()
     .test("assign-to-required", "Assign To is required", function (value) {
@@ -505,8 +535,14 @@ const addressItemSchema = yup.object({
     .string()
     .optional()
     .max(20, "GST No must not exceed 20 characters"),
-  tan_no: yup.string().optional().max(20, "TAN must not exceed 20 characters"),
-  arn_no: yup.string().optional().max(30, "ARN must not exceed 30 characters"),
+  tan_no: yup
+    .string()
+    .optional()
+    .max(20, "TAN must not exceed 20 characters"),
+  arn_no: yup
+    .string()
+    .optional()
+    .max(30, "ARN must not exceed 30 characters"),
   uin_no: yup.string().optional().max(30, "UIN must not exceed 30 characters"),
   gst_registration_status: yup.string().optional(),
   composite_regular: yup
@@ -592,6 +628,18 @@ function buildAddressValidationSchema(
       otherwise: (schema) =>
         schema.optional().max(20, "GST No must not exceed 20 characters"),
     }),
+    iec_code: yup
+      .string()
+      .required("IEC Code is required")
+      .max(20, "IEC Code must not exceed 20 characters"),
+    tan_no: yup
+      .string()
+      .required("TAN is required")
+      .max(20, "TAN must not exceed 20 characters"),
+    arn_no: yup
+      .string()
+      .required("ARN is required")
+      .max(30, "ARN must not exceed 30 characters"),
     sez_valid_date: yup.string().when("sez", {
       is: (value: boolean | string | number | null | undefined) =>
         parseYesNoBoolean(value),
@@ -1469,6 +1517,7 @@ const AddressCard = ({
               <Grid.Col span={4}>
                 <FormTextInput
                   label="IEC Code"
+                  withAsterisk={isIndiaUser}
                   placeholder="Enter IEC Code"
                   format="capital"
                   disabled={isViewMode}
@@ -1492,6 +1541,7 @@ const AddressCard = ({
               <Grid.Col span={4}>
                 <FormTextInput
                   label="TAN No"
+                  withAsterisk={isIndiaUser}
                   placeholder="Enter TAN number"
                   format="capital"
                   disabled={isViewMode}
@@ -1503,6 +1553,7 @@ const AddressCard = ({
               <Grid.Col span={4}>
                 <FormTextInput
                   label="ARN No"
+                  withAsterisk={isIndiaUser}
                   placeholder="Enter ARN number"
                   format="normal"
                   disabled={isViewMode}
@@ -3625,6 +3676,11 @@ function CustomerCreate() {
                       <Grid.Col span={4}>
                         <FormTextInput
                           label="Credit Amount"
+                          withAsterisk={
+                            String(customerForm.values.term_code ?? "")
+                              .trim()
+                              .toUpperCase() === "CREDIT"
+                          }
                           placeholder="Enter credit amount"
                           format="normal"
                           disabled={isViewMode}
@@ -3645,6 +3701,11 @@ function CustomerCreate() {
                       <Grid.Col span={4}>
                         <FormTextInput
                           label="Credit Day"
+                          withAsterisk={
+                            String(customerForm.values.term_code ?? "")
+                              .trim()
+                              .toUpperCase() === "CREDIT"
+                          }
                           placeholder="Enter credit days"
                           format="normal"
                           disabled={isViewMode}

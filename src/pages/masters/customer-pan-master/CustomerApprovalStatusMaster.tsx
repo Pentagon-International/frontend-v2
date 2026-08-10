@@ -243,6 +243,16 @@ export default function CustomerApprovalStatusMaster({
         },
       },
       {
+        accessorKey: "approved_by",
+        header: "Approved By",
+        size: 180,
+        Cell: ({ row }) => (
+          <Text size="sm" lineClamp={2}>
+            {row.original.approved_by?.trim() || "—"}
+          </Text>
+        ),
+      },
+      {
         id: "actions",
         header: "Actions",
         size: 80,

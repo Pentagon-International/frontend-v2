@@ -104,6 +104,39 @@ type SalespersonsResponse = {
   data: SalespersonData[];
 };
 
+type SalespersonOption = {
+  value: string;
+  label: string;
+  sales_coordinator: string;
+  customer_service: string;
+};
+
+/** Match logged-in user to a salesperson option; empty when user is not in the list. */
+function resolveCurrentUserSalespersonOption(
+  options: SalespersonOption[],
+  user: ReturnType<typeof useAuthStore.getState>["user"],
+): SalespersonOption | null {
+  if (!user || !options.length) return null;
+  const candidates = [
+    String(user.email ?? "").trim().toLowerCase(),
+    String(user.full_name ?? "").trim().toLowerCase(),
+    String(user.username ?? "").trim().toLowerCase(),
+  ].filter(Boolean);
+  if (!candidates.length) return null;
+
+  for (const option of options) {
+    const person = String(option.value ?? option.label ?? "")
+      .trim()
+      .toLowerCase();
+    if (!person) continue;
+    if (candidates.some((c) => c === person)) return option;
+    if (candidates.some((c) => person.includes(c) || c.includes(person))) {
+      return option;
+    }
+  }
+  return null;
+}
+
 type QuotationData = {
   id: number;
   enquiry_id: string;
@@ -3242,6 +3275,28 @@ function EnquiryCreate() {
         customerForm.setFieldValue("customer_address", "");
         customerForm.setFieldValue("network_id", "");
         customerForm.setFieldValue("network_name", "");
+
+        // Temp / free-text customer: default Sales Person to current user when they are a salesperson
+        if (!isInitialDataLoad) {
+          const selfSalesperson = resolveCurrentUserSalespersonOption(
+            salespersonsData,
+            user,
+          );
+          if (selfSalesperson) {
+            customerForm.setFieldValue(
+              "sales_person",
+              selfSalesperson.value || "",
+            );
+            customerForm.setFieldValue(
+              "sales_coordinator",
+              selfSalesperson.sales_coordinator || "",
+            );
+            customerForm.setFieldValue(
+              "customer_services",
+              selfSalesperson.customer_service || "",
+            );
+          }
+        }
       }
     } else {
       setCustomerDisplayName(null);
@@ -5155,6 +5210,7 @@ function EnquiryCreate() {
                                       },
                                     }}
                                     searchable
+                                    clearable
                                     key={serviceForm.key(
                                       `service_details.${serviceIndex}.icd`
                                     )}
