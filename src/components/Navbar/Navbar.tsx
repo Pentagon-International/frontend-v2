@@ -135,12 +135,21 @@ const Navbar = ({
       location.pathname.startsWith("/debit-credit-note-non-trade") ||
       location.pathname.startsWith("/service-job") ||
       location.pathname.startsWith("/job-closure") ||
-      location.pathname.startsWith("/job-profit-verification") ||
       location.pathname.startsWith("/job-reopen") ||
       location.pathname.startsWith("/bank-reconciliation") ||
       location.pathname.startsWith("/checker")
     ) {
       setIsAccountsOpen(true);
+    }
+    if (
+      location.pathname.startsWith("/job-profit-verification") ||
+      location.pathname.startsWith("/pipeline") ||
+      location.pathname.startsWith("/lead") ||
+      location.pathname.startsWith("/quotation") ||
+      location.pathname.startsWith("/potential-customers") ||
+      location.pathname.startsWith("/call-entry")
+    ) {
+      setIsSalesOpen(true);
     }
     if (location.pathname.startsWith("/finance-dashboard")) {
       setIsFinanceDashboardOpen(true);
@@ -506,6 +515,19 @@ const Navbar = ({
                     label="Pipeline"
                     icon={IconGitBranch}
                     path="/pipeline"
+                    collapsibles={{
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsSeaExportOpen,
+                      setIsAccountsOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Sales"
+                    label="Job Profit Verification"
+                    icon={IconFileAnalytics}
+                    path="/job-profit-verification"
                     collapsibles={{
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
@@ -1258,19 +1280,6 @@ const Navbar = ({
                       label="Job Closure"
                       icon={IconCircleCheck}
                       path="/job-closure"
-                      collapsibles={{
-                        setIsSalesOpen,
-                        setIsTariffOpen,
-                        setIsCustomerServiceOpen,
-                        setIsAirOpen,
-                        setIsSeaExportOpen,
-                      }}
-                    />
-                    <SubNavLink
-                      parent="Accounts"
-                      label="Job Profit Verification"
-                      icon={IconFileAnalytics}
-                      path="/job-profit-verification"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

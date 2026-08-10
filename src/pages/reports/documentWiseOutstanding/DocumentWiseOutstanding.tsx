@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Dropdown from "../../../components/Dropdown";
 import SearchableSelect from "../../../components/SearchableSelect";
+import SingleDateInput from "../../../components/SingleDateInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { URL } from "../../../api/serverUrls";
 import { postAPICall } from "../../../service/postApiCall";
@@ -27,6 +28,7 @@ type DocumentWiseOutstandingFormValues = {
   account_code: string;
   account_name: string;
   sl_code: string;
+  to_date: Date | null;
 };
 
 function extensionForFormat(contentType: string | undefined): string {
@@ -61,6 +63,7 @@ export default function DocumentWiseOutstanding() {
       account_code: "",
       account_name: "",
       sl_code: "",
+      to_date: null,
     },
   });
 
@@ -101,7 +104,7 @@ export default function DocumentWiseOutstanding() {
     if (!form.values.account_code?.trim()) {
       ToastNotification({
         type: "error",
-        message: "Account Name is required",
+        message: "GL Account is required",
       });
       return;
     }
@@ -122,6 +125,10 @@ export default function DocumentWiseOutstanding() {
 
     if (shouldIncludeSlCode(form.values.sl_code)) {
       filters.sl_code = form.values.sl_code.trim();
+    }
+
+    if (form.values.to_date) {
+      filters.to_date = dayjs(form.values.to_date).format("YYYY-MM-DD");
     }
 
     const uiFormat = fmt.toLowerCase();
@@ -222,8 +229,8 @@ export default function DocumentWiseOutstanding() {
         <Grid gutter="sm">
           <Grid.Col span={{ base: 12, md: 3 }}>
             <SearchableSelect
-              label="Account Name"
-              placeholder="Search by account name"
+              label="GL Account"
+              placeholder="Search by GL account"
               apiEndpoint={URL.chartOfAccounts}
               value={form.values.account_id}
               dropdownZIndex={400}
@@ -277,6 +284,13 @@ export default function DocumentWiseOutstanding() {
                     : "",
                 );
               }}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <SingleDateInput
+              label="To Date"
+              value={form.values.to_date}
+              onChange={(d) => form.setFieldValue("to_date", d)}
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, md: 3 }}>

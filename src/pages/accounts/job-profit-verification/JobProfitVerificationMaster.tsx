@@ -383,29 +383,13 @@ function readJobStatus(row: JobProfitRow): string | undefined {
   return row.job_status ?? row.status;
 }
 
-function resolveJobEditPath(service?: string, trade?: string): string | null {
-  const s = (service ?? "").toUpperCase();
-  const t = (trade ?? "").toUpperCase();
-  const isExport = t.includes("EXPORT");
-  if (s === "AIR") {
-    return isExport ? "/air/export-job/edit" : "/air/import-job/edit";
-  }
-  if (s === "FCL" || s === "LCL") {
-    return isExport ? "/SeaExport/export-job/edit" : "/SeaExport/import-job/edit";
-  }
-  return null;
-}
-
-async function fetchJobForEdit(
-  jobNo: string,
-): Promise<Record<string, unknown> | null> {
-  const response = (await apiCallProtected.post(
-    URL.filterJobCreate,
-    { filters: { job_id: jobNo.trim() } },
-    API_HEADER,
-  )) as { data?: unknown[] };
-  const list = Array.isArray(response?.data) ? response.data : [];
-  return list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+/** Strip service prefix (e.g. FE-/FI-/AE-/AI-) — keep only the job id after the first hyphen. */
+function stripJobIdServicePrefix(jobNo: string): string {
+  const trimmed = jobNo.trim();
+  const hyphenIndex = trimmed.indexOf("-");
+  if (hyphenIndex < 0) return trimmed;
+  const withoutPrefix = trimmed.slice(hyphenIndex + 1).trim();
+  return withoutPrefix || trimmed;
 }
 
 export default function JobProfitVerificationMaster() {
@@ -619,47 +603,22 @@ export default function JobProfitVerificationMaster() {
   );
 
   const handleOpenJobEdit = useCallback(
-    async (row: JobProfitRow) => {
+    (row: JobProfitRow) => {
       const jobNo = row.job_no?.trim();
       if (!jobNo) return;
 
-      const path = resolveJobEditPath(row.service, row.trade_code);
-      if (!path) {
-        ToastNotification({
-          type: "error",
-          message: "Unable to determine job edit route for this service.",
-        });
-        return;
-      }
+      const ledgerJobId = stripJobIdServicePrefix(jobNo);
 
-      const returnState = { returnTo: "/job-profit-verification" };
-      const consolId = row.consol_id;
-      if (consolId != null && Number.isFinite(Number(consolId))) {
-        persistListAndNavigate(path, { jobId: Number(consolId), ...returnState });
-        return;
-      }
-
-      try {
-        const job = await fetchJobForEdit(jobNo);
-        if (!job) {
-          ToastNotification({ type: "error", message: "Job not found." });
-          return;
-        }
-        const jobId = job.id ?? job.consol_id;
-        if (jobId != null && Number.isFinite(Number(jobId))) {
-          persistListAndNavigate(path, {
-            jobId: Number(jobId),
-            ...returnState,
-          });
-          return;
-        }
-        persistListAndNavigate(path, { job, ...returnState });
-      } catch {
-        ToastNotification({
-          type: "error",
-          message: "Failed to load job details.",
-        });
-      }
+      // Master-level ledger: job_id only — no service/segment/hbl filters.
+      persistListAndNavigate("/job-ledger", {
+        jobId: ledgerJobId,
+        job_id: ledgerJobId,
+        location: "",
+        segment_code: "",
+        segmentCode: "",
+        hbl_hawb_no: "",
+        jobReturnTo: "/job-profit-verification",
+      });
     },
     [persistListAndNavigate],
   );
