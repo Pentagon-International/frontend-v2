@@ -4726,7 +4726,7 @@ const Dashboard = () => {
 
       // Send email via accounts/send-email/ (same as Pulse)
       const response = await apiCallProtected.post(
-        URL.accountsSendEmail,
+        URL.quotationSendEmail,
         emailPayload
       );
 

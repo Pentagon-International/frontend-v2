@@ -221,7 +221,7 @@ export function CustomerOutstandingSendEmailModal({
 
     setSendingEmail(true);
     try {
-      const response = await apiCallProtected.post(URL.accountsSendEmail, emailPayload);
+      const response = await apiCallProtected.post(URL.quotationSendEmail, emailPayload);
       const successMessage =
         (response as { data?: { message?: string } })?.data?.message ||
         "Email sent successfully";

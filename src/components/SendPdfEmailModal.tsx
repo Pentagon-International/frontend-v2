@@ -174,7 +174,7 @@ export default function SendPdfEmailModal({
       formData.append("message", emailForm.message);
       formData.append("pdf_file", pdfFile);
 
-      await apiCallProtected.post(URL.accountsSendEmail, formData, {
+      await apiCallProtected.post(URL.quotationSendEmail, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

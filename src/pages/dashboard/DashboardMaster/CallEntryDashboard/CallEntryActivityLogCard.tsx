@@ -1,4 +1,4 @@
-import { Box, Group, Stack, Table, Text, UnstyledButton } from "@mantine/core";
+import { Box, Group, ScrollArea, Stack, Table, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import dayjs from "dayjs";
 import { IconArrowDownLeft, IconArrowUpRight, IconX } from "@tabler/icons-react";
 import { useMemo } from "react";
@@ -12,6 +12,8 @@ type Props = {
   pageSize: number;
   onPageChange: (page: number) => void;
   onRowClick?: (row: CallEntryActivityLogRow) => void;
+  /** When true (Closed KPI / outcome filter), show the Remark column */
+  showRemark?: boolean;
 };
 
 const cardStyle = {
@@ -83,6 +85,7 @@ export function CallEntryActivityLogCard({
   pageSize,
   onPageChange,
   onRowClick,
+  showRemark = false,
 }: Props) {
   const isMobile = useMediaQuery("(max-width: 48em)");
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -91,10 +94,32 @@ export function CallEntryActivityLogCard({
     if (activeTab === "All") return rows;
     return rows.filter((r) => getRowChannel(r) === activeTab);
   }, [activeTab, rows]);
+  const colCount = showRemark ? 6 : 5;
 
   return (
-    <Box style={cardStyle}>
-      <Group justify="space-between" px={12} py={9} style={{ borderBottom: "1px solid #E7EEF6" }}>
+    <Box
+      style={{
+        ...cardStyle,
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+      }}
+    >
+      <Group
+        justify="space-between"
+        px={12}
+        py={9}
+        style={{
+          borderBottom: "1px solid #E7EEF6",
+          flexShrink: 0,
+          position: "sticky",
+          top: 0,
+          zIndex: 3,
+          background: "#FFFFFF",
+        }}
+      >
         <Group gap={10}>
           <Text fw={700} fz={14} c="#0B1F3A" style={{ lineHeight: 1 }}>
             Activity Log
@@ -103,58 +128,70 @@ export function CallEntryActivityLogCard({
             Last 24h
           </Text>
         </Group>
-        {/* <Group gap={4} wrap="wrap" justify="flex-end">
-          {channelTabs.map((tab) => {
-            const active = activeTab === tab;
-            return (
-              <UnstyledButton
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: "4px 9px",
-                  borderRadius: 6,
-                  background: active ? "#EEF2F7" : "transparent",
-                  color: active ? "#0F172A" : "#7386A1",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  border: active ? "1px solid #E2E8F0" : "1px solid transparent",
-                }}
-              >
-                {tab}
-              </UnstyledButton>
-            );
-          })}
-        </Group> */}
       </Group>
 
-      <Box style={{ overflowX: "auto" }}>
+      <ScrollArea
+        type="scroll"
+        offsetScrollbars
+        scrollbarSize={8}
+        style={{ flex: 1, minHeight: 0 }}
+        styles={{
+          root: { flex: 1, minHeight: 0 },
+          viewport: { minHeight: 0 },
+        }}
+      >
         <Table
           highlightOnHover={false}
           withTableBorder={false}
           withColumnBorders={false}
+          stickyHeader
+          stickyHeaderOffset={0}
           horizontalSpacing={isMobile ? 8 : 10}
           verticalSpacing={isMobile ? 7 : 8}
-          style={{ minWidth: isMobile ? 560 : 700 }}
+          style={{
+            width: "100%",
+            tableLayout: "fixed",
+            minWidth: isMobile
+              ? showRemark
+                ? 640
+                : 560
+              : showRemark
+                ? 720
+                : 640,
+          }}
         >
-          <Table.Thead>
+          <Table.Thead
+            style={{
+              background: "#FFFFFF",
+              zIndex: 2,
+              boxShadow: "0 1px 0 #EAF0F6",
+            }}
+          >
             <Table.Tr style={{ borderBottom: "1px solid #EAF0F6" }}>
-              <Table.Th w={28}></Table.Th>
-              <Table.Th>
+              <Table.Th style={{ width: 28, maxWidth: 28 }} />
+              <Table.Th style={{ width: "auto", minWidth: 0 }}>
                 <Text fz={12} fw={700} c="#B0C0D4" style={{ letterSpacing: "0.03em" }}>
                   CUSTOMER / PURPOSE
                 </Text>
               </Table.Th>
-              <Table.Th>
+              <Table.Th style={{ width: isMobile ? 110 : 130 }}>
                 <Text fz={12} fw={700} c="#B0C0D4" style={{ letterSpacing: "0.03em" }}>
                   OUTCOME
                 </Text>
               </Table.Th>
-              <Table.Th>
+              {showRemark ? (
+                <Table.Th style={{ width: "25%", maxWidth: "25%" }}>
+                  <Text fz={12} fw={700} c="#B0C0D4" style={{ letterSpacing: "0.03em" }}>
+                    REMARK
+                  </Text>
+                </Table.Th>
+              ) : null}
+              <Table.Th style={{ width: isMobile ? 88 : 110 }}>
                 <Text fz={12} fw={700} c="#B0C0D4" style={{ letterSpacing: "0.03em" }}>
                   REP
                 </Text>
               </Table.Th>
-              <Table.Th>
+              <Table.Th style={{ width: isMobile ? 56 : 64 }}>
                 <Text ta="right" fz={12} fw={700} c="#B0C0D4" style={{ letterSpacing: "0.03em" }}>
                   TIME
                 </Text>
@@ -163,12 +200,22 @@ export function CallEntryActivityLogCard({
           </Table.Thead>
           <Table.Tbody>
             {visibleRows.map((row) => {
-            const chip = getOutcomeChip(row.outcome || "");
-            const tone = getLeadingTone(row);
-            const iconBg =
-              tone === "blue" ? "#E5F0FF" : tone === "green" ? "#DCFCE7" : "#FEE2E2";
-            const iconColor =
-              tone === "blue" ? "#2563EB" : tone === "green" ? "#15803D" : "#DC2626";
+              const chip = getOutcomeChip(row.outcome || "");
+              const tone = getLeadingTone(row);
+              const iconBg =
+                tone === "blue"
+                  ? "#E5F0FF"
+                  : tone === "green"
+                    ? "#DCFCE7"
+                    : "#FEE2E2";
+              const iconColor =
+                tone === "blue"
+                  ? "#2563EB"
+                  : tone === "green"
+                    ? "#15803D"
+                    : "#DC2626";
+              const remarkText = row.remark?.trim() || "";
+              const remarkDisplay = remarkText || "-";
 
               return (
                 <Table.Tr
@@ -179,7 +226,7 @@ export function CallEntryActivityLogCard({
                     cursor: onRowClick ? "pointer" : "default",
                   }}
                 >
-                  <Table.Td>
+                  <Table.Td style={{ width: 28, maxWidth: 28 }}>
                     <Box
                       style={{
                         width: 26,
@@ -200,38 +247,91 @@ export function CallEntryActivityLogCard({
                       )}
                     </Box>
                   </Table.Td>
-                  <Table.Td>
-                    <Stack gap={0}>
-                      <Text fw={700} fz={isMobile ? 12 : 13} c="#0B1F3A" lineClamp={1} style={{ lineHeight: 1.1 }}>
+                  <Table.Td style={{ width: "auto", minWidth: 0 }}>
+                    <Stack gap={0} style={{ minWidth: 0, maxWidth: "100%" }}>
+                      <Text
+                        fw={700}
+                        fz={isMobile ? 12 : 13}
+                        c="#0B1F3A"
+                        truncate
+                        style={{ lineHeight: 1.1, minWidth: 0 }}
+                      >
                         {row.customer_name || row.customer_code}
                       </Text>
-                      <Text fz={isMobile ? 11 : 12} fw={500} c="#7F93AF" lineClamp={1} style={{ lineHeight: 1.1 }}>
+                      <Text
+                        fz={isMobile ? 11 : 12}
+                        fw={500}
+                        c="#7F93AF"
+                        truncate
+                        style={{ lineHeight: 1.1, minWidth: 0 }}
+                      >
                         {row.purpose || "-"}
                       </Text>
                     </Stack>
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td style={{ width: isMobile ? 110 : 130 }}>
                     <Box
                       style={{
                         display: "inline-block",
+                        maxWidth: "100%",
                         background: chip.bg,
                         color: chip.fg,
                         borderRadius: 4,
                         padding: "3px 10px",
-                        minWidth: isMobile ? 104 : 122,
                       }}
                     >
-                      <Text fz={isMobile ? 10 : 11} fw={700} style={{ lineHeight: 1 }}>
+                      <Text
+                        fz={isMobile ? 10 : 11}
+                        fw={700}
+                        truncate
+                        style={{ lineHeight: 1, maxWidth: "100%" }}
+                      >
                         {row.outcome || "-"}
                       </Text>
                     </Box>
                   </Table.Td>
-                  <Table.Td>
-                    <Text fz={isMobile ? 11 : 12} fw={500} c="#334155">
+                  {showRemark ? (
+                    <Table.Td style={{ width: "25%", maxWidth: "25%" }}>
+                      <Tooltip
+                        label={remarkText}
+                        disabled={!remarkText}
+                        multiline
+                        maw={360}
+                        withArrow
+                        openDelay={250}
+                        position="top-start"
+                        events={{ hover: true, focus: true, touch: true }}
+                        styles={{
+                          tooltip: {
+                            fontSize: 12,
+                            fontWeight: 500,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          },
+                        }}
+                      >
+                        <Text
+                          fz={isMobile ? 11 : 12}
+                          fw={500}
+                          c="#334155"
+                          truncate
+                          style={{
+                            lineHeight: 1.25,
+                            maxWidth: "100%",
+                            display: "block",
+                          }}
+                        >
+                          {remarkDisplay}
+                        </Text>
+                      </Tooltip>
+                    </Table.Td>
+                  ) : null}
+                  <Table.Td style={{ width: isMobile ? 88 : 110 }}>
+                    <Text fz={isMobile ? 11 : 12} fw={500} c="#334155" truncate>
                       {row.salesperson || "-"}
                     </Text>
                   </Table.Td>
-                  <Table.Td>
+                  <Table.Td style={{ width: isMobile ? 56 : 64 }}>
                     <Text ta="right" fz={isMobile ? 11 : 12} fw={500} c="#8EA1B9">
                       {getRowTime(row.call_date)}
                     </Text>
@@ -241,7 +341,7 @@ export function CallEntryActivityLogCard({
             })}
             {visibleRows.length === 0 ? (
               <Table.Tr>
-                <Table.Td colSpan={5}>
+                <Table.Td colSpan={colCount}>
                   <Text ta="center" c="#94A3B8" fz={12} py={14}>
                     No activity logs found.
                   </Text>
@@ -250,9 +350,14 @@ export function CallEntryActivityLogCard({
             ) : null}
           </Table.Tbody>
         </Table>
-      </Box>
+      </ScrollArea>
 
-      <Group justify="space-between" px={12} py={6}>
+      <Group
+        justify="space-between"
+        px={12}
+        py={6}
+        style={{ borderTop: "1px solid #E7EEF6", flexShrink: 0 }}
+      >
         <Text fz={11} c="#94A3B8">
           Page {page} / {totalPages}
         </Text>
