@@ -29,7 +29,6 @@ import {
 } from "@mantine/core";
 import {
   IconFilter,
-  IconPlus,
   IconDots,
   IconEdit,
   IconDownload,
@@ -71,7 +70,6 @@ import {
   erpListStickyActionTdStyle,
   erpListStickyActionThStyle,
   erpToolbarOutlineButtonStyles,
-  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   BookingCreateJobLoader,
   getBookingRowAirVolume,
@@ -1501,10 +1499,11 @@ function AirExportBookingMaster() {
     setShouldRestore,
   ]);
 
-  const persistListAndNavigate = useCallback(() => {
-    persistListState();
-    navigate("./create");
-  }, [persistListState, navigate]);
+  // Create New hidden: bookings must be created from gained quotations
+  // const persistListAndNavigate = useCallback(() => {
+  //   persistListState();
+  //   navigate("./create");
+  // }, [persistListState, navigate]);
 
   // ---- refetch effects ----
   useEffect(() => {
@@ -2043,6 +2042,7 @@ function AirExportBookingMaster() {
                   >
                     {showFilters ? "Hide filters" : "Filters"}
                   </Button>
+                  {/* Create New hidden: bookings must be created from gained quotations
                   <Button
                     size="xs"
                     leftSection={<IconPlus size={14} />}
@@ -2051,6 +2051,7 @@ function AirExportBookingMaster() {
                   >
                     New Booking
                   </Button>
+                  */}
                 </>
               ),
             }}

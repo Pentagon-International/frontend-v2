@@ -52,7 +52,6 @@ import {
   erpListGeistSelectClassNames,
   ERP_LIST_GEIST_ROOT_CLASS,
   erpToolbarOutlineButtonStyles,
-  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   BookingCreateJobLoader,
   LastBookingsList,
@@ -852,10 +851,11 @@ function OceanImportBookingMaster() {
     setShouldRestore,
   ]);
 
-  const persistListAndNavigate = useCallback(() => {
-    persistListState();
-    navigate("./create");
-  }, [persistListState, navigate]);
+  // Create New hidden: bookings must be created from gained quotations
+  // const persistListAndNavigate = useCallback(() => {
+  //   persistListState();
+  //   navigate("./create");
+  // }, [persistListState, navigate]);
 
   const isDataLoading = isRestoring || isLoading || isFetching;
 
@@ -1590,6 +1590,7 @@ function OceanImportBookingMaster() {
                   >
                     {showFilters ? "Hide filters" : "Filters"}
                   </Button>
+                  {/* Create New hidden: bookings must be created from gained quotations
                   <Button
                     size="xs"
                     leftSection={<IconPlus size={14} />}
@@ -1598,6 +1599,7 @@ function OceanImportBookingMaster() {
                   >
                     Create New
                   </Button>
+                  */}
                 </>
               ),
             }}

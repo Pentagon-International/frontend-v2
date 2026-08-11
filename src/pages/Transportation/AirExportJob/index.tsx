@@ -19,7 +19,6 @@ import {
   Flex,
 } from "@mantine/core";
 import {
-  IconPlus,
   IconDotsVertical,
   IconEdit,
   IconX,
@@ -50,7 +49,6 @@ import {
   ERPListScreen,
   ERPListStatPill,
   erpToolbarOutlineButtonStyles,
-  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   erpListFilterUnifiedMantineStyles,
   erpListFilterFieldCellStyle,
@@ -736,6 +734,7 @@ function AirExportJobMaster() {
                 >
                   {showFilters ? "Hide filters" : "Filters"}
                 </Button>
+                {/* Create New hidden: export jobs should be created from bookings
                 <Button
                   size="xs"
                   leftSection={<IconPlus size={14} />}
@@ -749,6 +748,7 @@ function AirExportJobMaster() {
                 >
                   Create New
                 </Button>
+                */}
               </>
             ),
           }}
