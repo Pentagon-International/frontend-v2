@@ -619,7 +619,8 @@ export const generateUsBillOfLadingPDF = (
   const carrierDetails = jobData?.carrierDetails || {};
   const mblDetails = jobData?.mblDetails || {};
 
-  const billOfLadingNo = housingData?.hbl_number || "";
+  const billOfLadingNo =
+    housingData?.hbl_number || housingData?.houseno || housingData?.house_no || "";
   const exportReference =
     housingData?.shipment_reference_no ||
     housingData?.shipment_id ||

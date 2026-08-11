@@ -332,9 +332,8 @@ export default function VendorMaster() {
     String(userCountry?.country_name ?? "")
       .toLowerCase()
       .includes("india");
-  // Hide only for non-admin P2PEN users based in India; P2PEN abroad (e.g. US) may create
-  const showCreateButton =
-    isAdmin || !isPentagonUser || !isIndiaUser;
+  // Hide Create New for foreign branches; also hide for non-admin P2PEN users in India
+  const showCreateButton = isIndiaUser && (isAdmin || !isPentagonUser);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();

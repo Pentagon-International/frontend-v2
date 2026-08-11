@@ -514,6 +514,7 @@ export const generateBillOfLadingPDF = (
     blType?: string;
     houseIndex?: number;
     documentTitle?: string;
+    originalCountLabel?: string;
   },
 ): string => {
   try {
@@ -602,8 +603,9 @@ export const generateBillOfLadingPDF = (
     const jobInfo = jobData || {};
     const mblDetails = jobData?.mblDetails || {};
 
-    // Document Numbers — Bill of Lading uses house (HBL) number
-    const billOfLadingNo = housingData?.hbl_number || "";
+    // Document Numbers — Bill of Lading uses house (HBL / houseno) number
+    const billOfLadingNo =
+      housingData?.hbl_number || housingData?.houseno || housingData?.house_no || "";
     const housingList = Array.isArray(jobInfo?.housing_details)
       ? jobInfo.housing_details
       : Array.isArray(jobInfo?.housingDetails)
@@ -809,17 +811,12 @@ export const generateBillOfLadingPDF = (
     doc.setFont("helvetica", "bold");
     const docTitle =
       options?.documentTitle?.trim() || "MULTIMODAL TRANSPORT DOCUMENT";
+    doc.setTextColor(0, 0, 0);
+    doc.text(docTitle, pageWidth / 2, yPos, { align: "center" });
     if (titleSuffix) {
       const titleWidth = doc.getTextWidth(docTitle);
-      const titleGap = 3;
-      const suffixWidth = doc.getTextWidth(titleSuffix);
-      const blockWidth = titleWidth + titleGap + suffixWidth;
-      const blockStartX = (pageWidth - blockWidth) / 2;
-      doc.setTextColor(0, 0, 0);
-      doc.text(docTitle, blockStartX, yPos);
-      doc.text(titleSuffix, blockStartX + titleWidth + titleGap, yPos);
-    } else {
-      doc.text(docTitle, pageWidth / 2, yPos, { align: "center" });
+      const titleGap = 18;
+      doc.text(titleSuffix, pageWidth / 2 + titleWidth / 2 + titleGap, yPos);
     }
     yPos += 5;
 
@@ -982,19 +979,32 @@ export const generateBillOfLadingPDF = (
       rightY,
     );
     rightY += isIndiaBranch ? 6 : 8;
-    if (isIndiaContent) {
+    const bookingShipmentRef = String(
+      housingData?.shipment_reference_no || "",
+    ).trim();
+    if (bookingShipmentRef) {
       doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
       doc.text(
-        "MTO NO : MTO/DGS/3208/SEP/2026",
+        `Shipment Reference No: ${bookingShipmentRef}`,
         midLineX + boxPadding,
         rightY,
       );
-      rightY += 4;
-    } else if (shipmentReferenceNo) {
+      rightY += 5;
+    } else if (!isIndiaContent && shipmentReferenceNo) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.text(
         `SHIPMENT REF NO: ${shipmentReferenceNo}`,
+        midLineX + boxPadding,
+        rightY,
+      );
+      rightY += 4;
+    }
+    if (isIndiaContent) {
+      doc.setFont("helvetica", "bold");
+      doc.text(
+        "MTO NO : MTO/DGS/3208/SEP/2026",
         midLineX + boxPadding,
         rightY,
       );
@@ -1840,7 +1850,11 @@ export const generateBillOfLadingPDF = (
     doc.setFontSize(7);
     doc.text("Freight Amount", footerCol1X + boxPadding, footerY);
     doc.text("Freight Payable at", footerCol2X + boxPadding, footerY);
-    doc.text("Number of Original MTD (s)", footerCol3X + boxPadding, footerY);
+    doc.text(
+      options?.originalCountLabel?.trim() || "Number of Original MTD (s)",
+      footerCol3X + boxPadding,
+      footerY,
+    );
     doc.text("Place and Date of issue", footerCol4X + boxPadding, footerY);
     
     footerY += 4;

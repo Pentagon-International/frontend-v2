@@ -349,11 +349,11 @@ const validationSchema = yup.object({
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
 
-  // Ocean Schedule fields - All optional
+  // Ocean Schedule fields
   schedule_id: yup.string(),
   carrier_code: yup.string(),
-  eta: yup.date().nullable(),
-  etd: yup.date().nullable(),
+  eta: yup.date().nullable().required("ETA is required"),
+  etd: yup.date().nullable().required("ETD is required"),
   vessel_name: yup.string(),
   voyage_no: yup.string(),
 
@@ -2886,6 +2886,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
+        "etd",
+        "eta",
       ];
 
       const validation = form.validate();
@@ -3207,11 +3209,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         housingData,
         defaultBranch,
         country,
-        { draft: true, documentTitle: "SHIPPING LINE OF LADING" },
+        {
+          draft: true,
+          documentTitle: "SHIPPING BILL OF LADING",
+          originalCountLabel: "Number of Original B/L's",
+        },
       );
 
       setBolPreviewLabel(
-        String(housingData.hbl_number || bookingRecord?.shipment_code || "HBL"),
+        String(
+          housingData.hbl_number ||
+            bookingRecord?.houseno ||
+            bookingRecord?.shipment_code ||
+            "HBL",
+        ),
       );
       setBolPreviewRowData({
         jobData: bolJobData,
@@ -3219,7 +3230,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         defaultBranch,
         country,
         draft: true,
-        documentTitle: "SHIPPING LINE OF LADING",
+        documentTitle: "SHIPPING BILL OF LADING",
+        originalCountLabel: "Number of Original B/L's",
       });
       setBolPreviewHasUnsavedChanges(false);
       setBolPdfBlob(blobUrl);
@@ -3244,6 +3256,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         documentTitle:
           typeof rowData.documentTitle === "string"
             ? rowData.documentTitle
+            : undefined,
+        originalCountLabel:
+          typeof rowData.originalCountLabel === "string"
+            ? rowData.originalCountLabel
             : undefined,
       },
     );
@@ -4255,6 +4271,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETD (Estimated Time of Departure)"
                     placeholder="YYYY-MM-DD"
+                    withAsterisk
                     value={form.values.etd ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("etd", date ?? null);
@@ -4266,6 +4283,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETA (Estimated Time of Arrival)"
                     placeholder="YYYY-MM-DD"
+                    withAsterisk
                     value={form.values.eta ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("eta", date ?? null);

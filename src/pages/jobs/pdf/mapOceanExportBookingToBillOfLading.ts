@@ -101,8 +101,8 @@ export const mapOceanExportBookingToBillOfLadingData = (
   const shipmentCode = String(
     bookingRecord?.shipment_code ?? bookingRecord?.shipment_id ?? "",
   );
-  const hblNumber = String(
-    bookingRecord?.hbl_number ?? bookingRecord?.shipment_code ?? "",
+  const houseNo = String(
+    bookingRecord?.houseno ?? bookingRecord?.house_no ?? bookingRecord?.hbl_number ?? "",
   );
 
   const destinationAgentName =
@@ -137,8 +137,9 @@ export const mapOceanExportBookingToBillOfLadingData = (
   };
 
   const housingData = {
-    hbl_number: hblNumber,
-    shipment_reference_no: shipmentCode || String(bookingRecord?.id ?? ""),
+    hbl_number: houseNo,
+    houseno: houseNo,
+    shipment_reference_no: shipmentCode,
     shipment_id: shipmentCode,
     shipper_name: formValues.shipper_name,
     shipper_address: formValues.shipper_address,

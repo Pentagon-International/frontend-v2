@@ -302,8 +302,12 @@ const validationSchema = yup.object({
         move_type: yup.string(),
         from_location_code: yup.string(),
         to_location_code: yup.string(),
-        etd: yup.date(),
-        eta: yup.date().min(yup.ref("etd"), "ETA must be after ETD"),
+        etd: yup.date().nullable().required("ETD is required"),
+        eta: yup
+          .date()
+          .nullable()
+          .required("ETA is required")
+          .min(yup.ref("etd"), "ETA must be after ETD"),
         carrier_code: yup.string(),
         flight_no: yup.string().nullable(),
         status: yup.string(),
@@ -2686,7 +2690,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         (field) => validation.errors[field],
       );
 
-      if (hasRequiredFieldErrors) {
+      const hasRoutingDateErrors = Object.keys(validation.errors).some(
+        (key) =>
+          key.startsWith("routingDetails") &&
+          (key.endsWith(".etd") || key.endsWith(".eta")),
+      );
+
+      if (hasRequiredFieldErrors || hasRoutingDateErrors) {
         console.log(
           "Required fields have validation errors:",
           validation.errors,
@@ -3761,10 +3771,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <RequiredLabel label="To" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
-                  <RequiredLabel label="ETD" required={false} />
+                  <RequiredLabel label="ETD" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
-                  <RequiredLabel label="ETA" required={false} />
+                  <RequiredLabel label="ETA" required={true} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
                   <RequiredLabel label="Carrier" required={false} />
@@ -3942,6 +3952,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                               date ?? null,
                             );
                           }}
+                          error={
+                            form.errors[`routingDetails.${index}.etd`] as string
+                          }
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
@@ -3956,6 +3969,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                               date ?? null,
                             );
                           }}
+                          error={
+                            form.errors[`routingDetails.${index}.eta`] as string
+                          }
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
