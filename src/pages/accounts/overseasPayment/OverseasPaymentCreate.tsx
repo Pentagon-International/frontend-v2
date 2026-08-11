@@ -31,7 +31,10 @@ import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
-import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import {
+  mergeEditPageAuditSources,
+  appendEditPageAuditPatch,
+} from "../../../utils/editPageAuditInfo";
 import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -149,7 +152,9 @@ function clampLocalAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
-function toLocalAmount(value: number | string | null | undefined): number | null {
+function toLocalAmount(
+  value: number | string | null | undefined,
+): number | null {
   const rounded = roundLocalMoneyToDecimals(value);
   return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
@@ -279,8 +284,7 @@ const fetchOutstandingAllocations = async (payload: {
     API_HEADER,
   );
   const res = response as
-    | { data?: InvoiceCombinedItem[] }
-    | InvoiceCombinedItem[];
+    { data?: InvoiceCombinedItem[] } | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -532,9 +536,7 @@ function formatOutstandingDocumentAmountInLocal(
       ? formatMoneyAmountBound(amountInLocal)
       : "—";
   const n = parseFloat(String(amountInLocal).trim());
-  return Number.isFinite(n)
-    ? formatMoneyAmountBound(n)
-    : String(amountInLocal);
+  return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(amountInLocal);
 }
 
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
@@ -1115,11 +1117,7 @@ export default function OverseasPaymentCreate({
     return () => {
       cancelled = true;
     };
-  }, [
-    loadedFromListState,
-    paymentFromState?.id,
-    partyAccountCodeBackfillKey,
-  ]);
+  }, [loadedFromListState, paymentFromState?.id, partyAccountCodeBackfillKey]);
 
   // Create only: auto-fetch ROE from exchange-rate master when currency is set.
   // Document selection applies document currency/ROE and skips this fetch once.
@@ -1269,7 +1267,11 @@ export default function OverseasPaymentCreate({
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
     });
-    if (syncCurrency && headerCurrency && form.values.currency !== headerCurrency) {
+    if (
+      syncCurrency &&
+      headerCurrency &&
+      form.values.currency !== headerCurrency
+    ) {
       // Allow currency-change effect to fetch ROE from exchange-rate master.
       skipNextCurrencyRoeSyncRef.current = false;
       form.setFieldValue("currency", headerCurrency);
@@ -1289,7 +1291,9 @@ export default function OverseasPaymentCreate({
       const amt = row.amount;
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
-        amt != null && Number.isFinite(amt) ? clampLocalAmount(amt * roeVal) : null;
+        amt != null && Number.isFinite(amt)
+          ? clampLocalAmount(amt * roeVal)
+          : null;
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
@@ -1721,9 +1725,7 @@ export default function OverseasPaymentCreate({
     const isUpdate = options?.reversalId != null && options.reversalId > 0;
     const details = options?.detailsOverride ?? values.details ?? [];
     const source = paymentFromState as
-      | Record<string, unknown>
-      | null
-      | undefined;
+      Record<string, unknown> | null | undefined;
     const base: Record<string, unknown> = {
       payment_no: paymentNo,
       date: formatDateDDMMYYYY(values.date),
@@ -1930,9 +1932,9 @@ export default function OverseasPaymentCreate({
       } catch (e: unknown) {
         console.error("Failed to update posted overseas payment", e);
         ToastNotification({
-        type: "error",
-        message: getServerErrorMessage(e, "Failed to update payment."),
-      });
+          type: "error",
+          message: getServerErrorMessage(e, "Failed to update payment."),
+        });
       } finally {
         setIsSubmitting(false);
       }
@@ -1975,8 +1977,7 @@ export default function OverseasPaymentCreate({
     const partyAmountTotal =
       (values.details ?? []).reduce(
         (sum, d) =>
-          sum +
-          (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
+          sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
         0,
       ) ?? 0;
     const adjCurrTotal =
@@ -2319,7 +2320,10 @@ export default function OverseasPaymentCreate({
         console.error("Post payment reversal error:", err);
         ToastNotification({
           type: "error",
-          message: getServerErrorMessage(err, "Failed to post payment reversal."),
+          message: getServerErrorMessage(
+            err,
+            "Failed to post payment reversal.",
+          ),
         });
       } finally {
         setIsPosting(false);
@@ -2731,7 +2735,8 @@ export default function OverseasPaymentCreate({
                 disabled={
                   useNonEditableStyleOnly
                     ? false
-                    : headerOtherDisabled || isLocalCurrency(form.values.currency)
+                    : headerOtherDisabled ||
+                      isLocalCurrency(form.values.currency)
                 }
               />
             </Grid.Col>
@@ -2762,20 +2767,12 @@ export default function OverseasPaymentCreate({
                 label="Local Amount"
                 placeholder="Local amount"
                 value={form.values.local_amount ?? undefined}
-                onChange={(v) => {
-                  enableAutoCalculations();
-                  form.setFieldValue(
-                    "local_amount",
-                    clampLocalAmount(typeof v === "string" ? parseFloat(v) : v) ??
-                      null,
-                  );
-                }}
+                readOnly
                 min={0}
                 decimalScale={localAmountDecimalScale}
                 max={AMOUNT_MAX}
                 hideControls
-                styles={headerFieldStyles}
-                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                styles={adjustmentFieldStyles}
               />
             </Grid.Col>
 
@@ -2980,7 +2977,10 @@ export default function OverseasPaymentCreate({
                                 OVERSEAS_DEFAULT_CURRENCY,
                                 (roe) => {
                                   form.setFieldValue(`details.${idx}.roe`, roe);
-                                  form.setFieldValue("currency", OVERSEAS_DEFAULT_CURRENCY);
+                                  form.setFieldValue(
+                                    "currency",
+                                    OVERSEAS_DEFAULT_CURRENCY,
+                                  );
                                   form.setFieldValue("roe", roe);
                                 },
                               );
@@ -3028,32 +3028,39 @@ export default function OverseasPaymentCreate({
                             readOnly
                             styles={partyFieldStyles}
                           /> */}
-                 <Dropdown
-                // label="Currency"
-                placeholder="Select currency"
-                data={currencyOptions}
-                // value={form.values.currency}
-                value={form.values.details[idx].currency}
-                onChange={(v) => {
-                  enableAutoCalculations();
-                  skipNextCurrencyRoeSyncRef.current = false;
-                  form.setFieldValue(`details.${idx}.currency`, v ?? "");
-                  form.clearFieldError(`details.${idx}.roe`);
-                  form.clearFieldError("roe");
-                  if (v) {
-                    form.setFieldValue("currency", v);
-                    syncRoeForCurrencyChange(v, (roe) => {
-                      form.setFieldValue(`details.${idx}.roe`, roe);
-                      form.setFieldValue("roe", roe);
-                    });
-                  }
-                }}
-                searchable
-                withAsterisk
-                error={form.errors.currency}
-                styles={headerFieldStyles}
-                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
-              />
+                          <Dropdown
+                            // label="Currency"
+                            placeholder="Select currency"
+                            data={currencyOptions}
+                            // value={form.values.currency}
+                            value={form.values.details[idx].currency}
+                            onChange={(v) => {
+                              enableAutoCalculations();
+                              skipNextCurrencyRoeSyncRef.current = false;
+                              form.setFieldValue(
+                                `details.${idx}.currency`,
+                                v ?? "",
+                              );
+                              form.clearFieldError(`details.${idx}.roe`);
+                              form.clearFieldError("roe");
+                              if (v) {
+                                form.setFieldValue("currency", v);
+                                syncRoeForCurrencyChange(v, (roe) => {
+                                  form.setFieldValue(`details.${idx}.roe`, roe);
+                                  form.setFieldValue("roe", roe);
+                                });
+                              }
+                            }}
+                            searchable
+                            withAsterisk
+                            error={form.errors.currency}
+                            styles={headerFieldStyles}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : headerOtherDisabled
+                            }
+                          />
                         </Grid.Col>
                         <Grid.Col span={1}>
                           <NumberInput
@@ -3150,24 +3157,13 @@ export default function OverseasPaymentCreate({
                             placeholder="Local Amount"
                             min={0}
                             hideControls
+                            readOnly
                             value={
                               form.values.details[idx].local_amount ?? undefined
                             }
-                            onChange={(v) => {
-                              enableAutoCalculations();
-                              form.setFieldValue(
-                                `details.${idx}.local_amount`,
-                                clampLocalAmount(
-                                  typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? null,
-                              );
-                            }}
                             decimalScale={localAmountDecimalScale}
                             max={AMOUNT_MAX}
-                            styles={partyFieldStyles}
-                            disabled={
-                              useNonEditableStyleOnly ? false : isReadOnly
-                            }
+                            styles={adjustmentFieldStyles}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -3598,9 +3594,7 @@ export default function OverseasPaymentCreate({
                           )}
                         </Table.Td>
                         <Table.Td>
-                          {formatOutstandingDocumentAmountInLocal(
-                            inv.amount,
-                          )}
+                          {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
                           {(inv.currency_code ?? "—").toString().trim() || "—"}
@@ -3664,299 +3658,304 @@ export default function OverseasPaymentCreate({
                   (canAttachDocumentsAfterPost && !isExistingDoc);
 
                 return (
-                <Grid key={index} columns={12} gutter="sm" align="flex-end">
-                  <Grid.Col span={5.5}>
-                    <TextInput
-                      label="Document Name"
-                      placeholder="Enter document name"
-                      value={doc.name}
-                      disabled={!canEditDocRow}
-                      onChange={(e) => {
-                        if (!canEditDocRow) return;
-                        const updatedDocs = [
-                          ...form.values.supporting_documents,
-                        ];
-                        updatedDocs[index] = {
-                          ...updatedDocs[index],
-                          name: e.target.value,
-                        };
-                        form.setFieldValue("supporting_documents", updatedDocs);
-                      }}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={5.5}>
-                    <Box>
-                      <Text size="sm" fw={500} mb={4}>
-                        File
-                      </Text>
-                      <Dropzone
+                  <Grid key={index} columns={12} gutter="sm" align="flex-end">
+                    <Grid.Col span={5.5}>
+                      <TextInput
+                        label="Document Name"
+                        placeholder="Enter document name"
+                        value={doc.name}
                         disabled={!canEditDocRow}
-                        onDrop={(files: File[]) => {
+                        onChange={(e) => {
                           if (!canEditDocRow) return;
-                          if (files.length === 0) return;
-                          const file = files[0];
-                          if (fileErrors[index]) {
-                            const newErrors = { ...fileErrors };
-                            delete newErrors[index];
-                            setFileErrors(newErrors);
-                          }
-                          if (file.size > MAX_FILE_SIZE) {
-                            const newErrors = { ...fileErrors };
-                            newErrors[index] =
-                              `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
-                            setFileErrors(newErrors);
-                            ToastNotification({
-                              type: "error",
-                              message: `File "${file.name}" exceeds 5MB limit`,
-                            });
-                            return;
-                          }
                           const updatedDocs = [
                             ...form.values.supporting_documents,
                           ];
                           updatedDocs[index] = {
                             ...updatedDocs[index],
-                            file,
-                            document_url: undefined,
+                            name: e.target.value,
                           };
                           form.setFieldValue(
                             "supporting_documents",
                             updatedDocs,
                           );
                         }}
-                        onReject={(files: any[]) => {
-                          const rejection = files[0];
-                          if (
-                            rejection?.errors?.some(
-                              (e: any) => e.code === "file-too-large",
-                            )
-                          ) {
-                            const newErrors = { ...fileErrors };
-                            newErrors[index] = "File size exceeds 5MB limit";
-                            setFileErrors(newErrors);
-                          }
-                        }}
-                        maxSize={MAX_FILE_SIZE}
-                        accept={undefined}
-                        multiple={false}
-                        styles={{
-                          root: {
-                            border: "1px solid var(--mantine-color-gray-4)",
-                            borderRadius: "var(--mantine-radius-sm)",
-                            backgroundColor: "var(--mantine-color-white)",
-                            minHeight: "36px",
-                            padding: "0",
-                          },
-                          inner: {
-                            padding: "0",
-                            minHeight: "36px",
-                          },
-                        }}
-                      >
-                        <Group
-                          justify="space-between"
-                          gap="xs"
-                          px="sm"
-                          style={{
-                            minHeight: "36px",
-                            pointerEvents: "none",
-                            cursor: canEditDocRow ? "pointer" : "default",
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={5.5}>
+                      <Box>
+                        <Text size="sm" fw={500} mb={4}>
+                          File
+                        </Text>
+                        <Dropzone
+                          disabled={!canEditDocRow}
+                          onDrop={(files: File[]) => {
+                            if (!canEditDocRow) return;
+                            if (files.length === 0) return;
+                            const file = files[0];
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            if (file.size > MAX_FILE_SIZE) {
+                              const newErrors = { ...fileErrors };
+                              newErrors[index] =
+                                `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                              setFileErrors(newErrors);
+                              ToastNotification({
+                                type: "error",
+                                message: `File "${file.name}" exceeds 5MB limit`,
+                              });
+                              return;
+                            }
+                            const updatedDocs = [
+                              ...form.values.supporting_documents,
+                            ];
+                            updatedDocs[index] = {
+                              ...updatedDocs[index],
+                              file,
+                              document_url: undefined,
+                            };
+                            form.setFieldValue(
+                              "supporting_documents",
+                              updatedDocs,
+                            );
+                          }}
+                          onReject={(files: any[]) => {
+                            const rejection = files[0];
+                            if (
+                              rejection?.errors?.some(
+                                (e: any) => e.code === "file-too-large",
+                              )
+                            ) {
+                              const newErrors = { ...fileErrors };
+                              newErrors[index] = "File size exceeds 5MB limit";
+                              setFileErrors(newErrors);
+                            }
+                          }}
+                          maxSize={MAX_FILE_SIZE}
+                          accept={undefined}
+                          multiple={false}
+                          styles={{
+                            root: {
+                              border: "1px solid var(--mantine-color-gray-4)",
+                              borderRadius: "var(--mantine-radius-sm)",
+                              backgroundColor: "var(--mantine-color-white)",
+                              minHeight: "36px",
+                              padding: "0",
+                            },
+                            inner: {
+                              padding: "0",
+                              minHeight: "36px",
+                            },
                           }}
                         >
-                          <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                            {doc.file ? (
-                              <>
-                                <IconUpload
-                                  size={16}
-                                  color="var(--mantine-color-dimmed)"
-                                />
-                                <Text
-                                  size="sm"
-                                  truncate
-                                  style={{
-                                    flex: 1,
-                                    color: "var(--mantine-color-dark)",
-                                  }}
-                                >
-                                  {doc.file.name}
-                                </Text>
-                              </>
-                            ) : doc.document_url ? (
-                              <>
-                                <IconDownload
-                                  size={16}
-                                  color="var(--mantine-color-blue-6)"
-                                />
-                                <Text
-                                  size="sm"
-                                  truncate
-                                  style={{
-                                    flex: 1,
-                                    color: "var(--mantine-color-blue-6)",
-                                    cursor: "pointer",
-                                    textDecoration: "underline",
-                                    pointerEvents: "auto",
-                                  }}
+                          <Group
+                            justify="space-between"
+                            gap="xs"
+                            px="sm"
+                            style={{
+                              minHeight: "36px",
+                              pointerEvents: "none",
+                              cursor: canEditDocRow ? "pointer" : "default",
+                            }}
+                          >
+                            <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                              {doc.file ? (
+                                <>
+                                  <IconUpload
+                                    size={16}
+                                    color="var(--mantine-color-dimmed)"
+                                  />
+                                  <Text
+                                    size="sm"
+                                    truncate
+                                    style={{
+                                      flex: 1,
+                                      color: "var(--mantine-color-dark)",
+                                    }}
+                                  >
+                                    {doc.file.name}
+                                  </Text>
+                                </>
+                              ) : doc.document_url ? (
+                                <>
+                                  <IconDownload
+                                    size={16}
+                                    color="var(--mantine-color-blue-6)"
+                                  />
+                                  <Text
+                                    size="sm"
+                                    truncate
+                                    style={{
+                                      flex: 1,
+                                      color: "var(--mantine-color-blue-6)",
+                                      cursor: "pointer",
+                                      textDecoration: "underline",
+                                      pointerEvents: "auto",
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (
+                                        doc.document_url &&
+                                        doc.original_document_name
+                                      ) {
+                                        downloadFile(
+                                          doc.document_url,
+                                          doc.original_document_name,
+                                        );
+                                      }
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.opacity = "0.8";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.opacity = "1";
+                                    }}
+                                  >
+                                    {doc.original_document_name ||
+                                      "Download file"}
+                                  </Text>
+                                </>
+                              ) : (
+                                <>
+                                  <IconUpload
+                                    size={16}
+                                    color="var(--mantine-color-dimmed)"
+                                  />
+                                  <Text
+                                    size="sm"
+                                    c="dimmed"
+                                    truncate
+                                    style={{ flex: 1 }}
+                                  >
+                                    Drag and drop or click to select file
+                                  </Text>
+                                </>
+                              )}
+                            </Group>
+                            {canEditDocRow &&
+                              (doc.file || doc.document_url) && (
+                                <Button
+                                  variant="subtle"
+                                  color="red"
+                                  size="xs"
+                                  p={4}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (
-                                      doc.document_url &&
-                                      doc.original_document_name
-                                    ) {
-                                      downloadFile(
-                                        doc.document_url,
-                                        doc.original_document_name,
-                                      );
+                                    if (fileErrors[index]) {
+                                      const newErrors = { ...fileErrors };
+                                      delete newErrors[index];
+                                      setFileErrors(newErrors);
                                     }
+                                    const updatedDocs = [
+                                      ...form.values.supporting_documents,
+                                    ];
+                                    updatedDocs[index] = {
+                                      ...updatedDocs[index],
+                                      file: null,
+                                      document_url: undefined,
+                                      document_id: undefined,
+                                    };
+                                    form.setFieldValue(
+                                      "supporting_documents",
+                                      updatedDocs,
+                                    );
                                   }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.opacity = "0.8";
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.opacity = "1";
-                                  }}
+                                  style={{ pointerEvents: "auto" }}
                                 >
-                                  {doc.original_document_name ||
-                                    "Download file"}
-                                </Text>
-                              </>
-                            ) : (
-                              <>
-                                <IconUpload
-                                  size={16}
-                                  color="var(--mantine-color-dimmed)"
-                                />
-                                <Text
-                                  size="sm"
-                                  c="dimmed"
-                                  truncate
-                                  style={{ flex: 1 }}
-                                >
-                                  Drag and drop or click to select file
-                                </Text>
-                              </>
-                            )}
+                                  <IconX size={14} />
+                                </Button>
+                              )}
                           </Group>
-                          {canEditDocRow && (doc.file || doc.document_url) && (
-                            <Button
-                              variant="subtle"
-                              color="red"
-                              size="xs"
-                              p={4}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (fileErrors[index]) {
-                                  const newErrors = { ...fileErrors };
-                                  delete newErrors[index];
-                                  setFileErrors(newErrors);
-                                }
-                                const updatedDocs = [
-                                  ...form.values.supporting_documents,
-                                ];
-                                updatedDocs[index] = {
-                                  ...updatedDocs[index],
-                                  file: null,
-                                  document_url: undefined,
-                                  document_id: undefined,
-                                };
-                                form.setFieldValue(
-                                  "supporting_documents",
-                                  updatedDocs,
-                                );
-                              }}
-                              style={{ pointerEvents: "auto" }}
-                            >
-                              <IconX size={14} />
-                            </Button>
-                          )}
-                        </Group>
-                      </Dropzone>
-                      {fileErrors[index] && (
-                        <Text size="xs" c="red" mt={4}>
-                          {fileErrors[index]}
-                        </Text>
-                      )}
-                    </Box>
-                  </Grid.Col>
-                  {canEditDocRow && (
-                  <Grid.Col span={1}>
-                    <Button
-                      variant="light"
-                      color="red"
-                      onClick={() => {
-                        if (fileErrors[index]) {
-                          const newErrors = { ...fileErrors };
-                          delete newErrors[index];
-                          setFileErrors(newErrors);
-                        }
-                        if (form.values.supporting_documents.length === 1) {
-                          form.setFieldValue("supporting_documents", [
-                            { name: "", file: null },
-                          ]);
-                        } else {
-                          const updatedDocs =
-                            form.values.supporting_documents.filter(
-                              (_, i) => i !== index,
-                            );
-                          form.setFieldValue(
-                            "supporting_documents",
-                            updatedDocs,
-                          );
-                          const newErrors: { [key: number]: string } = {};
-                          Object.keys(fileErrors).forEach((key) => {
-                            const keyNum = parseInt(key);
-                            if (keyNum < index) {
-                              newErrors[keyNum] = fileErrors[keyNum];
-                            } else if (keyNum > index) {
-                              newErrors[keyNum - 1] = fileErrors[keyNum];
-                            }
-                          });
-                          setFileErrors(newErrors);
-                        }
-                      }}
-                    >
-                      <IconTrash size={16} />
-                    </Button>
-                  </Grid.Col>
-                  )}
-                  {canManageSupportingDocuments && (
-                  <Grid.Col span={1} offset={11}>
-                    {index === form.values.supporting_documents.length - 1 && (
+                        </Dropzone>
+                        {fileErrors[index] && (
+                          <Text size="xs" c="red" mt={4}>
+                            {fileErrors[index]}
+                          </Text>
+                        )}
+                      </Box>
+                    </Grid.Col>
+                    {canEditDocRow && (
+                      <Grid.Col span={1}>
                         <Button
                           variant="light"
-                          color="#105476"
+                          color="red"
                           onClick={() => {
-                            form.setFieldValue("supporting_documents", [
-                              ...form.values.supporting_documents,
-                              { name: "", file: null },
-                            ]);
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            if (form.values.supporting_documents.length === 1) {
+                              form.setFieldValue("supporting_documents", [
+                                { name: "", file: null },
+                              ]);
+                            } else {
+                              const updatedDocs =
+                                form.values.supporting_documents.filter(
+                                  (_, i) => i !== index,
+                                );
+                              form.setFieldValue(
+                                "supporting_documents",
+                                updatedDocs,
+                              );
+                              const newErrors: { [key: number]: string } = {};
+                              Object.keys(fileErrors).forEach((key) => {
+                                const keyNum = parseInt(key);
+                                if (keyNum < index) {
+                                  newErrors[keyNum] = fileErrors[keyNum];
+                                } else if (keyNum > index) {
+                                  newErrors[keyNum - 1] = fileErrors[keyNum];
+                                }
+                              });
+                              setFileErrors(newErrors);
+                            }
                           }}
                         >
-                          <IconPlus size={16} />
+                          <IconTrash size={16} />
                         </Button>
-                      )}
-                  </Grid.Col>
-                  )}
-                </Grid>
-              );
+                      </Grid.Col>
+                    )}
+                    {canManageSupportingDocuments && (
+                      <Grid.Col span={1} offset={11}>
+                        {index ===
+                          form.values.supporting_documents.length - 1 && (
+                          <Button
+                            variant="light"
+                            color="#105476"
+                            onClick={() => {
+                              form.setFieldValue("supporting_documents", [
+                                ...form.values.supporting_documents,
+                                { name: "", file: null },
+                              ]);
+                            }}
+                          >
+                            <IconPlus size={16} />
+                          </Button>
+                        )}
+                      </Grid.Col>
+                    )}
+                  </Grid>
+                );
               })}
 
               {canManageSupportingDocuments &&
                 form.values.supporting_documents.length === 0 && (
-                <Button
-                  variant="light"
-                  color="#105476"
-                  leftSection={<IconPlus size={16} />}
-                  onClick={() => {
-                    form.setFieldValue("supporting_documents", [
-                      { name: "", file: null },
-                    ]);
-                  }}
-                  fullWidth
-                >
-                  Add Document
-                </Button>
-              )}
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    leftSection={<IconPlus size={16} />}
+                    onClick={() => {
+                      form.setFieldValue("supporting_documents", [
+                        { name: "", file: null },
+                      ]);
+                    }}
+                    fullWidth
+                  >
+                    Add Document
+                  </Button>
+                )}
 
               <Group justify="flex-end" mt="md">
                 <Button variant="outline" onClick={closeDocumentsModal}>
@@ -4003,11 +4002,7 @@ export default function OverseasPaymentCreate({
                 ? "Attach supporting document"
                 : "View supporting document(s)"}
             </Button>
-            <Button
-              variant="outline"
-              color="#105476"
-              onClick={handleBack}
-            >
+            <Button variant="outline" color="#105476" onClick={handleBack}>
               Cancel
             </Button>
             {(!isReadOnly || isPostedDocumentAttachEdit) && (

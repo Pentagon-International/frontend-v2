@@ -63,7 +63,10 @@ import {
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
-import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import {
+  mergeEditPageAuditSources,
+  appendEditPageAuditPatch,
+} from "../../../utils/editPageAuditInfo";
 import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -148,7 +151,9 @@ function clampLocalAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
-function toLocalAmount(value: number | string | null | undefined): number | null {
+function toLocalAmount(
+  value: number | string | null | undefined,
+): number | null {
   const rounded = roundLocalMoneyToDecimals(value);
   return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
@@ -265,8 +270,7 @@ const fetchOutstandingAllocations = async (payload: {
     API_HEADER,
   );
   const res = response as
-    | { data?: InvoiceCombinedItem[] }
-    | InvoiceCombinedItem[];
+    { data?: InvoiceCombinedItem[] } | InvoiceCombinedItem[];
   const data = Array.isArray(res) ? res : res?.data;
   return Array.isArray(data) ? data : [];
 };
@@ -513,9 +517,7 @@ function formatOutstandingDocumentAmountInLocal(
       ? formatMoneyAmountBound(amountInLocal)
       : "—";
   const n = parseFloat(String(amountInLocal).trim());
-  return Number.isFinite(n)
-    ? formatMoneyAmountBound(n)
-    : String(amountInLocal);
+  return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(amountInLocal);
 }
 
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
@@ -1116,45 +1118,84 @@ export default function PaymentCreate({
     prevHeaderAmountRoeRef.current = headerAmountRoeKey;
   }, [partyLocalAmountsSnapshot, headerAmountRoeKey]);
 
+  /** Skip one amount→local recalculation after allocation sync (adj local is the source). */
+  const skipPartyLocalFromAmountRef = useRef(false);
+
+  const getMatchingAllocations = (
+    row: DetailRow,
+    adjustments: AdjustmentRow[],
+  ) => {
+    const partyCode = (row.customer_code ?? "").toString().trim();
+    const partyDisplay = (row.customer_display ?? "").toString().trim();
+    return adjustments.filter((a) => {
+      const matchesParty =
+        (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
+        (partyDisplay &&
+          (a.subledger_display ?? "").toString().trim() === partyDisplay);
+      if (!matchesParty) return false;
+      const hasDocument = (a.document_no ?? "").toString().trim() !== "";
+      const hasLocal =
+        a.adj_local_amount != null &&
+        Number.isFinite(a.adj_local_amount) &&
+        a.adj_local_amount !== 0;
+      const hasCurr =
+        a.adj_curr_amount != null &&
+        Number.isFinite(a.adj_curr_amount) &&
+        a.adj_curr_amount !== 0;
+      return hasDocument || hasLocal || hasCurr;
+    });
+  };
+
+  const applyAdjLocalToPartyDetail = (
+    idx: number,
+    row: DetailRow,
+    allocationRows: AdjustmentRow[],
+  ) => {
+    if (allocationRows.length === 0) return;
+    const sum = allocationRows.reduce(
+      (s, a) =>
+        s +
+        (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+          ? a.adj_local_amount
+          : 0),
+      0,
+    );
+    const local = clampLocalAmount(sum);
+    const roeVal =
+      row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
+    const derivedAmount =
+      local != null && Number.isFinite(local)
+        ? clampAmount(local / roeVal)
+        : null;
+    skipPartyLocalFromAmountRef.current = true;
+    if (form.values.details[idx].local_amount !== local) {
+      form.setFieldValue(`details.${idx}.local_amount`, local);
+    }
+    if (
+      derivedAmount != null &&
+      form.values.details[idx].amount !== derivedAmount
+    ) {
+      form.setFieldValue(`details.${idx}.amount`, derivedAmount);
+    }
+  };
+
+  /** Sync party details from allocation totals: party local = Σ adj local; party amount = local / party ROE. */
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
+    options?: { detailIndex?: number; allocationsForDetail?: AdjustmentRow[] },
   ) => {
     const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
     form.values.details.forEach((row, idx) => {
-      const partyCode = (row.customer_code ?? "").toString().trim();
-      const partyDisplay = (row.customer_display ?? "").toString().trim();
-      const matchingAllocations = adjustments.filter(
-        (a) =>
-          (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
-          (partyDisplay &&
-            (a.subledger_display ?? "").toString().trim() === partyDisplay),
-      );
-      if (matchingAllocations.length === 0) return;
-      const sum = matchingAllocations.reduce(
-        (s, a) =>
-          s +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      );
-      const local = clampLocalAmount(sum);
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const derivedAmount =
-        local != null &&
-        roeVal != null &&
-        Number.isFinite(roeVal) &&
-        roeVal !== 0
-          ? clampAmount(local / roeVal)
-          : null;
-      if (form.values.details[idx].local_amount !== local) {
-        form.setFieldValue(`details.${idx}.local_amount`, local);
+      const matchingAllocations = getMatchingAllocations(row, adjustments);
+      if (matchingAllocations.length > 0) {
+        applyAdjLocalToPartyDetail(idx, row, matchingAllocations);
+        return;
       }
       if (
-        derivedAmount != null &&
-        form.values.details[idx].amount !== derivedAmount
+        options?.detailIndex === idx &&
+        (options.allocationsForDetail?.length ?? 0) > 0
       ) {
-        form.setFieldValue(`details.${idx}.amount`, derivedAmount);
+        applyAdjLocalToPartyDetail(idx, row, options.allocationsForDetail ?? []);
       }
     });
   };
@@ -1166,11 +1207,39 @@ export default function PaymentCreate({
     )
     .join(";");
   useEffect(() => {
+    if (skipPartyLocalFromAmountRef.current) {
+      skipPartyLocalFromAmountRef.current = false;
+      return;
+    }
     form.values.details.forEach((row, idx) => {
+      const roeVal =
+        row.roe != null && Number.isFinite(row.roe) && row.roe !== 0
+          ? row.roe
+          : 1;
+      const matchingAllocations = getMatchingAllocations(
+        row,
+        form.values.adjustments ?? [],
+      );
+      if (matchingAllocations.length > 0) {
+        const local = row.local_amount;
+        const derivedAmount =
+          local != null && Number.isFinite(local)
+            ? clampAmount(local / roeVal)
+            : null;
+        if (
+          derivedAmount != null &&
+          form.values.details[idx].amount !== derivedAmount
+        ) {
+          skipPartyLocalFromAmountRef.current = true;
+          form.setFieldValue(`details.${idx}.amount`, derivedAmount);
+        }
+        return;
+      }
       const amt = row.amount;
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
-        amt != null && Number.isFinite(amt) ? clampLocalAmount(amt * roeVal) : null;
+        amt != null && Number.isFinite(amt)
+          ? clampLocalAmount(amt * roeVal)
+          : null;
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
@@ -1434,7 +1503,12 @@ export default function PaymentCreate({
       sorted.map((listIdx) => invoiceList[listIdx]),
     );
     form.setFieldValue("adjustments", nextAdjustments);
-    syncPartyDetailsFromAllocations(nextAdjustments);
+    const partyAllocations = nextAdjustments.filter((a) => isSameParty(a));
+    syncPartyDetailsFromAllocations(nextAdjustments, {
+      detailIndex: invoiceModalDetailRowIndex,
+      allocationsForDetail:
+        partyAllocations.length > 0 ? partyAllocations : newRows,
+    });
     setInvoiceModalOpen(false);
     setInvoiceModalDetailRowIndex(null);
     setInvoiceModalAllocationFilter(null);
@@ -1542,9 +1616,7 @@ export default function PaymentCreate({
     const isUpdate = options?.reversalId != null && options.reversalId > 0;
     const details = options?.detailsOverride ?? values.details ?? [];
     const source = paymentFromState as
-      | Record<string, unknown>
-      | null
-      | undefined;
+      Record<string, unknown> | null | undefined;
     const base: Record<string, unknown> = {
       payment_no: paymentNo,
       date: formatDateDDMMYYYY(values.date),
@@ -2115,7 +2187,10 @@ export default function PaymentCreate({
         console.error("Post payment reversal error:", err);
         ToastNotification({
           type: "error",
-          message: getServerErrorMessage(err, "Failed to post payment reversal."),
+          message: getServerErrorMessage(
+            err,
+            "Failed to post payment reversal.",
+          ),
         });
       } finally {
         setIsPosting(false);
@@ -2497,7 +2572,8 @@ export default function PaymentCreate({
                 disabled={
                   useNonEditableStyleOnly
                     ? false
-                    : headerOtherDisabled || isLocalCurrency(form.values.currency)
+                    : headerOtherDisabled ||
+                      isLocalCurrency(form.values.currency)
                 }
               />
             </Grid.Col>
@@ -2526,19 +2602,12 @@ export default function PaymentCreate({
                 label="Local Amount"
                 placeholder="Local amount"
                 value={form.values.local_amount ?? undefined}
-                onChange={(v) =>
-                  form.setFieldValue(
-                    "local_amount",
-                    clampLocalAmount(typeof v === "string" ? parseFloat(v) : v) ??
-                      null,
-                  )
-                }
+                readOnly
                 min={0}
                 decimalScale={localAmountDecimalScale}
                 max={AMOUNT_MAX}
                 hideControls
-                styles={headerFieldStyles}
-                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                styles={adjustmentFieldStyles}
               />
             </Grid.Col>
 
@@ -2784,27 +2853,34 @@ export default function PaymentCreate({
                             readOnly
                             styles={partyFieldStyles}
                           /> */}
-                                    <Dropdown
-                // label="Currency"
-                placeholder="Select currency"
-                data={currencyOptions}
-                // value={form.values.currency}
-                value={form.values.details[idx].currency}
-                onChange={(v) => {
-                  form.setFieldValue(`details.${idx}.currency`, v ?? "");
-                  form.clearFieldError(`details.${idx}.roe`);
-                  if (v) {
-                    syncRoeForCurrencyChange(v, (roe) =>
-                      form.setFieldValue(`details.${idx}.roe`, roe),
-                    );
-                  }
-                }}
-                searchable
-                withAsterisk
-                error={form.errors.currency}
-                styles={headerFieldStyles}
-                disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
-              />
+                          <Dropdown
+                            // label="Currency"
+                            placeholder="Select currency"
+                            data={currencyOptions}
+                            // value={form.values.currency}
+                            value={form.values.details[idx].currency}
+                            onChange={(v) => {
+                              form.setFieldValue(
+                                `details.${idx}.currency`,
+                                v ?? "",
+                              );
+                              form.clearFieldError(`details.${idx}.roe`);
+                              if (v) {
+                                syncRoeForCurrencyChange(v, (roe) =>
+                                  form.setFieldValue(`details.${idx}.roe`, roe),
+                                );
+                              }
+                            }}
+                            searchable
+                            withAsterisk
+                            error={form.errors.currency}
+                            styles={headerFieldStyles}
+                            disabled={
+                              useNonEditableStyleOnly
+                                ? false
+                                : headerOtherDisabled
+                            }
+                          />
                         </Grid.Col>
                         <Grid.Col span={1}>
                           <NumberInput
@@ -2830,17 +2906,39 @@ export default function PaymentCreate({
                                 form.clearFieldError,
                                 `details.${idx}.roe`,
                               );
-                              const amt = form.values.details[idx]?.amount;
-                              if (
-                                amt != null &&
-                                Number.isFinite(amt) &&
-                                newRoe != null &&
-                                Number.isFinite(newRoe)
-                              ) {
-                                form.setFieldValue(
-                                  `details.${idx}.local_amount`,
-                                  clampLocalAmount(amt * newRoe),
-                                );
+                              const matchingAllocations = getMatchingAllocations(
+                                form.values.details[idx],
+                                form.values.adjustments ?? [],
+                              );
+                              if (matchingAllocations.length > 0) {
+                                const local =
+                                  form.values.details[idx]?.local_amount;
+                                if (
+                                  local != null &&
+                                  Number.isFinite(local) &&
+                                  newRoe != null &&
+                                  Number.isFinite(newRoe) &&
+                                  newRoe !== 0
+                                ) {
+                                  skipPartyLocalFromAmountRef.current = true;
+                                  form.setFieldValue(
+                                    `details.${idx}.amount`,
+                                    clampAmount(local / newRoe),
+                                  );
+                                }
+                              } else {
+                                const amt = form.values.details[idx]?.amount;
+                                if (
+                                  amt != null &&
+                                  Number.isFinite(amt) &&
+                                  newRoe != null &&
+                                  Number.isFinite(newRoe)
+                                ) {
+                                  form.setFieldValue(
+                                    `details.${idx}.local_amount`,
+                                    clampLocalAmount(amt * newRoe),
+                                  );
+                                }
                               }
                             }}
                             decimalScale={ROE_DECIMAL_PLACES}
@@ -2898,23 +2996,13 @@ export default function PaymentCreate({
                             placeholder="Local Amount"
                             min={0}
                             hideControls
+                            readOnly
                             value={
                               form.values.details[idx].local_amount ?? undefined
                             }
-                            onChange={(v) =>
-                              form.setFieldValue(
-                                `details.${idx}.local_amount`,
-                                clampLocalAmount(
-                                  typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? null,
-                              )
-                            }
                             decimalScale={localAmountDecimalScale}
                             max={AMOUNT_MAX}
-                            styles={partyFieldStyles}
-                            disabled={
-                              useNonEditableStyleOnly ? false : isReadOnly
-                            }
+                            styles={adjustmentFieldStyles}
                           />
                         </Grid.Col>
                         <Grid.Col span={1}>
@@ -3385,27 +3473,27 @@ export default function PaymentCreate({
           </Modal>
 
           {/* Supporting Documents Modal */}
-            <Modal
-              opened={documentsModalOpened}
-              onClose={closeDocumentsModal}
-              title={
-                canManageSupportingDocuments
-                  ? "Attach Supporting Documents"
-                  : "Supporting Documents"
-              }
-              size="xl"
-              centered
-              style={{ fontFamily: "Inter" }}
-              styles={{ title: { fontWeight: 600, color: "#105476" } }}
-            >
-              <Stack gap="xs">
-                {form.values.supporting_documents.map((doc, index) => {
-                  const isExistingDoc = doc.document_id != null;
-                  const canEditDocRow =
-                    !isReadOnly ||
-                    (canAttachDocumentsAfterPost && !isExistingDoc);
+          <Modal
+            opened={documentsModalOpened}
+            onClose={closeDocumentsModal}
+            title={
+              canManageSupportingDocuments
+                ? "Attach Supporting Documents"
+                : "Supporting Documents"
+            }
+            size="xl"
+            centered
+            style={{ fontFamily: "Inter" }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+          >
+            <Stack gap="xs">
+              {form.values.supporting_documents.map((doc, index) => {
+                const isExistingDoc = doc.document_id != null;
+                const canEditDocRow =
+                  !isReadOnly ||
+                  (canAttachDocumentsAfterPost && !isExistingDoc);
 
-                  return (
+                return (
                   <Grid key={index} columns={12} gutter="sm" align="flex-end">
                     <Grid.Col span={5.5}>
                       <TextInput
@@ -3583,38 +3671,39 @@ export default function PaymentCreate({
                                 </>
                               )}
                             </Group>
-                            {canEditDocRow && (doc.file || doc.document_url) && (
-                              <Button
-                                variant="subtle"
-                                color="red"
-                                size="xs"
-                                p={4}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (fileErrors[index]) {
-                                    const newErrors = { ...fileErrors };
-                                    delete newErrors[index];
-                                    setFileErrors(newErrors);
-                                  }
-                                  const updatedDocs = [
-                                    ...form.values.supporting_documents,
-                                  ];
-                                  updatedDocs[index] = {
-                                    ...updatedDocs[index],
-                                    file: null,
-                                    document_url: undefined,
-                                    document_id: undefined,
-                                  };
-                                  form.setFieldValue(
-                                    "supporting_documents",
-                                    updatedDocs,
-                                  );
-                                }}
-                                style={{ pointerEvents: "auto" }}
-                              >
-                                <IconX size={14} />
-                              </Button>
-                            )}
+                            {canEditDocRow &&
+                              (doc.file || doc.document_url) && (
+                                <Button
+                                  variant="subtle"
+                                  color="red"
+                                  size="xs"
+                                  p={4}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (fileErrors[index]) {
+                                      const newErrors = { ...fileErrors };
+                                      delete newErrors[index];
+                                      setFileErrors(newErrors);
+                                    }
+                                    const updatedDocs = [
+                                      ...form.values.supporting_documents,
+                                    ];
+                                    updatedDocs[index] = {
+                                      ...updatedDocs[index],
+                                      file: null,
+                                      document_url: undefined,
+                                      document_id: undefined,
+                                    };
+                                    form.setFieldValue(
+                                      "supporting_documents",
+                                      updatedDocs,
+                                    );
+                                  }}
+                                  style={{ pointerEvents: "auto" }}
+                                >
+                                  <IconX size={14} />
+                                </Button>
+                              )}
                           </Group>
                         </Dropzone>
                         {fileErrors[index] && (
@@ -3625,71 +3714,71 @@ export default function PaymentCreate({
                       </Box>
                     </Grid.Col>
                     {canEditDocRow && (
-                    <Grid.Col span={1}>
-                      <Button
-                        variant="light"
-                        color="red"
-                        onClick={() => {
-                          if (fileErrors[index]) {
-                            const newErrors = { ...fileErrors };
-                            delete newErrors[index];
-                            setFileErrors(newErrors);
-                          }
-                          if (form.values.supporting_documents.length === 1) {
-                            form.setFieldValue("supporting_documents", [
-                              { name: "", file: null },
-                            ]);
-                          } else {
-                            const updatedDocs =
-                              form.values.supporting_documents.filter(
-                                (_, i) => i !== index,
-                              );
-                            form.setFieldValue(
-                              "supporting_documents",
-                              updatedDocs,
-                            );
-                            const newErrors: { [key: number]: string } = {};
-                            Object.keys(fileErrors).forEach((key) => {
-                              const keyNum = parseInt(key);
-                              if (keyNum < index) {
-                                newErrors[keyNum] = fileErrors[keyNum];
-                              } else if (keyNum > index) {
-                                newErrors[keyNum - 1] = fileErrors[keyNum];
-                              }
-                            });
-                            setFileErrors(newErrors);
-                          }
-                        }}
-                      >
-                        <IconTrash size={16} />
-                      </Button>
-                    </Grid.Col>
-                    )}
-                    {canManageSupportingDocuments && (
-                    <Grid.Col span={1} offset={11}>
-                      {index ===
-                        form.values.supporting_documents.length - 1 && (
+                      <Grid.Col span={1}>
                         <Button
                           variant="light"
-                          color="#105476"
+                          color="red"
                           onClick={() => {
-                            form.setFieldValue("supporting_documents", [
-                              ...form.values.supporting_documents,
-                              { name: "", file: null },
-                            ]);
+                            if (fileErrors[index]) {
+                              const newErrors = { ...fileErrors };
+                              delete newErrors[index];
+                              setFileErrors(newErrors);
+                            }
+                            if (form.values.supporting_documents.length === 1) {
+                              form.setFieldValue("supporting_documents", [
+                                { name: "", file: null },
+                              ]);
+                            } else {
+                              const updatedDocs =
+                                form.values.supporting_documents.filter(
+                                  (_, i) => i !== index,
+                                );
+                              form.setFieldValue(
+                                "supporting_documents",
+                                updatedDocs,
+                              );
+                              const newErrors: { [key: number]: string } = {};
+                              Object.keys(fileErrors).forEach((key) => {
+                                const keyNum = parseInt(key);
+                                if (keyNum < index) {
+                                  newErrors[keyNum] = fileErrors[keyNum];
+                                } else if (keyNum > index) {
+                                  newErrors[keyNum - 1] = fileErrors[keyNum];
+                                }
+                              });
+                              setFileErrors(newErrors);
+                            }
                           }}
                         >
-                          <IconPlus size={16} />
+                          <IconTrash size={16} />
                         </Button>
-                      )}
-                    </Grid.Col>
+                      </Grid.Col>
+                    )}
+                    {canManageSupportingDocuments && (
+                      <Grid.Col span={1} offset={11}>
+                        {index ===
+                          form.values.supporting_documents.length - 1 && (
+                          <Button
+                            variant="light"
+                            color="#105476"
+                            onClick={() => {
+                              form.setFieldValue("supporting_documents", [
+                                ...form.values.supporting_documents,
+                                { name: "", file: null },
+                              ]);
+                            }}
+                          >
+                            <IconPlus size={16} />
+                          </Button>
+                        )}
+                      </Grid.Col>
                     )}
                   </Grid>
                 );
-                })}
+              })}
 
-                {canManageSupportingDocuments &&
-                  form.values.supporting_documents.length === 0 && (
+              {canManageSupportingDocuments &&
+                form.values.supporting_documents.length === 0 && (
                   <Button
                     variant="light"
                     color="#105476"
@@ -3705,13 +3794,13 @@ export default function PaymentCreate({
                   </Button>
                 )}
 
-                <Group justify="flex-end" mt="md">
-                  <Button variant="outline" onClick={closeDocumentsModal}>
-                    Close
-                  </Button>
-                </Group>
-              </Stack>
-            </Modal>
+              <Group justify="flex-end" mt="md">
+                <Button variant="outline" onClick={closeDocumentsModal}>
+                  Close
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
 
           <Group justify="flex-end" mt="xl">
             <Button

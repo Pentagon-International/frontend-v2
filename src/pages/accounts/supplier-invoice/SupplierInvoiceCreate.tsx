@@ -4217,23 +4217,11 @@ export default function SupplierInvoiceCreate({
                       <NumberInput
                         placeholder="0"
                         value={row.amount_in_local ?? undefined}
-                        onChange={(v) =>
-                          form.setFieldValue(
-                            `charges_data.${index}.amount_in_local`,
-                            typeof v === "number" ? clampLocalAmount(v) : null,
-                          )
-                        }
+                        readOnly
                         min={0}
                         decimalScale={localAmountDecimalScale}
                         hideControls
-                        disabled={isReadOnly || reversalFormDisabled}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
+                        styles={readOnlyFieldStyles}
                       />
                     </Grid.Col>
                     {isIndiaUser && (

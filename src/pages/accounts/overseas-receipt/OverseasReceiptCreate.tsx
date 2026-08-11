@@ -2601,19 +2601,12 @@ import {
                   label="Local Amount"
                   placeholder="Local amount"
                   value={form.values.local_amount ?? undefined}
-                  onChange={(v) =>
-                    form.setFieldValue(
-                      "local_amount",
-                      clampLocalAmount(typeof v === "string" ? parseFloat(v) : v) ??
-                        null,
-                    )
-                  }
+                  readOnly
                   min={0}
                   decimalScale={localAmountDecimalScale}
                   max={AMOUNT_MAX}
                   hideControls
-                  styles={headerFieldStyles}
-                  disabled={useNonEditableStyleOnly ? false : headerOtherDisabled}
+                  styles={adjustmentFieldStyles}
                 />
               </Grid.Col>
   
@@ -2998,25 +2991,13 @@ import {
                               placeholder="Local Amount"
                               min={0}
                               hideControls
+                              readOnly
                               value={
                                 form.values.details[idx].local_amount ?? undefined
                               }
-                              onChange={(v) =>
-                                form.setFieldValue(
-                                  `details.${idx}.local_amount`,
-                                  clampLocalAmount(
-                                    typeof v === "string" ? parseFloat(v) : v,
-                                  ) ?? null,
-                                )
-                              }
                               decimalScale={localAmountDecimalScale}
                               max={AMOUNT_MAX}
-                              styles={partyFieldStyles}
-                              disabled={
-                                useNonEditableStyleOnly
-                                  ? false
-                                  : isReadOnly || reversalFormDisabled
-                              }
+                              styles={adjustmentFieldStyles}
                             />
                           </Grid.Col>
                           <Grid.Col span={1}>
