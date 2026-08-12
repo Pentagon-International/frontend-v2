@@ -1538,6 +1538,17 @@ function CallEntryNew() {
               timestamp: Date.now(),
             },
           });
+        } else if (
+          returnTo === "/dashboard/call-entry-dashboard" &&
+          returnToState
+        ) {
+          navigate(returnTo, {
+            state: {
+              ...returnToState,
+              refreshData: true,
+              timestamp: Date.now(),
+            },
+          });
         } else {
           // Navigate with a refresh flag to trigger data reload
           // Don't preserve filters on submit - clear them
@@ -4046,6 +4057,11 @@ function CallEntryNew() {
                             dashboardState: returnToState,
                           },
                         });
+                      } else if (
+                        returnTo === "/dashboard/call-entry-dashboard" &&
+                        returnToState
+                      ) {
+                        navigate(returnTo, { state: returnToState });
                       } else if (returnTo) {
                         // If navigating to a specific route, restore filters if preserved
                         if (preserveFilters && returnTo === "/call-entry") {

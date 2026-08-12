@@ -187,7 +187,7 @@ export function TopActiveEnquirySendEmailModal({ opened, onClose, row }: Props) 
     setSendingEmail(true);
     try {
       const response = await apiCallProtected.post(
-        URL.accountsSendEmail,
+        URL.quotationSendEmail,
         emailPayload
       );
       const successMessage =

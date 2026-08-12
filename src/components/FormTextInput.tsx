@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { TextInput, TextInputProps } from "@mantine/core";
+import { toTitleCase } from "../utils/textFormatter";
 
 export type TextFormatType = "normal" | "initcap" | "capital";
 
@@ -27,7 +28,7 @@ const applyFormat = (value: string, format: TextFormatType): string => {
     case "capital":
       return value.toUpperCase();
     case "initcap":
-      return value.replace(/\b\w/g, (char) => char.toUpperCase());
+      return toTitleCase(value);
     case "normal":
     default:
       return value;

@@ -337,6 +337,8 @@ export interface CallEntryActivityLogRow {
   followup_date: string;
   status: string;
   sno: number;
+  /** Present on closed / resolved activity-log rows */
+  remark?: string | null;
 }
 
 export interface CallEntryDashboardResponse {

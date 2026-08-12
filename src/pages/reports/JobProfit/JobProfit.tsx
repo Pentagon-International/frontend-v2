@@ -32,6 +32,7 @@ type JobProfitFormValues = {
   pod: string;
   report_format: string | null;
   branch_code: string | null;
+  status: string | null;
 };
 
 const SERVICE_OPTIONS = [
@@ -43,6 +44,12 @@ const SERVICE_OPTIONS = [
 const TRADE_OPTIONS = [
   { value: "IMPORT", label: "IMPORT" },
   { value: "EXPORT", label: "EXPORT" },
+] as const;
+
+const JOB_STATUS_OPTIONS = [
+  { value: "ACTIVE", label: "ACTIVE" },
+  { value: "CLOSED", label: "CLOSED" },
+  { value: "CANCEL", label: "CANCEL" },
 ] as const;
 
 const REPORT_FORMAT_OPTIONS = [
@@ -133,6 +140,7 @@ export default function JobProfit() {
       pod: "",
       report_format: "pdf",
       branch_code: null,
+      status: null,
     },
   });
 
@@ -230,6 +238,9 @@ export default function JobProfit() {
     }
     if (form.values.branch_code?.trim()) {
       filters.branch_code = form.values.branch_code.trim();
+    }
+    if (form.values.status) {
+      filters.status = form.values.status;
     }
 
     const format = form.values.report_format.toLowerCase();
@@ -420,6 +431,16 @@ export default function JobProfit() {
               value={form.values.report_format}
               onChange={(v) => form.setFieldValue("report_format", v)}
               clearable={false}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <Dropdown
+              label="Job Status"
+              placeholder="Select job status"
+              data={[...JOB_STATUS_OPTIONS]}
+              value={form.values.status}
+              onChange={(v) => form.setFieldValue("status", v)}
+              clearable
             />
           </Grid.Col>
 

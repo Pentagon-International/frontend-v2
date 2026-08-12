@@ -2675,6 +2675,8 @@ function CallEntry() {
                                 company: dashboardState.company || null,
                                 fromDate: dashboardState.fromDate || null,
                                 toDate: dashboardState.toDate || null,
+                                type: dashboardState.type || null,
+                                search: dashboardState.search || null,
                                 openCustomerWiseForSalesperson:
                                   dashboardState.openCustomerWiseForSalesperson || null,
                               },
