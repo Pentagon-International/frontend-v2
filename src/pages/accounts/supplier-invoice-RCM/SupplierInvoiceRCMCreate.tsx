@@ -737,6 +737,65 @@ import {
       queryFn: fetchChargeMaster,
       staleTime: Infinity,
     });
+
+    const { data: sacCodes = [] } = useQuery({
+      queryKey: ["gstSacMasterFilter", "supplier-invoice-rcm"],
+      queryFn: async () => {
+        try {
+          const res = await postAPICall(URL.gstSacMasterFilter, {}, API_HEADER);
+          const maybeAxios = res as { data?: unknown };
+          const payloadUnknown: unknown = maybeAxios?.data ?? res;
+          const isObj = (v: unknown): v is Record<string, unknown> =>
+            typeof v === "object" && v !== null && !Array.isArray(v);
+
+          let rows: unknown[] = [];
+          if (Array.isArray(payloadUnknown)) {
+            rows = payloadUnknown;
+          } else if (
+            isObj(payloadUnknown) &&
+            Array.isArray(payloadUnknown.data)
+          ) {
+            rows = payloadUnknown.data as unknown[];
+          } else if (
+            isObj(payloadUnknown) &&
+            isObj(payloadUnknown.data) &&
+            Array.isArray((payloadUnknown.data as Record<string, unknown>).data)
+          ) {
+            rows = (payloadUnknown.data as Record<string, unknown>)
+              .data as unknown[];
+          }
+
+          const list = rows as Array<{ sac_code?: unknown }>;
+          return list
+            .map((r) => String(r?.sac_code ?? "").trim())
+            .filter(Boolean);
+        } catch (e) {
+          console.error("Error fetching SAC master:", e);
+          return [] as string[];
+        }
+      },
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+      enabled: isIndiaUser,
+    });
+
+    const sacCodeOptions = useMemo(() => {
+      const uniq = new Set<string>();
+      (Array.isArray(sacCodes) ? sacCodes : []).forEach((c) => {
+        const v = String(c ?? "").trim();
+        if (v) uniq.add(v);
+      });
+      return Array.from(uniq);
+    }, [sacCodes]);
+
+    const sacCodeOptionsForForm = useMemo(() => {
+      const uniq = new Set<string>(sacCodeOptions);
+      (form.values.charges_data ?? []).forEach((c) => {
+        const v = String(c.tax_code ?? "").trim();
+        if (v) uniq.add(v);
+      });
+      return Array.from(uniq);
+    }, [sacCodeOptions, form.values.charges_data]);
   
     const currencyOptions = useMemo(() => {
       const data = currencyData as {
@@ -1229,6 +1288,7 @@ import {
     ) => {
       const isCreate = saveResponse?.id == null;
       const chargesPayload = values.charges_data.map((c) => {
+        const taxCode = String(c.tax_code ?? "").trim();
         const base = {
           account_code: c.account_code || "",
           account_name: c.account_name || "",
@@ -1241,7 +1301,7 @@ import {
           roe: formatRoeForAccountsPayload(c.roe),
           amount: formatAmountToTwoDecimals(c.amount ?? 0),
           amount_in_local: formatLocalAmount(c.amount_in_local ?? 0),
-          tax_code: c.tax_code || "",
+          tax_code: taxCode,
           Dr_Cr: c.Dr_Cr,
         };
         // Create: do not include id in charges; Update: include id when charge exists
@@ -3131,13 +3191,16 @@ import {
                       </Grid.Col>
                     {isIndiaUser && (
                       <Grid.Col span={chargeColSpans.sac}>
-                        <TextInput
+                        <Dropdown
+                          searchable
+                          clearable
                           placeholder="SAC Code"
-                          value={row.tax_code}
-                          onChange={(e) =>
+                          data={sacCodeOptionsForForm}
+                          value={String(row.tax_code ?? "").trim() || null}
+                          onChange={(val) =>
                             form.setFieldValue(
                               `charges_data.${index}.tax_code`,
-                              e.currentTarget.value,
+                              String(val ?? "").trim(),
                             )
                           }
                           disabled={isReadOnly || reversalFormDisabled}
