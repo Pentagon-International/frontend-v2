@@ -412,27 +412,27 @@ const bankDetailFieldStyles = {
 const twoDecimalInputRegex = /^\d*(\.\d{0,2})?$/;
 const twoDecimalRequiredRegex = /^\d+(\.\d{1,2})?$/;
 
-// Separate validation schemas for each form
-const customerValidationSchema = yup.object({
-  customer_name: yup
-    .string()
-    .required("Customer name is required")
-    .min(3, "Customer name must be at least 3 characters")
-    .max(100, "Customer name must not exceed 100 characters"),
-  customer_type_code: yup
-    .array()
-    .of(yup.string().required())
-    .min(1, "Customer type is required"),
-  term_code: yup.string().required("Credit type is required"),
-  own_office: yup
-    .string()
-    .required("Own office selection is required")
-    .oneOf(["true", "false"], "Please select a valid option"),
-  credit_amount: yup
-    .string()
-    .when("term_code", {
-      is: (v: string | undefined) =>
-        String(v ?? "").trim().toUpperCase() === "CREDIT",
+function buildCustomerValidationSchema() {
+  const isCreditTerm = (v: string | undefined) =>
+    String(v ?? "").trim().toUpperCase() === "CREDIT";
+
+  return yup.object({
+    customer_name: yup
+      .string()
+      .required("Customer name is required")
+      .min(3, "Customer name must be at least 3 characters")
+      .max(100, "Customer name must not exceed 100 characters"),
+    customer_type_code: yup
+      .array()
+      .of(yup.string().required())
+      .min(1, "Customer type is required"),
+    term_code: yup.string().required("Credit type is required"),
+    own_office: yup
+      .string()
+      .required("Own office selection is required")
+      .oneOf(["true", "false"], "Please select a valid option"),
+    credit_amount: yup.string().when("term_code", {
+      is: isCreditTerm,
       then: (schema) =>
         schema
           .required("Credit amount is required")
@@ -441,7 +441,8 @@ const customerValidationSchema = yup.object({
             "Enter a valid credit amount",
             (v) =>
               !!v &&
-              (twoDecimalRequiredRegex.test(v.trim()) || /^\d+$/.test(v.trim())),
+              (twoDecimalRequiredRegex.test(v.trim()) ||
+                /^\d+$/.test(v.trim())),
           ),
       otherwise: (schema) =>
         schema
@@ -455,34 +456,36 @@ const customerValidationSchema = yup.object({
               /^\d+$/.test(v.trim()),
           ),
     }),
-  credit_day: yup.string().when("term_code", {
-    is: (v: string | undefined) =>
-      String(v ?? "").trim().toUpperCase() === "CREDIT",
-    then: (schema) =>
-      schema
-        .required("Credit days is required")
-        .test(
-          "valid-credit-day",
-          "Enter a valid number of days",
-          (v) => !!v && /^\d+$/.test(v.trim()),
-        ),
-    otherwise: (schema) =>
-      schema
-        .optional()
-        .test(
-          "valid-credit-day",
-          "Enter a valid number of days",
-          (v) => !v || /^\d+$/.test(v.trim()),
-        ),
-  }),
-  assigned_to: yup
-    .string()
-    .test("assign-to-required", "Assign To is required", function (value) {
-      const codes = this.parent.customer_type_code as string[] | undefined;
-      if (!isCustomerCustomerType(codes)) return true;
-      return Boolean(String(value ?? "").trim());
+    credit_day: yup.string().when("term_code", {
+      is: isCreditTerm,
+      then: (schema) =>
+        schema
+          .required("Credit days is required")
+          .test(
+            "valid-credit-day",
+            "Enter a valid number of days",
+            (v) => !!v && /^\d+$/.test(v.trim()),
+          ),
+      otherwise: (schema) =>
+        schema
+          .optional()
+          .test(
+            "valid-credit-day",
+            "Enter a valid number of days",
+            (v) => !v || /^\d+$/.test(v.trim()),
+          ),
     }),
-});
+    assigned_to: yup
+      .string()
+      .test("assign-to-required", "Assign To is required", function (value) {
+        const codes = this.parent.customer_type_code as string[] | undefined;
+        if (!isCustomerCustomerType(codes)) return true;
+        return Boolean(String(value ?? "").trim());
+      }),
+  });
+}
+
+const customerValidationSchema = buildCustomerValidationSchema();
 
 const addressItemSchema = yup.object({
   // customer_location: yup.string().required("Location is required"),

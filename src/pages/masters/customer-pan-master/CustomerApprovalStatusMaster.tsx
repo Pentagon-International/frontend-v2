@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import useAuthStore from "../../../store/authStore";
 import {
   ActionIcon,
@@ -43,11 +42,11 @@ import {
 } from "../../../service/customerPanApproval.service";
 import {
   CustomerPanApprovalDetails,
+  getForeignBranchProfile,
   getStatusBadgeColor,
   type ApprovalPartyType,
 } from "./ApproveCustomerPanMaster";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
-
 type TableRow = CustomerPanApprovalRow & { sno: number };
 
 type FilterFormState = {
@@ -79,9 +78,12 @@ export default function CustomerApprovalStatusMaster({
 }: {
   partyType?: ApprovalPartyType;
 } = {}) {
-  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
+  const foreignBranchProfile = useMemo(
+    () => getForeignBranchProfile(user?.country, user?.branches),
+    [user?.country, user?.branches],
+  );
   const assignedToEmail = useMemo(() => resolveUserEmail(user), [user]);
   const entityLabel =
     partyType === "vendor"
@@ -136,7 +138,8 @@ export default function CustomerApprovalStatusMaster({
       return fetchCustomerPanPendingList(index, pageSize, apiFilters);
     },
     enabled: Boolean(apiFilters.assigned_to),
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 
@@ -149,12 +152,6 @@ export default function CustomerApprovalStatusMaster({
   useEffect(() => {
     setPageIndex(0);
   }, [debouncedSearch]);
-
-  useEffect(() => {
-    if (!isIndiaUser) {
-      navigate("/master", { replace: true });
-    }
-  }, [isIndiaUser, navigate]);
 
   const rawRows = listResult?.rows ?? [];
 
@@ -304,10 +301,6 @@ export default function CustomerApprovalStatusMaster({
   });
 
   const tableLoading = isLoading || isFetching;
-
-  if (!isIndiaUser) {
-    return null;
-  }
 
   return (
     <>
@@ -558,6 +551,8 @@ export default function CustomerApprovalStatusMaster({
                 row={viewRow}
                 editable={false}
                 partyType={partyType}
+                requireIndiaTaxIds={isIndiaUser}
+                foreignBranchProfile={foreignBranchProfile}
               />
             </ScrollArea.Autosize>
           )}

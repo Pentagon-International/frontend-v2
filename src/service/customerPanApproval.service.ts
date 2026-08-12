@@ -36,6 +36,8 @@ export type CustomerPanApprovalAddress = {
   sez?: boolean;
   sez_valid_date?: string | null;
   iec_code?: string | null;
+  trn_no?: string | null;
+  validity_date?: string | null;
 };
 
 export type CustomerPanApprovalRow = {

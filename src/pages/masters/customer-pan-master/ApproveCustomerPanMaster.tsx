@@ -22,7 +22,6 @@ import {
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
-import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
 import {
   formatDateForUi,
@@ -68,7 +67,64 @@ import {
   type RelatedCustomer,
 } from "../../../service/customerPanApproval.service";
 import CustomerDocumentsList from "../../../components/CustomerDocumentsList";
-import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
+import {
+  isIndianUserFromProfile,
+  isVietnameseBranch,
+  type BranchCurrencyContext,
+  type UserCountryProfile,
+} from "../../../utils/userNumberFormat";
+
+export type ForeignBranchProfile = {
+  isDubaiUser: boolean;
+  isKenyaUser: boolean;
+  isVietnamUser: boolean;
+  isChinaUser: boolean;
+};
+
+export function getForeignBranchProfile(
+  country?: UserCountryProfile,
+  branches?: BranchCurrencyContext[] | null,
+): ForeignBranchProfile {
+  const defaultBranch = branches?.find((b) => b.is_default) ?? branches?.[0];
+  const countryCode = String(country?.country_code ?? "").toUpperCase();
+  const countryName = String(country?.country_name ?? "").toLowerCase();
+
+  const isKenyaUser =
+    String(defaultBranch?.branch_code ?? "").toUpperCase() === "KE" ||
+    countryCode === "KE" ||
+    countryName.includes("kenya");
+
+  const isDubaiUser =
+    countryCode === "AE" ||
+    countryName.includes("united arab emirates") ||
+    countryName.includes("uae") ||
+    countryName.includes("dubai");
+
+  const isChinaUser =
+    countryCode === "CN" || countryName.toUpperCase() === "CHINA";
+
+  const isVietnamUser = isVietnameseBranch(branches);
+
+  return { isDubaiUser, isKenyaUser, isVietnamUser, isChinaUser };
+}
+
+function formatCustomerTypesDisplay(row: CustomerPanApprovalRow): string {
+  const types = row.customer_types;
+  if (!Array.isArray(types) || types.length === 0) return "—";
+  const labels = types
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        const record = item as Record<string, unknown>;
+        return String(
+          record.customer_type_name ?? record.customer_type_code ?? "",
+        ).trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+  return labels.length > 0 ? labels.join(", ") : "—";
+}
 
 type TableRow = CustomerPanApprovalRow & { sno: number };
 
@@ -82,6 +138,17 @@ const TERM_CODE_OPTIONS = [
   { label: "Cash", value: "CASH" },
   { label: "Prepaid", value: "PREPAID" },
 ];
+
+const MODAL_DROPDOWN_Z_INDEX = 1000;
+
+function normalizeTermCodeValue(termCode?: string | null): string | null {
+  const normalized = String(termCode ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+  return (
+    TERM_CODE_OPTIONS.find((option) => option.value === normalized)?.value ??
+    normalized
+  );
+}
 
 const TWO_DECIMAL_INPUT_REGEX = /^\d*(\.\d{0,2})?$/;
 
@@ -309,6 +376,7 @@ export function CustomerPanApprovalDetails({
   onChange,
   partyType = "customer",
   requireIndiaTaxIds = true,
+  foreignBranchProfile,
 }: {
   row: CustomerPanApprovalRow;
   editable?: boolean;
@@ -316,7 +384,14 @@ export function CustomerPanApprovalDetails({
   partyType?: ApprovalPartyType;
   /** When true (India users), IEC/TAN/ARN are marked required in edit mode. */
   requireIndiaTaxIds?: boolean;
+  foreignBranchProfile?: ForeignBranchProfile;
 }) {
+  const branchProfile = foreignBranchProfile ?? {
+    isDubaiUser: false,
+    isKenyaUser: false,
+    isVietnamUser: false,
+    isChinaUser: false,
+  };
   const addresses = row.addresses_data ?? [];
   const isVendor = partyType === "vendor";
   const entityLabel =
@@ -372,14 +447,30 @@ export function CustomerPanApprovalDetails({
 
             <DetailSection
               title="General Information"
-              fields={[
-                { label: "Term Code", value: row.term_code },
-                { label: "TDS Type", value: row.tds_type },
-                { label: "Own Office", value: row.own_office },
-                { label: `${entityLabel} Status`, value: row.status },
-                { label: "Assign To", value: row.created_by },
-                { label: "Network", value: row.network_name },
-              ]}
+              fields={
+                requireIndiaTaxIds
+                  ? [
+                      { label: "Term Code", value: row.term_code },
+                      { label: "TDS Type", value: row.tds_type },
+                      { label: "Own Office", value: row.own_office },
+                      { label: `${entityLabel} Status`, value: row.status },
+                      { label: "Assign To", value: row.created_by },
+                      { label: "Network", value: row.network_name },
+                    ]
+                  : [
+                      {
+                        label: `${entityLabel} Type`,
+                        value: formatCustomerTypesDisplay(row),
+                      },
+                      { label: "Credit Type", value: row.term_code },
+                      { label: "Own Office", value: row.own_office },
+                      { label: "Network Name", value: row.network_name },
+                      {
+                        label: "Assign To",
+                        value: row.assigned_to ?? row.created_by,
+                      },
+                    ]
+              }
             />
 
             <DetailSection
@@ -408,6 +499,8 @@ export function CustomerPanApprovalDetails({
                   key={address.id ?? `address-${index}`}
                   address={address}
                   index={index}
+                  requireIndiaTaxIds={requireIndiaTaxIds}
+                  foreignBranchProfile={branchProfile}
                 />
               ))}
             </Stack>
@@ -420,7 +513,7 @@ export function CustomerPanApprovalDetails({
           </Text>
         )}
 
-        {isVendor && tdsSections.length > 0 && (
+        {requireIndiaTaxIds && isVendor && tdsSections.length > 0 && (
           <Card withBorder padding="md" radius="md" bg="#fafbfc">
             <Text size="sm" fw={600} c="#105476" mb="sm">
               TDS Section Details
@@ -514,11 +607,20 @@ export function CustomerPanApprovalDetails({
             General Information
           </Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            {!requireIndiaTaxIds && (
+              <FormTextInput
+                format="normal"
+                label={`${entityLabel} Type`}
+                value={formatCustomerTypesDisplay(row)}
+                disabled
+              />
+            )}
             <Dropdown
               label="Credit Type"
               data={TERM_CODE_OPTIONS}
-              value={row.term_code || null}
+              value={normalizeTermCodeValue(row.term_code)}
               onChange={(value) => updateRow({ term_code: value ?? "" })}
+              dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
               clearable
             />
             <Dropdown
@@ -542,14 +644,34 @@ export function CustomerPanApprovalDetails({
                       : value === "true",
                 })
               }
+              dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
               clearable
             />
-            <FormTextInput format="normal"
-              label={`${entityLabel} Status`}
-              value={row.status ?? ""}
-              onChange={(e) => updateRow({ status: e.target.value })}
-            />
-            <FormTextInput format="normal"
+            {requireIndiaTaxIds && (
+              <>
+                <FormTextInput
+                  format="normal"
+                  label={`${entityLabel} Status`}
+                  value={row.status ?? ""}
+                  onChange={(e) => updateRow({ status: e.target.value })}
+                />
+                {isVendor && (
+                  <Dropdown
+                    label="TDS Type"
+                    data={[
+                      { value: "Individual", label: "Individual" },
+                      { value: "Company", label: "Company" },
+                    ]}
+                    value={row.tds_type || null}
+                    onChange={(value) => updateRow({ tds_type: value ?? null })}
+                    dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
+                    clearable
+                  />
+                )}
+              </>
+            )}
+            <FormTextInput
+              format="normal"
               label="Assign To"
               value={row.assigned_to ?? row.created_by ?? ""}
               onChange={(e) => updateRow({ assigned_to: e.target.value })}
@@ -575,21 +697,9 @@ export function CustomerPanApprovalDetails({
                 label: String(item.network_name ?? ""),
               })}
               searchFields={["network_name"]}
-              dropdownZIndex={1000}
+              dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
               minSearchLength={1}
             />
-            {isVendor && (
-              <Dropdown
-                label="TDS Type"
-                data={[
-                  { value: "Individual", label: "Individual" },
-                  { value: "Company", label: "Company" },
-                ]}
-                value={row.tds_type || null}
-                onChange={(value) => updateRow({ tds_type: value ?? null })}
-                clearable
-              />
-            )}
           </SimpleGrid>
 
           <Text size="xs" fw={700} c="#105476" tt="uppercase">
@@ -652,6 +762,8 @@ export function CustomerPanApprovalDetails({
                 index={index}
                 editable
                 onChange={(patch) => updateAddress(index, patch)}
+                requireIndiaTaxIds={requireIndiaTaxIds}
+                foreignBranchProfile={branchProfile}
               />
             ))}
           </Stack>
@@ -664,7 +776,7 @@ export function CustomerPanApprovalDetails({
         </Text>
       )}
 
-      {isVendor && (
+      {requireIndiaTaxIds && isVendor && (
         <Card withBorder padding="md" radius="md" bg="#fafbfc">
           <Group justify="space-between" mb="sm">
             <Text size="sm" fw={600} c="#105476">
@@ -989,12 +1101,44 @@ function CustomerPanAddressDetails({
   index,
   editable = false,
   onChange,
+  requireIndiaTaxIds = false,
+  foreignBranchProfile,
 }: {
   address: CustomerPanApprovalAddress;
   index: number;
   editable?: boolean;
   onChange?: (patch: Partial<CustomerPanApprovalAddress>) => void;
+  requireIndiaTaxIds?: boolean;
+  foreignBranchProfile?: ForeignBranchProfile;
 }) {
+  const branchProfile = foreignBranchProfile ?? {
+    isDubaiUser: false,
+    isKenyaUser: false,
+    isVietnamUser: false,
+    isChinaUser: false,
+  };
+
+  const foreignTaxFields: DetailField[] = [];
+  if (!requireIndiaTaxIds) {
+    if (branchProfile.isDubaiUser) {
+      foreignTaxFields.push(
+        { label: "TRN No", value: address.trn_no },
+        { label: "Validity Date", value: address.validity_date },
+      );
+    }
+    if (branchProfile.isKenyaUser || branchProfile.isChinaUser) {
+      foreignTaxFields.push({
+        label: branchProfile.isKenyaUser ? "PIN Number" : "TIN Number",
+        value: address.gst_id,
+      });
+    }
+    if (branchProfile.isVietnamUser) {
+      foreignTaxFields.push({
+        label: "Tax Exemption",
+        value: address.sez ? "Yes" : "No",
+      });
+    }
+  }
   if (!editable) {
     return (
       <Card withBorder padding="md" radius="md">
@@ -1026,51 +1170,67 @@ function CustomerPanAddressDetails({
               { label: "City", value: address.city },
               { label: "State", value: address.state },
               { label: "Country", value: address.country },
-              { label: "Pin Code", value: address.pincode },
+              {
+                label: requireIndiaTaxIds ? "Pin Code" : "Pin/Zip Code",
+                value: address.pincode,
+              },
             ]}
           />
 
           <DetailSection
             title="Contact"
             fields={[
-              { label: "Phone", value: address.phone_no },
+              {
+                label: requireIndiaTaxIds ? "Phone" : "Landline Number",
+                value: address.phone_no,
+              },
               { label: "Mobile", value: address.mobile_no },
-              { label: "Email", value: address.email, fullWidth: true },
+              {
+                label: requireIndiaTaxIds ? "Email" : "Email Id",
+                value: address.email,
+                fullWidth: true,
+              },
             ]}
           />
 
-          <DetailSection
-            title="Tax & Registration"
-            fields={[
-              { label: "PAN", value: address.pan_no },
-              {
-                label: "GST Registration Status",
-                value: address.gst_registration_status,
-              },
-              { label: "Tax ID / GSTIN", value: address.gst_id },
-              { label: "IEC Code", value: address.iec_code },
-              { label: "TAN", value: address.tan_no },
-              { label: "ARN", value: address.arn_no },
-              { label: "UIN", value: address.uin_no },
-              {
-                label: "Composite / Regular",
-                value: address.composite_regular,
-              },
-              { label: "SEZ", value: address.sez },
-              { label: "SEZ Validity Date", value: address.sez_valid_date },
-              { label: "MSME", value: address.msme },
-              { label: "MSME No", value: address.msme_no },
-              {
-                label: "PAN–Aadhaar Linked",
-                value: address.pan_aadhaar_link,
-              },
-              { label: "ITR Filed", value: address.Itr_filed },
-              {
-                label: "TDS Threshold",
-                value: address.tds_threshold_flag,
-              },
-            ]}
-          />
+          {requireIndiaTaxIds ? (
+            <DetailSection
+              title="Tax & Registration"
+              fields={[
+                { label: "PAN", value: address.pan_no },
+                {
+                  label: "GST Registration Status",
+                  value: address.gst_registration_status,
+                },
+                { label: "Tax ID / GSTIN", value: address.gst_id },
+                { label: "IEC Code", value: address.iec_code },
+                { label: "TAN", value: address.tan_no },
+                { label: "ARN", value: address.arn_no },
+                { label: "UIN", value: address.uin_no },
+                {
+                  label: "Composite / Regular",
+                  value: address.composite_regular,
+                },
+                { label: "SEZ", value: address.sez },
+                { label: "SEZ Validity Date", value: address.sez_valid_date },
+                { label: "MSME", value: address.msme },
+                { label: "MSME No", value: address.msme_no },
+                {
+                  label: "PAN–Aadhaar Linked",
+                  value: address.pan_aadhaar_link,
+                },
+                { label: "ITR Filed", value: address.Itr_filed },
+                {
+                  label: "TDS Threshold",
+                  value: address.tds_threshold_flag,
+                },
+              ]}
+            />
+          ) : (
+            foreignTaxFields.length > 0 && (
+              <DetailSection title="Tax Details" fields={foreignTaxFields} />
+            )
+          )}
         </Stack>
       </Card>
     );
@@ -1107,6 +1267,7 @@ function CustomerPanAddressDetails({
             ]}
             value={address.address_type || null}
             onChange={(value) => onChange?.({ address_type: value ?? "" })}
+            dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
           />
           <FormTextArea
             format="initcap"
@@ -1132,7 +1293,7 @@ function CustomerPanAddressDetails({
             onChange={(e) => onChange?.({ country: e.target.value })}
           />
           <FormTextInput format="normal"
-            label="Pin Code"
+            label={requireIndiaTaxIds ? "Pin Code" : "Pin/Zip Code"}
             value={address.pincode ?? ""}
             onChange={(e) => onChange?.({ pincode: e.target.value })}
           />
@@ -1143,7 +1304,7 @@ function CustomerPanAddressDetails({
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <FormTextInput format="normal"
-            label="Phone"
+            label={requireIndiaTaxIds ? "Phone" : "Landline Number"}
             value={address.phone_no ?? ""}
             onChange={(e) => onChange?.({ phone_no: e.target.value })}
           />
@@ -1153,17 +1314,19 @@ function CustomerPanAddressDetails({
             onChange={(e) => onChange?.({ mobile_no: e.target.value })}
           />
           <FormTextInput format="normal"
-            label="Email"
+            label={requireIndiaTaxIds ? "Email" : "Email Id"}
             style={{ gridColumn: "1 / -1" }}
             value={address.email ?? ""}
             onChange={(e) => onChange?.({ email: e.target.value })}
           />
         </SimpleGrid>
 
-        <Text size="xs" fw={700} c="#105476" tt="uppercase">
-          Tax & Registration
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        {requireIndiaTaxIds ? (
+          <>
+            <Text size="xs" fw={700} c="#105476" tt="uppercase">
+              Tax & Registration
+            </Text>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <FormTextInput format="normal"
             label="PAN"
             value={address.pan_no ?? ""}
@@ -1267,7 +1430,53 @@ function CustomerPanAddressDetails({
               onChange={(e) => onChange?.({ msme_no: e.target.value })}
             />
           )}
-        </SimpleGrid>
+            </SimpleGrid>
+          </>
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            {branchProfile.isDubaiUser && (
+              <>
+                <FormTextInput
+                  format="normal"
+                  label="TRN No"
+                  value={address.trn_no ?? ""}
+                  onChange={(e) => onChange?.({ trn_no: e.target.value })}
+                />
+                <SingleDateInput
+                  label="Validity Date"
+                  placeholder="Select validity date"
+                  value={parseDateYYYYMMDD(address.validity_date)}
+                  onChange={(value) =>
+                    onChange?.({ validity_date: formatDateYYYYMMDD(value) })
+                  }
+                />
+              </>
+            )}
+            {(branchProfile.isKenyaUser || branchProfile.isChinaUser) && (
+              <FormTextInput
+                format="normal"
+                label={
+                  branchProfile.isKenyaUser ? "PIN Number" : "TIN Number"
+                }
+                value={address.gst_id ?? ""}
+                onChange={(e) => onChange?.({ gst_id: e.target.value })}
+              />
+            )}
+            {branchProfile.isVietnamUser && (
+              <Dropdown
+                label="Tax Exemption"
+                data={[
+                  { value: "Yes", label: "Yes" },
+                  { value: "No", label: "No" },
+                ]}
+                value={address.sez ? "Yes" : "No"}
+                onChange={(value) =>
+                  onChange?.({ sez: value === "Yes" })
+                }
+              />
+            )}
+          </SimpleGrid>
+        )}
       </Stack>
     </Card>
   );
@@ -1281,10 +1490,14 @@ export default function ApproveCustomerPanMaster({
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
+  const foreignBranchProfile = useMemo(
+    () => getForeignBranchProfile(user?.country, user?.branches),
+    [user?.country, user?.branches],
+  );
   const hasCustomerApprovalScreen = Boolean(
     user?.screen_permissions?.customer_approval_screen,
   );
-  const canAccessApproval = hasCustomerApprovalScreen || !isIndiaUser;
+  const canAccessApproval = hasCustomerApprovalScreen;
   const entityLabel =
     partyType === "vendor"
       ? "Vendor"
@@ -1353,7 +1566,8 @@ export default function ApproveCustomerPanMaster({
       );
       return result;
     },
-    staleTime: 60 * 1000,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });
 
@@ -1992,6 +2206,7 @@ export default function ApproveCustomerPanMaster({
         }
         centered
         size="xl"
+        zIndex={400}
       >
         <Stack gap="md">
           <Box
@@ -2037,6 +2252,7 @@ export default function ApproveCustomerPanMaster({
                 }
                 partyType={partyType}
                 requireIndiaTaxIds={isIndiaUser}
+                foreignBranchProfile={foreignBranchProfile}
               />
             </ScrollArea.Autosize>
           )}

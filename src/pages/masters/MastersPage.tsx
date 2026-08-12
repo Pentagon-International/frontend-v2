@@ -39,7 +39,6 @@ export default function MastersPage() {
   const hasCustomerApprovalScreen = Boolean(
     user?.screen_permissions?.customer_approval_screen,
   );
-  const showApproveCustomers = hasCustomerApprovalScreen || !isIndiaUser;
 
   const formatRoute = (label: string) => {
     if (label === "Customer for Approval") return "create-customer";
@@ -184,18 +183,6 @@ export default function MastersPage() {
                   icon: <IconUserHexagon size={28} color="#105476" />,
                   label: "Create Agent-PAN",
                 },
-                {
-                  icon: <IconClipboardCheck size={28} color="#105476" />,
-                  label: "Customer Approval Status",
-                },
-                {
-                  icon: <IconClipboardCheck size={28} color="#105476" />,
-                  label: "Vendor Approval Status",
-                },
-                {
-                  icon: <IconClipboardCheck size={28} color="#105476" />,
-                  label: "Agent Approval Status",
-                },
               ]
             : [
                 {
@@ -211,7 +198,19 @@ export default function MastersPage() {
                   label: "Agent for Approval",
                 },
               ]),
-          ...(showApproveCustomers
+          {
+            icon: <IconClipboardCheck size={28} color="#105476" />,
+            label: "Customer Approval Status",
+          },
+          {
+            icon: <IconClipboardCheck size={28} color="#105476" />,
+            label: "Vendor Approval Status",
+          },
+          {
+            icon: <IconClipboardCheck size={28} color="#105476" />,
+            label: "Agent Approval Status",
+          },
+          ...(hasCustomerApprovalScreen
             ? [
                 {
                   icon: <IconClipboardCheck size={28} color="#105476" />,
@@ -291,7 +290,7 @@ export default function MastersPage() {
         ],
       },
     ],
-    [hasManagerOrStaffAccess, isIndiaUser, showApproveCustomers],
+    [hasManagerOrStaffAccess, isIndiaUser, hasCustomerApprovalScreen],
   );
 
   // function onClick() {
