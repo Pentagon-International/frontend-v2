@@ -3296,6 +3296,7 @@ function HouseCreate() {
             <Grid>
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="capital"
                   label="HAWB Number"
                   required
                   placeholder="Enter HAWB Number"
@@ -3556,6 +3557,7 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="capital"
                   label="Item Number"
                   placeholder="Enter Item Number"
                   {...form.getInputProps("item_no")}
@@ -3565,6 +3567,7 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="capital"
                   label="Sub Item Number"
                   placeholder="Enter Sub Item Number"
                   {...form.getInputProps("sub_item_no")}
@@ -3574,6 +3577,7 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="capital"
                   label="Customer Ref No"
                   placeholder="Enter Customer Ref No"
                   {...form.getInputProps("ref_no")}

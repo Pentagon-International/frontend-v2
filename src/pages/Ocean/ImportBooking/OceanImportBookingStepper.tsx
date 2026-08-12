@@ -3997,6 +3997,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
+                    format="capital"
                     label="HBL Number"
                     placeholder="Enter HBL Number"
                     value={form.values.houseno}
@@ -4008,6 +4009,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
+                    format="capital"
                     label="MBL Number"
                     placeholder="Enter MBL Number"
                     value={form.values.master_no}
@@ -4124,7 +4126,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Voyage Number"
                     placeholder="Enter voyage number"
-                    format="normal"
+                    format="capital"
                     {...form.getInputProps("voyage_no")}
                   />
                 </Grid.Col>

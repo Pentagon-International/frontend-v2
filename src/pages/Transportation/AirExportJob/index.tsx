@@ -771,6 +771,7 @@ function AirExportJobMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Job ID"
                       placeholder="Type Job ID"
                       size="xs"
@@ -785,6 +786,7 @@ function AirExportJobMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="MAWB No"
                       placeholder="Type MAWB No"
                       size="xs"

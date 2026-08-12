@@ -640,6 +640,7 @@ export default function CustomerTypeMaster() {
           <Grid gutter="sm" px="md" pt="xs" pb="sm">
             <Grid.Col span={2.4}>
               <FormTextInput
+                format="capital"
                 size="xs"
                 label="Customer Type Code"
                 placeholder="Enter Customer Type Code"

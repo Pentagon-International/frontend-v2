@@ -673,6 +673,7 @@ function InlandExportJobGenerationMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       size="xs"
                       label="Flight No"
                       placeholder="Enter flight number"

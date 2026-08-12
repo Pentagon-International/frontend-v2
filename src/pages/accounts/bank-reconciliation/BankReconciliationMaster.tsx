@@ -943,6 +943,7 @@ export default function BankReconciliationMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="BRS No"
                       placeholder="BRS number"
                       size="xs"

@@ -4467,6 +4467,7 @@ function ExportJobCreate() {
 
               <Grid.Col span={2.4}>
                 <FormTextInput
+                  format="capital"
                   label="Voyage Number"
                   required
                   placeholder="Enter voyage number"
@@ -4476,6 +4477,7 @@ function ExportJobCreate() {
 
               <Grid.Col span={2.4}>
                 <FormTextInput
+                  format="capital"
                   label="MBL Number"
                   required
                   placeholder="Enter MBL number"
@@ -4714,6 +4716,7 @@ function ExportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Voyage Number"
                               required
                               placeholder="Enter voyage number"
@@ -4779,6 +4782,7 @@ function ExportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Flight Number"
                               required
                               placeholder="Enter flight number"
@@ -4844,6 +4848,7 @@ function ExportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Truck Number"
                               required
                               placeholder="Enter truck number"
@@ -4901,6 +4906,7 @@ function ExportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Rail Number"
                               required
                               placeholder="Enter rail number"
@@ -5171,6 +5177,7 @@ function ExportJobCreate() {
                   </Grid.Col>
                   <Grid.Col span={1.8}>
                     <FormTextInput
+                      format="capital"
                       required
                       placeholder="Container number"
                       maxLength={11}
@@ -5233,6 +5240,7 @@ function ExportJobCreate() {
                   </Grid.Col>
                   <Grid.Col span={1.8}>
                     <FormTextInput
+                      format="capital"
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.actual_seal_no`,
@@ -5242,6 +5250,7 @@ function ExportJobCreate() {
                   </Grid.Col>
                   <Grid.Col span={1.8}>
                     <FormTextInput
+                      format="capital"
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.customs_seal_no`,

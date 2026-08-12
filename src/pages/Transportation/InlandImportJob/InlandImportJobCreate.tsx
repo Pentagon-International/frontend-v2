@@ -3656,6 +3656,7 @@ function InlandImportJobCreate() {
 
               <Grid.Col span={2}>
                 <FormTextInput
+                  format="capital"
                   label="Truck Number"
                   required
                   placeholder="Enter truck number"
@@ -3665,6 +3666,7 @@ function InlandImportJobCreate() {
 
               <Grid.Col span={2}>
                 <FormTextInput
+                  format="capital"
                   label="AWB Number"
                   required
                   placeholder="Enter AWB number"
@@ -3970,6 +3972,7 @@ function InlandImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.5}>
                             <FormTextInput
+                              format="capital"
                               label="Voyage Number"
                               placeholder="Enter voyage number"
                               {...routingsForm.getInputProps(
@@ -4017,6 +4020,7 @@ function InlandImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.5}>
                             <FormTextInput
+                              format="capital"
                               label="Flight Number"
                               placeholder="Enter flight number"
                               {...routingsForm.getInputProps(
@@ -4064,6 +4068,7 @@ function InlandImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.5}>
                             <FormTextInput
+                              format="capital"
                               label="Truck Number"
                               placeholder="Enter truck number"
                               {...routingsForm.getInputProps(
@@ -4104,6 +4109,7 @@ function InlandImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.5}>
                             <FormTextInput
+                              format="capital"
                               label="Rail Number"
                               placeholder="Enter rail number"
                               {...routingsForm.getInputProps(

@@ -4263,7 +4263,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <FormTextInput
                     label="Voyage Number"
                     placeholder="Enter voyage number"
-                    format="normal"
+                    format="capital"
                     {...form.getInputProps("voyage_no")}
                   />
                 </Grid.Col>

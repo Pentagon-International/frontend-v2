@@ -1671,6 +1671,7 @@ function AirImportToExportBooking() {
                 <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                     <FormTextInput
+                      format="capital"
                       size="xs"
                       label="Booking ID"
                       placeholder="Enter Booking ID"
@@ -1686,6 +1687,7 @@ function AirImportToExportBooking() {
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                     <FormTextInput
+                      format="capital"
                       size="xs"
                       label="Enquiry ID"
                       placeholder="Enter Enquiry ID"
@@ -1785,6 +1787,7 @@ function AirImportToExportBooking() {
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                     <FormTextInput
+                      format="capital"
                       size="xs"
                       label="House No"
                       placeholder="Enter House No"
@@ -1815,6 +1818,7 @@ function AirImportToExportBooking() {
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
                     <FormTextInput
+                      format="capital"
                       size="xs"
                       label="MAWB"
                       placeholder="Enter MAWB"

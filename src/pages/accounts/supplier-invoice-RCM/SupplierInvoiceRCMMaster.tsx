@@ -1039,6 +1039,7 @@ function SupplierInvoiceRCMMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Invoice No"
                       placeholder="Type Invoice No"
                       value={draftFilters.invoice_no}

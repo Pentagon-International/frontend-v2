@@ -927,6 +927,7 @@ function InlandExportJobGenerationCreate() {
             <Grid mt="sm">
               <Grid.Col span={3}>
                 <FormTextInput
+                  format="capital"
                   label="Master No"
                   placeholder="Enter master number"
                   maxLength={11}
@@ -980,6 +981,7 @@ function InlandExportJobGenerationCreate() {
               </Grid.Col>
               <Grid.Col span={3}>
                 <FormTextInput
+                  format="capital"
                   label="Flight No"
                   placeholder="Enter flight number"
                   {...jobDetailsForm.getInputProps("flight_no")}

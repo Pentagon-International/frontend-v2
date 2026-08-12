@@ -489,6 +489,7 @@ export default function ServiceJobMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Job ID"
                       placeholder="Type Job ID"
                       size="xs"
@@ -579,6 +580,7 @@ export default function ServiceJobMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="AWB / BL Number"
                       placeholder="Type AWB or BL number"
                       size="xs"

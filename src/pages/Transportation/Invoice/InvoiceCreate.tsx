@@ -4959,6 +4959,7 @@ function InvoiceCreate({
 
                 <Grid.Col span={2}>
                   <FormTextInput
+                    format="capital"
                     label="GSTN"
                     placeholder="Enter GSTN"
                     value={form.values.gstn}
@@ -4973,6 +4974,7 @@ function InvoiceCreate({
             {isKenyaUser && (
               <Grid.Col span={2}>
                 <FormTextInput
+                  format="capital"
                   label="PIN number"
                   placeholder="Enter PIN number"
                   value={form.values.gstn}
@@ -4986,6 +4988,7 @@ function InvoiceCreate({
             {/* Shipment No / Job id - Job id when from Air Export Job */}
             <Grid.Col span={2}>
               <FormTextInput
+                format="capital"
                 label={isFromAirExportJob ? "Job id" : "Shipment No"}
                 placeholder={
                   isFromAirExportJob ? "Job id" : "Enter shipment number"
@@ -5251,7 +5254,7 @@ function InvoiceCreate({
                 <FormTextInput
                   label="IRN No"
                   placeholder="Enter IRN number"
-                  format="normal"
+                  format="capital"
                   value={form.values.irn_no}
                   onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
                   error={form.errors.irn_no}
@@ -5265,7 +5268,7 @@ function InvoiceCreate({
                 <FormTextInput
                   label="Fapiao No"
                   placeholder="Enter fapiao number"
-                  format="normal"
+                  format="capital"
                   value={form.values.fapiao_no}
                   onChange={(e) =>
                     form.setFieldValue("fapiao_no", e.target.value)
@@ -5514,7 +5517,7 @@ function InvoiceCreate({
                     {showShipmentIdInCharges && (
                       <Grid.Col span={chargeGridCols.shipment}>
                         <FormTextInput
-                          format="normal"
+                          format="capital"
                           value={charge.shipment_id ?? ""}
                           readOnly={!isAgentInvoice || isReadOnly}
                           placeholder={

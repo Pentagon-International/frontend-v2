@@ -968,6 +968,7 @@ export default function JobProfitVerificationMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Job Number"
                       placeholder="Type job number"
                       size="xs"

@@ -1539,6 +1539,7 @@ export function DebitCreditNoteCreateBase({
         <Grid gutter="sm" mt="xs" columns={13}>
           <Grid.Col span={2}>
             <FormTextInput
+              format="capital"
               label="GST ID"
               placeholder="GST ID"
               value={form.values.gstId}

@@ -150,6 +150,7 @@ export function JobMasterPartyDetailsPanel({
         </Grid.Col>
         <Grid.Col span={4}>
           <FormTextInput
+            format="normal"
             label="Shipper Email"
             readOnly={disabled}
             value={partyDetailsForm.values.shipper_email}
@@ -258,6 +259,7 @@ export function JobMasterPartyDetailsPanel({
         </Grid.Col>
         <Grid.Col span={4}>
           <FormTextInput
+            format="normal"
             label="Consignee Email"
             readOnly={disabled}
             value={partyDetailsForm.values.consignee_email}
@@ -380,6 +382,7 @@ export function JobMasterPartyDetailsPanel({
         </Grid.Col>
         <Grid.Col span={4}>
           <FormTextInput
+            format="normal"
             label="Carrier Agent Email"
             readOnly={disabled}
             value={partyDetailsForm.values.carrier_agent_email}

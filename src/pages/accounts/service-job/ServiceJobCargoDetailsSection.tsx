@@ -204,6 +204,7 @@ export function ServiceJobCargoDetailsSection({
               </Grid.Col>
               <Grid.Col span={1.8}>
                 <FormTextInput
+                  format="capital"
                   placeholder="Container number"
                   maxLength={11}
                   readOnly={readOnly}
@@ -216,6 +217,7 @@ export function ServiceJobCargoDetailsSection({
               </Grid.Col>
               <Grid.Col span={1.8}>
                 <FormTextInput
+                  format="capital"
                   placeholder="Actual seal number"
                   readOnly={readOnly}
                   value={container.actual_seal_no || ""}
@@ -228,6 +230,7 @@ export function ServiceJobCargoDetailsSection({
               </Grid.Col>
               <Grid.Col span={1.8}>
                 <FormTextInput
+                  format="capital"
                   placeholder="Customs seal number"
                   readOnly={readOnly}
                   value={container.customs_seal_no || ""}

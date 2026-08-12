@@ -1149,6 +1149,7 @@ function SupplierInvoiceReversalMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Reverse Invoice No"
                       placeholder="Type Reverse Invoice No"
                       value={draftFilters.invoice_no}
@@ -1167,6 +1168,7 @@ function SupplierInvoiceReversalMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Invoice No"
                       placeholder="Type Invoice No"
                       value={draftFilters.original_doc_no}
@@ -1203,6 +1205,7 @@ function SupplierInvoiceReversalMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Job Id"
                       placeholder="Type Job Id"
                       value={draftFilters.job_id}
@@ -1221,6 +1224,7 @@ function SupplierInvoiceReversalMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Shipment Id"
                       placeholder="Type Shipment Id"
                       value={draftFilters.shipment_id}

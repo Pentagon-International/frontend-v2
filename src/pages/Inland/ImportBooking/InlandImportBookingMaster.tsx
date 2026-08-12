@@ -2087,6 +2087,7 @@ function InlandImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="Booking ID"
                         placeholder="Enter Booking ID"
@@ -2111,6 +2112,7 @@ function InlandImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="Enquiry ID"
                         placeholder="Enter Enquiry ID"
@@ -2264,6 +2266,7 @@ function InlandImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="House No"
                         placeholder="Enter House No"
@@ -2312,6 +2315,7 @@ function InlandImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="MAWB"
                         placeholder="Enter MAWB"

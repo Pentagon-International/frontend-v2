@@ -4471,6 +4471,7 @@ function ImportJobCreate() {
 
               <Grid.Col span={3}>
                 <FormTextInput
+                  format="capital"
                   label="IGM Number"
                   placeholder="Enter IGM Number"
                   value={mblDetailsForm.values.igm_no}
@@ -4549,6 +4550,7 @@ function ImportJobCreate() {
 
               <Grid.Col span={2.4}>
                 <FormTextInput
+                  format="capital"
                   label="Voyage Number"
                   required
                   placeholder="Enter voyage number"
@@ -4558,6 +4560,7 @@ function ImportJobCreate() {
 
               <Grid.Col span={2.4}>
                 <FormTextInput
+                  format="capital"
                   label="MBL Number"
                   required
                   placeholder="Enter MBL number"
@@ -4650,6 +4653,7 @@ function ImportJobCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="normal"
                   label="Shipper Email"
                   value={partyDetailsForm.values.shipper_email}
                   onChange={(e) =>
@@ -4796,6 +4800,7 @@ function ImportJobCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="normal"
                   label="Consignee Email"
                   value={partyDetailsForm.values.consignee_email}
                   onChange={(e) =>
@@ -4951,6 +4956,7 @@ function ImportJobCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="normal"
                   label="Carrier Agent Email"
                   value={partyDetailsForm.values.carrier_agent_email}
                   onChange={(e) =>
@@ -5228,6 +5234,7 @@ function ImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Voyage Number"
                               required
                               placeholder="Enter voyage number"
@@ -5294,6 +5301,7 @@ function ImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Flight Number"
                               required
                               placeholder="Enter flight number"
@@ -5360,6 +5368,7 @@ function ImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Truck Number"
                               required
                               placeholder="Enter truck number"
@@ -5415,6 +5424,7 @@ function ImportJobCreate() {
                           </Grid.Col>
                           <Grid.Col span={2.4}>
                             <FormTextInput
+                              format="capital"
                               label="Rail Number"
                               required
                               placeholder="Enter rail number"
@@ -5708,6 +5718,7 @@ function ImportJobCreate() {
                   </Grid.Col>
                   <Grid.Col span={1.3}>
                     <FormTextInput
+                      format="capital"
                       required
                       placeholder="Container number"
                       maxLength={11}
@@ -5768,6 +5779,7 @@ function ImportJobCreate() {
                   </Grid.Col>
                   <Grid.Col span={1}>
                     <FormTextInput
+                      format="capital"
                       placeholder="Actual seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.actual_seal_no`,
@@ -5777,6 +5789,7 @@ function ImportJobCreate() {
                   </Grid.Col>
                   <Grid.Col span={1}>
                     <FormTextInput
+                      format="capital"
                       placeholder="Customs seal number"
                       {...containerDetailsForm.getInputProps(
                         `containers.${index}.customs_seal_no`,
