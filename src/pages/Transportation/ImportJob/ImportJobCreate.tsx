@@ -48,6 +48,8 @@ import {
   useCallback,
   Fragment,
   useRef,
+  lazy,
+  Suspense,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
@@ -69,7 +71,15 @@ import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
+import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
 import useAuthStore from "../../../store/authStore";
+
+const BolPdfEditor = lazy(() =>
+  import("../../../components/PdfEditor").then((m) => ({
+    default: m.PdfEditor,
+  })),
+);
 import dayjs from "dayjs";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -567,7 +577,7 @@ function ImportJobCreate() {
     return jobData;
   }, [jobData, housingDetails]);
 
-  // PDF Preview state
+  // PDF Preview state (Cargo Arrival Notice)
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [currentHousingForPreview, setCurrentHousingForPreview] =
@@ -575,6 +585,18 @@ function ImportJobCreate() {
   const [canChargesModalOpen, setCanChargesModalOpen] = useState(false);
   const [pendingHousingForCan, setPendingHousingForCan] =
     useState<HousingDetail | null>(null);
+
+  // Bill of Lading PDF preview state (mirrors Ocean Export)
+  const [bolPreviewOpen, setBolPreviewOpen] = useState(false);
+  const [bolPdfBlob, setBolPdfBlob] = useState<string | null>(null);
+  const [currentHousingForBolPreview, setCurrentHousingForBolPreview] =
+    useState<HousingDetail | null>(null);
+  const [bolPreviewRowData, setBolPreviewRowData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [bolPreviewHasUnsavedChanges, setBolPreviewHasUnsavedChanges] =
+    useState(false);
 
   // Delivery Order preview state
   const [doPreviewOpen, setDoPreviewOpen] = useState(false);
@@ -2795,6 +2817,227 @@ function ImportJobCreate() {
       const link = document.createElement("a");
       link.href = pdfBlob;
       link.download = `Cargo-Arrival-Notice-${currentHousingForPreview.hbl_number || "HBL"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      ToastNotification({
+        type: "success",
+        message: "PDF downloaded successfully",
+      });
+    }
+  };
+
+  // Generate Bill Of Lading PDF Preview (same pattern as Ocean Export)
+  const generateBillOfLadingPDFPreview = async (
+    housing: HousingDetail,
+    options?: { draft?: boolean },
+  ) => {
+    try {
+      setBolPreviewOpen(true);
+      setCurrentHousingForBolPreview(housing);
+
+      const defaultBranch = user?.branches?.find(
+        (branch) => branch.is_default,
+      ) ||
+        user?.branches?.[0] || { branch_name: "CHENNAI" };
+      const country = user?.country || null;
+      const isDraft = options?.draft === true;
+
+      const combinedData = {
+        ...(jobWithMergedHousingDetails ?? jobData),
+        ...housing,
+        mblDetails: {
+          service: mblDetailsForm.values.service,
+          pp_cc: mblDetailsForm.values.pp_cc,
+          origin_agent: mblDetailsForm.values.origin_agent,
+          origin_code: mblDetailsForm.values.origin_code,
+          origin_name: mblDetailsForm.values.origin_name,
+          destination_code: mblDetailsForm.values.destination_code,
+          destination_name: mblDetailsForm.values.destination_name,
+          etd: mblDetailsForm.values.etd,
+          eta: mblDetailsForm.values.eta,
+          atd: mblDetailsForm.values.atd,
+          ata: mblDetailsForm.values.ata,
+          job_date: mblDetailsForm.values.job_date,
+          agent_name: mblDetailsForm.values.agent_name || "",
+          agent_address: mblDetailsForm.values.agent_address || "",
+          agent_email: String(
+            (jobWithMergedHousingDetails ?? jobData)?.agent_email ??
+              (
+                jobWithMergedHousingDetails as {
+                  mblDetails?: { agent_email?: string };
+                } | null
+              )?.mblDetails?.agent_email ??
+              "",
+          ),
+          consignee_name: mblDetailsForm.values.consignee_name || "",
+          consignee_address: mblDetailsForm.values.consignee_address || "",
+          consignee_email: mblDetailsForm.values.consignee_email || "",
+        },
+        carrierDetails: {
+          carrier_code: carrierDetailsForm.values.carrier_code,
+          carrier_name: carrierDetailsForm.values.carrier_name,
+          vessel_name: carrierDetailsForm.values.vessel_name,
+          voyage_number: carrierDetailsForm.values.voyage_number,
+          mbl_number: carrierDetailsForm.values.mbl_number,
+          mbl_date: carrierDetailsForm.values.mbl_date,
+        },
+        containerDetails: containerDetailsForm.values.containers,
+      };
+
+      const housingFromJob = (
+        jobWithMergedHousingDetails ?? jobData
+      )?.housing_details?.find(
+        (house) =>
+          house.id === housing.id || Number(house.id) === Number(housing.id),
+      ) as
+        | {
+            pp_cc?: string;
+            freight?: string;
+            bl_type?: string;
+            summary?: HousingDetail["summary"];
+          }
+        | undefined;
+
+      const housingForPdf = {
+        ...housingFromJob,
+        ...housing,
+        freight:
+          String(
+            housing.pp_cc ||
+              housing.freight ||
+              housingFromJob?.pp_cc ||
+              housingFromJob?.freight ||
+              "",
+          ).trim() || "",
+        summary: housing.summary ?? housingFromJob?.summary,
+        cargo_details: (housing.cargo_details || []).map((cargo) => ({
+          ...cargo,
+          package_type:
+            resolvePackageTypeName(
+              cargo.package_type_name || cargo.package_type,
+              packageTypeOptions,
+            ) ||
+            cargo.package_type_name ||
+            cargo.package_type ||
+            "",
+        })),
+        package_type:
+          resolvePackageTypeName(
+            housing.cargo_details?.find(
+              (c) => c.package_type_name || c.package_type,
+            )?.package_type_name ||
+              housing.cargo_details?.find((c) => c.package_type)?.package_type ||
+              (housing as { package_type?: string }).package_type,
+            packageTypeOptions,
+          ) ||
+          (housing as { package_type?: string }).package_type ||
+          "",
+      };
+
+      const houseIndex = housingDetails.findIndex(
+        (h) =>
+          (housing.id != null &&
+            h.id != null &&
+            String(h.id) === String(housing.id)) ||
+          (housing.hbl_number &&
+            h.hbl_number &&
+            String(h.hbl_number) === String(housing.hbl_number)),
+      );
+      const houseIndex1Based = houseIndex >= 0 ? houseIndex + 1 : 1;
+      const blType = String(
+        (housingForPdf as { bl_type?: unknown }).bl_type ?? "",
+      );
+
+      const blobUrl = generateBillOfLadingPDF(
+        {
+          ...combinedData,
+          housing_details: housingDetails,
+        },
+        housingForPdf,
+        defaultBranch,
+        country,
+        {
+          draft: isDraft,
+          blType,
+          houseIndex: houseIndex1Based,
+        },
+      );
+      setBolPreviewRowData({
+        jobData: {
+          ...combinedData,
+          housing_details: housingDetails,
+        },
+        housingData: housingForPdf,
+        defaultBranch,
+        country,
+        draft: isDraft,
+        blType,
+        houseIndex: houseIndex1Based,
+      });
+      setBolPreviewHasUnsavedChanges(false);
+      setBolPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent(
+        typeof housing.id === "number" ? housing.id : undefined,
+        "BL Released",
+      ).catch((e) => console.error("Failed to patch PDF release event:", e));
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Error generating PDF preview",
+      });
+      setBolPreviewOpen(false);
+    }
+  };
+
+  const regenerateBolPreviewPdf = async (rowData: Record<string, unknown>) => {
+    const blobUrl = generateBillOfLadingPDF(
+      rowData.jobData,
+      rowData.housingData,
+      rowData.defaultBranch,
+      rowData.country,
+      {
+        draft: rowData.draft === true,
+        blType: String(
+          rowData.blType ??
+            (rowData.housingData as { bl_type?: unknown } | undefined)
+              ?.bl_type ??
+            "",
+        ),
+        houseIndex:
+          typeof rowData.houseIndex === "number"
+            ? rowData.houseIndex
+            : undefined,
+      },
+    );
+    return blobUrl;
+  };
+
+  const handleBolPreviewPdfRegenerated = (newBlobUrl: string) => {
+    if (bolPdfBlob) {
+      window.URL.revokeObjectURL(bolPdfBlob);
+    }
+    setBolPdfBlob(newBlobUrl);
+  };
+
+  const handleCloseBolPreview = () => {
+    setBolPreviewOpen(false);
+    setBolPdfBlob(null);
+    setCurrentHousingForBolPreview(null);
+    setBolPreviewRowData(null);
+    setBolPreviewHasUnsavedChanges(false);
+    if (bolPdfBlob) {
+      window.URL.revokeObjectURL(bolPdfBlob);
+    }
+  };
+
+  const handleDownloadBolPDF = () => {
+    if (bolPdfBlob && currentHousingForBolPreview) {
+      const link = document.createElement("a");
+      link.href = bolPdfBlob;
+      link.download = `Bill-Of-Lading-${currentHousingForBolPreview.hbl_number || "HBL"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -6805,6 +7048,92 @@ function ImportJobCreate() {
                         <Menu.Dropdown
                           styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}
                         >
+                          {mode === "edit" && jobData?.id && (
+                            <>
+                              <Menu.Item
+                                leftSection={
+                                  <Box
+                                    style={{
+                                      backgroundColor: "#E7F5FF",
+                                      borderRadius: "6px",
+                                      padding: "6px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <IconEye size={16} color="#105476" />
+                                  </Box>
+                                }
+                                styles={{
+                                  item: {
+                                    fontFamily: "Inter",
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    borderRadius: "6px",
+                                    padding: "10px 12px",
+                                    marginBottom: "4px",
+                                    "&:hover": {
+                                      backgroundColor: "#F8F9FA",
+                                    },
+                                  },
+                                  itemLabel: {
+                                    fontFamily: "Inter",
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                  },
+                                }}
+                                onClick={() =>
+                                  generateBillOfLadingPDFPreview(house, {
+                                    draft: true,
+                                  })
+                                }
+                              >
+                                Draft Bill Of Lading
+                              </Menu.Item>
+                              <Menu.Item
+                                leftSection={
+                                  <Box
+                                    style={{
+                                      backgroundColor: "#E7F5FF",
+                                      borderRadius: "6px",
+                                      padding: "6px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <IconEye size={16} color="#105476" />
+                                  </Box>
+                                }
+                                styles={{
+                                  item: {
+                                    fontFamily: "Inter",
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    borderRadius: "6px",
+                                    padding: "10px 12px",
+                                    marginBottom: "4px",
+                                    "&:hover": {
+                                      backgroundColor: "#F8F9FA",
+                                    },
+                                  },
+                                  itemLabel: {
+                                    fontFamily: "Inter",
+                                    fontSize: "13px",
+                                    fontWeight: 500,
+                                    color: "#424242",
+                                  },
+                                }}
+                                onClick={() =>
+                                  generateBillOfLadingPDFPreview(house)
+                                }
+                              >
+                                Bill Of Lading
+                              </Menu.Item>
+                            </>
+                          )}
                           <Menu.Item
                             leftSection={
                               <Box
@@ -7053,6 +7382,104 @@ function ImportJobCreate() {
         housingDetails={housingDetails}
         mblContainers={containerDetailsForm.values.containers}
       />
+
+      {/* Bill Of Lading PDF Preview Modal */}
+      <Modal
+        opened={bolPreviewOpen}
+        onClose={handleCloseBolPreview}
+        title={`Bill Of Lading - ${currentHousingForBolPreview?.hbl_number || "HBL"}`}
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        centered
+        transitionProps={{ transition: "fade", duration: 200 }}
+        styles={{
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh" style={{ width: "100%" }}>
+          {bolPdfBlob && bolPreviewRowData ? (
+            <>
+              <Box
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: "flex",
+                  width: "100%",
+                }}
+              >
+                <Suspense
+                  fallback={
+                    <Center style={{ flex: 1 }}>
+                      <Loader size="lg" color="#105476" />
+                    </Center>
+                  }
+                >
+                  <BolPdfEditor
+                    pdfBlobUrl={bolPdfBlob}
+                    rowData={bolPreviewRowData}
+                    generatePdf={regenerateBolPreviewPdf}
+                    onQuotationChange={setBolPreviewRowData}
+                    onPdfRegenerated={handleBolPreviewPdfRegenerated}
+                    onUnsavedChangesChange={setBolPreviewHasUnsavedChanges}
+                    buildFieldRegistry={buildBolFieldRegistry}
+                    editable
+                  />
+                </Suspense>
+              </Box>
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCloseBolPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadBolPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                  disabled={bolPreviewHasUnsavedChanges}
+                >
+                  Download PDF
+                </Button>
+                <Button
+                  onClick={() =>
+                    handleOpenSendEmailForPdf(
+                      bolPdfBlob,
+                      `Bill-Of-Lading-${currentHousingForBolPreview?.hbl_number || "HBL"}.pdf`,
+                      "Bill Of Lading",
+                    )
+                  }
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                  disabled={bolPreviewHasUnsavedChanges}
+                >
+                  Send Email
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
 
       {/* PDF Preview Modal */}
       <Modal

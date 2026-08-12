@@ -42,6 +42,8 @@ import {
   useCallback,
   Fragment,
   useRef,
+  lazy,
+  Suspense,
 } from "react";
 import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
@@ -112,6 +114,14 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
+import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
+import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
+
+const BolPdfEditor = lazy(() =>
+  import("../../../components/PdfEditor").then((m) => ({
+    default: m.PdfEditor,
+  })),
+);
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
@@ -449,10 +459,20 @@ function HouseCreate() {
     Record<number, Record<string, string>>
   >({});
 
-  // PDF Preview state
+  // PDF Preview state (Cargo Arrival Notice)
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [canChargesModalOpen, setCanChargesModalOpen] = useState(false);
+
+  // Bill of Lading PDF preview state (mirrors Ocean Export HouseCreate)
+  const [bolPreviewOpen, setBolPreviewOpen] = useState(false);
+  const [bolPdfBlob, setBolPdfBlob] = useState<string | null>(null);
+  const [bolPreviewRowData, setBolPreviewRowData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [bolPreviewHasUnsavedChanges, setBolPreviewHasUnsavedChanges] =
+    useState(false);
 
   // Delivery Order preview state
   const [doPreviewOpen, setDoPreviewOpen] = useState(false);
@@ -2972,6 +2992,291 @@ function HouseCreate() {
     }
   };
 
+  // Generate Bill of Lading PDF preview from current form data
+  // Shape matches Ocean Export HouseCreate / ImportJobCreate house-card BL generator.
+  const generateBolPDFPreview = (options?: { draft?: boolean }) => {
+    try {
+      setBolPreviewOpen(true);
+      const defaultBranch = user?.branches?.find(
+        (branch) => branch.is_default,
+      ) ||
+        user?.branches?.[0] || { branch_name: "CHENNAI" };
+      const country = user?.country || null;
+      const isDraft = options?.draft === true;
+      const containerDetailsForPdf =
+        (location.state?.containerDetails as Record<string, unknown>[]) ||
+        (location.state?.job as { container_details?: Record<string, unknown>[] })
+          ?.container_details ||
+        [];
+      const notifyName = form.values.notify1_customer_name || "";
+      const notifyAddress = form.values.notify1_customer_address || "";
+      const notifyEmail = form.values.notify1_customer_email || "";
+      const freightPpCc = form.values.pp_cc || "Collect";
+      const editSummary = (
+        editData as {
+          summary?: {
+            total_no_of_packages?: number | string;
+            total_gross_weight?: number | string;
+            total_volume?: number | string;
+            container_type?: string[];
+          };
+        } | undefined
+      )?.summary;
+      const cargoDetailsForPdf = cargoDetails.map((c) => {
+        const matchedContainer = containerDetailsForPdf.find(
+          (container) =>
+            String(container.container_no ?? "") ===
+            String(c.container_number ?? ""),
+        );
+        const packageTypeDisplay = resolvePackageTypeName(
+          c.package_type,
+          packageTypeOptions,
+        );
+        return {
+          no_of_packages: c.no_of_packages,
+          package_type: packageTypeDisplay || c.package_type || "",
+          gross_weight: formatHouseCargoWeightForPayload(c.gross_weight),
+          volume: formatHouseCargoWeightForPayload(c.volume),
+          chargeable_weight: formatHouseCargoChargeableForPayload(
+            c.gross_weight,
+            c.volume,
+            "ocean",
+          ),
+          haz: c.haz === true || String(c.haz) === "Yes",
+          container_no: c.container_number || "",
+          container_id: c.container_id,
+          actual_seal_no:
+            (matchedContainer?.actual_seal_no as string | undefined) || "",
+          container_type_name:
+            (
+              matchedContainer?.container_type_details as
+                | { container_type_name?: string }
+                | undefined
+            )?.container_type_name ||
+            (matchedContainer?.container_type_name as string | undefined) ||
+            "",
+        };
+      });
+      const housingPackageType =
+        cargoDetailsForPdf
+          .map((c) => c.package_type)
+          .find((pt) => Boolean(pt && String(pt).trim())) || "";
+      const computedSummary = {
+        total_no_of_packages: cargoDetailsForPdf.reduce(
+          (sum, cargo) => sum + (Number(cargo.no_of_packages) || 0),
+          0,
+        ),
+        total_gross_weight: cargoDetailsForPdf.reduce(
+          (sum, cargo) => sum + (parseFloat(String(cargo.gross_weight)) || 0),
+          0,
+        ),
+        total_volume: cargoDetailsForPdf.reduce(
+          (sum, cargo) => sum + (parseFloat(String(cargo.volume)) || 0),
+          0,
+        ),
+        container_type: Array.from(
+          new Set(
+            cargoDetailsForPdf
+              .map((cargo) => cargo.container_type_name)
+              .filter((name): name is string =>
+                Boolean(name && String(name).trim()),
+              ),
+          ),
+        ),
+      };
+      const housingData = {
+        id: (editData as { id?: number | string } | undefined)?.id,
+        hbl_number: form.values.hbl_number,
+        house_date: form.values.house_date
+          ? dayjs(form.values.house_date).format("YYYY-MM-DD")
+          : null,
+        routed: form.values.routed,
+        routed_by: form.values.routed_by,
+        origin_code: form.values.origin_code,
+        origin_name: form.values.origin_name,
+        destination_code: form.values.destination_code,
+        destination_name: form.values.destination_name,
+        customer_service: form.values.customer_service,
+        trade: form.values.trade,
+        agent_name: form.values.agent_name,
+        agent_address: form.values.agent_address,
+        agent_email: form.values.agent_email,
+        shipper_name: form.values.shipper_name,
+        shipper_address: form.values.shipper_address,
+        shipper_email: form.values.shipper_email,
+        shipper_state_id: form.values.shipper_state_id
+          ? Number(form.values.shipper_state_id)
+          : ((
+              editData as
+                | { shipment_id?: string; shipper_state_id?: number }
+                | undefined
+            )?.shipper_state_id ?? null),
+        shipment_id:
+          (editData as { shipment_id?: string } | undefined)?.shipment_id ??
+          null,
+        consignee_name: form.values.consignee_name,
+        consignee_address: form.values.consignee_address,
+        consignee_email: form.values.consignee_email,
+        notify1_customer_name: notifyName,
+        notify1_customer_address: notifyAddress,
+        notify1_customer_email: notifyEmail,
+        notify_customer1_name: notifyName,
+        notify_customer1_address: notifyAddress,
+        notify_customer1_email: notifyEmail,
+        commodity_description: form.values.commodity_description,
+        marks_no: form.values.marks_no,
+        note: form.values.note || "",
+        bl_type:
+          String(
+            (editData as { bl_type?: unknown } | undefined)?.bl_type ?? "",
+          ) || "",
+        pp_cc: freightPpCc,
+        freight: freightPpCc,
+        package_type: housingPackageType,
+        summary: editSummary ?? computedSummary,
+        cargo_details: cargoDetailsForPdf,
+        mbl_charges: (() => {
+          const meaningfulCharges = getMeaningfulHouseCharges(
+            chargesForm.values.charges,
+          );
+          if (meaningfulCharges.length === 0) return [];
+          return meaningfulCharges.map((charge) => ({
+            ...(charge.id != null &&
+              charge.id !== undefined && { id: Number(charge.id) }),
+            charge_id: charge.charge_id ?? null,
+            charge_name: charge.charge_name,
+            pp_cc: charge.pp_cc,
+            unit_id: charge.unit_id ? Number(charge.unit_id) : null,
+            unit: charge.unit_code,
+            currency_id: charge.currency_id ? Number(charge.currency_id) : null,
+            currency: charge.currency,
+            no_of_unit: charge.no_of_unit,
+            roe: roundRoeForPayload(charge.roe) ?? null,
+            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount: roundMoneyToDecimals(charge.amount) ?? null,
+            sell_local_amount:
+              roundLocalMoneyToDecimals(charge.sell_local_amount) ?? null,
+            unit_cost: roundMoneyToDecimals(charge.unit_cost) ?? null,
+            total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
+            cost_local_amount:
+              roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
+            supplier_code: charge.supplier_code || null,
+            supplier_name: charge.supplier_name || null,
+          }));
+        })(),
+      };
+      const houseIndex1Based =
+        editIndex != null && Number.isFinite(Number(editIndex))
+          ? Number(editIndex) + 1
+          : existingHousingDetails.length + 1;
+      const jobDataForBol = {
+        ...(location.state?.job || {}),
+        mblDetails: location.state?.mblDetails || {},
+        carrierDetails: location.state?.carrierDetails || {},
+        containerDetails: containerDetailsForPdf,
+        container_details: containerDetailsForPdf,
+        housing_details: existingHousingDetails,
+      };
+      const blType = String(housingData.bl_type ?? "");
+
+      const blobUrl = generateBillOfLadingPDF(
+        jobDataForBol,
+        housingData,
+        defaultBranch,
+        country,
+        {
+          draft: isDraft,
+          blType,
+          houseIndex: houseIndex1Based,
+        },
+      );
+      setBolPreviewRowData({
+        jobData: jobDataForBol,
+        housingData,
+        defaultBranch,
+        country,
+        draft: isDraft,
+        blType,
+        houseIndex: houseIndex1Based,
+      });
+      setBolPreviewHasUnsavedChanges(false);
+      setBolPdfBlob(blobUrl);
+      void patchHousingPdfReleasedEvent("BL Released").catch((e) =>
+        console.error("Failed to patch PDF release event:", e),
+      );
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Error generating PDF preview",
+      });
+      setBolPreviewOpen(false);
+    }
+  };
+
+  const regenerateBolPreviewPdf = async (rowData: Record<string, unknown>) => {
+    return generateBillOfLadingPDF(
+      rowData.jobData,
+      rowData.housingData,
+      rowData.defaultBranch,
+      rowData.country,
+      {
+        draft: rowData.draft === true,
+        blType: String(
+          rowData.blType ??
+            (rowData.housingData as { bl_type?: unknown } | undefined)
+              ?.bl_type ??
+            "",
+        ),
+        houseIndex:
+          typeof rowData.houseIndex === "number"
+            ? rowData.houseIndex
+            : undefined,
+      },
+    );
+  };
+
+  const handleBolPreviewPdfRegenerated = (newBlobUrl: string) => {
+    if (bolPdfBlob) {
+      window.URL.revokeObjectURL(bolPdfBlob);
+    }
+    setBolPdfBlob(newBlobUrl);
+  };
+
+  const handleCloseBolPreview = () => {
+    setBolPreviewOpen(false);
+    if (bolPdfBlob) {
+      window.URL.revokeObjectURL(bolPdfBlob);
+    }
+    setBolPdfBlob(null);
+    setBolPreviewRowData(null);
+    setBolPreviewHasUnsavedChanges(false);
+  };
+
+  const handleDownloadBolPDF = () => {
+    if (bolPdfBlob) {
+      const link = document.createElement("a");
+      link.href = bolPdfBlob;
+      link.download = `Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      ToastNotification({
+        type: "success",
+        message: "PDF downloaded successfully",
+      });
+    }
+  };
+
+  const handleOpenSendEmailForBol = () => {
+    setActivePdfBlob(bolPdfBlob);
+    setActiveFileName(
+      `Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`,
+    );
+    setActiveDocumentLabel("Bill Of Lading");
+    openSendEmail();
+  };
+
   const resolveDoAttentionTo = (type: DoTypeOption) => {
     if (type === "carrier_agent") {
       const partyDetails = location.state?.mblDetails as
@@ -3367,6 +3672,82 @@ function HouseCreate() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown styles={JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES}>
+              <Menu.Item
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
+                onClick={() => generateBolPDFPreview({ draft: true })}
+              >
+                Draft Bill Of Lading
+              </Menu.Item>
+              <Menu.Item
+                leftSection={
+                  <Box
+                    style={{
+                      backgroundColor: "#E7F5FF",
+                      borderRadius: "6px",
+                      padding: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <IconEye size={16} color="#105476" />
+                  </Box>
+                }
+                styles={{
+                  item: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginBottom: "4px",
+                    "&:hover": {
+                      backgroundColor: "#F8F9FA",
+                    },
+                  },
+                  itemLabel: {
+                    fontFamily: "Inter",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#424242",
+                  },
+                }}
+                onClick={() => generateBolPDFPreview()}
+              >
+                Bill Of Lading
+              </Menu.Item>
               <Menu.Item
                 leftSection={
                   <Box
@@ -6542,6 +6923,98 @@ function HouseCreate() {
           void generatePDFPreview(showCharges);
         }}
       />
+
+      {/* Bill Of Lading PDF Preview Modal */}
+      <Modal
+        opened={bolPreviewOpen}
+        onClose={handleCloseBolPreview}
+        title={`Bill Of Lading - ${form.values.hbl_number || "HBL"}`}
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        centered
+        transitionProps={{ transition: "fade", duration: 200 }}
+        styles={{
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh" style={{ width: "100%" }}>
+          {bolPdfBlob && bolPreviewRowData ? (
+            <>
+              <Box
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  minWidth: 0,
+                  display: "flex",
+                  width: "100%",
+                }}
+              >
+                <Suspense
+                  fallback={
+                    <Center style={{ flex: 1 }}>
+                      <Loader size="lg" color="#105476" />
+                    </Center>
+                  }
+                >
+                  <BolPdfEditor
+                    pdfBlobUrl={bolPdfBlob}
+                    rowData={bolPreviewRowData}
+                    generatePdf={regenerateBolPreviewPdf}
+                    onQuotationChange={setBolPreviewRowData}
+                    onPdfRegenerated={handleBolPreviewPdfRegenerated}
+                    onUnsavedChangesChange={setBolPreviewHasUnsavedChanges}
+                    buildFieldRegistry={buildBolFieldRegistry}
+                    editable
+                  />
+                </Suspense>
+              </Box>
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleCloseBolPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadBolPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                  disabled={bolPreviewHasUnsavedChanges}
+                >
+                  Download PDF
+                </Button>
+                <Button
+                  onClick={handleOpenSendEmailForBol}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                  disabled={bolPreviewHasUnsavedChanges}
+                >
+                  Send Email
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
 
       {/* PDF Preview Modal */}
       <Modal
