@@ -225,6 +225,7 @@ type AddressData = {
 type CustomerFormData = {
   customer_name: string;
   customer_type_code: string[];
+  account_codes: string[];
   term_code: string;
   own_office: string;
   credit_amount: string;
@@ -742,6 +743,46 @@ function normalizeCustomerTypeCodes(source: {
   return [];
 }
 
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: "1103010005", label: "Local Debtor - 1103010005" },
+  { value: "1203010002", label: "Local Creditor - 1203010002" },
+  { value: "1103010003", label: "Overseas Debtor - 1103010003" },
+  { value: "1203010007", label: "Overseas Creditor - 1203010007" },
+] as const;
+
+const ACCOUNT_TYPE_CODES = new Set<string>(
+  ACCOUNT_TYPE_OPTIONS.map((option) => option.value),
+);
+
+function normalizeAccountCodes(source: {
+  account_codes?: unknown;
+  account_code?: unknown;
+}): string[] {
+  const raw = source.account_codes ?? source.account_code;
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => {
+        if (typeof item === "string" || typeof item === "number") {
+          return String(item).trim();
+        }
+        if (item && typeof item === "object") {
+          const record = item as {
+            account_code?: unknown;
+            code?: unknown;
+          };
+          return String(record.account_code ?? record.code ?? "").trim();
+        }
+        return "";
+      })
+      .filter((code) => ACCOUNT_TYPE_CODES.has(code));
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const code = raw.trim();
+    return ACCOUNT_TYPE_CODES.has(code) ? [code] : [];
+  }
+  return [];
+}
+
 type SalespersonOption = {
   value: string;
   label: string;
@@ -751,6 +792,7 @@ type CustomerDetailRecord = CustomerFormData & {
   id?: number;
   customer_code?: string;
   name?: string;
+  account_code?: string | string[] | null;
   customer_type?: string;
   customer_types?: Array<{
     customer_type_code?: string | null;
@@ -939,6 +981,7 @@ function buildCustomerFormValuesFromRecord(
   return {
     customer_name: record.customer_name || record.name || "",
     customer_type_code: normalizeCustomerTypeCodes(record),
+    account_codes: normalizeAccountCodes(record),
     term_code: record.term_code || record.credit_type || "",
     own_office: record.own_office ? "true" : "false",
     credit_amount:
@@ -2190,6 +2233,7 @@ function CustomerCreate() {
     initialValues: {
       customer_name: "",
       customer_type_code: [],
+      account_codes: [],
       term_code: "",
       own_office: "",
       credit_amount: "",
@@ -2295,6 +2339,7 @@ function CustomerCreate() {
       customerForm.setValues({
         customer_name: formData.customer_name,
         customer_type_code: formData.customer_type_code,
+        account_codes: formData.account_codes,
         term_code: formData.term_code,
         own_office: formData.own_office,
         credit_amount: formData.credit_amount,
@@ -2474,6 +2519,7 @@ function CustomerCreate() {
               }> | null;
             },
           ),
+          account_codes: normalizeAccountCodes(restoredCustomerData),
           term_code: restoredCustomerData.term_code || "",
           own_office: restoredCustomerData.own_office || "",
           credit_amount:
@@ -2974,6 +3020,7 @@ function CustomerCreate() {
       const payload = {
         customer_name: values.customer_name,
         customer_type_code: values.customer_type_code,
+        account_codes: values.account_codes ?? [],
         term_code: values.term_code,
         own_office: values.own_office === "true",
         status: "ACTIVE",
@@ -3127,6 +3174,7 @@ function CustomerCreate() {
         id: Number(customerData?.id ?? customerId),
         customer_name: values.customer_name,
         customer_type_code: values.customer_type_code,
+        account_codes: values.account_codes ?? [],
         term_code: values.term_code,
         own_office: values.own_office === "true",
         status: "ACTIVE",
@@ -3753,6 +3801,30 @@ function CustomerCreate() {
                           />
                         </Grid.Col>
                       )}
+
+                      <Grid.Col span={4}>
+                        <FormMultiSelect
+                          label="Account type"
+                          placeholder="Select account type"
+                          searchable
+                          data={[...ACCOUNT_TYPE_OPTIONS]}
+                          disabled={!!isViewMode}
+                          {...customerForm.getInputProps("account_codes")}
+                          styles={{
+                            input: {
+                              minHeight: "36px",
+                              maxHeight: "72px",
+                              overflowY: "auto",
+                              alignContent: "flex-start",
+                            },
+                            pillsList: {
+                              flexWrap: "wrap",
+                              maxHeight: "60px",
+                              overflowY: "auto",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
                     </Grid>
                   </Card>
                 </Box>

@@ -45,8 +45,6 @@ import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerD
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
-import useAuthStore from "../../../store/authStore";
-import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 
 const LIST_KEY = "AGENT_MASTER";
 
@@ -321,19 +319,8 @@ function buildAgentFilterPayload(
 
 export default function AgentMaster() {
   const isAdmin = useIsAdminUser();
-  const userPulseId = useAuthStore((s) => s.user?.pulse_id);
-  const userCountry = useAuthStore((s) => s.user?.country);
-  const isPentagonUser =
-    String(userPulseId ?? "")
-      .trim()
-      .toUpperCase() === "P2PEN";
-  const isIndiaUser =
-    isIndianUserCountry(userCountry?.country_code) ||
-    String(userCountry?.country_name ?? "")
-      .toLowerCase()
-      .includes("india");
-  // Hide Create New for foreign branches; also hide for non-admin P2PEN users in India
-  const showCreateButton = isIndiaUser && (isAdmin || !isPentagonUser);
+  // Create New is admin-only on customer / vendor / agent masters
+  const showCreateButton = isAdmin;
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();

@@ -24,6 +24,7 @@ import {
   Modal,
   Select,
   ActionIcon,
+  Center,
 } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import { useForm } from "@mantine/form";
@@ -39,6 +40,9 @@ import {
   IconCalendarEvent,
   IconFileDescription,
   IconBellRinging,
+  IconFileInvoice,
+  IconPrinter,
+  IconSend,
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
@@ -52,13 +56,18 @@ import { SearchableSelect } from "../../../components";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import useAuthStore from "../../../store/authStore";
+import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
+import {
+  fetchAirExportBookingAirPdf,
+  resolveBookingPrimaryKey,
+} from "../../../utils/airWayBillPdf";
 import {
   getDefaultBookingChargeCurrencyFields,
   ROE_DECIMAL_PLACES,
   roundRoeForPayload,
 } from "../../../utils/exchangeRateRoe";
 import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
-import { useDebouncedCallback } from "@mantine/hooks";
+import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
 import { toTitleCase } from "../../../utils/textFormatter";
 import {
   applyShipmentTermsSelection,
@@ -657,6 +666,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
+  const [draftAwbPreviewOpen, setDraftAwbPreviewOpen] = useState(false);
+  const [draftAwbPdfBlob, setDraftAwbPdfBlob] = useState<string | null>(null);
+  const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
+    useDisclosure(false);
+  const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
+  const [activeFileName, setActiveFileName] = useState("");
+  const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
 
   // State for display values
   const [shipperDisplayName, setShipperDisplayName] = useState<string | null>(
@@ -2960,6 +2976,73 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
   };
 
+  const draftAwbFileLabel = String(
+    jobData?.shipment_code ??
+      (resolveBookingPrimaryKey(jobData) || "booking"),
+  );
+
+  const handleDraftAirwayBillPreview = async () => {
+    const bookingId = resolveBookingPrimaryKey(jobData);
+    if (!bookingId) {
+      ToastNotification({
+        type: "error",
+        message: "Booking ID not found for Draft Airway Bill",
+      });
+      return;
+    }
+
+    setDraftAwbPreviewOpen(true);
+    setDraftAwbPdfBlob(null);
+    try {
+      const blob = await fetchAirExportBookingAirPdf({
+        booking_id: bookingId,
+        document: "draft_awb",
+      });
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setDraftAwbPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching Draft Airway Bill PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load Draft Airway Bill PDF",
+      });
+      setDraftAwbPreviewOpen(false);
+    }
+  };
+
+  const handleDraftAwbClosePreview = () => {
+    setDraftAwbPreviewOpen(false);
+    if (draftAwbPdfBlob) {
+      window.URL.revokeObjectURL(draftAwbPdfBlob);
+    }
+    setDraftAwbPdfBlob(null);
+  };
+
+  const handleDraftAwbDownloadPDF = () => {
+    if (draftAwbPdfBlob) {
+      const link = document.createElement("a");
+      link.href = draftAwbPdfBlob;
+      link.download = `Draft-Airway-Bill-${draftAwbFileLabel}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleOpenSendEmailForDraftAwb = () => {
+    setActivePdfBlob(draftAwbPdfBlob);
+    setActiveFileName(`Draft-Airway-Bill-${draftAwbFileLabel}.pdf`);
+    setActiveDocumentLabel("Draft Airway Bill");
+    openSendEmail();
+  };
+
+  const handleDraftAwbPrint = () => {
+    if (draftAwbPdfBlob) {
+      const win = window.open(draftAwbPdfBlob, "_blank");
+      if (win) win.print();
+    }
+  };
+
   const addRoutingDetail = () => {
     form.insertListItem("routingDetails", {
       move_type: "",
@@ -3221,6 +3304,96 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         </Stack>
       </Modal>
 
+      {/* Draft Airway Bill PDF Preview Modal (edit/view mode only) */}
+      <Modal
+        opened={draftAwbPreviewOpen}
+        onClose={handleDraftAwbClosePreview}
+        title="Draft Airway Bill"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {draftAwbPdfBlob ? (
+            <>
+              <iframe
+                src={draftAwbPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Draft Airway Bill Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleDraftAwbClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDraftAwbPrint}
+                  leftSection={<IconPrinter size={16} />}
+                >
+                  Print
+                </Button>
+                <Button
+                  onClick={handleDraftAwbDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+                <Button
+                  onClick={handleOpenSendEmailForDraftAwb}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
+
+      <SendPdfEmailModal
+        opened={sendEmailOpened}
+        onClose={closeSendEmail}
+        pdfBlobUrl={activePdfBlob}
+        fileName={activeFileName}
+        documentLabel={activeDocumentLabel}
+      />
+
       <Box
         style={{
           flex: 1,
@@ -3362,6 +3535,25 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 >
                   Trigger Update
                 </Menu.Item>
+                {isEditMode && resolveBookingPrimaryKey(jobData) > 0 && (
+                  <Menu.Item
+                    leftSection={<IconFileInvoice size={16} />}
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": { backgroundColor: "#F8F9FA" },
+                      },
+                    }}
+                    onClick={handleDraftAirwayBillPreview}
+                  >
+                    Draft Airway Bill
+                  </Menu.Item>
+                )}
               </Menu.Dropdown>
             </Menu>
           </Group>

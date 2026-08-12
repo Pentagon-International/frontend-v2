@@ -19,6 +19,11 @@ export type AirExportAirPdfByJobPayload = {
   document: AirExportAirPdfDocument;
 };
 
+export type AirExportAirPdfByBookingPayload = {
+  booking_id: number;
+  document: AirExportAirPdfDocument;
+};
+
 export type AirExportAirPdfPayload =
   | AirExportAirPdfByHousingPayload
   | AirExportAirPdfByJobPayload;
@@ -37,6 +42,15 @@ export function resolveJobPrimaryKey(
   record: { id?: unknown; job_id?: unknown } | null | undefined,
 ): number {
   const raw = record?.id ?? record?.job_id;
+  if (raw == null || raw === "") return 0;
+  const id = typeof raw === "number" ? raw : Number(String(raw).trim());
+  return Number.isFinite(id) && id > 0 ? id : 0;
+}
+
+export function resolveBookingPrimaryKey(
+  record: { id?: unknown; booking_id?: unknown } | null | undefined,
+): number {
+  const raw = record?.id ?? record?.booking_id;
   if (raw == null || raw === "") return 0;
   const id = typeof raw === "number" ? raw : Number(String(raw).trim());
   return Number.isFinite(id) && id > 0 ? id : 0;
@@ -138,4 +152,36 @@ export async function fetchAirExportAirPdfByJob(
   document: AirExportAirPdfDocument,
 ): Promise<Blob> {
   return fetchAirExportAirPdf({ job_id: jobId, document });
+}
+
+/** Booking-level air PDF (customer-service-shipment), e.g. draft AWB on export booking. */
+export async function fetchAirExportBookingAirPdf(
+  payload: AirExportAirPdfByBookingPayload,
+): Promise<Blob> {
+  const token = useAuthStore.getState().accessToken;
+  const booking_id = resolveBookingPrimaryKey({ id: payload.booking_id });
+  if (!booking_id) {
+    throw new Error("Invalid booking id for Air PDF");
+  }
+
+  const response = await fetch(
+    `${URL.base}${URL.customerServiceShipment}air/pdf/`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        booking_id,
+        document: payload.document,
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.blob();
 }
