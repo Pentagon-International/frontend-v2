@@ -1455,10 +1455,15 @@ export default function ServiceJobCreate() {
 
   const serviceOptions = useMemo(
     () =>
-      activeServices.map((s) => ({
-        value: String(s.id),
-        label: s.service_name,
-      })),
+      activeServices.map((s) => {
+        const code = String(s.service_code ?? "").trim();
+        const name = String(s.service_name ?? "").trim();
+        return {
+          value: String(s.id),
+          // Include code in label so searchable Dropdown filters by code or name
+          label: code && name ? `${code} - ${name}` : name || code || String(s.id),
+        };
+      }),
     [activeServices],
   );
 
@@ -2494,7 +2499,7 @@ export default function ServiceJobCreate() {
               <Grid.Col span={4}>
                 <Dropdown
                   label="Service"
-                  placeholder="Select service"
+                  placeholder="Type service code or name"
                   searchable
                   disabled={isReadOnly}
                   data={serviceOptions}
