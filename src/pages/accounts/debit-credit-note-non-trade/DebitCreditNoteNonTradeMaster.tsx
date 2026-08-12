@@ -965,6 +965,7 @@ export default function DebitCreditNoteNonTradeMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Document No"
                       placeholder="Type document no"
                       value={draftFilters.document_no}

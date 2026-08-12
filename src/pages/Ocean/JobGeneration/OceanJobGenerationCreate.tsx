@@ -1321,6 +1321,7 @@ function OceanJobGenerationCreate() {
 
               <Grid.Col span={3}>
                 <FormTextInput
+                  format="capital"
                   label="Master No"
                   placeholder="Enter master number"
                   {...jobDetailsForm.getInputProps("master_no")}
@@ -1407,6 +1408,7 @@ function OceanJobGenerationCreate() {
 
               <Grid.Col span={3}>
                 <FormTextInput
+                  format="capital"
                   label="Voyage"
                   withAsterisk
                   placeholder="Enter voyage number"

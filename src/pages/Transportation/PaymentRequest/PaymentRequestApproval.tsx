@@ -1461,6 +1461,7 @@ function PaymentRequestApproval() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Job Id"
                       value={draftFilters.job_reference ?? ""}
                       placeholder="Type Job Id"
@@ -1479,6 +1480,7 @@ function PaymentRequestApproval() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Request Number"
                       value={draftFilters.request_no ?? ""}
                       placeholder="Type Request Number"

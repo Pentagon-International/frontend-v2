@@ -3653,6 +3653,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
+                    format="capital"
                     label="HAWB Number"
                     placeholder="Enter HAWB Number"
                     value={form.values.houseno}
@@ -3664,6 +3665,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
+                    format="capital"
                     label="MAWB Number"
                     placeholder="Enter MAWB Number"
                     value={form.values.master_no}
@@ -3689,6 +3691,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
+                    format="capital"
                     label="Flight Number"
                     placeholder="Enter flight number"
                     value={form.values.flight_no ?? ""}

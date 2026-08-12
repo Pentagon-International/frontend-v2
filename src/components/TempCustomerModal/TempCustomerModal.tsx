@@ -175,6 +175,7 @@ export default function TempCustomerModal({
           </Grid.Col>
           <Grid.Col span={6}>
             <FormTextInput
+              format="normal"
               label="Mobile Number"
               withAsterisk
               {...form.getInputProps("contact_number")}

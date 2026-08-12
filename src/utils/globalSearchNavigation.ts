@@ -147,7 +147,7 @@ export const globalSearchModuleToRoute = (
         return { path: `/inland/import-job/invoice/edit/${id}`, needsState: false };
       if (sub === "service_job")
         return { path: `/service-job/invoice/edit/${id}`, needsState: false };
-      return null;
+      return { path: `/invoice/edit/${id}`, needsState: false };
     case "reverse_invoice":
       return { path: "/invoice-reverse", needsState: true };
     case "journal_voucher":

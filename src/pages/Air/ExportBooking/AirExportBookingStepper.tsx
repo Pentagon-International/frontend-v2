@@ -652,7 +652,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       charge_id: "",
       charge_name: "",
       pp_cc: "Prepaid",
-      ...getDefaultBookingChargeCurrencyFields(useAuthStore.getState().user?.branches),
+      ...getDefaultBookingChargeCurrencyFields(
+        useAuthStore.getState().user?.branches,
+      ),
       unit: "",
       no_of_units: "",
       sell_per_unit: "",
@@ -874,10 +876,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   // Get user data from auth store
   const user = useAuthStore((state) => state.user);
-  const isVietnamBranch = useMemo(
-    () => isVietnamBranchFromUser(user),
-    [user],
-  );
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -1030,7 +1029,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       charge_id: "",
       charge_name: "",
       pp_cc: "Prepaid",
-      ...getDefaultBookingChargeCurrencyFields(useAuthStore.getState().user?.branches),
+      ...getDefaultBookingChargeCurrencyFields(
+        useAuthStore.getState().user?.branches,
+      ),
       unit: "",
       no_of_units: "",
       sell_per_unit: "",
@@ -1254,9 +1255,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             date: String(e.date ?? ""),
           }))
         : [],
-      document_ids: parseJobDocumentsFromApi(
-        data as Record<string, unknown>,
-      ).document_ids,
+      document_ids: parseJobDocumentsFromApi(data as Record<string, unknown>)
+        .document_ids,
       document_display_list: parseJobDocumentsFromApi(
         data as Record<string, unknown>,
       ).document_display_list,
@@ -1448,13 +1448,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
   useEffect(() => {
     if (!unitOptions.length) return;
-    setCharges((prev) =>
-      mapBookingChargesWithUnits(
-        prev,
-        form.values.service,
-        form.values.cargo_details,
-        unitOptions,
-      ) ?? prev,
+    setCharges(
+      (prev) =>
+        mapBookingChargesWithUnits(
+          prev,
+          form.values.service,
+          form.values.cargo_details,
+          unitOptions,
+        ) ?? prev,
     );
   }, [unitOptions, form.values.service, form.values.cargo_details]);
 
@@ -2427,8 +2428,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const mappedCharges = (chargesData as Array<Record<string, unknown>>).map(
         (charge: Record<string, unknown>) => {
           const nestedCharge = charge.charge as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
           const chargeName =
             charge.charge_name || nestedCharge?.charge_name || "";
           return {
@@ -2905,8 +2905,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             min_sell: roundMoneyToDecimals(parseFloat(charge.min_sell)) || 0,
             cost_per_unit:
               roundMoneyToDecimals(parseFloat(charge.cost_per_unit)) || 0,
-            total_cost: roundLocalMoneyToDecimals(parseFloat(charge.total_cost)) || 0,
-            total_sell: roundLocalMoneyToDecimals(parseFloat(charge.total_sell)) || 0,
+            total_cost:
+              roundLocalMoneyToDecimals(parseFloat(charge.total_cost)) || 0,
+            total_sell:
+              roundLocalMoneyToDecimals(parseFloat(charge.total_sell)) || 0,
           };
           // Only attach id when it was received from filter endpoint; do not send generated values
           if (charge.id != null && charge.id !== undefined) {
@@ -3867,6 +3869,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={4}>
                   <FormTextInput
+                    format="capital"
                     label="Flight Number"
                     placeholder="Enter flight number"
                     value={form.values.flight_no ?? ""}
@@ -4215,6 +4218,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       </Grid.Col>
                       <Grid.Col span={1.5}>
                         <FormTextInput
+                          format="normal"
                           placeholder={
                             form.values.routingDetails[index]?.move_type ===
                             "AIR"
@@ -4483,8 +4487,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const addr = (
                           (
                             (original as any).addresses_data as
-                              | Array<{ address?: string }>
-                              | undefined
+                              Array<{ address?: string }> | undefined
                           )?.[0]?.address ?? ""
                         ).toString();
                         const email = String(
@@ -5308,6 +5311,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
+                    format="normal"
                     label="Marks No"
                     placeholder="Enter marks and numbers"
                     {...form.getInputProps("marks_no")}
@@ -5899,6 +5903,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     />
                   ) : (
                     <FormTextInput
+                      format="normal"
                       label="Quotation/Contract No"
                       placeholder="Enter quotation number"
                       value={quotationId}

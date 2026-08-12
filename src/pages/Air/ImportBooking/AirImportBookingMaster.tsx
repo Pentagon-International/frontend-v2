@@ -1616,6 +1616,7 @@ function AirImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="Booking ID"
                         placeholder="Enter Booking ID"
@@ -1640,6 +1641,7 @@ function AirImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="Enquiry ID"
                         placeholder="Enter Enquiry ID"
@@ -1793,6 +1795,7 @@ function AirImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="House No"
                         placeholder="Enter House No"
@@ -1841,6 +1844,7 @@ function AirImportBookingMaster() {
                       }}
                     >
                       <FormTextInput
+                        format="capital"
                         size="xs"
                         label="MAWB"
                         placeholder="Enter MAWB"

@@ -159,11 +159,7 @@ const fetchCheckSezStatus = async (payload: {
   document_date: string;
 }): Promise<boolean> => {
   try {
-    const response = await postAPICall(
-      URL.checkSezStatus,
-      payload,
-      API_HEADER,
-    );
+    const response = await postAPICall(URL.checkSezStatus, payload, API_HEADER);
     const root = response as {
       sez?: unknown;
       data?: { sez?: unknown };
@@ -806,12 +802,11 @@ function applyReversableDataToReverseForm(
     state: data.state_id != null ? String(data.state_id) : "",
     gstn: data.gstn ?? "",
     shipment_no: data.shipment_no ?? "",
-    daybook_id:
-      opts.emptyDaybook
-        ? ""
-        : data.day_book_id != null
-          ? String(data.day_book_id)
-          : "",
+    daybook_id: opts.emptyDaybook
+      ? ""
+      : data.day_book_id != null
+        ? String(data.day_book_id)
+        : "",
     document_date: normalizeDate(data.document_date ?? null),
     due_date: normalizeDate(data.due_date ?? null),
     currency: data.currency_code ?? "",
@@ -879,7 +874,9 @@ function applyReversableDataToReverseForm(
                 ? amountPerUnit
                 : null,
               amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
+              header_amount: Number.isFinite(headerAmount)
+                ? headerAmount
+                : null,
               amount_in_local: Number.isFinite(amountInLocal)
                 ? amountInLocal
                 : null,
@@ -927,8 +924,7 @@ function buildReverseChargePayload(
   },
 ): Record<string, unknown> {
   const chargeCurrencyItem = opts.currencyData.find(
-    (c) =>
-      (c.code || c.currency_code || "").toString() === charge.currency,
+    (c) => (c.code || c.currency_code || "").toString() === charge.currency,
   );
   const chargeCurrencyId =
     chargeCurrencyItem?.id != null ? Number(chargeCurrencyItem.id) : null;
@@ -1081,10 +1077,7 @@ function InvoiceReverse() {
     user?.country?.country_name,
   ]);
 
-  const isVietnamBranch = useMemo(
-    () => isVietnamBranchFromUser(user),
-    [user],
-  );
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
@@ -1100,10 +1093,7 @@ function InvoiceReverse() {
     user?.country?.country_name,
   ]);
 
-  const isUsInvoiceUser = useMemo(
-    () => isUnitedStatesBranchUser(user),
-    [user],
-  );
+  const isUsInvoiceUser = useMemo(() => isUnitedStatesBranchUser(user), [user]);
 
   // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
   const isVatInvoiceUser = useMemo(
@@ -1114,10 +1104,7 @@ function InvoiceReverse() {
   // India GST: State/GSTN/SAC, IGST/CGST/SGST. Foreign branches use VAT (isVatInvoiceUser).
   const isGstInvoiceUser = useMemo(
     () =>
-      isIndiaUser &&
-      !isAgentInvoice &&
-      !isVatInvoiceUser &&
-      !isUsInvoiceUser,
+      isIndiaUser && !isAgentInvoice && !isVatInvoiceUser && !isUsInvoiceUser,
     [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
@@ -1202,11 +1189,7 @@ function InvoiceReverse() {
       bill_to: (value) => (!value ? "Bill To is required" : null),
       address: (value) => (!value ? "Address is required" : null),
       state: (value) =>
-        !isGstInvoiceRef.current
-          ? null
-          : !value
-            ? "State is required"
-            : null,
+        !isGstInvoiceRef.current ? null : !value ? "State is required" : null,
       shipment_no: (value) => (!value ? "Shipment No is required" : null),
       daybook_id: (value) => (!value ? "Daybook is required" : null),
       document_date: (value) => (!value ? "Document Date is required" : null),
@@ -1634,9 +1617,7 @@ function InvoiceReverse() {
     } | null;
     const st = location.state as NavState;
     if (st?.financeReverseRecord) {
-      setReversalRecordData(
-        st.financeReverseRecord as Record<string, unknown>,
-      );
+      setReversalRecordData(st.financeReverseRecord as Record<string, unknown>);
     }
     const reverseInvoiceId =
       st?.reverse_invoice_id != null && Number(st.reverse_invoice_id) > 0
@@ -1684,9 +1665,7 @@ function InvoiceReverse() {
           setSaveResponse({
             id: Number(data.id ?? reverseInvoiceId),
             customer_id:
-              data.customer_id != null
-                ? Number(data.customer_id)
-                : undefined,
+              data.customer_id != null ? Number(data.customer_id) : undefined,
             reverse_document_no:
               pickReverseDocumentNo(st) || pickReverseDocumentNo(data),
             status: String(data.status ?? "UNPOSTED"),
@@ -1973,8 +1952,7 @@ function InvoiceReverse() {
             charge_id: c.charge_id ?? null,
             charge_name: c.charge_name ?? "",
             charge_code: c.charge_code ?? "",
-            shipment_id:
-              c.shipment_id ?? c.shipment_no ?? "",
+            shipment_id: c.shipment_id ?? c.shipment_no ?? "",
             unit_code: c.unit_code ?? "",
             no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
             currency: c.currency_code ?? "",
@@ -1983,9 +1961,7 @@ function InvoiceReverse() {
               ? amountPerUnit
               : null,
             amount: Number.isFinite(amount) ? amount : null,
-            header_amount: Number.isFinite(headerAmount)
-              ? headerAmount
-              : null,
+            header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
             amount_in_local: Number.isFinite(amountInLocal)
               ? amountInLocal
               : null,
@@ -2085,8 +2061,7 @@ function InvoiceReverse() {
           (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
         );
         const addrForGst =
-          primaryAddress ||
-          (addressesData || []).find((a) => a.gst_id != null);
+          primaryAddress || (addressesData || []).find((a) => a.gst_id != null);
         if (addrForGst?.gst_id) {
           form.setFieldValue("gstn", String(addrForGst.gst_id));
         }
@@ -2551,10 +2526,14 @@ function InvoiceReverse() {
                 <Grid.Col span={2}>
                   <Dropdown
                     label="State"
-                    placeholder={isStateLoading ? "Loading states" : "Select state"}
+                    placeholder={
+                      isStateLoading ? "Loading states" : "Select state"
+                    }
                     data={stateOptions}
                     value={form.values.state || null}
-                    onChange={(value) => form.setFieldValue("state", value ?? "")}
+                    onChange={(value) =>
+                      form.setFieldValue("state", value ?? "")
+                    }
                     searchable
                     withAsterisk
                     readOnly={isStateLoading || isReadOnly}
@@ -2563,6 +2542,7 @@ function InvoiceReverse() {
                 </Grid.Col>
                 <Grid.Col span={2}>
                   <FormTextInput
+                    format="capital"
                     label="GSTN"
                     placeholder="GSTN"
                     value={form.values.gstn}
@@ -2576,6 +2556,7 @@ function InvoiceReverse() {
             {isKenyaUser && (
               <Grid.Col span={2}>
                 <FormTextInput
+                  format="capital"
                   label="PIN number"
                   placeholder="PIN number"
                   value={form.values.gstn}
@@ -2587,6 +2568,7 @@ function InvoiceReverse() {
             )}
             <Grid.Col span={2}>
               <FormTextInput
+                format="capital"
                 label={isAgentInvoice ? "Job id" : "Shipment No"}
                 placeholder={isAgentInvoice ? "Job id" : "Shipment No"}
                 value={form.values.shipment_no}
@@ -2694,6 +2676,7 @@ function InvoiceReverse() {
             {!isKenyaUser && (
               <Grid.Col span={2}>
                 <FormTextInput
+                  format="capital"
                   label="IRN No"
                   placeholder="IRN No"
                   value={form.values.irn_no}
@@ -2706,6 +2689,7 @@ function InvoiceReverse() {
             {isChinaUser && (
               <Grid.Col span={2}>
                 <FormTextInput
+                  format="capital"
                   label="Fapiao No"
                   placeholder="Fapiao No"
                   value={form.values.fapiao_no}
@@ -2932,7 +2916,11 @@ function InvoiceReverse() {
                               }
                               setChargeErrors(newErrors);
                             }
-                            if (chargeId != null && jobServiceId != null && isGstInvoiceUser) {
+                            if (
+                              chargeId != null &&
+                              jobServiceId != null &&
+                              isGstInvoiceUser
+                            ) {
                               fetchGetEffectiveSac([
                                 {
                                   charge_id: chargeId,
@@ -3182,6 +3170,7 @@ function InvoiceReverse() {
                       {isGstInvoiceUser && (
                         <Grid.Col span={0.8}>
                           <FormTextInput
+                            format="normal"
                             placeholder="SAC Code"
                             value={charge.tax_code}
                             readOnly={isReadOnly}
@@ -3795,11 +3784,7 @@ function InvoiceReverse() {
           </Box>
 
           <Group justify="flex-end" mt="xl">
-            <Button
-              variant="outline"
-              color="#105476"
-              onClick={navigateBack}
-            >
+            <Button variant="outline" color="#105476" onClick={navigateBack}>
               Cancel
             </Button>
             {!isReadOnly && (

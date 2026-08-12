@@ -2636,6 +2636,7 @@ export default function ServiceJobCreate() {
 
               <Grid.Col span={4}>
                 <FormTextInput
+                  format="capital"
                   label={awbFieldLabel}
                   placeholder={awbFieldPlaceholder}
                   readOnly={isReadOnly}

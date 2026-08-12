@@ -741,6 +741,7 @@ function OceanJobGenerationMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       size="xs"
                       label="Voyage"
                       placeholder="Enter voyage number"

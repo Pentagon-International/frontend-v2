@@ -1173,6 +1173,7 @@ function SupplierInvoiceMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Invoice No"
                       placeholder="Type Invoice No"
                       value={draftFilters.invoice_no}
@@ -1209,6 +1210,7 @@ function SupplierInvoiceMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Job Id"
                       placeholder="Type Job Id"
                       value={draftFilters.job_id}
@@ -1227,6 +1229,7 @@ function SupplierInvoiceMaster() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
+                      format="capital"
                       label="Shipment Id"
                       placeholder="Type Shipment Id"
                       value={draftFilters.shipment_id}
