@@ -36,6 +36,10 @@ import {
   appendEditPageAuditPatch,
 } from "../../../utils/editPageAuditInfo";
 import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
+import {
+  clickableAdjustmentDocumentNoStyles,
+  useGlobalSearchDocumentNavigation,
+} from "../../../hooks/useGlobalSearchDocumentNavigation";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -570,6 +574,17 @@ export default function OverseasPaymentCreate({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const dateFormat = useDateFormat();
+  const getDocumentNavigationOptions = useMemo(
+    () => () => ({
+      returnTo: location.pathname,
+      returnToState: location.state,
+    }),
+    [location.pathname, location.state],
+  );
+  const { onDocumentNoClick, documentNavUi } =
+    useGlobalSearchDocumentNavigation({
+      getOptions: getDocumentNavigationOptions,
+    });
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
@@ -2477,6 +2492,7 @@ export default function OverseasPaymentCreate({
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {documentNavUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -3339,10 +3355,23 @@ export default function OverseasPaymentCreate({
                         <TextInput
                           placeholder="Document no"
                           readOnly
-                          {...form.getInputProps(
-                            `adjustments.${idx}.document_no`,
-                          )}
-                          styles={adjustmentFieldStyles}
+                          value={form.values.adjustments[idx].document_no}
+                          title={
+                            form.values.adjustments[idx].document_no?.trim()
+                              ? "Open document"
+                              : undefined
+                          }
+                          onClick={() => {
+                            const documentNo =
+                              form.values.adjustments[idx].document_no?.trim() ??
+                              "";
+                            if (documentNo) void onDocumentNoClick(documentNo);
+                          }}
+                          styles={
+                            form.values.adjustments[idx].document_no?.trim()
+                              ? clickableAdjustmentDocumentNoStyles
+                              : adjustmentFieldStyles
+                          }
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>

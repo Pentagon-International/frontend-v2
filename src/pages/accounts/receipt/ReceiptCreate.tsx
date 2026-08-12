@@ -72,6 +72,10 @@ import {
   appendEditPageAuditPatch,
 } from "../../../utils/editPageAuditInfo";
 import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
+import {
+  clickableAdjustmentDocumentNoStyles,
+  useGlobalSearchDocumentNavigation,
+} from "../../../hooks/useGlobalSearchDocumentNavigation";
 
 const RECEIPT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -545,6 +549,17 @@ export default function ReceiptCreate({
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const dateFormat = useDateFormat();
+  const getDocumentNavigationOptions = useMemo(
+    () => () => ({
+      returnTo: location.pathname,
+      returnToState: location.state,
+    }),
+    [location.pathname, location.state],
+  );
+  const { onDocumentNoClick, documentNavUi } =
+    useGlobalSearchDocumentNavigation({
+      getOptions: getDocumentNavigationOptions,
+    });
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
@@ -2337,6 +2352,7 @@ export default function ReceiptCreate({
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {documentNavUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -3266,10 +3282,23 @@ export default function ReceiptCreate({
                         <TextInput
                           placeholder="Document no"
                           readOnly
-                          {...form.getInputProps(
-                            `adjustments.${idx}.document_no`,
-                          )}
-                          styles={adjustmentFieldStyles}
+                          value={form.values.adjustments[idx].document_no}
+                          title={
+                            form.values.adjustments[idx].document_no?.trim()
+                              ? "Open document"
+                              : undefined
+                          }
+                          onClick={() => {
+                            const documentNo =
+                              form.values.adjustments[idx].document_no?.trim() ??
+                              "";
+                            if (documentNo) void onDocumentNoClick(documentNo);
+                          }}
+                          styles={
+                            form.values.adjustments[idx].document_no?.trim()
+                              ? clickableAdjustmentDocumentNoStyles
+                              : adjustmentFieldStyles
+                          }
                         />
                       </Grid.Col>
                       <Grid.Col span={1.5}>
