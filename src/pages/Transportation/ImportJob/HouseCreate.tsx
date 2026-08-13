@@ -147,7 +147,11 @@ import {
   spreadMasterDocumentsNavState,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { normalizePackageTypeCode, pickPackageTypeCodeFromCargo, resolvePackageTypeName } from "../../../utils/packageTypeOptions";
+import {
+  normalizePackageTypeCode,
+  pickPackageTypeCodeFromCargo,
+  resolvePackageTypeName,
+} from "../../../utils/packageTypeOptions";
 import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -230,7 +234,10 @@ type CargoDetail = {
 const ITEM_TYPE_OPTIONS = [
   { value: "GC - Govt. Cargo", label: "GC - Govt. Cargo" },
   { value: "OT - Other Cargo", label: "OT - Other Cargo" },
-  { value: "UB - Un-accompanied Baggage", label: "UB - Un-accompanied Baggage" },
+  {
+    value: "UB - Un-accompanied Baggage",
+    label: "UB - Un-accompanied Baggage",
+  },
 ];
 
 // Type definitions for charges (charge_id, unit_id, currency_id for payload; id for update)
@@ -414,15 +421,15 @@ function HouseCreate() {
 
   // State for address options (populated from addresses_data when shipper/consignee is selected)
   const [shipperAddressOptions, setShipperAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [originAgentAddressOptions, setOriginAgentAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
 
   // Shipment-party search state for Shipper (import flow)
@@ -628,7 +635,7 @@ function HouseCreate() {
 
   const getPartyAddresses = (
     original: Record<string, unknown>,
-  ): Array<{ address?: string }> => {
+  ): Array<{ address?: string; email?: string; address_type?: string }> => {
     const raw =
       (original.addresses_data as unknown) ??
       (original.addresses as unknown) ??
@@ -637,8 +644,20 @@ function HouseCreate() {
     return (raw as Array<Record<string, unknown>>).map((a) => ({
       address:
         (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      email: String(a.email ?? ""),
+      address_type: String(a.address_type ?? ""),
     }));
   };
+
+  const pickPrimaryPartyAddress = <
+    T extends { address?: string; email?: string; address_type?: string | null },
+  >(
+    addresses: T[],
+  ): T | undefined =>
+    addresses.find(
+      (a) =>
+        String(a.address_type || "").toUpperCase() === "PRIMARY" && !!a.address,
+    ) || addresses.find((a) => !!a.address);
 
   // Get existing housing details from location state if available
   // Support both hawbDetails and housingDetails for backward compatibility (same as AirHouseCreate)
@@ -2472,7 +2491,8 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount_per_unit:
+              roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
               roundLocalMoneyToDecimals(charge.sell_local_amount) ?? null,
@@ -2885,10 +2905,8 @@ function HouseCreate() {
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => {
           const packageTypeName =
-            resolvePackageTypeName(
-              cargo.package_type,
-              packageTypeOptions,
-            ) || String(cargo.package_type_name ?? "").trim();
+            resolvePackageTypeName(cargo.package_type, packageTypeOptions) ||
+            String(cargo.package_type_name ?? "").trim();
           return {
             no_of_packages: cargo.no_of_packages,
             package_type: cargo.package_type,
@@ -2920,7 +2938,8 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount_per_unit:
+              roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
               roundLocalMoneyToDecimals(charge.sell_local_amount) ?? null,
@@ -3005,22 +3024,27 @@ function HouseCreate() {
       const isDraft = options?.draft === true;
       const containerDetailsForPdf =
         (location.state?.containerDetails as Record<string, unknown>[]) ||
-        (location.state?.job as { container_details?: Record<string, unknown>[] })
-          ?.container_details ||
+        (
+          location.state?.job as {
+            container_details?: Record<string, unknown>[];
+          }
+        )?.container_details ||
         [];
       const notifyName = form.values.notify1_customer_name || "";
       const notifyAddress = form.values.notify1_customer_address || "";
       const notifyEmail = form.values.notify1_customer_email || "";
       const freightPpCc = form.values.pp_cc || "Collect";
       const editSummary = (
-        editData as {
-          summary?: {
-            total_no_of_packages?: number | string;
-            total_gross_weight?: number | string;
-            total_volume?: number | string;
-            container_type?: string[];
-          };
-        } | undefined
+        editData as
+          | {
+              summary?: {
+                total_no_of_packages?: number | string;
+                total_gross_weight?: number | string;
+                total_volume?: number | string;
+                container_type?: string[];
+              };
+            }
+          | undefined
       )?.summary;
       const cargoDetailsForPdf = cargoDetails.map((c) => {
         const matchedContainer = containerDetailsForPdf.find(
@@ -3050,8 +3074,7 @@ function HouseCreate() {
           container_type_name:
             (
               matchedContainer?.container_type_details as
-                | { container_type_name?: string }
-                | undefined
+                { container_type_name?: string } | undefined
             )?.container_type_name ||
             (matchedContainer?.container_type_name as string | undefined) ||
             "",
@@ -3108,8 +3131,7 @@ function HouseCreate() {
           ? Number(form.values.shipper_state_id)
           : ((
               editData as
-                | { shipment_id?: string; shipper_state_id?: number }
-                | undefined
+                { shipment_id?: string; shipper_state_id?: number } | undefined
             )?.shipper_state_id ?? null),
         shipment_id:
           (editData as { shipment_id?: string } | undefined)?.shipment_id ??
@@ -3152,7 +3174,8 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount_per_unit:
+              roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
               roundLocalMoneyToDecimals(charge.sell_local_amount) ?? null,
@@ -3270,9 +3293,7 @@ function HouseCreate() {
 
   const handleOpenSendEmailForBol = () => {
     setActivePdfBlob(bolPdfBlob);
-    setActiveFileName(
-      `Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`,
-    );
+    setActiveFileName(`Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`);
     setActiveDocumentLabel("Bill Of Lading");
     openSendEmail();
   };
@@ -3293,9 +3314,7 @@ function HouseCreate() {
           }
         | undefined;
       const name =
-        partyDetails?.carrier_agent_name ||
-        jobParty?.carrier_agent_name ||
-        "";
+        partyDetails?.carrier_agent_name || jobParty?.carrier_agent_name || "";
       const address =
         partyDetails?.carrier_agent_address ||
         jobParty?.carrier_agent_address ||
@@ -3414,8 +3433,7 @@ function HouseCreate() {
               return (no && aNo === no) || (id && aId === id);
             });
             const details = apiMatch?.container_type_details as
-              | { container_type_name?: string }
-              | undefined;
+              { container_type_name?: string } | undefined;
             const name = String(
               c.container_type_name ||
                 details?.container_type_name ||
@@ -3444,10 +3462,8 @@ function HouseCreate() {
           )
           .map((cargo) => {
             const packageTypeName =
-              resolvePackageTypeName(
-                cargo.package_type,
-                packageTypeOptions,
-              ) || String(cargo.package_type_name ?? "").trim();
+              resolvePackageTypeName(cargo.package_type, packageTypeOptions) ||
+              String(cargo.package_type_name ?? "").trim();
             return {
               container_no: cargo.container_number,
               container_number: cargo.container_number,
@@ -3582,69 +3598,69 @@ function HouseCreate() {
             Back to Import Job
           </Button> */}
           {!isReadOnly && (
-          <Button
-            color="#105476"
-            variant="outline"
-            onClick={() => {
-              if (active === 0) {
-                if (!validateStep1()) return;
-                if (!validateStep2()) {
-                  setActive(1);
-                  return;
+            <Button
+              color="#105476"
+              variant="outline"
+              onClick={() => {
+                if (active === 0) {
+                  if (!validateStep1()) return;
+                  if (!validateStep2()) {
+                    setActive(1);
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 1) {
+                  if (!validateStep2()) return;
+                  if (!validateStep3()) {
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 2) {
+                  if (!validateStep3()) return;
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 3) {
+                  if (!validateStep4()) return;
+                  handleSave();
+                } else if (active === 4) {
+                  if (!validateStep1()) {
+                    setActive(0);
+                    return;
+                  }
+                  if (!validateStep2()) {
+                    setActive(1);
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
                 }
-                if (!validateStep3()) {
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 1) {
-                if (!validateStep2()) return;
-                if (!validateStep3()) {
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 2) {
-                if (!validateStep3()) return;
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 3) {
-                if (!validateStep4()) return;
-                handleSave();
-              } else if (active === 4) {
-                if (!validateStep1()) {
-                  setActive(0);
-                  return;
-                }
-                if (!validateStep2()) {
-                  setActive(1);
-                  return;
-                }
-                if (!validateStep3()) {
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              }
-            }}
-          >
-            Save HBL
-          </Button>
+              }}
+            >
+              Save HBL
+            </Button>
           )}
           <Menu
             shadow="md"
@@ -3978,11 +3994,7 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        styles={
-          isReadOnly
-            ? { panel: { pointerEvents: "none" } }
-            : undefined
-        }
+        styles={isReadOnly ? { panel: { pointerEvents: "none" } } : undefined}
       >
         <Tabs.List
           mb="md"
@@ -4410,6 +4422,12 @@ function HouseCreate() {
                       setShipperSearch(v);
                       form.setFieldValue("shipper_name", v);
                       form.setFieldValue("shipper_code", "");
+                      if (!v.trim()) {
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                        setShipperAddressOptions([]);
+                      }
                     }}
                     error={form.errors.shipper_name as string}
                   />
@@ -4469,18 +4487,12 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
-
-                      // Reset address value so it always replaces on re-select
-                      form.setFieldValue("shipper_address", "");
-                      setShipperAddressOptions(addressOptions);
-                      if (addressOptions.length > 0) {
-                        form.setFieldValue(
-                          "shipper_address",
-                          addressOptions[0].value,
-                        );
-                      }
 
                       const addressesDataFull = Array.isArray(
                         (original as Record<string, unknown>).addresses_data,
@@ -4488,15 +4500,28 @@ function HouseCreate() {
                         ? ((original as Record<string, unknown>)
                             .addresses_data as Array<{
                             address?: string;
+                            email?: string;
                             state_id?: number | null;
                             address_type?: string | null;
                           }>)
                         : [];
-                      const primaryAddr = addressesDataFull.find(
-                        (a) =>
-                          String(a.address_type || "").toUpperCase() ===
-                          "PRIMARY",
+                      const primaryAddr = pickPrimaryPartyAddress(
+                        addressesDataFull,
                       );
+
+                      // Reset address value so it always replaces on re-select
+                      form.setFieldValue("shipper_address", "");
+                      setShipperAddressOptions(addressOptions);
+                      if (addressOptions.length > 0) {
+                        const primaryAddressValue = primaryAddr?.address
+                          ? toTitleCase(String(primaryAddr.address))
+                          : addressOptions[0].value;
+                        form.setFieldValue(
+                          "shipper_address",
+                          primaryAddressValue,
+                        );
+                      }
+
                       const addrWithState =
                         primaryAddr ||
                         addressesDataFull.find((a) => a.state_id != null);
@@ -4519,7 +4544,10 @@ function HouseCreate() {
                           : String(value ?? "").trim();
                       form.setFieldValue("shipper_code", customerCode);
                       form.setFieldValue("shipper_name", toTitleCase(name));
-                      form.setFieldValue("shipper_email", email);
+                      form.setFieldValue(
+                        "shipper_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       setShipperSearch(name);
                     }}
                     comboboxProps={{ zIndex: 10 }}
@@ -4564,8 +4592,16 @@ function HouseCreate() {
                     data={shipperAddressOptions}
                     value={form.values.shipper_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("shipper_address", formattedValue);
+                      form.setFieldValue("shipper_address", value || "");
+                      if (value) {
+                        const selected = shipperAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "shipper_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.shipper_address}
                   />
@@ -4601,6 +4637,15 @@ function HouseCreate() {
                   value={form.values.consignee_code}
                   displayValue={form.values.consignee_name}
                   onChange={(value, selectedData, originalData) => {
+                    if (!value) {
+                      form.setFieldValue("consignee_code", "");
+                      form.setFieldValue("consignee_name", "");
+                      form.setFieldValue("consignee_email", "");
+                      form.setFieldValue("consignee_address", "");
+                      form.setFieldValue("consignee_state_id", "");
+                      setConsigneeAddressOptions([]);
+                      return;
+                    }
                     form.setFieldValue("consignee_code", value || "");
                     form.setFieldValue(
                       "consignee_name",
@@ -4615,11 +4660,11 @@ function HouseCreate() {
                     const email = String(
                       original.customer_email ?? original.email ?? "",
                     );
-                    form.setFieldValue("consignee_email", email);
 
                     const addressesData = Array.isArray(original.addresses_data)
                       ? (original.addresses_data as Array<{
                           address?: string;
+                          email?: string;
                           state_id?: number | null;
                           address_type?: string | null;
                         }>)
@@ -4628,23 +4673,27 @@ function HouseCreate() {
                       .filter((a) => a.address)
                       .map((a) => {
                         const addr = toTitleCase(String(a.address || ""));
-                        return { value: addr, label: addr };
+                        return {
+                          value: addr,
+                          label: addr,
+                          email: String(a.email || ""),
+                        };
                       });
                     setConsigneeAddressOptions(addressOptions);
 
-                    if (addressOptions.length > 0) {
+                    const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                    form.setFieldValue(
+                      "consignee_email",
+                      String(primaryAddr?.email || email || ""),
+                    );
+
+                    if (primaryAddr?.address) {
                       form.setFieldValue(
                         "consignee_address",
-                        addressOptions[0].value,
+                        toTitleCase(String(primaryAddr.address)),
                       );
-                    } else {
-                      if (!value) form.setFieldValue("consignee_address", "");
                     }
 
-                    if (!value) {
-                      form.setFieldValue("consignee_state_id", "");
-                      return;
-                    }
                     const primaryAddress = addressesData.find(
                       (a) =>
                         String(a.address_type || "").toUpperCase() ===
@@ -4686,8 +4735,16 @@ function HouseCreate() {
                     data={consigneeAddressOptions}
                     value={form.values.consignee_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("consignee_address", formattedValue);
+                      form.setFieldValue("consignee_address", value || "");
+                      if (value) {
+                        const selected = consigneeAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.consignee_address}
                   />
@@ -4734,33 +4791,46 @@ function HouseCreate() {
                       originalData &&
                       (originalData as Record<string, unknown>).addresses_data
                     ) {
-                      const addressOptions = (
+                      const addressesData = (
                         (originalData as Record<string, unknown>)
                           .addresses_data as Array<{
                           id: number;
                           address: string;
+                          email?: string;
+                          address_type?: string;
                         }>
-                      ).map((addr: { id: number; address: string }) => ({
-                        value: addr.address,
-                        label: addr.address,
-                      }));
+                      );
+                      const addressOptions = addressesData.map(
+                        (addr: {
+                          id: number;
+                          address: string;
+                          email?: string;
+                        }) => ({
+                          value: addr.address,
+                          label: addr.address,
+                          email: String(addr.email || ""),
+                        }),
+                      );
 
                       setNotifyCustomerAddressOptions(addressOptions);
 
-                      if (
-                        addressOptions.length > 0 &&
-                        addressOptions[0].value
-                      ) {
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "notify1_customer_address",
-                          addressOptions[0].value,
+                          primaryAddr.address,
                         );
                       } else {
                         form.setFieldValue("notify1_customer_address", "");
                       }
+                      form.setFieldValue(
+                        "notify1_customer_email",
+                        String(primaryAddr?.email || ""),
+                      );
                     } else {
                       setNotifyCustomerAddressOptions([]);
                       form.setFieldValue("notify1_customer_address", "");
+                      form.setFieldValue("notify1_customer_email", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -4787,11 +4857,19 @@ function HouseCreate() {
                     data={notifyCustomerAddressOptions}
                     value={form.values.notify1_customer_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "notify1_customer_address",
-                        formattedValue,
+                        value || "",
                       );
+                      if (value) {
+                        const selected = notifyCustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "notify1_customer_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.notify1_customer_address}
                   />
@@ -4849,32 +4927,39 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        email?: string;
+                        address_type?: string;
                       }>;
 
                       const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
+                        (addr: {
+                          id: number;
+                          address: string;
+                          email?: string;
+                        }) => ({
                           value: addr.address,
                           label: addr.address,
+                          email: String(addr.email || ""),
                         }),
                       );
 
                       setOriginAgentAddressOptions(addressOptions);
 
-                      if (
-                        addressOptions.length > 0 &&
-                        addressOptions[0].value
-                      ) {
-                        form.setFieldValue(
-                          "agent_address",
-                          addressOptions[0].value,
-                        );
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      if (primaryAddr?.address) {
+                        form.setFieldValue("agent_address", primaryAddr.address);
                       } else {
                         form.setFieldValue("agent_address", "");
                       }
+                      form.setFieldValue(
+                        "agent_email",
+                        String(primaryAddr?.email || ""),
+                      );
                     } else {
                       setOriginAgentAddressOptions([]);
                       form.setFieldValue("agent_address", "");
                       form.setFieldValue("agent_code", "");
+                      form.setFieldValue("agent_email", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -4902,8 +4987,13 @@ function HouseCreate() {
                     data={originAgentAddressOptions}
                     value={form.values.agent_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("agent_address", formattedValue);
+                      form.setFieldValue("agent_address", value || "");
+                      if (value) {
+                        const selected = originAgentAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue("agent_email", selected?.email || "");
+                      }
                     }}
                     error={form.errors.agent_address}
                   />
@@ -5560,32 +5650,32 @@ function HouseCreate() {
                         charges: collectCharges,
                       };
                       navigate("/SeaExport/import-job/invoice", {
-                          state: {
-                            serviceType:
-                              location.state?.mblDetails?.service || "FCL",
-                            hawbDetails: [detailForInvoice],
-                            housingDetails: [detailForInvoice],
-                            is_agent: false,
-                            // Explicitly indicate that Bill To / State / Address should come from consignee
-                            billToFrom: "consignee",
-                            ...(location.state?.job && {
-                              job: location.state.job,
-                            }),
-                            ...(location.state?.mblDetails && {
-                              mblDetails: location.state.mblDetails,
-                            }),
-                            ...(location.state?.carrierDetails && {
-                              carrierDetails: location.state.carrierDetails,
-                            }),
-                            ...(location.state?.routings && {
-                              routings: location.state.routings,
-                            }),
-                          },
-                        });
-                      }}
-                    >
-                      Create Invoice
-                    </Button>
+                        state: {
+                          serviceType:
+                            location.state?.mblDetails?.service || "FCL",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          // Explicitly indicate that Bill To / State / Address should come from consignee
+                          billToFrom: "consignee",
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
+                          ...(location.state?.mblDetails && {
+                            mblDetails: location.state.mblDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Button>
                 </Group>
               )}
             </Group>

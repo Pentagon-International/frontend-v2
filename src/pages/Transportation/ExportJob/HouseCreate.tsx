@@ -401,17 +401,17 @@ function HouseCreate() {
 
   // State for address options (populated from addresses_data when shipper/consignee is selected)
   const [shipperAddressOptions, setShipperAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [notify2CustomerAddressOptions, setNotify2CustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [agentAddressOptions, setAgentAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
 
   // Consignee (shipment-party) search state
@@ -767,7 +767,7 @@ function HouseCreate() {
 
   const getPartyAddresses = (
     original: Record<string, unknown>,
-  ): Array<{ address?: string }> => {
+  ): Array<{ address?: string; email?: string; address_type?: string }> => {
     const raw =
       (original.addresses_data as unknown) ??
       (original.addresses as unknown) ??
@@ -776,8 +776,30 @@ function HouseCreate() {
     return (raw as Array<Record<string, unknown>>).map((a) => ({
       address:
         (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      email: String(a.email ?? ""),
+      address_type: String(a.address_type ?? ""),
     }));
   };
+
+  const pickPrimaryPartyAddress = <
+    T extends { address?: string; email?: string; address_type?: string | null },
+  >(
+    addresses: T[],
+  ): T | undefined =>
+    addresses.find(
+      (a) =>
+        String(a.address_type || "").toUpperCase() === "PRIMARY" && !!a.address,
+    ) || addresses.find((a) => !!a.address);
+
+  const addressesMatchForSelect = (a?: string, b?: string) =>
+    String(a || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase() ===
+    String(b || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
 
   // Get existing housing details from location state if available
   // Support both hawbDetails and housingDetails for backward compatibility (same as AirHouseCreate)
@@ -1113,9 +1135,15 @@ function HouseCreate() {
 
       // Ensure address fields show on edit even when address option lists are empty/disabled
       if (editData.shipper_address) {
-        const addr = toTitleCase(String(editData.shipper_address));
+        const addr = String(editData.shipper_address);
         form.setFieldValue("shipper_address", addr);
-        setShipperAddressOptions([{ value: addr, label: addr }]);
+        setShipperAddressOptions([
+          {
+            value: addr,
+            label: addr,
+            email: String(editData.shipper_email || ""),
+          },
+        ]);
       }
       if (editData.consignee_address) {
         const addr = toTitleCase(String(editData.consignee_address));
@@ -3637,6 +3665,9 @@ function HouseCreate() {
                   value={form.values.shipper_code}
                   displayValue={form.values.shipper_name}
                   onChange={(value, selectedData, originalData) => {
+                    const previousCode = form.values.shipper_code;
+                    const previousAddress = form.values.shipper_address;
+                    const previousEmail = form.values.shipper_email;
                     form.setFieldValue("shipper_code", value || "");
                     form.setFieldValue(
                       "shipper_name",
@@ -3655,46 +3686,109 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        email?: string;
                         state_id?: number;
+                        address_type?: string;
                       }>;
 
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
+                      const addressOptions = addressesData
+                        .filter((addr) => addr.address)
+                        .map((addr) => ({
                           value: addr.address,
                           label: addr.address,
-                        }),
-                      );
+                          email: String(addr.email || ""),
+                        }));
 
-                      setShipperAddressOptions(addressOptions);
+                      const primary =
+                        addressesData.find(
+                          (a) =>
+                            String(a.address_type || "").toUpperCase() ===
+                            "PRIMARY",
+                        ) || addressesData[0];
 
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
+                      const keepExisting =
+                        !!previousAddress &&
+                        (!previousCode || previousCode === value);
+                      const matched = keepExisting
+                        ? addressOptions.find((item) =>
+                            addressesMatchForSelect(item.value, previousAddress),
+                          )
+                        : undefined;
+
+                      const optionsWithSaved =
+                        keepExisting && previousAddress && !matched
+                          ? [
+                              {
+                                value: previousAddress,
+                                label: previousAddress,
+                                email: String(previousEmail || ""),
+                              },
+                              ...addressOptions,
+                            ]
+                          : addressOptions;
+
+                      setShipperAddressOptions(optionsWithSaved);
+
+                      if (matched) {
+                        form.setFieldValue("shipper_address", matched.value);
                         form.setFieldValue(
-                          "shipper_address",
-                          addressesData[0].address,
+                          "shipper_email",
+                          matched.email ||
+                            previousEmail ||
+                            getPartyEmail(
+                              originalData as Record<string, unknown>,
+                            ) ||
+                            "",
+                        );
+                      } else if (keepExisting && previousAddress) {
+                        form.setFieldValue("shipper_address", previousAddress);
+                        if (previousEmail) {
+                          form.setFieldValue("shipper_email", previousEmail);
+                        }
+                      } else if (primary?.address) {
+                        form.setFieldValue("shipper_address", primary.address);
+                        form.setFieldValue(
+                          "shipper_email",
+                          primary?.email ||
+                            getPartyEmail(
+                              originalData as Record<string, unknown>,
+                            ) ||
+                            "",
                         );
                       } else {
                         form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
                       }
 
-                      // Set shipper_state_id from first address that has state_id
-                      const addrWithState = addressesData.find(
-                        (a: { state_id?: number }) => a.state_id != null,
-                      );
+                      const selectedForState =
+                        (matched
+                          ? addressesData.find((a) =>
+                              addressesMatchForSelect(
+                                a.address,
+                                matched.value,
+                              ),
+                            )
+                          : null) ||
+                        (keepExisting ? null : primary);
+                      const addrWithState =
+                        (selectedForState?.state_id != null
+                          ? selectedForState
+                          : null) ||
+                        addressesData.find(
+                          (a: { state_id?: number }) => a.state_id != null,
+                        );
                       if (addrWithState?.state_id != null) {
                         form.setFieldValue(
                           "shipper_state_id",
                           String(addrWithState.state_id),
                         );
-                      } else {
+                      } else if (!keepExisting) {
                         form.setFieldValue("shipper_state_id", "");
                       }
-                    } else {
+                    } else if (!value) {
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_email", "");
                       form.setFieldValue("shipper_state_id", "");
                     }
                   }}
@@ -3724,8 +3818,16 @@ function HouseCreate() {
                     data={shipperAddressOptions}
                     value={form.values.shipper_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("shipper_address", formattedValue);
+                      form.setFieldValue("shipper_address", value || "");
+                      if (value) {
+                        const selected = shipperAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "shipper_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.shipper_address}
                   />
@@ -3766,6 +3868,11 @@ function HouseCreate() {
                       setConsigneeSearch(v);
                       form.setFieldValue("consignee_name", v);
                       form.setFieldValue("consignee_code", "");
+                      if (!v.trim()) {
+                        form.setFieldValue("consignee_address", "");
+                        form.setFieldValue("consignee_email", "");
+                        setConsigneeAddressOptions([]);
+                      }
                     }}
                     error={form.errors.consignee_name as string}
                   />
@@ -3775,6 +3882,7 @@ function HouseCreate() {
                     required
                     placeholder="Select or search consignee"
                     searchable
+                    clearable
                     data={consigneeOptions}
                     searchValue={consigneeSearch}
                     onSearchChange={(value) => {
@@ -3790,6 +3898,7 @@ function HouseCreate() {
                         form.setFieldValue("consignee_address", "");
                         form.setFieldValue("consignee_email", "");
                         setConsigneeAddressOptions([]);
+                        setConsigneeSearch("");
                         return;
                       }
                       const original = consigneeDataRef.current[value] || {};
@@ -3807,22 +3916,31 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
+
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
 
                       // Reset address value so it always replaces on re-select
                       form.setFieldValue("consignee_address", "");
                       setConsigneeAddressOptions(addressOptions);
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "consignee_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
 
                       form.setFieldValue("consignee_code", value);
                       form.setFieldValue("consignee_name", toTitleCase(name));
-                      form.setFieldValue("consignee_email", email);
+                      form.setFieldValue(
+                        "consignee_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       setConsigneeSearch(name);
                     }}
                     comboboxProps={{ zIndex: 10 }}
@@ -3866,8 +3984,16 @@ function HouseCreate() {
                     data={consigneeAddressOptions}
                     value={form.values.consignee_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("consignee_address", formattedValue);
+                      form.setFieldValue("consignee_address", value || "");
+                      if (value) {
+                        const selected = consigneeAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.consignee_address}
                   />
@@ -3934,6 +4060,7 @@ function HouseCreate() {
                         form.setFieldValue("notify1_customer_address", "");
                         form.setFieldValue("notify1_customer_email", "");
                         setNotifyCustomerAddressOptions([]);
+                        setNotifyCustomerSearch("");
                         return;
                       }
                       const original =
@@ -3952,20 +4079,29 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
                       setNotifyCustomerAddressOptions(addressOptions);
+
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
 
                       form.setFieldValue(
                         "notify1_customer_name",
                         toTitleCase(name),
                       );
-                      form.setFieldValue("notify1_customer_email", email);
+                      form.setFieldValue(
+                        "notify1_customer_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       form.setFieldValue("notify1_customer_address", "");
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "notify1_customer_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
                       setNotifyCustomerSearch(name);
@@ -4012,11 +4148,19 @@ function HouseCreate() {
                     data={notifyCustomerAddressOptions}
                     value={form.values.notify1_customer_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "notify1_customer_address",
-                        formattedValue,
+                        value || "",
                       );
+                      if (value) {
+                        const selected = notifyCustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "notify1_customer_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.notify1_customer_address}
                   />
@@ -4083,6 +4227,7 @@ function HouseCreate() {
                         form.setFieldValue("notify2_customer_address", "");
                         form.setFieldValue("notify2_customer_email", "");
                         setNotify2CustomerAddressOptions([]);
+                        setNotify2CustomerSearch("");
                         return;
                       }
                       const original =
@@ -4101,20 +4246,29 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
                       setNotify2CustomerAddressOptions(addressOptions);
+
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
 
                       form.setFieldValue(
                         "notify2_customer_name",
                         toTitleCase(name),
                       );
-                      form.setFieldValue("notify2_customer_email", email);
+                      form.setFieldValue(
+                        "notify2_customer_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       form.setFieldValue("notify2_customer_address", "");
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "notify2_customer_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
                       setNotify2CustomerSearch(name);
@@ -4161,11 +4315,19 @@ function HouseCreate() {
                     data={notify2CustomerAddressOptions}
                     value={form.values.notify2_customer_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "notify2_customer_address",
-                        formattedValue,
+                        value || "",
                       );
+                      if (value) {
+                        const selected = notify2CustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "notify2_customer_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.notify2_customer_address}
                   />
@@ -4222,26 +4384,39 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        email?: string;
+                        address_type?: string;
                       }>;
 
                       const addressOptions = addressesData
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(a.email || ""),
+                          };
                         });
                       setAgentAddressOptions(addressOptions);
 
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+
                       form.setFieldValue("agent_address", "");
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "agent_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
+                      form.setFieldValue(
+                        "agent_email",
+                        String(primaryAddr?.email || ""),
+                      );
                     } else {
                       setAgentAddressOptions([]);
                       form.setFieldValue("agent_address", "");
+                      form.setFieldValue("agent_email", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -4269,8 +4444,13 @@ function HouseCreate() {
                     data={agentAddressOptions}
                     value={form.values.agent_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("agent_address", formattedValue);
+                      form.setFieldValue("agent_address", value || "");
+                      if (value) {
+                        const selected = agentAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue("agent_email", selected?.email || "");
+                      }
                     }}
                     error={form.errors.agent_address}
                   />

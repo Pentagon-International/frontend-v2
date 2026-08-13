@@ -167,6 +167,7 @@ type ServiceJobFormValues = {
   mbl_date: Date | null;
   etd: Date | null;
   eta: Date | null;
+  job_date: Date | null;
 };
 
 const EMPTY_PARTY_DETAILS: JobMasterPartyDetailsValues = {
@@ -257,7 +258,67 @@ function getDefaultPpCcFromService(importExport?: string): "Prepaid" | "Collect"
   return "Collect";
 }
 
-function readMblNumber(
+function isExportServiceType(importExport?: string): boolean {
+  return String(importExport ?? "")
+    .trim()
+    .toUpperCase()
+    .includes("EXPORT");
+}
+
+function resolveServiceJobDate(
+  importExport: string | undefined,
+  etd: Date | null,
+  eta: Date | null,
+): Date | null {
+  const source = isExportServiceType(importExport) ? etd : eta;
+  if (!source || !dayjs(source).isValid()) return null;
+  return dayjs(source).startOf("day").toDate();
+}
+
+function seedSavedPartyAddress(
+  id: string,
+  address: string,
+  email: string,
+): {
+  options: PartyAddressOption[];
+  search: string;
+  custom: boolean;
+} {
+  const addr = String(address || "").trim();
+  const addressId = String(id || "").trim();
+  if (!addr) {
+    return { options: [], search: "", custom: false };
+  }
+  if (addressId) {
+    return {
+      options: [
+        {
+          value: addressId,
+          label: addr,
+          email: String(email || ""),
+          address: addr,
+        },
+      ],
+      search: addr,
+      custom: false,
+    };
+  }
+  return { options: [], search: "", custom: true };
+}
+
+function getMasterAwbField(
+  transportMode: string,
+): "mawb_no" | "mbl_number" {
+  return isAirTransportMode(transportMode) ? "mawb_no" : "mbl_number";
+}
+
+function getHouseAwbField(
+  transportMode: string,
+): "hawb_no" | "hbl_number" {
+  return isAirTransportMode(transportMode) ? "hawb_no" : "hbl_number";
+}
+
+function readMasterAwbFromJob(
   job: Record<string, unknown>,
   house?: Record<string, unknown>,
 ): string {
@@ -277,6 +338,23 @@ function readHblNumber(
       house?.hawb_number ??
       job?.mawb_no ??
       job?.mawb_number ??
+      "",
+  );
+}
+
+function readMblNumber(
+  job: Record<string, unknown>,
+  house?: Record<string, unknown>,
+): string {
+  return String(
+    job.mbl_number ??
+      house?.mbl_number ??
+      job.mbl_no ??
+      house?.mbl_no ??
+      job.mawb_no ??
+      job.mawb_number ??
+      house?.mawb_no ??
+      house?.mawb_number ??
       "",
   );
 }
@@ -1403,6 +1481,7 @@ export default function ServiceJobCreate() {
       mbl_date: null,
       etd: null,
       eta: null,
+      job_date: null,
     },
   });
 
@@ -1499,6 +1578,33 @@ export default function ServiceJobCreate() {
   const defaultPpCc = getDefaultPpCcFromService(selectedService?.import_export);
   const isSeaJob =
     Boolean(transportMode) && !isAirTransportMode(transportMode);
+  const awbFieldLabel = isSeaJob ? "BL Number" : "AWB Number";
+  const awbFieldPlaceholder = isSeaJob
+    ? "Enter BL number"
+    : "Enter AWB number";
+
+  useEffect(() => {
+    const next = resolveServiceJobDate(
+      selectedService?.import_export,
+      form.values.etd,
+      form.values.eta,
+    );
+    const current = form.values.job_date;
+    const same =
+      (next == null && current == null) ||
+      (next != null &&
+        current != null &&
+        dayjs(next).isSame(dayjs(current), "day"));
+    if (!same) {
+      form.setFieldValue("job_date", next);
+    }
+  }, [
+    selectedService?.import_export,
+    form.values.etd,
+    form.values.eta,
+    form.values.job_date,
+    form,
+  ]);
 
   const portTransportParams = useMemo(
     () => getPortTransportParams(transportMode),
@@ -1590,6 +1696,11 @@ export default function ServiceJobCreate() {
         mbl_date: readMblDate(job, house),
         etd: parseJobDateField(job.etd ?? house?.etd),
         eta: parseJobDateField(job.eta ?? house?.eta),
+        job_date: resolveServiceJobDate(
+          svc?.import_export,
+          parseJobDateField(job.etd ?? house?.etd),
+          parseJobDateField(job.eta ?? house?.eta),
+        ),
       });
 
       partyDetailsForm.setValues({
@@ -1654,25 +1765,34 @@ export default function ServiceJobCreate() {
           house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
         ),
       });
-      setShipperAddressCustom(
-        Boolean(
-          String(house?.shipper_address ?? job.shipper_address ?? "").trim(),
-        ),
+      const shipperSeed = seedSavedPartyAddress(
+        String(house?.shipper_address_id ?? job.shipper_address_id ?? ""),
+        String(house?.shipper_address ?? job.shipper_address ?? ""),
+        String(house?.shipper_email ?? job.shipper_email ?? ""),
       );
-      setConsigneeAddressCustom(
-        Boolean(
-          String(
-            house?.consignee_address ?? job.consignee_address ?? "",
-          ).trim(),
-        ),
+      setShipperAddressOptions(shipperSeed.options);
+      setShipperAddressSearch(shipperSeed.search);
+      setShipperAddressCustom(shipperSeed.custom);
+      const consigneeSeed = seedSavedPartyAddress(
+        String(house?.consignee_address_id ?? job.consignee_address_id ?? ""),
+        String(house?.consignee_address ?? job.consignee_address ?? ""),
+        String(house?.consignee_email ?? job.consignee_email ?? ""),
       );
-      setCarrierAgentAddressCustom(
-        Boolean(
-          String(
-            house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
-          ).trim(),
+      setConsigneeAddressOptions(consigneeSeed.options);
+      setConsigneeAddressSearch(consigneeSeed.search);
+      setConsigneeAddressCustom(consigneeSeed.custom);
+      const carrierSeed = seedSavedPartyAddress(
+        String(
+          house?.carrier_agent_address_id ?? job.carrier_agent_address_id ?? "",
         ),
+        String(
+          house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
+        ),
+        String(house?.carrier_agent_email ?? job.carrier_agent_email ?? ""),
       );
+      setCarrierAgentAddressOptions(carrierSeed.options);
+      setCarrierAgentAddressSearch(carrierSeed.search);
+      setCarrierAgentAddressCustom(carrierSeed.custom);
 
       if (house) {
         const chargeRows = readChargesFromHouse(house, mode).map((c) =>
@@ -1881,6 +2001,10 @@ export default function ServiceJobCreate() {
       destination_code: form.values.destination_code || null,
       etd: formatJobDateForPayload(form.values.etd, mode),
       eta: formatJobDateForPayload(form.values.eta, mode),
+      job_date:
+        form.values.job_date && dayjs(form.values.job_date).isValid()
+          ? dayjs(form.values.job_date).format("YYYY-MM-DD")
+          : null,
       // Header-level parties (same as housing) — required for job master sync
       ...housePartyBlock,
       mbl_number: form.values.mbl_number || null,
@@ -2747,6 +2871,16 @@ export default function ServiceJobCreate() {
                     disabled={isReadOnly}
                   />
                 )}
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <SingleDateInput
+                  label="Job Date"
+                  placeholder="YYYY-MM-DD"
+                  readOnly
+                  value={form.values.job_date}
+                  size="sm"
+                />
               </Grid.Col>
             </Grid>
           </Box>

@@ -1,9 +1,18 @@
-import { FC, useCallback, useState, type CSSProperties, type MouseEvent } from "react";
+import {
+  FC,
+  useCallback,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 
 export const isViewableFileUrl = (url?: string | null): url is string =>
   Boolean(url?.trim()) && !url!.trim().startsWith("temp_uploads");
 
-const sanitizeDownloadFilename = (filename: string, fallback = "download.pdf"): string => {
+const sanitizeDownloadFilename = (
+  filename: string,
+  fallback = "download.pdf",
+): string => {
   const name = filename?.trim() || fallback;
   return name.replace(/[<>:"/\\|?*]+/g, "_");
 };
@@ -20,7 +29,10 @@ const resolveDownloadFilename = (url: string, filename?: string): string => {
   return "download.pdf";
 };
 
-export const downloadAutomationFile = async (url: string, filename?: string): Promise<void> => {
+export const downloadAutomationFile = async (
+  url: string,
+  filename?: string,
+): Promise<void> => {
   const token = localStorage.getItem("accessToken");
   const response = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -54,19 +66,22 @@ const DownloadFileButton: FC<{
 }> = ({ url, filename, className, style, label = "↓ Download" }) => {
   const [downloading, setDownloading] = useState(false);
 
-  const handleDownload = useCallback(async (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      await downloadAutomationFile(url, filename);
-    } catch {
-      // Keep silent — no new tab or inline preview on failure
-    } finally {
-      setDownloading(false);
-    }
-  }, [downloading, filename, url]);
+  const handleDownload = useCallback(
+    async (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (downloading) return;
+      setDownloading(true);
+      try {
+        await downloadAutomationFile(url, filename);
+      } catch {
+        // Keep silent — no new tab or inline preview on failure
+      } finally {
+        setDownloading(false);
+      }
+    },
+    [downloading, filename, url],
+  );
 
   return (
     <button
@@ -81,11 +96,11 @@ const DownloadFileButton: FC<{
   );
 };
 
-export const FilePreviewFrame: FC<{ url: string; title?: string; filename?: string }> = ({
-  url,
-  title = "File preview",
-  filename,
-}) => (
+export const FilePreviewFrame: FC<{
+  url: string;
+  title?: string;
+  filename?: string;
+}> = ({ url, title = "File preview", filename }) => (
   <div
     style={{
       flex: 1,
@@ -109,7 +124,15 @@ export const FilePreviewFrame: FC<{ url: string; title?: string; filename?: stri
         background: "#fff",
       }}
     />
-    <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+    <div
+      style={{
+        marginTop: 10,
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
       <DownloadFileButton
         url={url}
         filename={filename}
@@ -150,25 +173,55 @@ export const FilePreviewModal: FC<FilePreviewModalProps> = ({
   onClose,
   onBack,
 }) => (
-  <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div className="modal modal-xl" style={{ display: "flex", flexDirection: "column" }}>
+  <div
+    className="overlay"
+    onClick={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }}
+  >
+    <div
+      className="modal modal-xl"
+      style={{ display: "flex", flexDirection: "column" }}
+    >
       <div className="modal-head">
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <h2
+            style={{
+              margin: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
             {title ?? filename ?? "File Preview"}
           </h2>
           {filename && title && filename !== title && (
-            <div style={{ fontSize: ".68rem", color: "var(--muted)", marginTop: 4, fontFamily: "var(--mono)" }}>
+            <div
+              style={{
+                fontSize: ".68rem",
+                color: "var(--muted)",
+                marginTop: 4,
+                fontFamily: "var(--mono)",
+              }}
+            >
               {filename}
             </div>
           )}
         </div>
-        <button className="modal-close" onClick={onClose}>✕</button>
+        <button className="modal-close" onClick={onClose}>
+          ✕
+        </button>
       </div>
-      <FilePreviewFrame url={url} title={title ?? filename} filename={filename} />
+      <FilePreviewFrame
+        url={url}
+        title={title ?? filename}
+        filename={filename}
+      />
       <div className="modal-foot">
         {onBack && (
-          <button className="btn btn-ghost" onClick={onBack}>← Back to files</button>
+          <button className="btn btn-ghost" onClick={onBack}>
+            ← Back to files
+          </button>
         )}
         <DownloadFileButton
           url={url}
@@ -176,7 +229,9 @@ export const FilePreviewModal: FC<FilePreviewModalProps> = ({
           className="btn btn-primary"
           label="↓ Download"
         />
-        <button className="btn btn-ghost" onClick={onClose}>Close</button>
+        <button className="btn btn-ghost" onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   </div>

@@ -4013,7 +4013,7 @@ function AirImportJobCreate() {
                       partyDetailsForm.setFieldValue("shipper_address", "");
                     }
                     setShipperAddressOptions(value ? options : []);
-                    setShipperAddressSearch("");
+                    setShipperAddressSearch(value ? primary?.label || "" : "");
                     setShipperAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -4072,10 +4072,12 @@ function AirImportJobCreate() {
                     searchValue={shipperAddressSearch}
                     onSearchChange={(value) => {
                       setShipperAddressSearch(value);
+                      const trimmed = value.trim().toLowerCase();
                       const hasMatch = shipperAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() ===
-                          value.trim().toLowerCase(),
+                          item.label.toLowerCase() === trimmed ||
+                          item.value.toLowerCase() === trimmed ||
+                          item.address.toLowerCase() === trimmed,
                       );
                       if (value.trim() && !hasMatch) {
                         setShipperAddressCustom(true);
@@ -4101,6 +4103,14 @@ function AirImportJobCreate() {
                         "shipper_address",
                         selected?.address || "",
                       );
+                      if (value) {
+                        partyDetailsForm.setFieldValue(
+                          "shipper_email",
+                          selected?.email || "",
+                        );
+                      }
+                      setShipperAddressSearch(selected?.label || "");
+                      setShipperAddressCustom(false);
                     }}
                     searchable
                     clearable
@@ -4157,7 +4167,7 @@ function AirImportJobCreate() {
                       partyDetailsForm.setFieldValue("consignee_address", "");
                     }
                     setConsigneeAddressOptions(value ? options : []);
-                    setConsigneeAddressSearch("");
+                    setConsigneeAddressSearch(value ? primary?.label || "" : "");
                     setConsigneeAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -4216,10 +4226,12 @@ function AirImportJobCreate() {
                     searchValue={consigneeAddressSearch}
                     onSearchChange={(value) => {
                       setConsigneeAddressSearch(value);
+                      const trimmed = value.trim().toLowerCase();
                       const hasMatch = consigneeAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() ===
-                          value.trim().toLowerCase(),
+                          item.label.toLowerCase() === trimmed ||
+                          item.value.toLowerCase() === trimmed ||
+                          item.address.toLowerCase() === trimmed,
                       );
                       if (value.trim() && !hasMatch) {
                         setConsigneeAddressCustom(true);
@@ -4245,6 +4257,14 @@ function AirImportJobCreate() {
                         "consignee_address",
                         selected?.address || "",
                       );
+                      if (value) {
+                        partyDetailsForm.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                      }
+                      setConsigneeAddressSearch(selected?.label || "");
+                      setConsigneeAddressCustom(false);
                     }}
                     searchable
                     clearable
@@ -4310,7 +4330,9 @@ function AirImportJobCreate() {
                       );
                     }
                     setCarrierAgentAddressOptions(value ? options : []);
-                    setCarrierAgentAddressSearch("");
+                    setCarrierAgentAddressSearch(
+                      value ? primary?.label || "" : "",
+                    );
                     setCarrierAgentAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -4371,10 +4393,12 @@ function AirImportJobCreate() {
                     searchValue={carrierAgentAddressSearch}
                     onSearchChange={(value) => {
                       setCarrierAgentAddressSearch(value);
+                      const trimmed = value.trim().toLowerCase();
                       const hasMatch = carrierAgentAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() ===
-                          value.trim().toLowerCase(),
+                          item.label.toLowerCase() === trimmed ||
+                          item.value.toLowerCase() === trimmed ||
+                          item.address.toLowerCase() === trimmed,
                       );
                       if (value.trim() && !hasMatch) {
                         setCarrierAgentAddressCustom(true);
@@ -4400,6 +4424,14 @@ function AirImportJobCreate() {
                         "carrier_agent_address",
                         selected?.address || "",
                       );
+                      if (value) {
+                        partyDetailsForm.setFieldValue(
+                          "carrier_agent_email",
+                          selected?.email || "",
+                        );
+                      }
+                      setCarrierAgentAddressSearch(selected?.label || "");
+                      setCarrierAgentAddressCustom(false);
                     }}
                     searchable
                     clearable

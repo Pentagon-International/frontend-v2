@@ -69,13 +69,19 @@ import {
   roundMoneyToDecimals,
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
-import { ROE_DECIMAL_PLACES, roundRoeForPayload } from "../../../utils/exchangeRateRoe";
+import {
+  ROE_DECIMAL_PLACES,
+  roundRoeForPayload,
+} from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
   validateMeaningfulHouseCharges,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
-import { formatInvoiceDocumentNo, getInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
+import {
+  formatInvoiceDocumentNo,
+  getInvoiceDocumentNo,
+} from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -116,9 +122,15 @@ import {
   HousePageDocumentsButton,
   HousePageDocumentsModal,
 } from "../../../components/HousePageDocumentsAttach";
-import { pickHouseDocumentFields, spreadMasterDocumentsNavState } from "../../../utils/jobDocuments";
+import {
+  pickHouseDocumentFields,
+  spreadMasterDocumentsNavState,
+} from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { normalizePackageTypeCode, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import {
+  normalizePackageTypeCode,
+  pickPackageTypeCodeFromCargo,
+} from "../../../utils/packageTypeOptions";
 import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -371,26 +383,24 @@ function HouseCreate() {
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
 
   const calculateChargeableWeight = useCallback(
-    (
-      grossWeight: HouseCargoWeightValue,
-      volumeWeight: HouseCargoWeightValue,
-    ) => calculateHouseChargeableWeight(grossWeight, volumeWeight, "air"),
+    (grossWeight: HouseCargoWeightValue, volumeWeight: HouseCargoWeightValue) =>
+      calculateHouseChargeableWeight(grossWeight, volumeWeight, "air"),
     [],
   );
 
   // State for address options (populated from addresses_data when shipper/consignee is selected)
   const [shipperAddressOptions, setShipperAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [notify2CustomerAddressOptions, setNotify2CustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [agentAddressOptions, setAgentAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
 
   // Consignee (shipment-party) search state
@@ -469,7 +479,6 @@ function HouseCreate() {
   const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
   const [activeFileName, setActiveFileName] = useState("");
   const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
-
 
   // Charges Form - Using useForm similar to routings in ExportJobCreate
   const chargesForm = useForm<{ charges: ChargeDetail[] }>({
@@ -762,10 +771,12 @@ function HouseCreate() {
 
   const shipmentOptions = useMemo(() => {
     if (!Array.isArray(termsOfShipment) || !termsOfShipment.length) return [];
-    return termsOfShipment.map((item: { tos_code?: string; tos_name?: string }) => ({
-      value: item.tos_code ? String(item.tos_code) : "",
-      label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
-    }));
+    return termsOfShipment.map(
+      (item: { tos_code?: string; tos_name?: string }) => ({
+        value: item.tos_code ? String(item.tos_code) : "",
+        label: `${String(item.tos_name || "")} (${String(item.tos_code || "")})`,
+      }),
+    );
   }, [termsOfShipment]);
 
   const eventTypeOptions = useMemo(() => {
@@ -778,8 +789,10 @@ function HouseCreate() {
   }, [eventMasterData]);
 
   const [eventsModalOpen, setEventsModalOpen] = useState(false);
-  const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
-    useState<string | null>(null);
+  const [
+    vendorInvoiceAutomationShipmentNo,
+    setVendorInvoiceAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -882,7 +895,9 @@ function HouseCreate() {
         cargo.volume,
       );
       // Only update if chargeable_weight changed
-      if (houseCargoWeightValuesEqual(cargo.chargeable_weight, chargeableWeight)) {
+      if (
+        houseCargoWeightValuesEqual(cargo.chargeable_weight, chargeableWeight)
+      ) {
         return cargo;
       }
       return {
@@ -904,7 +919,6 @@ function HouseCreate() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargoGrossWeights, cargoVolumeWeights, calculateChargeableWeight]);
-
 
   // Track if form has been initialized from editData to prevent overwriting user changes (reset when editData id/index changes) - same as AirImportJob
   const formInitializedFromEditDataRef = useRef(false);
@@ -987,8 +1001,8 @@ function HouseCreate() {
             .notify2_customer_email ?? "",
         commodity_description: editData.commodity_description || "",
         handling_information:
-          (editData as { handling_information?: string }).handling_information ||
-          "",
+          (editData as { handling_information?: string })
+            .handling_information || "",
         is_agreed_charges: parseBoolean(
           (editData as { is_agreed_charges?: unknown }).is_agreed_charges,
         ),
@@ -1092,11 +1106,9 @@ function HouseCreate() {
         (charge: Record<string, unknown>) => {
           console.log("_____charge LOADED", charge);
           const unitDetails = charge.unit_details as
-            | { unit_id?: number; unit_code?: string }
-            | undefined;
+            { unit_id?: number; unit_code?: string } | undefined;
           const currencyDetails = charge.currency_details as
-            | { currency_id?: number; currency_code?: string }
-            | undefined;
+            { currency_id?: number; currency_code?: string } | undefined;
           const unitCode = String(
             charge.unit_code ??
               charge.unit_input ??
@@ -1153,8 +1165,12 @@ function HouseCreate() {
             id: charge.id != null ? Number(charge.id) : undefined,
             charge_id: chargeId,
             charge_name: charge.charge_name ? String(charge.charge_name) : "",
-            supplier_code: charge.supplier_code ? String(charge.supplier_code) : "",
-            supplier_name: charge.supplier_name ? String(charge.supplier_name) : "",
+            supplier_code: charge.supplier_code
+              ? String(charge.supplier_code)
+              : "",
+            supplier_name: charge.supplier_name
+              ? String(charge.supplier_name)
+              : "",
             pp_cc,
             unit_id,
             no_of_unit: toNum(charge.no_of_unit),
@@ -1162,7 +1178,9 @@ function HouseCreate() {
             roe: toNum(charge.roe),
             amount_per_unit: toNum(charge.amount_per_unit),
             amount: toNum(charge.amount),
-            local_amount: toNum(charge.sell_local_amount ?? charge.local_amount),
+            local_amount: toNum(
+              charge.sell_local_amount ?? charge.local_amount,
+            ),
             cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
             total_cost: toNum(charge.total_cost),
             cost_local_amount: toNum(charge.cost_local_amount),
@@ -1189,7 +1207,9 @@ function HouseCreate() {
     .map((c) => c.no_of_unit)
     .join(",");
   const chargeRoes = chargesForm.values.charges.map((c) => c.roe).join(",");
-  const chargeAmounts = chargesForm.values.charges.map((c) => c.amount).join(",");
+  const chargeAmounts = chargesForm.values.charges
+    .map((c) => c.amount)
+    .join(",");
   const chargeTotalCosts = chargesForm.values.charges
     .map((c) => c.total_cost)
     .join(",");
@@ -1206,7 +1226,9 @@ function HouseCreate() {
       ) {
         const noOfUnit = charge.no_of_unit || 0;
         const amountPerUnit = charge.amount_per_unit || 0;
-        const calculatedAmount = clampCurrencyMoneyAmountBound(noOfUnit * amountPerUnit);
+        const calculatedAmount = clampCurrencyMoneyAmountBound(
+          noOfUnit * amountPerUnit,
+        );
         if (calculatedAmount > 0 && calculatedAmount !== next.amount) {
           next.amount = calculatedAmount;
         }
@@ -1245,7 +1267,10 @@ function HouseCreate() {
           next.cost_local_amount = calculatedCostLocal;
         }
       } else {
-        if (next.cost_local_amount !== null && next.cost_local_amount !== undefined) {
+        if (
+          next.cost_local_amount !== null &&
+          next.cost_local_amount !== undefined
+        ) {
           next.cost_local_amount = null;
         }
       }
@@ -1267,7 +1292,13 @@ function HouseCreate() {
       chargesForm.setValues({ charges: updatedCharges });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits, chargeRoes, chargeAmounts, chargeTotalCosts]);
+  }, [
+    chargeAmountPerUnits,
+    chargeNoOfUnits,
+    chargeRoes,
+    chargeAmounts,
+    chargeTotalCosts,
+  ]);
 
   // Salespersons data query
   const { data: rawSalespersonsData = [] } = useQuery({
@@ -1576,7 +1607,7 @@ function HouseCreate() {
 
   const getPartyAddresses = (
     original: Record<string, unknown>,
-  ): Array<{ address?: string }> => {
+  ): Array<{ address?: string; email?: string; address_type?: string }> => {
     const raw =
       (original.addresses_data as unknown) ??
       (original.addresses as unknown) ??
@@ -1585,8 +1616,20 @@ function HouseCreate() {
     return (raw as Array<Record<string, unknown>>).map((a) => ({
       address:
         (a.address as string | undefined) ?? (a.address1 as string | undefined),
+      email: String(a.email ?? ""),
+      address_type: String(a.address_type ?? ""),
     }));
   };
+
+  const pickPrimaryPartyAddress = <
+    T extends { address?: string; email?: string; address_type?: string | null },
+  >(
+    addresses: T[],
+  ): T | undefined =>
+    addresses.find(
+      (a) =>
+        String(a.address_type || "").toUpperCase() === "PRIMARY" && !!a.address,
+    ) || addresses.find((a) => !!a.address);
 
   // When charge currency matches branch currency, ROE must always be 1
   const chargeCurrenciesKey = chargesForm.values.charges
@@ -1662,11 +1705,9 @@ function HouseCreate() {
     const loadedCharges = chargesToLoad.map(
       (charge: Record<string, unknown>) => {
         const unitDetails = charge.unit_details as
-          | { unit_id?: number; unit_code?: string }
-          | undefined;
+          { unit_id?: number; unit_code?: string } | undefined;
         const currencyDetails = charge.currency_details as
-          | { currency_id?: number; currency_code?: string }
-          | undefined;
+          { currency_id?: number; currency_code?: string } | undefined;
         const unitCode = String(
           charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
         ).trim();
@@ -1736,18 +1777,20 @@ function HouseCreate() {
     );
     if (loadedCharges.length > 0) {
       const editCargoForCharges = toBookingCargoForNoOfUnits(
-        (
-          (editData.cargo_details as Array<Record<string, unknown>>) ?? []
-        ).map((cargo) => ({
-          gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
-          volume: importHouseCargoWeightFromApi(cargo.volume ?? cargo.volume_weight),
-          volume_weight: importHouseCargoWeightFromApi(
-            cargo.volume_weight ?? cargo.volume,
-          ),
-          chargeable_weight: importHouseCargoWeightFromApi(
-            cargo.chargeable_weight,
-          ),
-        })),
+        ((editData.cargo_details as Array<Record<string, unknown>>) ?? []).map(
+          (cargo) => ({
+            gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
+            volume: importHouseCargoWeightFromApi(
+              cargo.volume ?? cargo.volume_weight,
+            ),
+            volume_weight: importHouseCargoWeightFromApi(
+              cargo.volume_weight ?? cargo.volume,
+            ),
+            chargeable_weight: importHouseCargoWeightFromApi(
+              cargo.chargeable_weight,
+            ),
+          }),
+        ),
       );
       chargesForm.setValues({
         charges:
@@ -2317,7 +2360,9 @@ function HouseCreate() {
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
       ...cargo,
-      gross_weight: formatHouseCargoWeightForPayload((cargo as any).gross_weight),
+      gross_weight: formatHouseCargoWeightForPayload(
+        (cargo as any).gross_weight,
+      ),
       volume: formatHouseCargoWeightForPayload((cargo as any).volume),
       chargeable_weight: formatHouseCargoChargeableForPayload(
         (cargo as any).gross_weight,
@@ -2344,8 +2389,8 @@ function HouseCreate() {
     // Prepare housing detail object - use current form values
     const housingDetail = {
       ...(housingPk > 0 ? { id: housingPk } : {}),
-      ...((editData as { booking_id?: number | null } | undefined)?.booking_id !=
-        null && {
+      ...((editData as { booking_id?: number | null } | undefined)
+        ?.booking_id != null && {
         booking_id: (editData as { booking_id?: number | null }).booking_id,
       }),
       hawb_number: currentFormValues.hawb_number,
@@ -2372,8 +2417,7 @@ function HouseCreate() {
         ? Number(currentFormValues.shipper_state_id)
         : ((
             editData as
-              | { shipment_id?: string; shipper_state_id?: number }
-              | undefined
+              { shipment_id?: string; shipper_state_id?: number } | undefined
           )?.shipper_state_id ?? null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
@@ -2462,7 +2506,8 @@ function HouseCreate() {
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
           package_type: normalizePackageTypeCode(cargo.package_type) || "",
-          package_type_code: normalizePackageTypeCode(cargo.package_type) || null,
+          package_type_code:
+            normalizePackageTypeCode(cargo.package_type) || null,
           no_of_packages: cargo.no_of_packages,
           gross_weight: formatHouseCargoWeightForPayload(cargo.gross_weight),
           volume: formatHouseCargoWeightForPayload(cargo.volume),
@@ -2487,9 +2532,11 @@ function HouseCreate() {
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount_per_unit:
+              roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
-            sell_local_amount: roundLocalMoneyToDecimals(charge.local_amount) ?? null,
+            sell_local_amount:
+              roundLocalMoneyToDecimals(charge.local_amount) ?? null,
             unit_cost: roundMoneyToDecimals(charge.cost_per_unit) ?? null,
             total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
             cost_local_amount:
@@ -2654,71 +2701,75 @@ function HouseCreate() {
             Back to Export Job
           </Button> */}
           {!isReadOnly && (
-          <Button
-            color="#105476"
-            variant="outline"
-            onClick={() => {
-              if (active === 0) {
-                if (!validateStep1()) return;
-                if (!validateStep2()) {
-                  setActive(1);
-                  return;
+            <Button
+              color="#105476"
+              variant="outline"
+              onClick={() => {
+                if (active === 0) {
+                  if (!validateStep1()) return;
+                  if (!validateStep2()) {
+                    setActive(1);
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 1) {
+                  if (!validateStep2()) return;
+                  if (!validateStep3()) {
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 2) {
+                  if (!validateStep3()) return;
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 3) {
+                  if (!validateStep4()) return;
+                  handleSave();
+                } else if (active === 4) {
+                  if (!validateStep1()) {
+                    setActive(0);
+                    return;
+                  }
+                  if (!validateStep2()) {
+                    setActive(1);
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
                 }
-                if (!validateStep3()) {
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 1) {
-                if (!validateStep2()) return;
-                if (!validateStep3()) {
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 2) {
-                if (!validateStep3()) return;
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 3) {
-                if (!validateStep4()) return;
-                handleSave();
-              } else if (active === 4) {
-                if (!validateStep1()) {
-                  setActive(0);
-                  return;
-                }
-                if (!validateStep2()) {
-                  setActive(1);
-                  return;
-                }
-                if (!validateStep3()) {
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              }
-            }}
-          >
-            Save HAWB
-          </Button>
+              }}
+            >
+              Save HAWB
+            </Button>
           )}
-          <Menu shadow="md" width={JOB_HOUSE_ACTION_MENU_WIDTH} position="bottom-end">
+          <Menu
+            shadow="md"
+            width={JOB_HOUSE_ACTION_MENU_WIDTH}
+            position="bottom-end"
+          >
             <Menu.Target>
               <ActionIcon
                 variant="subtle"
@@ -2944,11 +2995,7 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        styles={
-          isReadOnly
-            ? { panel: { pointerEvents: "none" } }
-            : undefined
-        }
+        styles={isReadOnly ? { panel: { pointerEvents: "none" } } : undefined}
       >
         <Tabs.List
           mb="md"
@@ -3358,35 +3405,50 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        email?: string;
                         state_id?: number;
+                        address_type?: string;
                       }>;
 
-                      const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
+                      const addressOptions = addressesData
+                        .filter((addr) => addr.address)
+                        .map((addr) => ({
                           value: addr.address,
                           label: addr.address,
-                        }),
-                      );
+                          email: String(addr.email || ""),
+                        }));
 
                       setShipperAddressOptions(addressOptions);
 
-                      // Auto-select the first address if available
-                      if (
-                        addressesData.length > 0 &&
-                        addressesData[0].address
-                      ) {
-                        form.setFieldValue(
-                          "shipper_address",
-                          addressesData[0].address,
-                        );
+                      const primary =
+                        addressesData.find(
+                          (a) =>
+                            String(a.address_type || "").toUpperCase() ===
+                            "PRIMARY",
+                        ) || addressesData[0];
+
+                      // Auto-select primary address (fallback: first)
+                      if (primary?.address) {
+                        form.setFieldValue("shipper_address", primary.address);
                       } else {
                         form.setFieldValue("shipper_address", "");
                       }
 
-                      // Set shipper_state_id from first address that has state_id
-                      const addrWithState = addressesData.find(
-                        (a: { state_id?: number }) => a.state_id != null,
+                      form.setFieldValue(
+                        "shipper_email",
+                        primary?.email ||
+                          getPartyEmail(
+                            originalData as Record<string, unknown>,
+                          ) ||
+                          "",
                       );
+
+                      // Prefer primary address state_id when available
+                      const addrWithState =
+                        (primary?.state_id != null ? primary : null) ||
+                        addressesData.find(
+                          (a: { state_id?: number }) => a.state_id != null,
+                        );
                       if (addrWithState?.state_id != null) {
                         form.setFieldValue(
                           "shipper_state_id",
@@ -3398,6 +3460,7 @@ function HouseCreate() {
                     } else {
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_email", "");
                       form.setFieldValue("shipper_state_id", "");
                     }
                   }}
@@ -3426,8 +3489,16 @@ function HouseCreate() {
                     data={shipperAddressOptions}
                     value={form.values.shipper_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("shipper_address", formattedValue);
+                      form.setFieldValue("shipper_address", value || "");
+                      if (value) {
+                        const selected = shipperAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "shipper_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.shipper_address}
                   />
@@ -3464,6 +3535,11 @@ function HouseCreate() {
                       setConsigneeSearch(v);
                       form.setFieldValue("consignee_name", v);
                       form.setFieldValue("consignee_code", "");
+                      if (!v.trim()) {
+                        form.setFieldValue("consignee_address", "");
+                        form.setFieldValue("consignee_email", "");
+                        setConsigneeAddressOptions([]);
+                      }
                     }}
                     error={form.errors.consignee_name as string}
                   />
@@ -3473,6 +3549,7 @@ function HouseCreate() {
                     required
                     placeholder="Select or search consignee"
                     searchable
+                    clearable
                     data={consigneeOptions}
                     searchValue={consigneeSearch}
                     onSearchChange={(value) => {
@@ -3488,6 +3565,7 @@ function HouseCreate() {
                         form.setFieldValue("consignee_address", "");
                         form.setFieldValue("consignee_email", "");
                         setConsigneeAddressOptions([]);
+                        setConsigneeSearch("");
                         return;
                       }
                       const original = consigneeDataRef.current[value] || {};
@@ -3507,22 +3585,31 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
                       setConsigneeAddressOptions(addressOptions);
 
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+
                       // Reset address value so it always replaces on re-select
                       form.setFieldValue("consignee_address", "");
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "consignee_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
 
                       form.setFieldValue("consignee_code", value);
                       form.setFieldValue("consignee_name", toTitleCase(name));
-                      form.setFieldValue("consignee_email", email);
+                      form.setFieldValue(
+                        "consignee_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       setConsigneeSearch(name);
                     }}
                     comboboxProps={{ zIndex: 10 }}
@@ -3566,8 +3653,16 @@ function HouseCreate() {
                     data={consigneeAddressOptions}
                     value={form.values.consignee_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("consignee_address", formattedValue);
+                      form.setFieldValue("consignee_address", value || "");
+                      if (value) {
+                        const selected = consigneeAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.consignee_address}
                   />
@@ -3629,6 +3724,7 @@ function HouseCreate() {
                         form.setFieldValue("notify1_customer_address", "");
                         form.setFieldValue("notify1_customer_email", "");
                         setNotifyCustomerAddressOptions([]);
+                        setNotifyCustomerSearch("");
                         return;
                       }
                       const original =
@@ -3647,20 +3743,29 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
                       setNotifyCustomerAddressOptions(addressOptions);
+
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
 
                       form.setFieldValue(
                         "notify1_customer_name",
                         toTitleCase(name),
                       );
-                      form.setFieldValue("notify1_customer_email", email);
+                      form.setFieldValue(
+                        "notify1_customer_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       form.setFieldValue("notify1_customer_address", "");
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "notify1_customer_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
                       setNotifyCustomerSearch(name);
@@ -3707,11 +3812,19 @@ function HouseCreate() {
                     data={notifyCustomerAddressOptions}
                     value={form.values.notify1_customer_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "notify1_customer_address",
-                        formattedValue,
+                        value || "",
                       );
+                      if (value) {
+                        const selected = notifyCustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "notify1_customer_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.notify1_customer_address}
                   />
@@ -3777,6 +3890,7 @@ function HouseCreate() {
                         form.setFieldValue("notify2_customer_address", "");
                         form.setFieldValue("notify2_customer_email", "");
                         setNotify2CustomerAddressOptions([]);
+                        setNotify2CustomerSearch("");
                         return;
                       }
                       const original =
@@ -3795,20 +3909,29 @@ function HouseCreate() {
                         .filter((a) => a.address)
                         .map((a) => {
                           const addr = toTitleCase(String(a.address || ""));
-                          return { value: addr, label: addr };
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(email || a.email || ""),
+                          };
                         });
                       setNotify2CustomerAddressOptions(addressOptions);
+
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
 
                       form.setFieldValue(
                         "notify2_customer_name",
                         toTitleCase(name),
                       );
-                      form.setFieldValue("notify2_customer_email", email);
+                      form.setFieldValue(
+                        "notify2_customer_email",
+                        String(email || primaryAddr?.email || ""),
+                      );
                       form.setFieldValue("notify2_customer_address", "");
-                      if (addressOptions.length > 0) {
+                      if (primaryAddr?.address) {
                         form.setFieldValue(
                           "notify2_customer_address",
-                          addressOptions[0].value,
+                          toTitleCase(String(primaryAddr.address)),
                         );
                       }
                       setNotify2CustomerSearch(name);
@@ -3855,11 +3978,19 @@ function HouseCreate() {
                     data={notify2CustomerAddressOptions}
                     value={form.values.notify2_customer_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
                       form.setFieldValue(
                         "notify2_customer_address",
-                        formattedValue,
+                        value || "",
                       );
+                      if (value) {
+                        const selected = notify2CustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "notify2_customer_email",
+                          selected?.email || "",
+                        );
+                      }
                     }}
                     error={form.errors.notify2_customer_address}
                   />
@@ -3914,32 +4045,39 @@ function HouseCreate() {
                       ).addresses_data as Array<{
                         id: number;
                         address: string;
+                        email?: string;
+                        address_type?: string;
                       }>;
 
                       const addressOptions = addressesData.map(
-                        (addr: { id: number; address: string }) => ({
+                        (addr: {
+                          id: number;
+                          address: string;
+                          email?: string;
+                        }) => ({
                           value: addr.address,
                           label: addr.address,
+                          email: String(addr.email || ""),
                         }),
                       );
 
                       setAgentAddressOptions(addressOptions);
 
-                      // Auto-select the first address if available
-                      if (
-                        addressOptions.length > 0 &&
-                        addressOptions[0].value
-                      ) {
-                        form.setFieldValue(
-                          "agent_address",
-                          addressOptions[0].value,
-                        );
+                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+
+                      if (primaryAddr?.address) {
+                        form.setFieldValue("agent_address", primaryAddr.address);
                       } else {
                         form.setFieldValue("agent_address", "");
                       }
+                      form.setFieldValue(
+                        "agent_email",
+                        String(primaryAddr?.email || ""),
+                      );
                     } else {
                       setAgentAddressOptions([]);
                       form.setFieldValue("agent_address", "");
+                      form.setFieldValue("agent_email", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -3967,8 +4105,13 @@ function HouseCreate() {
                     data={agentAddressOptions}
                     value={form.values.agent_address || ""}
                     onChange={(value) => {
-                      const formattedValue = value ? toTitleCase(value) : "";
-                      form.setFieldValue("agent_address", formattedValue);
+                      form.setFieldValue("agent_address", value || "");
+                      if (value) {
+                        const selected = agentAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue("agent_email", selected?.email || "");
+                      }
                     }}
                     error={form.errors.agent_address}
                   />
@@ -4007,7 +4150,8 @@ function HouseCreate() {
                       (originalData as Record<string, unknown> | undefined)
                         ?.customer_name != null
                         ? String(
-                            (originalData as Record<string, unknown>).customer_name,
+                            (originalData as Record<string, unknown>)
+                              .customer_name,
                           )
                         : "";
                     form.setFieldValue("cha_code", chaCode);
@@ -4017,16 +4161,19 @@ function HouseCreate() {
                       (originalData as Record<string, unknown> | undefined)
                         ?.addresses_data &&
                       Array.isArray(
-                        (originalData as Record<string, unknown>).addresses_data,
+                        (originalData as Record<string, unknown>)
+                          .addresses_data,
                       ) &&
                       (
-                        (originalData as Record<string, unknown>).addresses_data as Array<{
+                        (originalData as Record<string, unknown>)
+                          .addresses_data as Array<{
                           address?: unknown;
                         }>
                       )[0]?.address
                         ? String(
                             (
-                              (originalData as Record<string, unknown>).addresses_data as Array<{
+                              (originalData as Record<string, unknown>)
+                                .addresses_data as Array<{
                                 address?: unknown;
                               }>
                             )[0].address,
@@ -4055,7 +4202,6 @@ function HouseCreate() {
                 />
               </Grid.Col>
             </Grid>
-
           </Box>
         </Tabs.Panel>
 
@@ -4073,7 +4219,10 @@ function HouseCreate() {
                   minRows={3}
                   value={form.values.commodity_description}
                   onChange={(e) => {
-                    form.setFieldValue("commodity_description", e.currentTarget.value);
+                    form.setFieldValue(
+                      "commodity_description",
+                      e.currentTarget.value,
+                    );
                   }}
                   error={form.errors.commodity_description}
                 />
@@ -4249,7 +4398,9 @@ function HouseCreate() {
                         }
                       }}
                       onBlur={(e) => {
-                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        const raw = e.currentTarget.value
+                          .replace(/,/g, "")
+                          .trim();
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
@@ -4301,7 +4452,9 @@ function HouseCreate() {
                         }
                       }}
                       onBlur={(e) => {
-                        const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                        const raw = e.currentTarget.value
+                          .replace(/,/g, "")
+                          .trim();
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
@@ -4423,7 +4576,8 @@ function HouseCreate() {
                         .filter(
                           (e: any) =>
                             e?.charge_id != null ||
-                            (e?.charge_name && String(e.charge_name).trim() !== ""),
+                            (e?.charge_name &&
+                              String(e.charge_name).trim() !== ""),
                         )
                         .map((e: any) => ({
                           charge_id: e?.charge_id ?? null,
@@ -4431,9 +4585,13 @@ function HouseCreate() {
                           segment: "",
                           // NOTE: PRQ "Job Id" should receive shipment_id from house context
                           job_no: String(
-                            (fullDetail as { shipment_id?: unknown })?.shipment_id ??
-                              (location.state?.job as { shipment_id?: unknown } | null)
-                                ?.shipment_id ??
+                            (fullDetail as { shipment_id?: unknown })
+                              ?.shipment_id ??
+                              (
+                                location.state?.job as {
+                                  shipment_id?: unknown;
+                                } | null
+                              )?.shipment_id ??
                               location.state?.job?.job_id ??
                               location.state?.job?.id ??
                               "",
@@ -4458,9 +4616,10 @@ function HouseCreate() {
                             e?.cost_local_amount ??
                             e?.local_amount ??
                             (e?.total_cost != null && e?.roe != null
-                              ? Math.round(Number(e.total_cost) * Number(e.roe) * 100) /
-                                100
-                              : e?.total_cost ?? null),
+                              ? Math.round(
+                                  Number(e.total_cost) * Number(e.roe) * 100,
+                                ) / 100
+                              : (e?.total_cost ?? null)),
                           tax_code: "",
                           tax: "false",
                         }));
@@ -4496,7 +4655,9 @@ function HouseCreate() {
                               location.state?.job?.id ??
                               "",
                           ),
-                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
                         },
                       });
                     }}
@@ -4522,7 +4683,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
-                          ...(location.state?.job && { job: location.state.job }),
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
                           ...(location.state?.mawbDetails && {
                             mawbDetails: location.state.mawbDetails,
                           }),
@@ -4552,27 +4715,29 @@ function HouseCreate() {
                         charges: prepaidCharges,
                       };
                       navigate("/air/export-job/invoice", {
-                          state: {
-                            serviceType: "AIR",
-                            hawbDetails: [detailForInvoice],
-                            housingDetails: [detailForInvoice],
-                            is_agent: false,
-                            ...(location.state?.job && { job: location.state.job }),
-                            ...(location.state?.mawbDetails && {
-                              mawbDetails: location.state.mawbDetails,
-                            }),
-                            ...(location.state?.carrierDetails && {
-                              carrierDetails: location.state.carrierDetails,
-                            }),
-                            ...(location.state?.routings && {
-                              routings: location.state.routings,
-                            }),
-                          },
-                        });
-                      }}
-                    >
-                      Create Invoice
-                    </Button>
+                        state: {
+                          serviceType: "AIR",
+                          hawbDetails: [detailForInvoice],
+                          housingDetails: [detailForInvoice],
+                          is_agent: false,
+                          ...(location.state?.job && {
+                            job: location.state.job,
+                          }),
+                          ...(location.state?.mawbDetails && {
+                            mawbDetails: location.state.mawbDetails,
+                          }),
+                          ...(location.state?.carrierDetails && {
+                            carrierDetails: location.state.carrierDetails,
+                          }),
+                          ...(location.state?.routings && {
+                            routings: location.state.routings,
+                          }),
+                        },
+                      });
+                    }}
+                  >
+                    Create Invoice
+                  </Button>
                 </Group>
               )}
             </Group>
@@ -4925,7 +5090,10 @@ function HouseCreate() {
                                 ),
                               );
                             } else {
-                              chargesForm.setFieldValue(`charges.${index}.amount`, null);
+                              chargesForm.setFieldValue(
+                                `charges.${index}.amount`,
+                                null,
+                              );
                             }
                             if (
                               currentCharge.cost_per_unit != null &&
@@ -4940,7 +5108,10 @@ function HouseCreate() {
                                 ),
                               );
                             } else {
-                              chargesForm.setFieldValue(`charges.${index}.total_cost`, null);
+                              chargesForm.setFieldValue(
+                                `charges.${index}.total_cost`,
+                                null,
+                              );
                             }
                           },
                         };
@@ -4948,37 +5119,49 @@ function HouseCreate() {
                     />
                   </Grid.Col>
                   <Grid.Col span={0.85}>
-                      <FormNumberInput
-                        placeholder="Amount/Unit"
-                        min={0}
-                        hideControls
-                        decimalScale={currencyAmountDecimalScale}
-                        value={charge.amount_per_unit || undefined}
-                        onChange={(value) => {
-                          const amountPerUnit = value as number | null;
-                          chargesForm.setFieldValue(`charges.${index}.amount_per_unit`, amountPerUnit);
-                          const currentCharge = chargesForm.values.charges[index];
-                          if (amountPerUnit == null || amountPerUnit === 0 || currentCharge.no_of_unit == null || currentCharge.no_of_unit === 0) {
-                            chargesForm.setFieldValue(`charges.${index}.amount`, null);
-                          } else {
-                            chargesForm.setFieldValue(
-                              `charges.${index}.amount`,
-                              clampCurrencyMoneyAmountBound(
-                                currentCharge.no_of_unit * amountPerUnit,
-                              ),
-                            );
+                    <FormNumberInput
+                      placeholder="Amount/Unit"
+                      min={0}
+                      hideControls
+                      decimalScale={currencyAmountDecimalScale}
+                      value={charge.amount_per_unit || undefined}
+                      onChange={(value) => {
+                        const amountPerUnit = value as number | null;
+                        chargesForm.setFieldValue(
+                          `charges.${index}.amount_per_unit`,
+                          amountPerUnit,
+                        );
+                        const currentCharge = chargesForm.values.charges[index];
+                        if (
+                          amountPerUnit == null ||
+                          amountPerUnit === 0 ||
+                          currentCharge.no_of_unit == null ||
+                          currentCharge.no_of_unit === 0
+                        ) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.amount`,
+                            null,
+                          );
+                        } else {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.amount`,
+                            clampCurrencyMoneyAmountBound(
+                              currentCharge.no_of_unit * amountPerUnit,
+                            ),
+                          );
+                        }
+                        if (chargeErrors[index]?.amount_per_unit) {
+                          const newErrors = { ...chargeErrors };
+                          if (newErrors[index]) {
+                            delete newErrors[index].amount_per_unit;
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
-                          if (chargeErrors[index]?.amount_per_unit) {
-                            const newErrors = { ...chargeErrors };
-                            if (newErrors[index]) {
-                              delete newErrors[index].amount_per_unit;
-                              if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
-                            }
-                            setChargeErrors(newErrors);
-                          }
-                        }}
-                        error={chargeErrors[index]?.amount_per_unit}
-                      />
+                          setChargeErrors(newErrors);
+                        }
+                      }}
+                      error={chargeErrors[index]?.amount_per_unit}
+                    />
                   </Grid.Col>
                   <Grid.Col span={0.85}>
                     <FormNumberInput
@@ -4988,12 +5171,16 @@ function HouseCreate() {
                       decimalScale={currencyAmountDecimalScale}
                       value={charge.amount || undefined}
                       onChange={(value) => {
-                        chargesForm.setFieldValue(`charges.${index}.amount`, value as number | null);
+                        chargesForm.setFieldValue(
+                          `charges.${index}.amount`,
+                          value as number | null,
+                        );
                         if (chargeErrors[index]?.amount) {
                           const newErrors = { ...chargeErrors };
                           if (newErrors[index]) {
                             delete newErrors[index].amount;
-                            if (Object.keys(newErrors[index]).length === 0) delete newErrors[index];
+                            if (Object.keys(newErrors[index]).length === 0)
+                              delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
                         }
@@ -5025,7 +5212,10 @@ function HouseCreate() {
                       value={charge.cost_per_unit || undefined}
                       onChange={(value) => {
                         const costPerUnit = value as number | null;
-                        chargesForm.setFieldValue(`charges.${index}.cost_per_unit`, costPerUnit);
+                        chargesForm.setFieldValue(
+                          `charges.${index}.cost_per_unit`,
+                          costPerUnit,
+                        );
                         const currentCharge = chargesForm.values.charges[index];
                         if (
                           costPerUnit != null &&
@@ -5040,7 +5230,10 @@ function HouseCreate() {
                             ),
                           );
                         } else {
-                          chargesForm.setFieldValue(`charges.${index}.total_cost`, null);
+                          chargesForm.setFieldValue(
+                            `charges.${index}.total_cost`,
+                            null,
+                          );
                         }
                       }}
                     />
@@ -5084,10 +5277,17 @@ function HouseCreate() {
                         value: String(item.customer_code ?? ""),
                         label: String(item.customer_name ?? ""),
                       })}
-                      value={charge.supplier_code ? String(charge.supplier_code) : null}
+                      value={
+                        charge.supplier_code
+                          ? String(charge.supplier_code)
+                          : null
+                      }
                       displayValue={charge.supplier_name || undefined}
                       onChange={(value, selectedData) => {
-                        chargesForm.setFieldValue(`charges.${index}.supplier_code`, value || "");
+                        chargesForm.setFieldValue(
+                          `charges.${index}.supplier_code`,
+                          value || "",
+                        );
                         chargesForm.setFieldValue(
                           `charges.${index}.supplier_name`,
                           selectedData?.label || "",
@@ -5104,7 +5304,15 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.5} style={{ display: "flex", gap: "6px", alignItems: "center", justifyContent: "flex-start" }}>
+                  <Grid.Col
+                    span={0.5}
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      alignItems: "center",
+                      justifyContent: "flex-start",
+                    }}
+                  >
                     {chargesForm.values.charges.length - 1 === index && (
                       <ActionIcon
                         variant="light"
@@ -5149,7 +5357,9 @@ function HouseCreate() {
               <ChargesLocalAmountTotalsRow
                 offsetBeforeSellCol={7.1}
                 house={{
-                  charges: getMeaningfulHouseCharges(chargesForm.values.charges),
+                  charges: getMeaningfulHouseCharges(
+                    chargesForm.values.charges,
+                  ),
                   mawb_charges: (editData as { mawb_charges?: unknown })
                     ?.mawb_charges as
                     | Array<{
@@ -5166,12 +5376,14 @@ function HouseCreate() {
                         cost_local_amount?: unknown;
                       }>
                     | undefined,
-                  summary: (editData as {
-                    summary?: {
-                      total_local_sell?: number | string | null;
-                      total_local_cost?: number | string | null;
-                    };
-                  })?.summary,
+                  summary: (
+                    editData as {
+                      summary?: {
+                        total_local_sell?: number | string | null;
+                        total_local_cost?: number | string | null;
+                      };
+                    }
+                  )?.summary,
                 }}
                 branches={user?.branches}
               />
@@ -5257,7 +5469,9 @@ function HouseCreate() {
                             <Fragment key={rowKey}>
                               <Table.Tr
                                 style={
-                                  hasReverseInvoices ? { cursor: "pointer" } : undefined
+                                  hasReverseInvoices
+                                    ? { cursor: "pointer" }
+                                    : undefined
                                 }
                                 onClick={(e) => {
                                   if (
@@ -5602,7 +5816,7 @@ function HouseCreate() {
                                                 fontWeight: 600,
                                                 width: "20%",
                                               }}
-                                                                                        >
+                                            >
                                               Document Number
                                             </Table.Th>
                                             <Table.Th
@@ -5673,7 +5887,9 @@ function HouseCreate() {
                                                       width: "20%",
                                                     }}
                                                   >
-                                                    {formatInvoiceDocumentNo(rev)}
+                                                    {formatInvoiceDocumentNo(
+                                                      rev,
+                                                    )}
                                                   </Table.Td>
                                                   <Table.Td
                                                     style={{

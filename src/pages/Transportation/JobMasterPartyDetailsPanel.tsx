@@ -48,6 +48,27 @@ export const getJobMasterAddressOptions = (
     .map(({ value, label, email, address }) => ({ value, label, email, address }));
 };
 
+const PARTY_CUSTOMER_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
+  value: String(item.id ?? ""),
+  label: String(item.customer_name ?? ""),
+});
+
+const CARRIER_AGENT_SEARCH_PARAMS = { types: "Carrier-agent" };
+
+const addressSearchMatchesOption = (
+  options: PartyAddressOption[],
+  search: string,
+) => {
+  const trimmed = search.trim().toLowerCase();
+  if (!trimmed) return false;
+  return options.some(
+    (item) =>
+      item.label.toLowerCase() === trimmed ||
+      item.value.toLowerCase() === trimmed ||
+      item.address.toLowerCase() === trimmed,
+  );
+};
+
 type JobMasterPartyDetailsPanelProps = {
   idPrefix: string;
   disabled?: boolean;
@@ -119,10 +140,7 @@ export function JobMasterPartyDetailsPanel({
             apiEndpoint={URL.shipper}
             placeholder="Type shipper name"
             searchFields={["customer_name", "customer_code"]}
-            displayFormat={(item: Record<string, unknown>) => ({
-              value: String(item.id ?? ""),
-              label: String(item.customer_name ?? ""),
-            })}
+            displayFormat={PARTY_CUSTOMER_DISPLAY_FORMAT}
             value={partyDetailsForm.values.shipper_id || null}
             displayValue={partyDetailsForm.values.shipper_name || null}
             disabled={disabled}
@@ -141,7 +159,7 @@ export function JobMasterPartyDetailsPanel({
                 partyDetailsForm.setFieldValue("shipper_address", "");
               }
               setShipperAddressOptions(value ? options : []);
-              setShipperAddressSearch("");
+              setShipperAddressSearch(value ? primary?.label || "" : "");
               setShipperAddressCustom(false);
             }}
             minSearchLength={2}
@@ -194,10 +212,10 @@ export function JobMasterPartyDetailsPanel({
               searchValue={shipperAddressSearch}
               onSearchChange={(value) => {
                 setShipperAddressSearch(value);
-                const hasMatch = shipperAddressOptions.some(
-                  (item) => item.label.toLowerCase() === value.trim().toLowerCase(),
-                );
-                if (value.trim() && !hasMatch) {
+                if (
+                  value.trim() &&
+                  !addressSearchMatchesOption(shipperAddressOptions, value)
+                ) {
                   setShipperAddressCustom(true);
                   partyDetailsForm.setFieldValue("shipper_address_id", "");
                   partyDetailsForm.setFieldValue("shipper_address", value);
@@ -207,6 +225,11 @@ export function JobMasterPartyDetailsPanel({
                 const selected = shipperAddressOptions.find((item) => item.value === value);
                 partyDetailsForm.setFieldValue("shipper_address_id", value || "");
                 partyDetailsForm.setFieldValue("shipper_address", selected?.address || "");
+                if (value) {
+                  partyDetailsForm.setFieldValue("shipper_email", selected?.email || "");
+                }
+                setShipperAddressSearch(selected?.label || "");
+                setShipperAddressCustom(false);
               }}
               searchable
               clearable
@@ -223,16 +246,14 @@ export function JobMasterPartyDetailsPanel({
         </Grid.Col>
         <Grid.Col span={4}>
           <SearchableSelect
+            key={`${idPrefix}-consignee-${partyDetailsForm.values.consignee_id}:${partyDetailsForm.values.consignee_name ?? "_"}`}
             size="sm"
             label="Consignee Name"
             dropdownZIndex={1000}
             apiEndpoint={URL.consignee}
             placeholder="Type consignee name"
             searchFields={["customer_name", "customer_code"]}
-            displayFormat={(item: Record<string, unknown>) => ({
-              value: String(item.id ?? ""),
-              label: String(item.customer_name ?? ""),
-            })}
+            displayFormat={PARTY_CUSTOMER_DISPLAY_FORMAT}
             value={partyDetailsForm.values.consignee_id || null}
             displayValue={partyDetailsForm.values.consignee_name || null}
             disabled={disabled}
@@ -251,7 +272,7 @@ export function JobMasterPartyDetailsPanel({
                 partyDetailsForm.setFieldValue("consignee_address", "");
               }
               setConsigneeAddressOptions(value ? options : []);
-              setConsigneeAddressSearch("");
+              setConsigneeAddressSearch(value ? primary?.label || "" : "");
               setConsigneeAddressCustom(false);
             }}
             minSearchLength={2}
@@ -304,10 +325,10 @@ export function JobMasterPartyDetailsPanel({
               searchValue={consigneeAddressSearch}
               onSearchChange={(value) => {
                 setConsigneeAddressSearch(value);
-                const hasMatch = consigneeAddressOptions.some(
-                  (item) => item.label.toLowerCase() === value.trim().toLowerCase(),
-                );
-                if (value.trim() && !hasMatch) {
+                if (
+                  value.trim() &&
+                  !addressSearchMatchesOption(consigneeAddressOptions, value)
+                ) {
                   setConsigneeAddressCustom(true);
                   partyDetailsForm.setFieldValue("consignee_address_id", "");
                   partyDetailsForm.setFieldValue("consignee_address", value);
@@ -317,6 +338,11 @@ export function JobMasterPartyDetailsPanel({
                 const selected = consigneeAddressOptions.find((item) => item.value === value);
                 partyDetailsForm.setFieldValue("consignee_address_id", value || "");
                 partyDetailsForm.setFieldValue("consignee_address", selected?.address || "");
+                if (value) {
+                  partyDetailsForm.setFieldValue("consignee_email", selected?.email || "");
+                }
+                setConsigneeAddressSearch(selected?.label || "");
+                setConsigneeAddressCustom(false);
               }}
               searchable
               clearable
@@ -338,13 +364,10 @@ export function JobMasterPartyDetailsPanel({
             label="Carrier Agent Name"
             dropdownZIndex={1000}
             apiEndpoint={URL.customerByTypes}
-            additionalParams={{ types: "Carrier-agent" }}
+            additionalParams={CARRIER_AGENT_SEARCH_PARAMS}
             placeholder="Type carrier agent name"
             searchFields={["customer_name", "customer_code"]}
-            displayFormat={(item: Record<string, unknown>) => ({
-              value: String(item.id ?? ""),
-              label: String(item.customer_name ?? ""),
-            })}
+            displayFormat={PARTY_CUSTOMER_DISPLAY_FORMAT}
             value={partyDetailsForm.values.carrier_agent_id || null}
             displayValue={partyDetailsForm.values.carrier_agent_name || null}
             disabled={disabled}
@@ -375,7 +398,7 @@ export function JobMasterPartyDetailsPanel({
                 partyDetailsForm.setFieldValue("carrier_agent_address", "");
               }
               setCarrierAgentAddressOptions(value ? options : []);
-              setCarrierAgentAddressSearch("");
+              setCarrierAgentAddressSearch(value ? primary?.label || "" : "");
               setCarrierAgentAddressCustom(false);
             }}
             minSearchLength={2}
@@ -432,10 +455,10 @@ export function JobMasterPartyDetailsPanel({
               searchValue={carrierAgentAddressSearch}
               onSearchChange={(value) => {
                 setCarrierAgentAddressSearch(value);
-                const hasMatch = carrierAgentAddressOptions.some(
-                  (item) => item.label.toLowerCase() === value.trim().toLowerCase(),
-                );
-                if (value.trim() && !hasMatch) {
+                if (
+                  value.trim() &&
+                  !addressSearchMatchesOption(carrierAgentAddressOptions, value)
+                ) {
                   setCarrierAgentAddressCustom(true);
                   partyDetailsForm.setFieldValue("carrier_agent_address_id", "");
                   partyDetailsForm.setFieldValue("carrier_agent_address", value);
@@ -450,6 +473,14 @@ export function JobMasterPartyDetailsPanel({
                   "carrier_agent_address",
                   selected?.address || "",
                 );
+                if (value) {
+                  partyDetailsForm.setFieldValue(
+                    "carrier_agent_email",
+                    selected?.email || "",
+                  );
+                }
+                setCarrierAgentAddressSearch(selected?.label || "");
+                setCarrierAgentAddressCustom(false);
               }}
               searchable
               clearable

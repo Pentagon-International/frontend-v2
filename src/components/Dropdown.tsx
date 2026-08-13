@@ -197,7 +197,22 @@ export default function Dropdown({
   };
 
   const handleBlur = () => {
-    if (!selectedItem && displayData.length > 0) {
+    // Portal dropdown clicks blur the input before onChange. If a controlled
+    // value already matches an option, keep it — never snap back to first/primary.
+    if (!selectedItem && value) {
+      const matched = normalizedData.find((item) => item.value === value);
+      if (matched) {
+        setSelectedItem(matched);
+        setSearch(matched.label);
+        searchRef.current = matched.label;
+        setIsSearchMode(false);
+        return;
+      }
+    }
+
+    // Only auto-pick when the user was actively searching with no committed value
+    // (e.g. tab away after typing). Do not run this on click-away after a selection.
+    if (!selectedItem && !value && isSearchMode && displayData.length > 0) {
       const idx = activeIndex > 0 ? activeIndex - 1 : 0;
       const pick = displayData[idx] ?? displayData[0];
       handleChange(pick.value);

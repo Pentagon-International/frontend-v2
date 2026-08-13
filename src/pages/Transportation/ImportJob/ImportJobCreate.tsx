@@ -103,7 +103,10 @@ import {
 } from "../../../utils/invoiceDocumentNumber";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { isJobClosed } from "../../../utils/closeJob";
-import { pickPackageTypeCodeFromCargo, resolvePackageTypeName } from "../../../utils/packageTypeOptions";
+import {
+  pickPackageTypeCodeFromCargo,
+  resolvePackageTypeName,
+} from "../../../utils/packageTypeOptions";
 import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import {
   getMeaningfulHouseCharges,
@@ -701,7 +704,8 @@ function ImportJobCreate() {
   }, [location.pathname, location.state]);
 
   const isReadOnly =
-    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
+    mode === "view" ||
+    isJobClosed((jobData as { status?: string | null } | undefined)?.status);
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -771,7 +775,8 @@ function ImportJobCreate() {
     initialValues: {
       service: "",
       pp_cc: normalizeFreightPpCc(
-        (location.state?.mblDetails as { pp_cc?: unknown } | undefined)?.pp_cc ??
+        (location.state?.mblDetails as { pp_cc?: unknown } | undefined)
+          ?.pp_cc ??
           (jobData as { pp_cc?: unknown } | undefined)?.pp_cc ??
           (jobData as { freight?: unknown } | undefined)?.freight,
       ),
@@ -1216,10 +1221,9 @@ function ImportJobCreate() {
                 house.consignee_state_code !== undefined
                   ? String(house.consignee_state_code)
                   : (
-                      house.consignee_state_details as
-                        | { state_code?: string }
-                        | undefined
-                    )?.state_code != null
+                        house.consignee_state_details as
+                          { state_code?: string } | undefined
+                      )?.state_code != null
                     ? String(
                         (
                           house.consignee_state_details as {
@@ -2928,7 +2932,8 @@ function ImportJobCreate() {
             housing.cargo_details?.find(
               (c) => c.package_type_name || c.package_type,
             )?.package_type_name ||
-              housing.cargo_details?.find((c) => c.package_type)?.package_type ||
+              housing.cargo_details?.find((c) => c.package_type)
+                ?.package_type ||
               (housing as { package_type?: string }).package_type,
             packageTypeOptions,
           ) ||
@@ -3229,8 +3234,10 @@ function ImportJobCreate() {
             const code = String(c.container_type ?? "").trim();
             const nameFromRow = String(c.container_type_name ?? "").trim();
             const nameFromDetails = String(
-              (c.container_type_details as { container_type_name?: string } | undefined)
-                ?.container_type_name ?? "",
+              (
+                c.container_type_details as
+                  { container_type_name?: string } | undefined
+              )?.container_type_name ?? "",
             ).trim();
             const nameFromMaster =
               containerTypeData.find((o) => o.value === code)?.label || "";
@@ -3388,8 +3395,7 @@ function ImportJobCreate() {
 
       const payload = {
         service: mblDetailsForm.values.service,
-        pp_cc:
-          normalizeFreightPpCc(mblDetailsForm.values.pp_cc) || "Collect",
+        pp_cc: normalizeFreightPpCc(mblDetailsForm.values.pp_cc) || "Collect",
         note: mblDetailsForm.values.note || "",
         service_type: "Import", // Based on the example payload
         agent: mblDetailsForm.values.origin_agent || null,
@@ -3609,9 +3615,8 @@ function ImportJobCreate() {
                     String(cargo.haz).toLowerCase() === "yes"
                 : null,
             package_type_code:
-              pickPackageTypeCodeFromCargo(
-                cargo as Record<string, unknown>,
-              ) || null,
+              pickPackageTypeCodeFromCargo(cargo as Record<string, unknown>) ||
+              null,
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (() => {
@@ -3818,9 +3823,7 @@ function ImportJobCreate() {
               {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
           )}
-          {jobData?.job_id && (
-            <ERPListJobStatusPill status={jobData?.status} />
-          )}
+          {jobData?.job_id && <ERPListJobStatusPill status={jobData?.status} />}
         </Group>
         {!isReadOnly && (
           <Group gap="xs">
@@ -4644,7 +4647,7 @@ function ImportJobCreate() {
                       partyDetailsForm.setFieldValue("shipper_address", "");
                     }
                     setShipperAddressOptions(value ? options : []);
-                    setShipperAddressSearch("");
+                    setShipperAddressSearch(value ? primary?.label || "" : "");
                     setShipperAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -4704,10 +4707,12 @@ function ImportJobCreate() {
                     searchValue={shipperAddressSearch}
                     onSearchChange={(value) => {
                       setShipperAddressSearch(value);
+                      const trimmed = value.trim().toLowerCase();
                       const hasMatch = shipperAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() ===
-                          value.trim().toLowerCase(),
+                          item.label.toLowerCase() === trimmed ||
+                          item.value.toLowerCase() === trimmed ||
+                          item.address.toLowerCase() === trimmed,
                       );
                       if (value.trim() && !hasMatch) {
                         setShipperAddressCustom(true);
@@ -4733,6 +4738,14 @@ function ImportJobCreate() {
                         "shipper_address",
                         selected?.address || "",
                       );
+                      if (value) {
+                        partyDetailsForm.setFieldValue(
+                          "shipper_email",
+                          selected?.email || "",
+                        );
+                      }
+                      setShipperAddressSearch(selected?.label || "");
+                      setShipperAddressCustom(false);
                     }}
                     searchable
                     clearable
@@ -4791,7 +4804,7 @@ function ImportJobCreate() {
                       partyDetailsForm.setFieldValue("consignee_address", "");
                     }
                     setConsigneeAddressOptions(value ? options : []);
-                    setConsigneeAddressSearch("");
+                    setConsigneeAddressSearch(value ? primary?.label || "" : "");
                     setConsigneeAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -4851,10 +4864,12 @@ function ImportJobCreate() {
                     searchValue={consigneeAddressSearch}
                     onSearchChange={(value) => {
                       setConsigneeAddressSearch(value);
+                      const trimmed = value.trim().toLowerCase();
                       const hasMatch = consigneeAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() ===
-                          value.trim().toLowerCase(),
+                          item.label.toLowerCase() === trimmed ||
+                          item.value.toLowerCase() === trimmed ||
+                          item.address.toLowerCase() === trimmed,
                       );
                       if (value.trim() && !hasMatch) {
                         setConsigneeAddressCustom(true);
@@ -4880,6 +4895,14 @@ function ImportJobCreate() {
                         "consignee_address",
                         selected?.address || "",
                       );
+                      if (value) {
+                        partyDetailsForm.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                      }
+                      setConsigneeAddressSearch(selected?.label || "");
+                      setConsigneeAddressCustom(false);
                     }}
                     searchable
                     clearable
@@ -4947,7 +4970,9 @@ function ImportJobCreate() {
                       );
                     }
                     setCarrierAgentAddressOptions(value ? options : []);
-                    setCarrierAgentAddressSearch("");
+                    setCarrierAgentAddressSearch(
+                      value ? primary?.label || "" : "",
+                    );
                     setCarrierAgentAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -5009,10 +5034,12 @@ function ImportJobCreate() {
                     searchValue={carrierAgentAddressSearch}
                     onSearchChange={(value) => {
                       setCarrierAgentAddressSearch(value);
+                      const trimmed = value.trim().toLowerCase();
                       const hasMatch = carrierAgentAddressOptions.some(
                         (item) =>
-                          item.label.toLowerCase() ===
-                          value.trim().toLowerCase(),
+                          item.label.toLowerCase() === trimmed ||
+                          item.value.toLowerCase() === trimmed ||
+                          item.address.toLowerCase() === trimmed,
                       );
                       if (value.trim() && !hasMatch) {
                         setCarrierAgentAddressCustom(true);
@@ -5038,6 +5065,14 @@ function ImportJobCreate() {
                         "carrier_agent_address",
                         selected?.address || "",
                       );
+                      if (value) {
+                        partyDetailsForm.setFieldValue(
+                          "carrier_agent_email",
+                          selected?.email || "",
+                        );
+                      }
+                      setCarrierAgentAddressSearch(selected?.label || "");
+                      setCarrierAgentAddressCustom(false);
                     }}
                     searchable
                     clearable
