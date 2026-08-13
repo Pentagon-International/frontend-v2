@@ -1126,7 +1126,7 @@ function isUnitedStatesCountry(
   );
 }
 
-/** US branch (user or default branch country): no GST/VAT tab, no tax rows on post (same as agent). */
+/** US branch (user or default branch country): no GST/VAT tab, no tax rows on post. Agent invoice: same skip only for US. */
 function isUnitedStatesBranchUser(
   user?: {
     country?: { country_code?: string; country_name?: string };
@@ -1395,7 +1395,7 @@ function InvoiceCreate({
   const isVatInvoiceRef = useRef(false);
   const isUsInvoiceRef = useRef(false);
 
-  // Agent invoice: hide SAC, IGST/CGST/SGST, Totals section, and Tax tab
+  // Agent invoice: hide SAC, IGST/CGST/SGST. VAT still applies except US.
   const isAgentInvoice = useMemo(() => {
     if ((location.state as { is_agent?: boolean } | null)?.is_agent === true)
       return true;
@@ -1543,12 +1543,13 @@ function InvoiceCreate({
     user?.country?.country_name,
   ]);
 
-  // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
+  // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge).
+  // Agent invoice: VAT applies for these branches too; only US agent invoices skip VAT.
   const isUsInvoiceUser = useMemo(() => isUnitedStatesBranchUser(user), [user]);
 
   const isVatInvoiceUser = useMemo(
-    () => !isAgentInvoice && !isIndiaUser && !isUsInvoiceUser,
-    [isAgentInvoice, isIndiaUser, isUsInvoiceUser],
+    () => !isIndiaUser && !isUsInvoiceUser,
+    [isIndiaUser, isUsInvoiceUser],
   );
 
   // India GST: State/GSTN/SAC, IGST/CGST/SGST. Foreign branches use VAT (isVatInvoiceUser).

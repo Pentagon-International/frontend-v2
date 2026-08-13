@@ -1095,10 +1095,11 @@ function InvoiceReverse() {
 
   const isUsInvoiceUser = useMemo(() => isUnitedStatesBranchUser(user), [user]);
 
-  // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge)
+  // Foreign branches (non-India, non-US): VAT integration (no State/GSTN/SAC; tax_rate + tax_amount per charge).
+  // Agent invoice: VAT applies for these branches too; only US agent invoices skip VAT.
   const isVatInvoiceUser = useMemo(
-    () => !isAgentInvoice && !isIndiaUser && !isUsInvoiceUser,
-    [isAgentInvoice, isIndiaUser, isUsInvoiceUser],
+    () => !isIndiaUser && !isUsInvoiceUser,
+    [isIndiaUser, isUsInvoiceUser],
   );
 
   // India GST: State/GSTN/SAC, IGST/CGST/SGST. Foreign branches use VAT (isVatInvoiceUser).
