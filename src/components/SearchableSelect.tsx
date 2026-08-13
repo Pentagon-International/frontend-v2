@@ -362,6 +362,7 @@ export default function SearchableSelect({
         autoFocus={autoFocus}
         classNames={classNames}
         comboboxProps={{
+          withinPortal: true,
           zIndex: dropdownZIndex,
         }}
         styles={{

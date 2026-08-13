@@ -53,6 +53,101 @@ export const EMPTY_SERVICE_JOB_CARGO: ServiceJobCargoDetail = {
   haz: null,
 };
 
+export function isEmptyServiceJobContainer(
+  container: ServiceJobContainerDetail,
+): boolean {
+  return (
+    container.id == null &&
+    String(container.container_type ?? "").trim() === "" &&
+    String(container.container_no ?? "").trim() === "" &&
+    String(container.actual_seal_no ?? "").trim() === "" &&
+    String(container.customs_seal_no ?? "").trim() === "" &&
+    container.loading_date == null &&
+    container.unloading_date == null
+  );
+}
+
+export function isEmptyServiceJobCargo(cargo: ServiceJobCargoDetail): boolean {
+  return (
+    cargo.id == null &&
+    String(cargo.container_number ?? "").trim() === "" &&
+    String(cargo.package_type ?? "").trim() === "" &&
+    cargo.no_of_packages == null &&
+    cargo.gross_weight == null &&
+    cargo.volume == null &&
+    cargo.haz == null
+  );
+}
+
+/**
+ * Pair container + cargo rows 1:1 for the combined UI.
+ * Payload mapping still uses the two arrays independently.
+ */
+export function alignContainerAndCargoRows(
+  containers: ServiceJobContainerDetail[],
+  cargoDetails: ServiceJobCargoDetail[],
+): {
+  containers: ServiceJobContainerDetail[];
+  cargoDetails: ServiceJobCargoDetail[];
+} {
+  const realContainers = containers.filter(
+    (container) => !isEmptyServiceJobContainer(container),
+  );
+  const realCargo = cargoDetails.filter((cargo) => !isEmptyServiceJobCargo(cargo));
+
+  if (realContainers.length === 0 && realCargo.length === 0) {
+    return {
+      containers: [{ ...EMPTY_SERVICE_JOB_CONTAINER }],
+      cargoDetails: [{ ...EMPTY_SERVICE_JOB_CARGO }],
+    };
+  }
+
+  const usedCargo = new Set<number>();
+  const nextContainers: ServiceJobContainerDetail[] = [];
+  const nextCargo: ServiceJobCargoDetail[] = [];
+
+  for (const container of realContainers) {
+    const containerNo = String(container.container_no ?? "").trim();
+    const cargoIdx =
+      containerNo === ""
+        ? -1
+        : realCargo.findIndex(
+            (cargo, index) =>
+              !usedCargo.has(index) &&
+              String(cargo.container_number ?? "").trim() === containerNo,
+          );
+
+    nextContainers.push(container);
+    if (cargoIdx >= 0) {
+      usedCargo.add(cargoIdx);
+      nextCargo.push({
+        ...realCargo[cargoIdx],
+        container_number: containerNo,
+        container_id:
+          realCargo[cargoIdx].container_id ??
+          (container.id != null ? Number(container.id) : undefined),
+      });
+    } else {
+      nextCargo.push({
+        ...EMPTY_SERVICE_JOB_CARGO,
+        container_number: containerNo,
+        container_id: container.id != null ? Number(container.id) : undefined,
+      });
+    }
+  }
+
+  realCargo.forEach((cargo, index) => {
+    if (usedCargo.has(index)) return;
+    nextContainers.push({
+      ...EMPTY_SERVICE_JOB_CONTAINER,
+      container_no: cargo.container_number || "",
+    });
+    nextCargo.push(cargo);
+  });
+
+  return { containers: nextContainers, cargoDetails: nextCargo };
+}
+
 /**
  * Cargo UI/payload mode from service master.
  * SEA+FULL → FCL, SEA+GROUPAGE → LCL, AIR → AIR, NA/other → LCL.

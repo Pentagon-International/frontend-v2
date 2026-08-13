@@ -98,6 +98,8 @@ import { ServiceJobCargoDetailsSection } from "./ServiceJobCargoDetailsSection";
 import {
   EMPTY_SERVICE_JOB_CARGO,
   EMPTY_SERVICE_JOB_CONTAINER,
+  alignContainerAndCargoRows,
+  isSeaServiceJobCargoMode,
   mapCargoDetailsForPayload,
   mapCargoDetailsFromApi,
   mapContainersForPayload,
@@ -160,7 +162,9 @@ type ServiceJobFormValues = {
   destination_name: string;
   routed: string;
   routed_by: string;
-  awb_number: string;
+  hbl_number: string;
+  mbl_number: string;
+  mbl_date: Date | null;
   etd: Date | null;
   eta: Date | null;
 };
@@ -253,38 +257,42 @@ function getDefaultPpCcFromService(importExport?: string): "Prepaid" | "Collect"
   return "Collect";
 }
 
-function getMasterAwbField(
-  transportMode: string,
-): "mawb_no" | "mbl_number" {
-  return isAirTransportMode(transportMode) ? "mawb_no" : "mbl_number";
-}
-
-function getHouseAwbField(
-  transportMode: string,
-): "hawb_no" | "hbl_number" {
-  return isAirTransportMode(transportMode) ? "hawb_no" : "hbl_number";
-}
-
-function readMasterAwbFromJob(
+function readMblNumber(
   job: Record<string, unknown>,
-  transportMode: string,
+  house?: Record<string, unknown>,
 ): string {
-  if (isAirTransportMode(transportMode)) {
-    return String(job.mawb_no ?? job.mawb_number ?? "");
-  }
-  return String(job.mbl_number ?? "");
+  return String(
+    job.mbl_number ?? house?.mbl_number ?? job.mbl_no ?? house?.mbl_no ?? "",
+  );
 }
 
-function readHouseAwbFromHouse(
-  house: Record<string, unknown>,
-  transportMode: string,
+function readHblNumber(
+  house?: Record<string, unknown>,
+  job?: Record<string, unknown>,
 ): string {
-  if (isAirTransportMode(transportMode)) {
-    return String(
-      house.hawb_no ?? house.hawb_number ?? house.hbl_number ?? "",
-    );
-  }
-  return String(house.hbl_number ?? "");
+  return String(
+    house?.hbl_number ??
+      house?.hbl_no ??
+      house?.hawb_no ??
+      house?.hawb_number ??
+      job?.mawb_no ??
+      job?.mawb_number ??
+      "",
+  );
+}
+
+function readMblDate(
+  job: Record<string, unknown>,
+  house?: Record<string, unknown>,
+): Date | null {
+  return parseJobDateField(
+    job.mbl_date ?? house?.mbl_date ?? job.mawb_date ?? house?.mawb_date,
+  );
+}
+
+function formatMasterDocDateForPayload(value: Date | null): string | null {
+  if (!value || !dayjs(value).isValid()) return null;
+  return dayjs(value).format("YYYY-MM-DD");
 }
 
 function readChargesFromHouse(
@@ -535,7 +543,7 @@ const ServiceJobPortField = memo(function ServiceJobPortField({
       disabled={disabled}
       additionalParams={additionalParams}
       minSearchLength={2}
-      dropdownZIndex={10}
+      dropdownZIndex={1000}
       onChange={handleChange}
     />
   );
@@ -800,6 +808,7 @@ function ServiceJobChargesSection({
             <Dropdown
               placeholder="Select Prepaid/Collect"
               searchable
+              dropdownZIndex={1000}
               data={[
                 { value: "Prepaid", label: "Prepaid" },
                 { value: "Collect", label: "Collect" },
@@ -817,6 +826,7 @@ function ServiceJobChargesSection({
             <Dropdown
               placeholder="Select Unit"
               searchable
+              dropdownZIndex={1000}
               data={unitOptions}
               value={charge.unit_id || null}
               disabled={readOnly}
@@ -834,6 +844,7 @@ function ServiceJobChargesSection({
             <Dropdown
               placeholder="Select Currency"
               searchable
+              dropdownZIndex={1000}
               data={currencyOptions}
               value={charge.currency_id || null}
               disabled={readOnly}
@@ -1387,7 +1398,9 @@ export default function ServiceJobCreate() {
       destination_name: "",
       routed: "",
       routed_by: "",
-      awb_number: "",
+      hbl_number: "",
+      mbl_number: "",
+      mbl_date: null,
       etd: null,
       eta: null,
     },
@@ -1486,10 +1499,6 @@ export default function ServiceJobCreate() {
   const defaultPpCc = getDefaultPpCcFromService(selectedService?.import_export);
   const isSeaJob =
     Boolean(transportMode) && !isAirTransportMode(transportMode);
-  const awbFieldLabel = isSeaJob ? "BL Number" : "AWB Number";
-  const awbFieldPlaceholder = isSeaJob
-    ? "Enter BL number"
-    : "Enter AWB number";
 
   const portTransportParams = useMemo(
     () => getPortTransportParams(transportMode),
@@ -1576,9 +1585,9 @@ export default function ServiceJobCreate() {
         ),
         routed: String(house?.routed ?? ""),
         routed_by: String(house?.routed_by ?? ""),
-        awb_number:
-          readMasterAwbFromJob(job, mode) ||
-          (house ? readHouseAwbFromHouse(house, mode) : ""),
+        hbl_number: readHblNumber(house, job),
+        mbl_number: readMblNumber(job, house),
+        mbl_date: readMblDate(job, house),
         etd: parseJobDateField(job.etd ?? house?.etd),
         eta: parseJobDateField(job.eta ?? house?.eta),
       });
@@ -1675,10 +1684,29 @@ export default function ServiceJobCreate() {
       }
 
       const mappedContainers = mapContainersFromApi(job.container_details);
-      setContainers(mappedContainers);
-      setCargoDetails(
-        mapCargoDetailsFromApi(house?.cargo_details, mappedContainers),
+      const mappedCargo = mapCargoDetailsFromApi(
+        house?.cargo_details,
+        mappedContainers,
       );
+      const jobCargoMode = resolveServiceJobCargoMode(
+        svc?.transport_mode,
+        svc?.full_groupage,
+      );
+      if (isSeaServiceJobCargoMode(jobCargoMode)) {
+        const aligned = alignContainerAndCargoRows(
+          mappedContainers,
+          mappedCargo,
+        );
+        setContainers(aligned.containers);
+        setCargoDetails(aligned.cargoDetails);
+      } else {
+        setContainers([{ ...EMPTY_SERVICE_JOB_CONTAINER }]);
+        setCargoDetails(
+          mappedCargo.length > 0
+            ? mappedCargo
+            : [{ ...EMPTY_SERVICE_JOB_CARGO }],
+        );
+      }
       setCommodityDescription(
         String(house?.commodity_description ?? job.commodity_description ?? ""),
       );
@@ -1802,8 +1830,6 @@ export default function ServiceJobCreate() {
 
   const buildPayload = () => {
     const mode = transportMode;
-    const masterAwbField = getMasterAwbField(mode);
-    const houseAwbField = getHouseAwbField(mode);
     const chargesKey = getHousingChargesPayloadKey(mode);
     const payloadMode = isEditMode ? "edit" : "create";
     const housePartyBlock = {
@@ -1835,7 +1861,7 @@ export default function ServiceJobCreate() {
       origin_code: form.values.origin_code || null,
       destination_code: form.values.destination_code || null,
       ...housePartyBlock,
-      [houseAwbField]: form.values.awb_number || null,
+      hbl_number: form.values.hbl_number || null,
       commodity_description: commodityDescription || null,
       marks_no: marksNo || null,
       cargo_details: cargoDetailsPayload,
@@ -1857,7 +1883,8 @@ export default function ServiceJobCreate() {
       eta: formatJobDateForPayload(form.values.eta, mode),
       // Header-level parties (same as housing) — required for job master sync
       ...housePartyBlock,
-      [masterAwbField]: form.values.awb_number || null,
+      mbl_number: form.values.mbl_number || null,
+      mbl_date: formatMasterDocDateForPayload(form.values.mbl_date),
       container_details: mapContainersForPayload(
         containers,
         payloadMode,
@@ -1889,7 +1916,9 @@ export default function ServiceJobCreate() {
       carrier_agent_name: partyDetailsForm.values.carrier_agent_name,
       carrier_agent_email: partyDetailsForm.values.carrier_agent_email,
       carrier_agent_address: partyDetailsForm.values.carrier_agent_address,
-      [getHouseAwbField(transportMode)]: form.values.awb_number,
+      hbl_number: form.values.hbl_number,
+      mbl_number: form.values.mbl_number,
+      mbl_date: form.values.mbl_date,
       charges: chargesForm.values.charges,
       [chargesKey]: chargesForm.values.charges,
     };
@@ -2376,14 +2405,6 @@ export default function ServiceJobCreate() {
             </Menu>
           )}
           <Button
-            variant="outline"
-            color="#105476"
-            leftSection={<IconPaperclip size={16} />}
-            onClick={jobDocuments.openDocumentsModal}
-          >
-            Attach Documents
-          </Button>
-          <Button
             color="#105476"
             leftSection={<IconCheck size={18} />}
             loading={isSubmitting}
@@ -2501,6 +2522,7 @@ export default function ServiceJobCreate() {
                   label="Service"
                   placeholder="Type service code or name"
                   searchable
+                  dropdownZIndex={1000}
                   disabled={isReadOnly}
                   data={serviceOptions}
                   value={form.values.service_id || null}
@@ -2557,6 +2579,7 @@ export default function ServiceJobCreate() {
                   label="Freight"
                   placeholder="Select Freight"
                   searchable
+                  dropdownZIndex={1000}
                   disabled={isReadOnly}
                   data={[
                     { value: "Prepaid", label: "Prepaid" },
@@ -2574,6 +2597,7 @@ export default function ServiceJobCreate() {
                   label="Routed"
                   placeholder="Select routed"
                   searchable
+                  dropdownZIndex={1000}
                   disabled={isReadOnly}
                   data={[
                     { value: "self", label: "Self" },
@@ -2593,6 +2617,7 @@ export default function ServiceJobCreate() {
                       label="Routed By"
                       placeholder="Select salesperson"
                       searchable
+                      dropdownZIndex={1000}
                       disabled={isReadOnly}
                       data={salespersonsData}
                       value={form.values.routed_by || null}
@@ -2618,7 +2643,7 @@ export default function ServiceJobCreate() {
                     value={form.values.routed_by || null}
                     displayValue={form.values.routed_by || undefined}
                     disabled={isReadOnly}
-                    dropdownZIndex={10}
+                    dropdownZIndex={1000}
                     onChange={(value) =>
                       form.setFieldValue("routed_by", value || "")
                     }
@@ -2637,10 +2662,34 @@ export default function ServiceJobCreate() {
               <Grid.Col span={4}>
                 <FormTextInput
                   format="capital"
-                  label={awbFieldLabel}
-                  placeholder={awbFieldPlaceholder}
+                  label="AWB"
+                  placeholder="Enter AWB number"
                   readOnly={isReadOnly}
-                  {...form.getInputProps("awb_number")}
+                  {...form.getInputProps("hbl_number")}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <FormTextInput
+                  format="capital"
+                  label="MBL No"
+                  placeholder="Enter MBL number"
+                  readOnly={isReadOnly}
+                  {...form.getInputProps("mbl_number")}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <SingleDateInput
+                  label="MBL Date"
+                  placeholder="YYYY-MM-DD"
+                  value={form.values.mbl_date}
+                  onChange={(value: Date | null) => {
+                    form.setFieldValue("mbl_date", value);
+                  }}
+                  error={form.errors.mbl_date as string | undefined}
+                  size="sm"
+                  disabled={isReadOnly}
                 />
               </Grid.Col>
 
@@ -2782,7 +2831,9 @@ export default function ServiceJobCreate() {
         component="footer"
         style={{
           marginTop: "24px",
-          zIndex: 200,
+          position: "relative",
+          zIndex: 1,
+          backgroundColor: "#fff",
           borderTop: "1px solid #dcdcdc",
           padding: "12px 24px 12px 0",
         }}

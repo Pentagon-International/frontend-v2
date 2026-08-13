@@ -73,11 +73,13 @@ function readListAwbFromRow(row: Record<string, unknown>): string {
     ? (row.housing_details[0] as Record<string, unknown> | undefined)
     : undefined;
   return String(
-    row.mawb_no ??
-      row.mbl_number ??
+    row.mbl_number ??
+      housing?.hbl_number ??
+      housing?.mbl_no ??
+      housing?.hbl_no ??
+      row.mawb_no ??
       row.mawb_number ??
       housing?.hawb_no ??
-      housing?.hbl_number ??
       "",
   );
 }

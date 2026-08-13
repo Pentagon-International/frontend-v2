@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { ActionIcon, Box, Button, Grid, Group, Text } from "@mantine/core";
+import { ActionIcon, Box, Grid, Group, Text } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -58,6 +58,9 @@ export function ServiceJobCargoDetailsSection({
   const showContainers = isSeaServiceJobCargoMode(cargoMode);
   const weightUnit = cargoMode === "AIR" ? "air" : "ocean";
   const packageTypeOptions = usePackageTypeOptions();
+  const rowCount = showContainers
+    ? Math.max(containers.length, cargoDetails.length, 1)
+    : Math.max(cargoDetails.length, 1);
 
   const { data: rawContainerData = [] } = useQuery({
     queryKey: ["containerType"],
@@ -81,31 +84,60 @@ export function ServiceJobCargoDetailsSection({
     }));
   }, [rawContainerData]);
 
-  const containerNumberOptions = useMemo(
-    () =>
-      containers
-        .map((c) => String(c.container_no ?? "").trim())
-        .filter(Boolean)
-        .map((no) => ({ value: no, label: no })),
-    [containers],
+  const padContainers = useCallback(
+    (list: ServiceJobContainerDetail[], index: number) => {
+      const next = [...list];
+      while (next.length <= index) next.push({ ...EMPTY_SERVICE_JOB_CONTAINER });
+      return next;
+    },
+    [],
+  );
+
+  const padCargo = useCallback(
+    (list: ServiceJobCargoDetail[], index: number) => {
+      const next = [...list];
+      while (next.length <= index) next.push({ ...EMPTY_SERVICE_JOB_CARGO });
+      return next;
+    },
+    [],
   );
 
   const updateContainer = useCallback(
     (index: number, patch: Partial<ServiceJobContainerDetail>) => {
-      const next = [...containers];
+      const next = padContainers(containers, index);
       next[index] = { ...next[index], ...patch };
       onContainersChange(next);
+
+      if ("container_no" in patch) {
+        const nextCargo = padCargo(cargoDetails, index);
+        nextCargo[index] = {
+          ...nextCargo[index],
+          container_number: String(patch.container_no ?? ""),
+          container_id:
+            next[index].id != null
+              ? Number(next[index].id)
+              : nextCargo[index].container_id,
+        };
+        onCargoDetailsChange(nextCargo);
+      }
     },
-    [containers, onContainersChange],
+    [
+      cargoDetails,
+      containers,
+      onCargoDetailsChange,
+      onContainersChange,
+      padCargo,
+      padContainers,
+    ],
   );
 
   const updateCargo = useCallback(
     (index: number, patch: Partial<ServiceJobCargoDetail>) => {
-      const next = [...cargoDetails];
+      const next = padCargo(cargoDetails, index);
       next[index] = { ...next[index], ...patch };
       onCargoDetailsChange(next);
     },
-    [cargoDetails, onCargoDetailsChange],
+    [cargoDetails, onCargoDetailsChange, padCargo],
   );
 
   const updateCargoWeight = useCallback(
@@ -115,7 +147,7 @@ export function ServiceJobCargoDetailsSection({
       value: string | number | null | undefined,
       previous: HouseCargoWeightValue,
     ) => {
-      const next = [...cargoDetails];
+      const next = padCargo(cargoDetails, index);
       next[index] = withRecalculatedChargeableWeight(
         {
           ...next[index],
@@ -125,7 +157,177 @@ export function ServiceJobCargoDetailsSection({
       );
       onCargoDetailsChange(next);
     },
-    [cargoDetails, onCargoDetailsChange, weightUnit],
+    [cargoDetails, onCargoDetailsChange, padCargo, weightUnit],
+  );
+
+  const addRow = useCallback(() => {
+    if (showContainers) {
+      const nextContainers = [...containers];
+      while (nextContainers.length < rowCount) {
+        nextContainers.push({ ...EMPTY_SERVICE_JOB_CONTAINER });
+      }
+      nextContainers.push({ ...EMPTY_SERVICE_JOB_CONTAINER });
+      onContainersChange(nextContainers);
+    }
+
+    const nextCargo = [...cargoDetails];
+    while (nextCargo.length < rowCount) {
+      nextCargo.push({ ...EMPTY_SERVICE_JOB_CARGO });
+    }
+    nextCargo.push({ ...EMPTY_SERVICE_JOB_CARGO });
+    onCargoDetailsChange(nextCargo);
+  }, [
+    cargoDetails,
+    containers,
+    onCargoDetailsChange,
+    onContainersChange,
+    rowCount,
+    showContainers,
+  ]);
+
+  const removeRow = useCallback(
+    (index: number) => {
+      if (showContainers) {
+        onContainersChange(containers.filter((_, i) => i !== index));
+      }
+      onCargoDetailsChange(cargoDetails.filter((_, i) => i !== index));
+    },
+    [
+      cargoDetails,
+      containers,
+      onCargoDetailsChange,
+      onContainersChange,
+      showContainers,
+    ],
+  );
+
+  const renderRowActions = (index: number) => {
+    if (readOnly) return null;
+    return (
+      <Group gap="xs">
+        {rowCount > 1 && (
+          <ActionIcon
+            variant="light"
+            color="red"
+            onClick={() => removeRow(index)}
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        )}
+        {index === rowCount - 1 && (
+          <ActionIcon variant="light" color="#105476" onClick={addRow}>
+            <IconPlus size={16} />
+          </ActionIcon>
+        )}
+      </Group>
+    );
+  };
+
+  const renderAirCargoFields = (
+    cargo: ServiceJobCargoDetail,
+    index: number,
+  ) => (
+    <>
+      <Grid.Col span={1.8}>
+        <FormNumberInput
+          placeholder="Enter No of Packages"
+          min={0}
+          hideControls
+          readOnly={readOnly}
+          value={cargo.no_of_packages ?? undefined}
+          onChange={(value) =>
+            updateCargo(index, {
+              no_of_packages:
+                value === "" || value == null ? null : Number(value),
+            })
+          }
+        />
+      </Grid.Col>
+      <Grid.Col span={1.8}>
+        <FormNumberInput
+          placeholder="Enter Gross Weight"
+          min={0}
+          hideControls
+          readOnly={readOnly}
+          {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+          value={cargo.gross_weight ?? undefined}
+          onChange={(value) =>
+            updateCargoWeight(index, "gross_weight", value, cargo.gross_weight)
+          }
+          onBlur={(e) => {
+            const raw = e.currentTarget.value.replace(/,/g, "").trim();
+            if (!raw) return;
+            updateCargoWeight(index, "gross_weight", raw, cargo.gross_weight);
+          }}
+        />
+      </Grid.Col>
+      <Grid.Col span={1.8}>
+        <FormNumberInput
+          placeholder="Enter Volume Weight"
+          min={0}
+          hideControls
+          readOnly={readOnly}
+          {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+          value={cargo.volume ?? undefined}
+          onChange={(value) =>
+            updateCargoWeight(index, "volume", value, cargo.volume)
+          }
+          onBlur={(e) => {
+            const raw = e.currentTarget.value.replace(/,/g, "").trim();
+            if (!raw) return;
+            updateCargoWeight(index, "volume", raw, cargo.volume);
+          }}
+        />
+      </Grid.Col>
+      <Grid.Col span={1.8}>
+        <FormTextInput
+          placeholder=""
+          format="normal"
+          value={formatHouseCargoChargeableDisplay(
+            cargo.gross_weight,
+            cargo.volume,
+            weightUnit,
+          )}
+          readOnly
+          disabled
+        />
+      </Grid.Col>
+      <Grid.Col span={2}>
+        <Dropdown
+          placeholder="Package Type"
+          searchable
+          dropdownZIndex={1000}
+          disabled={readOnly}
+          data={packageTypeOptions}
+          value={cargo.package_type || null}
+          clearable
+          onChange={(value) =>
+            updateCargo(index, { package_type: value || "" })
+          }
+        />
+      </Grid.Col>
+      <Grid.Col span={1.8}>
+        <Dropdown
+          placeholder="Select Haz"
+          searchable
+          dropdownZIndex={1000}
+          disabled={readOnly}
+          data={[
+            { value: "Yes", label: "Yes" },
+            { value: "No", label: "No" },
+          ]}
+          value={
+            cargo.haz === true ? "Yes" : cargo.haz === false ? "No" : null
+          }
+          onChange={(value) =>
+            updateCargo(index, {
+              haz: value === "Yes" ? true : value === "No" ? false : null,
+            })
+          }
+        />
+      </Grid.Col>
+      <Grid.Col span={1}>{renderRowActions(index)}</Grid.Col>
+    </>
   );
 
   return (
@@ -133,164 +335,7 @@ export function ServiceJobCargoDetailsSection({
       disabled={readOnly}
       style={{ border: "none", margin: 0, padding: 0, minInlineSize: 0 }}
     >
-    <Box mt="md">
-      {showContainers && (
-        <Box mb="xl">
-          <Group justify="space-between" align="flex-start" mb="md">
-            <Text size="lg" fw={600} c="#105476">
-              Container Details
-              {containers.length > 1 ? ` (${containers.length})` : ""}
-            </Text>
-            {!readOnly && (
-              <Button
-                variant="light"
-                color="#105476"
-                leftSection={<IconPlus size={16} />}
-                onClick={() =>
-                  onContainersChange([...containers, { ...EMPTY_SERVICE_JOB_CONTAINER }])
-                }
-              >
-                Add Container
-              </Button>
-            )}
-          </Group>
-
-          {containers.length > 0 && (
-            <Grid
-              mb="xs"
-              style={{ fontWeight: 600, color: "#105476" }}
-              gutter="sm"
-            >
-              <Grid.Col span={2.2}>
-                <RequiredLabel label="Container Type" required={false} />
-              </Grid.Col>
-              <Grid.Col span={1.8}>
-                <RequiredLabel label="Container No" required={false} />
-              </Grid.Col>
-              <Grid.Col span={1.8}>
-                <RequiredLabel label="Actual Seal No" required={false} />
-              </Grid.Col>
-              <Grid.Col span={1.8}>
-                <RequiredLabel label="Customs Seal No" required={false} />
-              </Grid.Col>
-              <Grid.Col span={1.7}>
-                <RequiredLabel label="Loading Date" required={false} />
-              </Grid.Col>
-              <Grid.Col span={1.7}>
-                <RequiredLabel label="Unloading Date" required={false} />
-              </Grid.Col>
-              <Grid.Col span={0.9}>
-                {!readOnly && containers.length > 1 && (
-                  <RequiredLabel label="Actions" required={false} />
-                )}
-              </Grid.Col>
-            </Grid>
-          )}
-
-          {containers.map((container, index) => (
-            <Grid key={`container-${index}`} gutter="sm" mb="xs">
-              <Grid.Col span={2.2}>
-                <Dropdown
-                  placeholder="Container Type"
-                  searchable
-                  disabled={readOnly}
-                  data={containerTypeData}
-                  nothingFoundMessage="No container types found"
-                  value={container.container_type || null}
-                  onChange={(value) =>
-                    updateContainer(index, { container_type: value || "" })
-                  }
-                />
-              </Grid.Col>
-              <Grid.Col span={1.8}>
-                <FormTextInput
-                  format="capital"
-                  placeholder="Container number"
-                  maxLength={11}
-                  readOnly={readOnly}
-                  value={container.container_no || ""}
-                  onChange={(e) => {
-                    const next = e.currentTarget.value.toUpperCase().slice(0, 11);
-                    updateContainer(index, { container_no: next });
-                  }}
-                />
-              </Grid.Col>
-              <Grid.Col span={1.8}>
-                <FormTextInput
-                  format="capital"
-                  placeholder="Actual seal number"
-                  readOnly={readOnly}
-                  value={container.actual_seal_no || ""}
-                  onChange={(e) =>
-                    updateContainer(index, {
-                      actual_seal_no: e.currentTarget.value,
-                    })
-                  }
-                />
-              </Grid.Col>
-              <Grid.Col span={1.8}>
-                <FormTextInput
-                  format="capital"
-                  placeholder="Customs seal number"
-                  readOnly={readOnly}
-                  value={container.customs_seal_no || ""}
-                  onChange={(e) =>
-                    updateContainer(index, {
-                      customs_seal_no: e.currentTarget.value,
-                    })
-                  }
-                />
-              </Grid.Col>
-              <Grid.Col span={1.7}>
-                <SingleDateInput
-                  placeholder="YYYY-MM-DD"
-                  value={container.loading_date}
-                  onChange={(value: Date | null) =>
-                    updateContainer(index, { loading_date: value })
-                  }
-                  size="sm"
-                  disabled={readOnly}
-                />
-              </Grid.Col>
-              <Grid.Col span={1.7}>
-                <SingleDateInput
-                  placeholder="YYYY-MM-DD"
-                  value={container.unloading_date}
-                  onChange={(value: Date | null) =>
-                    updateContainer(index, { unloading_date: value })
-                  }
-                  size="sm"
-                  disabled={readOnly}
-                />
-              </Grid.Col>
-              <Grid.Col span={0.9}>
-                {!readOnly && containers.length > 1 && (
-                  <ActionIcon
-                    variant="light"
-                    color="red"
-                    onClick={() =>
-                      onContainersChange(
-                        containers.filter((_, i) => i !== index),
-                      )
-                    }
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
-                )}
-              </Grid.Col>
-            </Grid>
-          ))}
-        </Box>
-      )}
-
-      <Box>
-        <Group justify="space-between" align="flex-start" mb="md">
-          <Text size="lg" fw={600} c="#105476">
-            Cargo Details
-            {cargoDetails.length > 1 ? ` (${cargoDetails.length})` : ""}
-          </Text>
-        </Group>
-
+      <Box mt="md">
         <Grid mb="md">
           <Grid.Col span={6}>
             <FormTextArea
@@ -320,235 +365,278 @@ export function ServiceJobCargoDetailsSection({
           </Grid.Col>
         </Grid>
 
-        <Grid
-          mb="xs"
-          style={{ fontWeight: 600, color: "#105476" }}
-          gutter="sm"
-        >
-          {showContainers && (
-            <Grid.Col span={1.5}>
-              <RequiredLabel label="Container Number" required={false} />
-            </Grid.Col>
-          )}
-          <Grid.Col span={showContainers ? 1.6 : 2}>
-            <RequiredLabel label="Package Type" required={false} />
-          </Grid.Col>
-          <Grid.Col span={showContainers ? 1.2 : 1.8}>
-            <RequiredLabel label="No of Packages" required={false} />
-          </Grid.Col>
-          <Grid.Col span={showContainers ? 1.6 : 1.8}>
-            <RequiredLabel label="Gross Weight (KG)" required={false} />
-          </Grid.Col>
-          <Grid.Col span={showContainers ? 1.6 : 1.8}>
-            <RequiredLabel
-              label={cargoMode === "AIR" ? "Volume Weight" : "Volume (CBM)"}
-              required={false}
-            />
-          </Grid.Col>
-          <Grid.Col span={showContainers ? 1.6 : 1.8}>
-            <RequiredLabel
-              label={
-                cargoMode === "AIR"
-                  ? "Chargeable Weight"
-                  : "Chargeable Weight (CBM)"
-              }
-              required={false}
-            />
-          </Grid.Col>
-          <Grid.Col span={showContainers ? 1.2 : 1.8}>
-            <RequiredLabel label="Haz" required={false} />
-          </Grid.Col>
-          <Grid.Col span={showContainers ? 0.7 : 1}>
-            {!readOnly && (
-              <RequiredLabel label="Actions" required={false} />
-            )}
-          </Grid.Col>
-        </Grid>
+        <Group justify="space-between" align="flex-start" mb="md">
+          <Text size="lg" fw={600} c="#105476">
+            {showContainers ? "Cargo and Container Details" : "Cargo Details"}
+            {rowCount > 1 ? ` (${rowCount})` : ""}
+          </Text>
+        </Group>
 
-        {cargoDetails.map((cargo, index) => (
-          <Grid key={`cargo-${index}`} gutter="sm" mb="xs">
-            {showContainers && (
-              <Grid.Col span={1.5}>
-                <Dropdown
-                  placeholder={
-                    containerNumberOptions.length > 0
-                      ? "Select Container Number"
-                      : "No containers available"
-                  }
-                  searchable
-                  data={containerNumberOptions}
-                  value={cargo.container_number || null}
-                  disabled={readOnly || containerNumberOptions.length === 0}
-                  clearable
-                  onChange={(value) => {
-                    const matched = containers.find(
-                      (c) => c.container_no === value,
-                    );
-                    updateCargo(index, {
-                      container_number: value || "",
-                      container_id:
-                        matched?.id != null ? Number(matched.id) : undefined,
-                    });
-                  }}
-                />
+        {showContainers ? (
+          Array.from({ length: rowCount }).map((_, index) => {
+            const container =
+              containers[index] ?? { ...EMPTY_SERVICE_JOB_CONTAINER };
+            const cargo = cargoDetails[index] ?? { ...EMPTY_SERVICE_JOB_CARGO };
+            const showLabels = index === 0;
+            return (
+              <Grid key={`cargo-container-${index}`} gutter="sm" mb="sm" align="flex-end">
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label={showLabels ? "Container Type" : undefined}
+                    placeholder="Container Type"
+                    searchable
+                    dropdownZIndex={1000}
+                    disabled={readOnly}
+                    data={containerTypeData}
+                    nothingFoundMessage="No container types found"
+                    value={container.container_type || null}
+                    onChange={(value) =>
+                      updateContainer(index, { container_type: value || "" })
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label={showLabels ? "Container No" : undefined}
+                    format="capital"
+                    placeholder="Container number"
+                    maxLength={11}
+                    readOnly={readOnly}
+                    value={container.container_no || ""}
+                    onChange={(e) => {
+                      const next = e.currentTarget.value
+                        .toUpperCase()
+                        .slice(0, 11);
+                      updateContainer(index, { container_no: next });
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormNumberInput
+                    label={showLabels ? "No of Packages" : undefined}
+                    placeholder="Enter No of Packages"
+                    min={0}
+                    hideControls
+                    readOnly={readOnly}
+                    value={cargo.no_of_packages ?? undefined}
+                    onChange={(value) =>
+                      updateCargo(index, {
+                        no_of_packages:
+                          value === "" || value == null ? null : Number(value),
+                      })
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormNumberInput
+                    label={showLabels ? "Gross Weight (KG)" : undefined}
+                    placeholder="Enter Gross Weight"
+                    min={0}
+                    hideControls
+                    readOnly={readOnly}
+                    {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                    value={cargo.gross_weight ?? undefined}
+                    onChange={(value) =>
+                      updateCargoWeight(
+                        index,
+                        "gross_weight",
+                        value,
+                        cargo.gross_weight,
+                      )
+                    }
+                    onBlur={(e) => {
+                      const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                      if (!raw) return;
+                      updateCargoWeight(
+                        index,
+                        "gross_weight",
+                        raw,
+                        cargo.gross_weight,
+                      );
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormNumberInput
+                    label={showLabels ? "Volume (CBM)" : undefined}
+                    placeholder="Enter Volume"
+                    min={0}
+                    hideControls
+                    readOnly={readOnly}
+                    {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                    value={cargo.volume ?? undefined}
+                    onChange={(value) =>
+                      updateCargoWeight(index, "volume", value, cargo.volume)
+                    }
+                    onBlur={(e) => {
+                      const raw = e.currentTarget.value.replace(/,/g, "").trim();
+                      if (!raw) return;
+                      updateCargoWeight(index, "volume", raw, cargo.volume);
+                    }}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label={showLabels ? "Chargeable Weight (CBM)" : undefined}
+                    placeholder=""
+                    format="normal"
+                    value={formatHouseCargoChargeableDisplay(
+                      cargo.gross_weight,
+                      cargo.volume,
+                      weightUnit,
+                    )}
+                    readOnly
+                    disabled
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <Dropdown
+                    label={showLabels ? "Package Type" : undefined}
+                    placeholder="Package Type"
+                    searchable
+                    dropdownZIndex={1000}
+                    disabled={readOnly}
+                    data={packageTypeOptions}
+                    value={cargo.package_type || null}
+                    clearable
+                    onChange={(value) =>
+                      updateCargo(index, { package_type: value || "" })
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label={showLabels ? "Actual Seal No" : undefined}
+                    format="capital"
+                    placeholder="Actual seal number"
+                    readOnly={readOnly}
+                    value={container.actual_seal_no || ""}
+                    onChange={(e) =>
+                      updateContainer(index, {
+                        actual_seal_no: e.currentTarget.value,
+                      })
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <FormTextInput
+                    label={showLabels ? "Customs Seal No" : undefined}
+                    format="capital"
+                    placeholder="Customs seal number"
+                    readOnly={readOnly}
+                    value={container.customs_seal_no || ""}
+                    onChange={(e) =>
+                      updateContainer(index, {
+                        customs_seal_no: e.currentTarget.value,
+                      })
+                    }
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <SingleDateInput
+                    label={showLabels ? "Loading Date" : undefined}
+                    placeholder="YYYY-MM-DD"
+                    value={container.loading_date}
+                    onChange={(value: Date | null) =>
+                      updateContainer(index, { loading_date: value })
+                    }
+                    size="sm"
+                    disabled={readOnly}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <SingleDateInput
+                    label={showLabels ? "Unloading Date" : undefined}
+                    placeholder="YYYY-MM-DD"
+                    value={container.unloading_date}
+                    onChange={(value: Date | null) =>
+                      updateContainer(index, { unloading_date: value })
+                    }
+                    size="sm"
+                    disabled={readOnly}
+                  />
+                </Grid.Col>
+                <Grid.Col span={2}>
+                  <Group gap="xs" align="flex-end" wrap="nowrap">
+                    <Box style={{ flex: 1, minWidth: 0 }}>
+                      <Dropdown
+                        label={showLabels ? "Haz" : undefined}
+                        placeholder="Select Haz"
+                        searchable
+                        dropdownZIndex={1000}
+                        disabled={readOnly}
+                        data={[
+                          { value: "Yes", label: "Yes" },
+                          { value: "No", label: "No" },
+                        ]}
+                        value={
+                          cargo.haz === true
+                            ? "Yes"
+                            : cargo.haz === false
+                              ? "No"
+                              : null
+                        }
+                        onChange={(value) =>
+                          updateCargo(index, {
+                            haz:
+                              value === "Yes"
+                                ? true
+                                : value === "No"
+                                  ? false
+                                  : null,
+                          })
+                        }
+                      />
+                    </Box>
+                    {renderRowActions(index)}
+                  </Group>
+                </Grid.Col>
+              </Grid>
+            );
+          })
+        ) : (
+          <>
+            <Grid
+              mb="xs"
+              style={{ fontWeight: 600, color: "#105476" }}
+              gutter="sm"
+            >
+              <Grid.Col span={1.8}>
+                <RequiredLabel label="No of Packages" required={false} />
               </Grid.Col>
-            )}
-            <Grid.Col span={showContainers ? 1.6 : 2}>
-              <Dropdown
-                placeholder="Package Type"
-                searchable
-                disabled={readOnly}
-                data={packageTypeOptions}
-                value={cargo.package_type || null}
-                clearable
-                onChange={(value) =>
-                  updateCargo(index, { package_type: value || "" })
-                }
-              />
-            </Grid.Col>
-            <Grid.Col span={showContainers ? 1.2 : 1.8}>
-              <FormNumberInput
-                placeholder="Enter No of Packages"
-                min={0}
-                hideControls
-                readOnly={readOnly}
-                value={cargo.no_of_packages ?? undefined}
-                onChange={(value) =>
-                  updateCargo(index, {
-                    no_of_packages:
-                      value === "" || value == null ? null : Number(value),
-                  })
-                }
-              />
-            </Grid.Col>
-            <Grid.Col span={showContainers ? 1.6 : 1.8}>
-              <FormNumberInput
-                placeholder="Enter Gross Weight"
-                min={0}
-                hideControls
-                readOnly={readOnly}
-                {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
-                value={cargo.gross_weight ?? undefined}
-                onChange={(value) =>
-                  updateCargoWeight(
-                    index,
-                    "gross_weight",
-                    value,
-                    cargo.gross_weight,
-                  )
-                }
-                onBlur={(e) => {
-                  const raw = e.currentTarget.value.replace(/,/g, "").trim();
-                  if (!raw) return;
-                  updateCargoWeight(
-                    index,
-                    "gross_weight",
-                    raw,
-                    cargo.gross_weight,
-                  );
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={showContainers ? 1.6 : 1.8}>
-              <FormNumberInput
-                placeholder={
-                  cargoMode === "AIR"
-                    ? "Enter Volume Weight"
-                    : "Enter Volume"
-                }
-                min={0}
-                hideControls
-                readOnly={readOnly}
-                {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
-                value={cargo.volume ?? undefined}
-                onChange={(value) =>
-                  updateCargoWeight(index, "volume", value, cargo.volume)
-                }
-                onBlur={(e) => {
-                  const raw = e.currentTarget.value.replace(/,/g, "").trim();
-                  if (!raw) return;
-                  updateCargoWeight(index, "volume", raw, cargo.volume);
-                }}
-              />
-            </Grid.Col>
-            <Grid.Col span={showContainers ? 1.6 : 1.8}>
-              <FormTextInput
-                placeholder=""
-                format="normal"
-                value={formatHouseCargoChargeableDisplay(
-                  cargo.gross_weight,
-                  cargo.volume,
-                  weightUnit,
+              <Grid.Col span={1.8}>
+                <RequiredLabel label="Gross Weight (KG)" required={false} />
+              </Grid.Col>
+              <Grid.Col span={1.8}>
+                <RequiredLabel label="Volume Weight" required={false} />
+              </Grid.Col>
+              <Grid.Col span={1.8}>
+                <RequiredLabel label="Chargeable Weight" required={false} />
+              </Grid.Col>
+              <Grid.Col span={2}>
+                <RequiredLabel label="Package Type" required={false} />
+              </Grid.Col>
+              <Grid.Col span={1.8}>
+                <RequiredLabel label="Haz" required={false} />
+              </Grid.Col>
+              <Grid.Col span={1}>
+                {!readOnly && (
+                  <RequiredLabel label="Actions" required={false} />
                 )}
-                readOnly
-                disabled
-              />
-            </Grid.Col>
-            <Grid.Col span={showContainers ? 1.2 : 1.8}>
-              <Dropdown
-                placeholder="Select Haz"
-                searchable
-                disabled={readOnly}
-                data={[
-                  { value: "Yes", label: "Yes" },
-                  { value: "No", label: "No" },
-                ]}
-                value={
-                  cargo.haz === true
-                    ? "Yes"
-                    : cargo.haz === false
-                      ? "No"
-                      : null
-                }
-                onChange={(value) =>
-                  updateCargo(index, {
-                    haz:
-                      value === "Yes"
-                        ? true
-                        : value === "No"
-                          ? false
-                          : null,
-                  })
-                }
-              />
-            </Grid.Col>
-            <Grid.Col span={showContainers ? 0.7 : 1}>
-              {!readOnly && (
-                <Group gap="xs">
-                  {cargoDetails.length > 1 && (
-                    <ActionIcon
-                      variant="light"
-                      color="red"
-                      onClick={() =>
-                        onCargoDetailsChange(
-                          cargoDetails.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  )}
-                  {index === cargoDetails.length - 1 && (
-                    <ActionIcon
-                      variant="light"
-                      color="#105476"
-                      onClick={() =>
-                        onCargoDetailsChange([
-                          ...cargoDetails,
-                          { ...EMPTY_SERVICE_JOB_CARGO },
-                        ])
-                      }
-                    >
-                      <IconPlus size={16} />
-                    </ActionIcon>
-                  )}
-                </Group>
-              )}
-            </Grid.Col>
-          </Grid>
-        ))}
+              </Grid.Col>
+            </Grid>
+
+            {Array.from({ length: rowCount }).map((_, index) => {
+              const cargo = cargoDetails[index] ?? { ...EMPTY_SERVICE_JOB_CARGO };
+              return (
+                <Grid key={`cargo-${index}`} gutter="sm" mb="xs">
+                  {renderAirCargoFields(cargo, index)}
+                </Grid>
+              );
+            })}
+          </>
+        )}
       </Box>
-    </Box>
     </fieldset>
   );
 }

@@ -115,7 +115,7 @@ export function JobMasterPartyDetailsPanel({
             key={`${idPrefix}-shipper-${partyDetailsForm.values.shipper_id}:${partyDetailsForm.values.shipper_name ?? "_"}`}
             size="sm"
             label="Shipper Name"
-            dropdownZIndex={10}
+            dropdownZIndex={1000}
             apiEndpoint={URL.shipper}
             placeholder="Type shipper name"
             searchFields={["customer_name", "customer_code"]}
@@ -184,6 +184,7 @@ export function JobMasterPartyDetailsPanel({
             <Dropdown
               size="sm"
               label="Shipper Address"
+              dropdownZIndex={1000}
               disabled={disabled}
               data={shipperAddressOptions.map((item) => ({
                 value: item.value,
@@ -224,7 +225,7 @@ export function JobMasterPartyDetailsPanel({
           <SearchableSelect
             size="sm"
             label="Consignee Name"
-            dropdownZIndex={10}
+            dropdownZIndex={1000}
             apiEndpoint={URL.consignee}
             placeholder="Type consignee name"
             searchFields={["customer_name", "customer_code"]}
@@ -293,6 +294,7 @@ export function JobMasterPartyDetailsPanel({
             <Dropdown
               size="sm"
               label="Consignee Address"
+              dropdownZIndex={1000}
               disabled={disabled}
               data={consigneeAddressOptions.map((item) => ({
                 value: item.value,
@@ -334,7 +336,7 @@ export function JobMasterPartyDetailsPanel({
             key={`${idPrefix}-carrier-agent-${partyDetailsForm.values.carrier_agent_id}:${partyDetailsForm.values.carrier_agent_name ?? "_"}`}
             size="sm"
             label="Carrier Agent Name"
-            dropdownZIndex={10}
+            dropdownZIndex={1000}
             apiEndpoint={URL.customerByTypes}
             additionalParams={{ types: "Carrier-agent" }}
             placeholder="Type carrier agent name"
@@ -420,6 +422,7 @@ export function JobMasterPartyDetailsPanel({
             <Dropdown
               size="sm"
               label="Carrier Agent Address"
+              dropdownZIndex={1000}
               disabled={disabled}
               data={carrierAgentAddressOptions.map((item) => ({
                 value: item.value,
