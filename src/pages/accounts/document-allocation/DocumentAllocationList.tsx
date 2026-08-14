@@ -10,12 +10,14 @@ import {
   Group,
   MantineProvider,
   Menu,
+  Modal,
   Select,
   Text,
   TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import {
+  IconArrowBackUp,
   IconCircleCheck,
   IconClock,
   IconDots,
@@ -164,6 +166,7 @@ type DocumentAllocationRowActionsProps = {
   appliedFilters: FilterState;
   erpTheme: ErpListTheme;
   primary: string;
+  onReverse: (row: DocumentAllocationListItem) => void;
 };
 
 const DocumentAllocationRowActions = memo(function DocumentAllocationRowActions({
@@ -176,10 +179,12 @@ const DocumentAllocationRowActions = memo(function DocumentAllocationRowActions(
   appliedFilters,
   erpTheme,
   primary,
+  onReverse,
 }: DocumentAllocationRowActionsProps) {
   const [menuOpened, setMenuOpened] = useState(false);
   const statusUpper = String(row.document_status ?? "").toUpperCase();
   const isUnposted = statusUpper === "UNPOSTED";
+  const isPosted = statusUpper === "POSTED";
 
   const goToDocumentAllocation = (mode: "view" | "edit") => {
     setMenuOpened(false);
@@ -243,6 +248,26 @@ const DocumentAllocationRowActions = memo(function DocumentAllocationRowActions(
             </Box>
           </>
         ) : null}
+        {isPosted ? (
+          <>
+            <Menu.Divider />
+            <Box px={10} py={5}>
+              <UnstyledButton
+                onClick={() => {
+                  setMenuOpened(false);
+                  onReverse(row);
+                }}
+              >
+                <Group gap="sm">
+                  <IconArrowBackUp size={16} color="#dc2626" />
+                  <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+                    Reverse
+                  </Text>
+                </Group>
+              </UnstyledButton>
+            </Box>
+          </>
+        ) : null}
       </Menu.Dropdown>
     </Menu>
   );
@@ -266,6 +291,9 @@ export default function DocumentAllocationList() {
   const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...EMPTY_FILTERS });
 
   const [isRestoring, setIsRestoring] = useState(true);
+  const [pendingReverse, setPendingReverse] =
+    useState<DocumentAllocationListItem | null>(null);
+  const [isReversing, setIsReversing] = useState(false);
 
   const getState = useListFilterStore((s) => s.getState);
   const setStoreFilters = useListFilterStore((s) => s.setFilters);
@@ -336,6 +364,7 @@ export default function DocumentAllocationList() {
     isLoading,
     isFetching,
     error: queryError,
+    refetch,
   } = useQuery<DocumentAllocationListQueryResult>({
     queryKey: [
       "documentAllocationList",
@@ -394,6 +423,47 @@ export default function DocumentAllocationList() {
     }
   }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
   const loading = isLoading || isFetching;
+
+  const closeReverseConfirm = useCallback(() => {
+    if (isReversing) return;
+    setPendingReverse(null);
+  }, [isReversing]);
+
+  const confirmReverse = useCallback(async () => {
+    if (!pendingReverse?.id || isReversing) return;
+    const docId = pendingReverse.id;
+    setIsReversing(true);
+    try {
+      const res = (await apiCallProtected.put(
+        `${URL.outstandingAllocationDocuments}${docId}/reverse/`,
+        {},
+      )) as { status?: boolean; message?: string };
+      if (res?.status === false) {
+        ToastNotification({
+          type: "error",
+          message: res.message || "Failed to reverse allocation document",
+        });
+        return;
+      }
+      ToastNotification({
+        type: "success",
+        message: res?.message || "Allocation document REVERSED.",
+      });
+      setPendingReverse(null);
+      await refetch();
+    } catch (error: unknown) {
+      const message =
+        error &&
+        typeof error === "object" &&
+        "message" in error &&
+        typeof (error as { message?: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : "Failed to reverse allocation document";
+      ToastNotification({ type: "error", message });
+    } finally {
+      setIsReversing(false);
+    }
+  }, [pendingReverse, isReversing, refetch]);
 
   const border = "#e2e8f0";
   const muted = "#64748b";
@@ -542,11 +612,12 @@ export default function DocumentAllocationList() {
             appliedFilters={appliedFilters}
             erpTheme={erpTheme}
             primary={primary}
+            onReverse={setPendingReverse}
           />
         ),
       },
     ],
-    [navigate, search, appliedFilters, erpTheme, primary, dateFormat, setStoreFilters, setStoreSearch, setShouldRestore],
+    [navigate, search, appliedFilters, erpTheme, primary, dateFormat, setStoreFilters, setStoreSearch, setShouldRestore, setPendingReverse],
   );
 
   const columns = useMemo(
@@ -940,6 +1011,40 @@ export default function DocumentAllocationList() {
             ),
           }}
         />
+        <Modal
+          opened={pendingReverse != null}
+          onClose={closeReverseConfirm}
+          title={
+            <Text fw={600} size="md" style={{ fontFamily: erpTheme.fontSans }}>
+              Reverse allocation
+            </Text>
+          }
+          centered
+          zIndex={400}
+          closeOnClickOutside={!isReversing}
+          closeOnEscape={!isReversing}
+          withCloseButton={!isReversing}
+        >
+          <Text size="sm" c="dimmed" mb="md" style={{ fontFamily: erpTheme.fontSans }}>
+            Are you sure you want to reverse
+            {pendingReverse?.allocation_no
+              ? ` allocation ${pendingReverse.allocation_no}`
+              : " this allocation document"}
+            ? This action cannot be undone.
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="subtle"
+              onClick={closeReverseConfirm}
+              disabled={isReversing}
+            >
+              Cancel
+            </Button>
+            <Button color="red" onClick={confirmReverse} loading={isReversing}>
+              Yes, reverse
+            </Button>
+          </Group>
+        </Modal>
       </Box>
     </MantineProvider>
   );
