@@ -191,6 +191,8 @@ type ChargeRow = {
   amount_in_local: number | null;
   tax_code: string;
   Dr_Cr: "Cr" | "Dr";
+  igst_rate: number | null;
+  igst: number | null;
 };
 
 type SupportingDocument = {
@@ -292,6 +294,30 @@ function toLocalAmount(value: number | string | null | undefined): number | null
   return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
 
+function parseOptionalNumber(
+  value: number | string | null | undefined,
+): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "string" ? parseFloat(value) : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** VAT amount = local amount × VAT rate / 100. Null rate or local → null. */
+function calcChargeVatAmount(
+  localAmount: number | null | undefined,
+  vatRate: number | null | undefined,
+): number | null {
+  if (
+    localAmount == null ||
+    vatRate == null ||
+    !Number.isFinite(localAmount) ||
+    !Number.isFinite(vatRate)
+  ) {
+    return null;
+  }
+  return clampLocalAmount((localAmount * vatRate) / 100);
+}
+
 type AmountCalcBaselineInput = {
   taxable_amount: number | null;
   non_taxable_amount: number | null;
@@ -314,7 +340,7 @@ function buildAmountCalcBaseline(values: AmountCalcBaselineInput): string {
   const chargesPart = (values.charges_data ?? [])
     .map(
       (c) =>
-        `${c.amount ?? ""}-${c.roe ?? ""}-${c.Dr_Cr ?? ""}`,
+        `${c.amount ?? ""}-${c.roe ?? ""}-${c.Dr_Cr ?? ""}-${c.igst_rate ?? ""}-${c.igst ?? ""}`,
     )
     .join(";");
   return `${agentPart}::${chargesPart}`;
@@ -498,6 +524,8 @@ type ApiCharge = {
   amount_in_local?: number | string;
   tax_code?: string;
   Dr_Cr?: string;
+  igst_rate?: number | string;
+  igst?: number | string;
 };
 
 /** Invoice row from list API (filter/supplier-invoice) — used for View/Edit from list. Same shape as list response item. */
@@ -564,6 +592,8 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
         : (c.amount ?? null),
     amount_in_local: toLocalAmount(c.amount_in_local),
     tax_code: c.tax_code ?? "",
+    igst_rate: parseOptionalNumber(c.igst_rate),
+    igst: toLocalAmount(c.igst),
     Dr_Cr: (() => {
       const v = (c.Dr_Cr ?? "").toString().toUpperCase();
       return (v === "CR" || v === "DR" ? (v === "CR" ? "Cr" : "Dr") : "Dr") as
@@ -955,22 +985,27 @@ export default function SupplierInvoiceCreate({
             amount: 0.8,
             localAmount: 0.8,
             sac: 0.75,
+            vatRate: 0,
+            vatAmount: 0,
             drCr: 0.75,
             actions: 0.5,
           }
         : {
-            shipment: 1.35,
-            charge: 1.35,
-            crn: 0.85,
-            account: 1.05,
-            subledger: 1.05,
-            narration: 1.65,
-            currency: 0.8,
-            roe: 0.7,
-            amount: 0.85,
-            localAmount: 0.85,
-            drCr: 0.8,
-            actions: 0.5,
+            shipment: 1.15,
+            charge: 1.15,
+            crn: 0.7,
+            account: 0.9,
+            subledger: 0.9,
+            narration: 1.25,
+            currency: 0.7,
+            roe: 0.6,
+            amount: 0.75,
+            localAmount: 0.75,
+            sac: 0,
+            vatRate: 0.7,
+            vatAmount: 0.8,
+            drCr: 0.7,
+            actions: 0.45,
           },
     [isIndiaUser],
   );
@@ -1023,6 +1058,8 @@ export default function SupplierInvoiceCreate({
           amount: null,
           amount_in_local: null,
           tax_code: "",
+          igst_rate: null,
+          igst: null,
           Dr_Cr: isReversal ? "Cr" : "Dr", // Charges: Supplier default="Dr", Reverse default="Cr"
         },
       ],
@@ -1570,9 +1607,10 @@ export default function SupplierInvoiceCreate({
     isLocalCurrency,
   ]);
 
-  // Auto-calc amount_in_local = ROE * Amount whenever ROE or Amount changes (not for supplier reversal — preserve API figures)
+  // Auto-calc amount_in_local = ROE * Amount, and VAT amount = local × rate / 100
+  // (not for supplier reversal — preserve API figures)
   const chargesAmountRoeKey = form.values.charges_data
-    .map((c) => `${c.amount}-${c.roe}`)
+    .map((c) => `${c.amount}-${c.roe}-${c.igst_rate}`)
     .join(",");
   useEffect(() => {
     if (isReversal) return;
@@ -1582,11 +1620,19 @@ export default function SupplierInvoiceCreate({
       const amount = c.amount ?? 0;
       const roe = c.roe ?? 0;
       const local = clampLocalAmount(amount * roe);
-      if (local !== (c.amount_in_local ?? null)) changed = true;
-      return { ...c, amount_in_local: local };
+      const vat = isIndiaUser
+        ? (c.igst ?? null)
+        : calcChargeVatAmount(local, c.igst_rate);
+      if (
+        local !== (c.amount_in_local ?? null) ||
+        vat !== (c.igst ?? null)
+      ) {
+        changed = true;
+      }
+      return { ...c, amount_in_local: local, igst: vat };
     });
     if (changed) form.setFieldValue("charges_data", next);
-  }, [chargesAmountRoeKey, isReversal]);
+  }, [chargesAmountRoeKey, isReversal, isIndiaUser]);
 
   useEffect(() => {
     if (!isEditMode) {
@@ -1625,7 +1671,26 @@ export default function SupplierInvoiceCreate({
     isViewMode,
   ]);
 
-  // Auto-calc Inv/Crn Amount = sum of breakup amounts × Agent INV/CRN ROE
+  // Foreign branches: header VAT Amount = sum of charge-row VAT amounts (still editable).
+  const chargesVatSumKey = form.values.charges_data
+    .map((c) => `${c.igst ?? ""}`)
+    .join(",");
+  useEffect(() => {
+    if (isIndiaUser) return;
+    if (shouldSkipAmountAutoCalc()) return;
+    const charges = form.values.charges_data ?? [];
+    const hasCalculatedVat = charges.some((c) => c.igst != null);
+    if (!hasCalculatedVat) return;
+    const vatSum = clampLocalAmount(
+      charges.reduce((acc, row) => acc + (parseNum(row.igst) ?? 0), 0),
+    );
+    if (vatSum !== (form.values.igst_amount ?? null)) {
+      form.setFieldValue("igst_amount", vatSum);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargesVatSumKey, isIndiaUser, shouldSkipAmountAutoCalc]);
+
+  // Inv/Crn Amount = (taxable + non-taxable) × Agent INV/CRN ROE + GST/VAT (GST/VAT are not ROE-converted)
   const invCrnCalcKey = [
     form.values.taxable_amount,
     form.values.non_taxable_amount,
@@ -1636,26 +1701,26 @@ export default function SupplierInvoiceCreate({
   ].join("|");
   useEffect(() => {
     if (shouldSkipAmountAutoCalc()) return;
-    const baseSum =
+    const taxableNonTaxable =
       (parseNum(form.values.taxable_amount) ?? 0) +
-      (parseNum(form.values.non_taxable_amount) ?? 0) +
-      (isIndiaUser
-        ? (parseNum(form.values.cgst_amount) ?? 0) +
-          (parseNum(form.values.sgst_amount) ?? 0) +
-          (parseNum(form.values.igst_amount) ?? 0)
-        : parseNum(form.values.igst_amount) ?? 0);
+      (parseNum(form.values.non_taxable_amount) ?? 0);
     const roe = parseNum(form.values.roe) ?? 1;
-    const nextInv = clampLocalAmount(baseSum * roe);
+    const gstOrVat = isIndiaUser
+      ? (parseNum(form.values.cgst_amount) ?? 0) +
+        (parseNum(form.values.sgst_amount) ?? 0) +
+        (parseNum(form.values.igst_amount) ?? 0)
+      : (parseNum(form.values.igst_amount) ?? 0);
+    const nextInv = clampLocalAmount(taxableNonTaxable * roe + gstOrVat);
     if (nextInv !== (form.values.Inv_crn_amount ?? null)) {
       form.setFieldValue("Inv_crn_amount", nextInv);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invCrnCalcKey, isIndiaUser, shouldSkipAmountAutoCalc]);
 
-  // Auto-calc Approved Amount = |sum(Dr) − sum(Cr)| of charge local amounts (same for INV and CRN).
+  // Auto-calc Approved Amount = |sum(Dr) − sum(Cr)| of (local amount + VAT amount).
   // Difference Amount = Inv/Crn Amount − Approved Amount.
   const chargesNetKey = form.values.charges_data
-    .map((c) => `${c.amount_in_local}-${c.Dr_Cr}`)
+    .map((c) => `${c.amount_in_local}-${c.igst}-${c.Dr_Cr}`)
     .join(",");
   useEffect(() => {
     if (shouldSkipAmountAutoCalc()) return;
@@ -1663,9 +1728,11 @@ export default function SupplierInvoiceCreate({
     const netLocal = round2(
       charges.reduce((acc, row) => {
         const amt = parseNum(row.amount_in_local) ?? 0;
-        if (!amt) return acc;
+        const vat = isIndiaUser ? 0 : (parseNum(row.igst) ?? 0);
+        const total = amt + vat;
+        if (!total) return acc;
         // Dr adds, Cr subtracts — difference of all Drs vs Crs
-        return row.Dr_Cr === "Cr" ? acc - amt : acc + amt;
+        return row.Dr_Cr === "Cr" ? acc - total : acc + total;
       }, 0),
     );
     // Absolute difference so approved stays non-negative for INV and CRN
@@ -1681,7 +1748,7 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("difference_amount", diff);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesNetKey, form.values.Inv_crn_amount, shouldSkipAmountAutoCalc]);
+  }, [chargesNetKey, form.values.Inv_crn_amount, shouldSkipAmountAutoCalc, isIndiaUser]);
 
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
@@ -1901,6 +1968,8 @@ export default function SupplierInvoiceCreate({
       amount: c.amount != null && c.amount !== "" ? parseFloat(String(c.amount)) || null : null,
       amount_in_local: c.local_amount != null && c.local_amount !== "" ? parseFloat(String(c.local_amount)) || null : null,
       tax_code: String(c.sac_code ?? ""),
+      igst_rate: parseOptionalNumber(c.igst_rate),
+      igst: toLocalAmount(c.igst),
       Dr_Cr: "Cr" as const,
     }));
 
@@ -2025,6 +2094,8 @@ export default function SupplierInvoiceCreate({
             amount: amountNum,
             amount_in_local: null,
             tax_code: "",
+            igst_rate: null,
+            igst: null,
             Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
           };
         })
@@ -2071,6 +2142,8 @@ export default function SupplierInvoiceCreate({
         amount_in_local: formatLocalAmount(c.amount_in_local ?? 0),
         tax_code: taxCode,
         Dr_Cr: c.Dr_Cr,
+        igst_rate: formatAmountToTwoDecimals(c.igst_rate ?? 0),
+        igst: formatLocalAmount(c.igst ?? 0),
       };
       // Create: do not include id in charges; Update: include id when charge exists
       if (!isCreate && c.id != null) return { ...base, id: c.id };
@@ -2767,6 +2840,8 @@ export default function SupplierInvoiceCreate({
       amount: null,
       amount_in_local: null,
       tax_code: "",
+      igst_rate: null,
+      igst: null,
       Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
     });
     if (currCode) {
@@ -3372,11 +3447,11 @@ export default function SupplierInvoiceCreate({
                   onChange={(v) =>
                     form.setFieldValue(
                       "igst_amount",
-                      typeof v === "number" ? clampAmount(v) : null,
+                      typeof v === "number" ? clampLocalAmount(v) : null,
                     )
                   }
                   min={0}
-                  decimalScale={currencyAmountDecimalScale}
+                  decimalScale={localAmountDecimalScale}
                   hideControls
                   styles={effectiveInputStyles}
                   disabled={isReadOnly || reversalFormDisabled}
@@ -3607,6 +3682,8 @@ export default function SupplierInvoiceCreate({
                                       : null,
                                   // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
                                   tax_code: "",
+                                  igst_rate: null,
+                                  igst: null,
                                   Dr_Cr,
                                 };
                                 return row;
@@ -3743,6 +3820,8 @@ export default function SupplierInvoiceCreate({
                                 amount: Number(amount),
                                 amount_in_local: clampLocalAmount(Number(amount)),
                                 tax_code: "",
+                                igst_rate: null,
+                                igst: null,
                                 Dr_Cr: normalizeDrCr(
                                   (r.Dr_cr as unknown) ??
                                     (r.Dr_Cr as unknown) ??
@@ -3831,6 +3910,16 @@ export default function SupplierInvoiceCreate({
                   {isIndiaUser && (
                     <Grid.Col span={chargeColSpans.sac} style={{ fontSize: "13px" }}>
                       SAC Code
+                    </Grid.Col>
+                  )}
+                  {!isIndiaUser && (
+                    <Grid.Col span={chargeColSpans.vatRate} style={{ fontSize: "13px" }}>
+                      VAT Rate
+                    </Grid.Col>
+                  )}
+                  {!isIndiaUser && (
+                    <Grid.Col span={chargeColSpans.vatAmount} style={{ fontSize: "13px" }}>
+                      VAT Amount
                     </Grid.Col>
                   )}
                   <Grid.Col span={chargeColSpans.drCr} style={{ fontSize: "13px" }}>
@@ -4308,6 +4397,47 @@ export default function SupplierInvoiceCreate({
                               height: "36px",
                             },
                           }}
+                        />
+                      </Grid.Col>
+                    )}
+                    {!isIndiaUser && (
+                      <Grid.Col span={chargeColSpans.vatRate}>
+                        <NumberInput
+                          placeholder="0"
+                          value={row.igst_rate ?? undefined}
+                          onChange={(v) =>
+                            form.setFieldValue(
+                              `charges_data.${index}.igst_rate`,
+                              typeof v === "number"
+                                ? Math.min(100, Math.max(0, v))
+                                : null,
+                            )
+                          }
+                          min={0}
+                          max={100}
+                          decimalScale={2}
+                          hideControls
+                          disabled={isReadOnly || reversalFormDisabled}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+                    )}
+                    {!isIndiaUser && (
+                      <Grid.Col span={chargeColSpans.vatAmount}>
+                        <NumberInput
+                          placeholder="0"
+                          value={row.igst ?? undefined}
+                          readOnly
+                          min={0}
+                          decimalScale={localAmountDecimalScale}
+                          hideControls
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                     )}
