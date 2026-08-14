@@ -580,7 +580,7 @@ import {
       { open: openDocumentsModal, close: closeDocumentsModal },
     ] = useDisclosure(false);
     const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
     const downloadFile = (url: string, fileName: string) => {
       const link = document.createElement("a");
@@ -1665,7 +1665,7 @@ import {
         );
         if (oversized) {
           ToastNotification({
-            message: "One or more files exceed the 5MB limit.",
+            message: "One or more files exceed the 10MB limit.",
             type: "error",
           });
           return;
@@ -3573,11 +3573,11 @@ import {
                               }
                               if (file.size > MAX_FILE_SIZE) {
                                 const newErrors = { ...fileErrors };
-                                newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                                newErrors[index] = `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                                 setFileErrors(newErrors);
                                 ToastNotification({
                                   type: "error",
-                                  message: `File "${file.name}" exceeds 5MB limit`,
+                                  message: `File "${file.name}" exceeds 10MB limit`,
                                 });
                                 return;
                               }
@@ -3602,7 +3602,7 @@ import {
                                 )
                               ) {
                                 const newErrors = { ...fileErrors };
-                                newErrors[index] = "File size exceeds 5MB limit";
+                                newErrors[index] = "File size exceeds 10MB limit";
                                 setFileErrors(newErrors);
                               }
                             }}
@@ -3865,7 +3865,7 @@ import {
                   const newErrors: { [key: number]: string } = {};
                   form.values.supporting_documents.forEach((doc, idx) => {
                     if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                      newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                      newErrors[idx] = `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                     }
                   });
                   setFileErrors(newErrors);

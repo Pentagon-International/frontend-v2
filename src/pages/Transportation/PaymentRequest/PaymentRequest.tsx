@@ -547,7 +547,7 @@ function PaymentRequest() {
   const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
 
-  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
   const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
     useDisclosure(false);
@@ -3213,7 +3213,7 @@ function PaymentRequest() {
                     const newErrors: { [key: number]: string } = {};
                     supportingDocuments.forEach((doc, idx) => {
                       if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] = `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        newErrors[idx] = `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                       }
                     });
                     setFileErrors(newErrors);
@@ -3316,11 +3316,11 @@ function PaymentRequest() {
                       }
                       if (file.size > MAX_FILE_SIZE) {
                         const newErrors = { ...fileErrors };
-                        newErrors[index] = `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        newErrors[index] = `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                         setFileErrors(newErrors);
                         ToastNotification({
                           type: "error",
-                          message: `File "${file.name}" exceeds 5MB limit`,
+                          message: `File "${file.name}" exceeds 10MB limit`,
                         });
                         return;
                       }
@@ -3337,7 +3337,7 @@ function PaymentRequest() {
                       const rejection = files[0];
                       if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
                         const newErrors = { ...fileErrors };
-                        newErrors[index] = "File size exceeds 5MB limit";
+                        newErrors[index] = "File size exceeds 10MB limit";
                         setFileErrors(newErrors);
                       }
                     }}

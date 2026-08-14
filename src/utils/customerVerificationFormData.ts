@@ -1,6 +1,6 @@
 import { API_HEADER } from "../store/storeKeys";
 
-export const MAX_SUPPORTING_DOCUMENT_SIZE = 5 * 1024 * 1024;
+export const MAX_SUPPORTING_DOCUMENT_SIZE = 10 * 1024 * 1024;
 
 export type SupportingDocument = {
   name: string;
@@ -59,7 +59,7 @@ export function validateSupportingDocumentSizes(
   for (const doc of documents) {
     if (!doc.file) continue;
     if (doc.file.size > MAX_SUPPORTING_DOCUMENT_SIZE) {
-      return `File "${doc.file.name}" exceeds 5MB limit`;
+      return `File "${doc.file.name}" exceeds 10MB limit`;
     }
   }
   return null;

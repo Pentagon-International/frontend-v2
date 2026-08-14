@@ -20,7 +20,7 @@ import type {
 } from "../utils/jobDocuments";
 import { openCustomerDocumentInNewTab } from "../utils/customerDocuments";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 type JobDocumentsModalProps = {
   opened: boolean;
@@ -148,7 +148,7 @@ export default function JobDocumentsModal({
                       if (file.size > MAX_FILE_SIZE) {
                         ToastNotification({
                           type: "error",
-                          message: `File "${file.name}" exceeds 5MB limit`,
+                          message: `File "${file.name}" exceeds 10MB limit`,
                         });
                         return;
                       }
@@ -158,7 +158,7 @@ export default function JobDocumentsModal({
                     onReject={() => {
                       ToastNotification({
                         type: "error",
-                        message: "File size exceeds 5MB limit",
+                        message: "File size exceeds 10MB limit",
                       });
                     }}
                     maxSize={MAX_FILE_SIZE}

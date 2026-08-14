@@ -1381,7 +1381,7 @@ function RFQCreate() {
     { open: openDocumentsModal, close: closeDocumentsModal },
   ] = useDisclosure(false);
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB in bytes
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
   const navigate = useNavigate();
 
   // Helper function to download file from URL
@@ -9137,7 +9137,7 @@ function RFQCreate() {
                               (doc, idx) => {
                                 if (doc.file && doc.file.size > MAX_FILE_SIZE) {
                                   newErrors[idx] =
-                                    `File size exceeds 5MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                                    `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                                 }
                               }
                             );
@@ -9366,11 +9366,11 @@ function RFQCreate() {
                         if (file.size > MAX_FILE_SIZE) {
                           const newErrors = { ...fileErrors };
                           newErrors[index] =
-                            `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                            `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                           setFileErrors(newErrors);
                           ToastNotification({
                             type: "error",
-                            message: `File "${file.name}" exceeds 5MB limit`,
+                            message: `File "${file.name}" exceeds 10MB limit`,
                           });
                           return;
                         }
@@ -9397,7 +9397,7 @@ function RFQCreate() {
                           )
                         ) {
                           const newErrors = { ...fileErrors };
-                          newErrors[index] = "File size exceeds 5MB limit";
+                          newErrors[index] = "File size exceeds 10MB limit";
                           setFileErrors(newErrors);
                         }
                       }}

@@ -90,11 +90,11 @@ export default function SupportingDocumentsModal({
     if (file.size > MAX_SUPPORTING_DOCUMENT_SIZE) {
       setFileErrors((prev) => ({
         ...prev,
-        [index]: `File size exceeds 5MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`,
+        [index]: `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`,
       }));
       ToastNotification({
         type: "error",
-        message: `File "${file.name}" exceeds 5MB limit`,
+        message: `File "${file.name}" exceeds 10MB limit`,
       });
       return;
     }
@@ -144,7 +144,7 @@ export default function SupportingDocumentsModal({
                   onReject={() => {
                     setFileErrors((prev) => ({
                       ...prev,
-                      [index]: "File size exceeds 5MB limit",
+                      [index]: "File size exceeds 10MB limit",
                     }));
                   }}
                   maxSize={MAX_SUPPORTING_DOCUMENT_SIZE}
