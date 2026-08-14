@@ -32,6 +32,7 @@ import {
   IconDotsVertical,
   IconEye,
   IconFilter,
+  IconPaperclip,
   IconSearch,
   IconUsers,
   IconX,
@@ -41,7 +42,7 @@ import {
   MRT_ColumnDef,
   useMantineReactTable,
 } from "mantine-react-table";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dropdown,
@@ -67,6 +68,16 @@ import {
   type RelatedCustomer,
 } from "../../../service/customerPanApproval.service";
 import CustomerDocumentsList from "../../../components/CustomerDocumentsList";
+import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
+import {
+  EMPTY_SUPPORTING_DOCUMENT,
+  validateSupportingDocumentSizes,
+  type SupportingDocument,
+} from "../../../utils/customerVerificationFormData";
+import {
+  extractDocumentsListFromResponse,
+  mapDocumentsListToSupportingDocuments,
+} from "../../../utils/customerDocuments";
 import {
   isIndianUserFromProfile,
   isVietnameseBranch,
@@ -184,7 +195,23 @@ function cloneApprovalRow(row: CustomerPanApprovalRow): CustomerPanApprovalRow {
     bank_details_data: (row.bank_details_data ?? []).map((item) => ({
       ...item,
     })),
+    documents_list: (row.documents_list ?? []).map((doc) => ({ ...doc })),
   };
+}
+
+function supportingDocumentsFromApprovalRow(
+  row: CustomerPanApprovalRow | null | undefined,
+): SupportingDocument[] {
+  const mapped = mapDocumentsListToSupportingDocuments(
+    row?.documents_list ?? [],
+  );
+  return [...mapped, { ...EMPTY_SUPPORTING_DOCUMENT }];
+}
+
+function countPendingNewSupportingDocuments(
+  documents: SupportingDocument[],
+): number {
+  return documents.filter((doc) => doc.file != null).length;
 }
 
 /** Client-side checks before saving an approval-edit row. */
@@ -377,6 +404,8 @@ export function CustomerPanApprovalDetails({
   partyType = "customer",
   requireIndiaTaxIds = true,
   foreignBranchProfile,
+  onAttachDocuments,
+  pendingNewDocumentsCount = 0,
 }: {
   row: CustomerPanApprovalRow;
   editable?: boolean;
@@ -385,6 +414,8 @@ export function CustomerPanApprovalDetails({
   /** When true (India users), IEC/TAN/ARN are marked required in edit mode. */
   requireIndiaTaxIds?: boolean;
   foreignBranchProfile?: ForeignBranchProfile;
+  onAttachDocuments?: () => void;
+  pendingNewDocumentsCount?: number;
 }) {
   const branchProfile = foreignBranchProfile ?? {
     isDubaiUser: false,
@@ -1004,10 +1035,47 @@ export function CustomerPanApprovalDetails({
         </Card>
       )}
 
-      {row.documents_list && row.documents_list.length > 0 && (
+      {onAttachDocuments ? (
         <Card withBorder padding="md" radius="md" bg="#fafbfc">
-          <CustomerDocumentsList documents={row.documents_list} />
+          <Group justify="space-between" wrap="nowrap" align="flex-start" mb="xs">
+            <Text size="sm" fw={600} c="#105476">
+              Supporting Documents
+            </Text>
+            <Button
+              variant="outline"
+              color="#105476"
+              size="xs"
+              leftSection={<IconPaperclip size={14} />}
+              onClick={onAttachDocuments}
+            >
+              Attach Documents
+            </Button>
+          </Group>
+          {row.documents_list && row.documents_list.length > 0 ? (
+            <CustomerDocumentsList
+              documents={row.documents_list}
+              hideTitle
+            />
+          ) : (
+            <Text size="sm" c="dimmed">
+              No documents attached yet.
+            </Text>
+          )}
+          {pendingNewDocumentsCount > 0 && (
+            <Text size="xs" c="#105476" mt="xs">
+              {pendingNewDocumentsCount} new document
+              {pendingNewDocumentsCount === 1 ? "" : "s"} will be uploaded on
+              Update.
+            </Text>
+          )}
         </Card>
+      ) : (
+        row.documents_list &&
+        row.documents_list.length > 0 && (
+          <Card withBorder padding="md" radius="md" bg="#fafbfc">
+            <CustomerDocumentsList documents={row.documents_list} />
+          </Card>
+        )
       )}
     </Stack>
   );
@@ -1515,6 +1583,13 @@ export default function ApproveCustomerPanMaster({
   );
   const [editableApprovalRow, setEditableApprovalRow] =
     useState<CustomerPanApprovalRow | null>(null);
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    SupportingDocument[]
+  >([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+  const [
+    documentsModalOpened,
+    { open: openDocumentsModal, close: closeDocumentsModal },
+  ] = useDisclosure(false);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -1641,8 +1716,26 @@ export default function ApproveCustomerPanMaster({
     await refetch();
   }, [queryClient, refetch]);
 
+  const resetApprovalModalState = useCallback(() => {
+    setPendingAction(null);
+    setEditableApprovalRow(null);
+    setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+    closeDocumentsModal();
+  }, [closeDocumentsModal]);
+
   const handleConfirmAction = async () => {
     if (!pendingAction || pendingAction.type === "view") return;
+
+    if (
+      pendingAction.type === "approve" &&
+      countPendingNewSupportingDocuments(supportingDocuments) > 0
+    ) {
+      ToastNotification({
+        type: "error",
+        message: "Please click Update to save attached documents before approving.",
+      });
+      return;
+    }
 
     setIsSubmittingAction(true);
     try {
@@ -1659,8 +1752,7 @@ export default function ApproveCustomerPanMaster({
           message: `${entityLabel} rejected successfully.`,
         });
       }
-      setPendingAction(null);
-      setEditableApprovalRow(null);
+      resetApprovalModalState();
       await refreshList();
     } catch (error) {
       ToastNotification({
@@ -1685,12 +1777,51 @@ export default function ApproveCustomerPanMaster({
       return;
     }
 
+    const sizeError = validateSupportingDocumentSizes(supportingDocuments);
+    if (sizeError) {
+      ToastNotification({ type: "error", message: sizeError });
+      return;
+    }
+
     setIsUpdatingCustomer(true);
     try {
-      await updateCustomerVerification(
+      const response = await updateCustomerVerification(
         pendingAction.row.id,
         buildCustomerVerificationPayload(rowToUpdate),
+        supportingDocuments,
       );
+      const uploadedDocs = extractDocumentsListFromResponse(response);
+      if (uploadedDocs.length > 0) {
+        setSupportingDocuments([
+          ...mapDocumentsListToSupportingDocuments(uploadedDocs),
+          { ...EMPTY_SUPPORTING_DOCUMENT },
+        ]);
+        setEditableApprovalRow((prev) =>
+          prev ? { ...prev, documents_list: uploadedDocs } : prev,
+        );
+        setPendingAction((prev) =>
+          prev
+            ? {
+                ...prev,
+                row: { ...prev.row, documents_list: uploadedDocs },
+              }
+            : prev,
+        );
+      } else {
+        setSupportingDocuments((prev) => {
+          const kept = prev
+            .filter(
+              (doc) => doc.file != null || doc.document_url || doc.document_id,
+            )
+            .map((doc) => ({
+              ...doc,
+              file: null,
+              original_document_name:
+                doc.original_document_name || doc.file?.name || doc.name,
+            }));
+          return [...kept, { ...EMPTY_SUPPORTING_DOCUMENT }];
+        });
+      }
       ToastNotification({
         type: "success",
         message: `${entityLabel} updated successfully.`,
@@ -1833,6 +1964,8 @@ export default function ApproveCustomerPanMaster({
                       onClick={() => {
                         setMenuOpened(false);
                         setEditableApprovalRow(null);
+                        setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+                        closeDocumentsModal();
                         setPendingAction({ row: item, type: "view" });
                       }}
                     >
@@ -1849,6 +1982,9 @@ export default function ApproveCustomerPanMaster({
                         onClick={() => {
                           setMenuOpened(false);
                           setEditableApprovalRow(cloneApprovalRow(item));
+                          setSupportingDocuments(
+                            supportingDocumentsFromApprovalRow(item),
+                          );
                           setPendingAction({ row: item, type: "approve" });
                         }}
                       >
@@ -1864,6 +2000,10 @@ export default function ApproveCustomerPanMaster({
                         onClick={() => {
                           setMenuOpened(false);
                           setEditableApprovalRow(null);
+                          setSupportingDocuments([
+                            { ...EMPTY_SUPPORTING_DOCUMENT },
+                          ]);
+                          closeDocumentsModal();
                           setPendingAction({ row: item, type: "reject" });
                         }}
                       >
@@ -1881,7 +2021,7 @@ export default function ApproveCustomerPanMaster({
         },
       },
     ],
-    [entityLabel, entityLabelLower, handleShowSimilarCustomers],
+    [entityLabel, entityLabelLower, handleShowSimilarCustomers, closeDocumentsModal],
   );
 
   const table = useMantineReactTable<TableRow>({
@@ -2194,8 +2334,7 @@ export default function ApproveCustomerPanMaster({
         opened={pendingAction !== null}
         onClose={() => {
           if (isSubmittingAction || isUpdatingCustomer) return;
-          setPendingAction(null);
-          setEditableApprovalRow(null);
+          resetApprovalModalState();
         }}
         title={
           pendingAction?.type === "approve"
@@ -2230,7 +2369,7 @@ export default function ApproveCustomerPanMaster({
           >
             <Text size="sm" fw={500}>
               {pendingAction?.type === "approve"
-                ? `Review and edit ${entityLabelLower} details. Use Update to save changes, or Approve to approve.`
+                ? `Review and edit ${entityLabelLower} details, including documents. Use Update to save changes, or Approve to approve.`
                 : pendingAction?.type === "reject"
                   ? `Please review all ${entityLabelLower} and address details before rejecting.`
                   : `${entityLabel} details are shown in view-only mode.`}
@@ -2253,6 +2392,14 @@ export default function ApproveCustomerPanMaster({
                 partyType={partyType}
                 requireIndiaTaxIds={isIndiaUser}
                 foreignBranchProfile={foreignBranchProfile}
+                onAttachDocuments={
+                  pendingAction.type === "approve"
+                    ? openDocumentsModal
+                    : undefined
+                }
+                pendingNewDocumentsCount={countPendingNewSupportingDocuments(
+                  supportingDocuments,
+                )}
               />
             </ScrollArea.Autosize>
           )}
@@ -2262,10 +2409,7 @@ export default function ApproveCustomerPanMaster({
               variant="outline"
               color="#105476"
               size="xs"
-              onClick={() => {
-                setPendingAction(null);
-                setEditableApprovalRow(null);
-              }}
+              onClick={resetApprovalModalState}
               disabled={isSubmittingAction || isUpdatingCustomer}
             >
               {pendingAction?.type === "view" ? "Close" : "Cancel"}
@@ -2296,6 +2440,15 @@ export default function ApproveCustomerPanMaster({
           </Group>
         </Stack>
       </Modal>
+
+      <SupportingDocumentsModal
+        opened={documentsModalOpened}
+        onClose={closeDocumentsModal}
+        documents={supportingDocuments}
+        onChange={setSupportingDocuments}
+        title="Attach Supporting Documents"
+        zIndex={500}
+      />
 
       <Modal
         opened={similarModalOpen}

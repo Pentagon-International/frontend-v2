@@ -56,7 +56,9 @@ export function mapDocumentsListToSupportingDocuments(
     file: null,
     document_url: getCustomerDocumentUrl(doc) || undefined,
     document_id: doc.id,
-    original_document_name: String(doc.file_name ?? "").trim(),
+    original_document_name: String(
+      doc.file_name ?? doc.document_name ?? "",
+    ).trim(),
   }));
 }
 
@@ -64,7 +66,7 @@ export function extractDocumentsListFromResponse(
   response: unknown,
 ): CustomerDocumentListItem[] {
   let current: unknown = response;
-  for (let depth = 0; depth < 3; depth += 1) {
+  for (let depth = 0; depth < 4; depth += 1) {
     if (!current || typeof current !== "object") break;
     const obj = current as Record<string, unknown>;
     if (Array.isArray(obj.documents_list)) {

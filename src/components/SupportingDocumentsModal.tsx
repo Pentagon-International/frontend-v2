@@ -29,12 +29,13 @@ type SupportingDocumentsModalProps = {
   onSubmit?: () => void;
   submitLabel?: string;
   submitLoading?: boolean;
+  zIndex?: number;
 };
 
 function getExistingFileLabel(doc: SupportingDocument): string {
   return (
-    doc.original_document_name?.trim() ||
     doc.name?.trim() ||
+    doc.original_document_name?.trim() ||
     "Download file"
   );
 }
@@ -49,6 +50,7 @@ export default function SupportingDocumentsModal({
   onSubmit,
   submitLabel = "Upload",
   submitLoading = false,
+  zIndex,
 }: SupportingDocumentsModalProps) {
   const [fileErrors, setFileErrors] = useState<Record<number, string>>({});
 
@@ -115,6 +117,7 @@ export default function SupportingDocumentsModal({
       title={title}
       size="xl"
       centered
+      zIndex={zIndex}
       styles={{ title: { fontWeight: 600, color: "#105476" } }}
     >
       <Stack gap="sm">
