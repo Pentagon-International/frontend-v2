@@ -1944,6 +1944,7 @@ export default function PaymentCreate({
             status: "UNPOSTED",
             detailsOverride: detailsForPayload,
           });
+          payload.is_agent = false;
           const fd = buildReversalFormData(payload);
           const raw = (await apiCallProtected.put(
             `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,
@@ -1980,6 +1981,7 @@ export default function PaymentCreate({
           const payload = buildReversalPayload(values, {
             detailsOverride: detailsForPayload,
           });
+          payload.is_agent = false;
           const fd = buildReversalFormData(payload);
           const raw = (await apiCallProtected.post(
             URL.reversePayment,
@@ -2167,6 +2169,7 @@ export default function PaymentCreate({
           paymentNo: reversePaymentSaveResponse.payment_no ?? "",
           status: "POSTED",
         });
+        payload.is_agent = false;
         const fd = buildReversalFormData(payload);
         const raw = (await apiCallProtected.put(
           `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,

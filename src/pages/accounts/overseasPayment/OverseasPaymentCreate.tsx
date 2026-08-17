@@ -1694,9 +1694,6 @@ export default function OverseasPaymentCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        ...(a.invoice_id != null && a.invoice_id > 0
-          ? { supplier_invoice_id: a.invoice_id }
-          : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
       })),
@@ -1778,9 +1775,6 @@ export default function OverseasPaymentCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        ...(a.invoice_id != null && a.invoice_id > 0
-          ? { supplier_invoice_id: a.invoice_id }
-          : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
       })),
@@ -2049,6 +2043,7 @@ export default function OverseasPaymentCreate({
             status: "UNPOSTED",
             detailsOverride: detailsForPayload,
           });
+          payload.is_agent = true;
           const fd = buildReversalFormData(payload);
           const raw = (await apiCallProtected.put(
             `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,
@@ -2099,6 +2094,7 @@ export default function OverseasPaymentCreate({
           const payload = buildReversalPayload(values, {
             detailsOverride: detailsForPayload,
           });
+          payload.is_agent = true;
           const fd = buildReversalFormData(payload);
           const raw = (await apiCallProtected.post(
             URL.reversePayment,
@@ -2303,6 +2299,7 @@ export default function OverseasPaymentCreate({
           paymentNo: reversePaymentSaveResponse.payment_no ?? "",
           status: "POSTED",
         });
+        payload.is_agent = true;
         const fd = buildReversalFormData(payload);
         const raw = (await apiCallProtected.put(
           `${URL.reversePayment}${reversePaymentSaveResponse.id}/`,

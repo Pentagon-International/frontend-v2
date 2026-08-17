@@ -1336,7 +1336,10 @@ import {
         const daybookId = inv.day_book_id ?? inv.daybook_id;
         return {
           location: branchCode,
-          type: (inv.day_book_type as string) ?? "",
+          type:
+            (inv.day_book_document_type as string) ??
+            (inv.day_book_type as string) ??
+            "",
           subledger: detailRow?.customer_code ?? "",
           subledger_display: detailRow?.customer_display ?? "",
           daybook_id: daybookId != null ? String(daybookId) : "",
@@ -1446,6 +1449,7 @@ import {
         dr_cr: (receiptFromState?.dr_cr ?? "Dr").toString(),
         parties: (values.details ?? []).map((d) => ({
           ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
+          account_code: d.account_code ?? "",
           subledger_code: d.customer_code ?? "",
           narration: d.narration ?? "",
           currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
@@ -1524,13 +1528,17 @@ import {
         chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
         dr_cr: "Cr",
         parties: details.map((d) => ({
+          account_code: d.account_code ?? "",
           subledger_code: d.customer_code ?? "",
           narration: d.narration ?? "",
           currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
           roe: parseRoeForPayload(d.roe) ?? 0,
           amount: d.amount ?? 0,
           local_amount: clampLocalAmount(d.local_amount) ?? 0,
-          dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr" ? d.dr_cr : "Dr").toString(),
+          dr_cr: (d.dr_cr === "Dr" || d.dr_cr === "Cr"
+            ? d.dr_cr
+            : "Dr"
+          ).toString(),
         })),
         allocations: nonEmptyAdjustments.map((a) => ({
           location: a.location ?? "",
