@@ -1854,6 +1854,7 @@ export default function OverseasPaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
+    // Posted documents: only Cheque Cleared Date may be updated via PATCH.
     const postedStatus = String(saveResponse?.status ?? "").toUpperCase();
     if (
       !_isReversal &&
@@ -1866,84 +1867,100 @@ export default function OverseasPaymentCreate({
       );
       const hasNewFiles = newDocs.some((d) => d.file != null);
 
-      if (!hasNewFiles) {
-        ToastNotification({
-          message: "Attach at least one new document before updating.",
-          type: "error",
-        });
-        return;
-      }
-
-      const incompleteNewDoc = newDocs.some(
-        (d) =>
-          (Boolean(d.file) && !(d.name ?? "").trim()) ||
-          (Boolean((d.name ?? "").trim()) && !d.file),
-      );
-      if (incompleteNewDoc) {
-        ToastNotification({
-          message: "Each new document must have both a name and a file.",
-          type: "error",
-        });
-        return;
-      }
-      const oversized = values.supporting_documents.some(
-        (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
-      );
-      if (oversized) {
-        ToastNotification({
-          message: "One or more files exceed the 10MB limit.",
-          type: "error",
-        });
-        return;
+      if (hasNewFiles) {
+        const incompleteNewDoc = newDocs.some(
+          (d) =>
+            (Boolean(d.file) && !(d.name ?? "").trim()) ||
+            (Boolean((d.name ?? "").trim()) && !d.file),
+        );
+        if (incompleteNewDoc) {
+          ToastNotification({
+            message: "Each new document must have both a name and a file.",
+            type: "error",
+          });
+          return;
+        }
+        const oversized = values.supporting_documents.some(
+          (doc) => doc.file != null && doc.file.size > MAX_FILE_SIZE,
+        );
+        if (oversized) {
+          ToastNotification({
+            message: "One or more files exceed the 10MB limit.",
+            type: "error",
+          });
+          return;
+        }
       }
 
       setIsSubmitting(true);
       try {
         const id = saveResponse.id;
-        const fd = new FormData();
-        fd.append("payment", JSON.stringify({ id }));
-        let fileIndex = 0;
-        values.supporting_documents.forEach((doc) => {
-          if (!doc.file) return;
+        if (hasNewFiles) {
+          const fd = new FormData();
           fd.append(
-            `document_names[${fileIndex}]`,
-            (doc.name ?? "").toString(),
+            "payment",
+            JSON.stringify({
+              id,
+              chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+            }),
           );
-          fd.append(`document[${fileIndex}]`, doc.file);
-          fileIndex++;
-        });
-        const raw = (await apiCallProtected.patch(
-          `${URL.payment}${id}/`,
-          fd,
-          FORM_DATA_HEADERS,
-        )) as any;
-        const res = raw?.data?.data ?? raw?.data ?? raw;
-        if (Array.isArray(res?.documents)) {
-          form.setFieldValue(
-            "supporting_documents",
-            res.documents.map((doc: any) => ({
-              name: (
-                doc.document_name ??
-                doc.file_name ??
-                doc.name ??
-                ""
-              ).toString(),
-              file: null,
-              document_url: doc.document_url ?? doc.url ?? "",
-              document_id: doc.id ?? undefined,
-              original_document_name:
-                doc.original_document_name ??
-                doc.document_name ??
-                doc.file_name ??
-                "",
-            })),
+          let fileIndex = 0;
+          values.supporting_documents.forEach((doc) => {
+            if (!doc.file) return;
+            fd.append(
+              `document_names[${fileIndex}]`,
+              (doc.name ?? "").toString(),
+            );
+            fd.append(`document[${fileIndex}]`, doc.file);
+            fileIndex++;
+          });
+          const raw = (await apiCallProtected.patch(
+            `${URL.payment}${id}/`,
+            fd,
+            FORM_DATA_HEADERS,
+          )) as any;
+          const res = raw?.data?.data ?? raw?.data ?? raw;
+          if (Array.isArray(res?.documents)) {
+            form.setFieldValue(
+              "supporting_documents",
+              res.documents.map((doc: any) => ({
+                name: (
+                  doc.document_name ??
+                  doc.file_name ??
+                  doc.name ??
+                  ""
+                ).toString(),
+                file: null,
+                document_url: doc.document_url ?? doc.url ?? "",
+                document_id: doc.id ?? undefined,
+                original_document_name:
+                  doc.original_document_name ??
+                  doc.document_name ??
+                  doc.file_name ??
+                  "",
+              })),
+            );
+          }
+          await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          ToastNotification({
+            type: "success",
+            message: "Payment updated successfully.",
+          });
+        } else {
+          await apiCallProtected.patch(
+            `${URL.payment}${id}/`,
+            {
+              id,
+              chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+            },
+            API_HEADER,
           );
+          await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          ToastNotification({
+            type: "success",
+            message: "Cheque Cleared Date updated successfully.",
+          });
         }
-        await queryClient.invalidateQueries({ queryKey: ["payment"] });
-        ToastNotification({
-          type: "success",
-          message: "Payment updated successfully.",
-        });
       } catch (e: unknown) {
         console.error("Failed to update posted overseas payment", e);
         ToastNotification({
@@ -2424,6 +2441,8 @@ export default function OverseasPaymentCreate({
     !isViewRoute &&
     pathname.includes("/edit") &&
     statusUpper === "POSTED";
+  // Posted edit: allow updating Cheque Cleared Date only (PATCH).
+  const isPostedChequeClearanceEdit = isPostedDocumentAttachEdit;
   const canAttachDocumentsAfterPost =
     isPostedDocumentAttachEdit &&
     saveResponse?.id != null &&
@@ -2434,6 +2453,8 @@ export default function OverseasPaymentCreate({
   const inputStyles =
     isReadOnly || reversalFormDisabled ? readOnlyFieldStyles : fieldStyles;
   const headerDateDisabled = isReadOnly;
+  const chequeClearanceDateDisabled =
+    headerDateDisabled && !isPostedChequeClearanceEdit;
   const headerOtherDisabled = isReadOnly || reversalFormDisabled;
   const useNonEditableStyleOnly = isReadOnly || _isReversal;
   const headerFieldStyles = headerOtherDisabled
@@ -2639,7 +2660,9 @@ export default function OverseasPaymentCreate({
         <Box
           component="form"
           onSubmit={
-            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+            isReadOnly && !isPostedChequeClearanceEdit
+              ? (e) => e.preventDefault()
+              : form.onSubmit(handleSubmit)
           }
         >
           <Grid>
@@ -2792,8 +2815,8 @@ export default function OverseasPaymentCreate({
               />
             </Grid.Col>
 
-            {/* Cheque fields - shown for all types except CASH */}
-            {showChequeSection && (
+            {/* Cheque fields - shown for all types except CASH (also when editing posted clearance date) */}
+            {(showChequeSection || isPostedChequeClearanceEdit) && (
               <>
                 <Grid.Col span={2}>
                   <TextInput
@@ -2852,9 +2875,9 @@ export default function OverseasPaymentCreate({
                     onChange={(date) =>
                       form.setFieldValue("chq_clrd_date", date)
                     }
-                    disabled={headerDateDisabled}
+                    disabled={chequeClearanceDateDisabled}
                     styles={
-                      headerDateDisabled
+                      chequeClearanceDateDisabled
                         ? useNonEditableStyleOnly
                           ? reversalNonEditableStyles
                           : readOnlyFieldStyles
@@ -4034,7 +4057,9 @@ export default function OverseasPaymentCreate({
             <Button variant="outline" color="#105476" onClick={handleBack}>
               Cancel
             </Button>
-            {(!isReadOnly || isPostedDocumentAttachEdit) && (
+            {(!isReadOnly ||
+              isPostedChequeClearanceEdit ||
+              isPostedDocumentAttachEdit) && (
               <>
                 <Button
                   type="submit"
@@ -4048,11 +4073,14 @@ export default function OverseasPaymentCreate({
                     ? reversePaymentSaveResponse?.id
                       ? "Update Payment Reversal"
                       : "Save Payment Reversal"
-                    : saveResponse?.id
+                    : isPostedChequeClearanceEdit
                       ? "Update Payment"
-                      : "Save Payment"}
+                      : saveResponse?.id
+                        ? "Update Payment"
+                        : "Save Payment"}
                 </Button>
-                {_isReversal
+                {!isPostedChequeClearanceEdit &&
+                  (_isReversal
                   ? reversePaymentSaveResponse &&
                     canPostDocuments &&
                     reversalStatusUpper === "UNPOSTED" && (
@@ -4078,7 +4106,7 @@ export default function OverseasPaymentCreate({
                       >
                         Post Payment
                       </Button>
-                    )}
+                    ))}
               </>
             )}
           </Group>
