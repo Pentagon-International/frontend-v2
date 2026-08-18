@@ -79,7 +79,11 @@ import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMe
 import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import * as yup from "yup";
@@ -102,6 +106,10 @@ import {
   hasMeaningfulHouseChargeData,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
+import {
+  resolveSupplierInvoiceEstimateCostAmount,
+  resolveSupplierInvoiceHouseCostAmount,
+} from "../../../utils/houseChargeAmounts";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -534,12 +542,14 @@ function AirImportJobCreate() {
         }
       | null
       | undefined;
-    // View must win over hasJobData so closed/view navigations stay read-only.
+    // View must win over hasJobData so /view stays read-only.
+    // Closed jobs on /edit stay in edit so Attach Documents can persist.
     if (
-      pathname.includes("/view") ||
-      state?.viewMode === true ||
-      String(state?.actionType ?? "").toLowerCase() === "view" ||
-      isJobClosed(state?.job?.status)
+      isJobOpenedAsView({
+        pathname,
+        viewMode: state?.viewMode,
+        actionType: state?.actionType,
+      })
     ) {
       return "view";
     }
@@ -550,8 +560,12 @@ function AirImportJobCreate() {
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly =
-    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
+  const isViewOnly = mode === "view";
+  const isClosedJob = isJobClosed(
+    (jobData as { status?: string | null } | undefined)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2347,7 +2361,7 @@ function AirImportJobCreate() {
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
-          ...(isReadOnly && { viewMode: true }),
+          ...(isViewOnly && { viewMode: true }),
         },
       });
 
@@ -2367,7 +2381,7 @@ function AirImportJobCreate() {
       navigate,
       jobDocuments,
       getMawbDetailsSnapshot,
-      isReadOnly,
+      isViewOnly,
     ],
   );
 
@@ -3243,9 +3257,7 @@ function AirImportJobCreate() {
               {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
           )}
-          {jobData?.job_id && (
-            <ERPListJobStatusPill status={jobData?.status} />
-          )}
+          {jobData?.job_id && <ERPListJobStatusPill status={jobData?.status} />}
         </Group>
         {!isReadOnly && (
           <Group gap="xs">
@@ -3513,12 +3525,28 @@ function AirImportJobCreate() {
             returnToState={location.state}
           />
         )}
+        {isReadOnly && mode === "edit" && (
+          <Button
+            color="#105476"
+            variant={canCreateJob ? "filled" : "outline"}
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            disabled={!canCreateJob}
+            leftSection={<IconPlus size={14} />}
+            style={{
+              cursor: canCreateJob ? "pointer" : "not-allowed",
+            }}
+          >
+            Update
+          </Button>
+        )}
       </Group>
 
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -3832,7 +3860,6 @@ function AirImportJobCreate() {
                 />
               </Grid.Col>
             </Grid>
-
 
             {/* IGM details row */}
             <Grid mb="xl">
@@ -4167,7 +4194,9 @@ function AirImportJobCreate() {
                       partyDetailsForm.setFieldValue("consignee_address", "");
                     }
                     setConsigneeAddressOptions(value ? options : []);
-                    setConsigneeAddressSearch(value ? primary?.label || "" : "");
+                    setConsigneeAddressSearch(
+                      value ? primary?.label || "" : "",
+                    );
                     setConsigneeAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -4626,10 +4655,10 @@ function AirImportJobCreate() {
                             searchFields={["carrier_code", "carrier_name"]}
                             displayFormat={carrierDisplayFormat}
                             value={routing.carrier_code || null}
-                              displayValue={formatCarrierDisplayValue(
-                                routing.carrier_name,
-                                routing.carrier_code,
-                              )}
+                            displayValue={formatCarrierDisplayValue(
+                              routing.carrier_name,
+                              routing.carrier_code,
+                            )}
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
@@ -4701,10 +4730,10 @@ function AirImportJobCreate() {
                             searchFields={["carrier_code", "carrier_name"]}
                             displayFormat={carrierDisplayFormat}
                             value={routing.carrier_code || null}
-                              displayValue={formatCarrierDisplayValue(
-                                routing.carrier_name,
-                                routing.carrier_code,
-                              )}
+                            displayValue={formatCarrierDisplayValue(
+                              routing.carrier_name,
+                              routing.carrier_code,
+                            )}
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
@@ -4753,10 +4782,10 @@ function AirImportJobCreate() {
                             searchFields={["carrier_code", "carrier_name"]}
                             displayFormat={carrierDisplayFormat}
                             value={routing.carrier_code || null}
-                              displayValue={formatCarrierDisplayValue(
-                                routing.carrier_name,
-                                routing.carrier_code,
-                              )}
+                            displayValue={formatCarrierDisplayValue(
+                              routing.carrier_name,
+                              routing.carrier_code,
+                            )}
                             onChange={(value, selectedData) => {
                               routingsForm.setFieldValue(
                                 `routings.${index}.carrier_code`,
@@ -5022,7 +5051,8 @@ function AirImportJobCreate() {
                             charge_name: toStr(er.charge_name),
                             currency_id: er.currency_id ?? null,
                             roe: er.roe ?? null,
-                            amount: er.total_cost ?? null,
+                            amount:
+                              resolveSupplierInvoiceEstimateCostAmount(er),
                             supplier_code: toStr(er.supplier_code),
                             supplier_name: toStr(er.supplier_name),
                           };
@@ -5072,10 +5102,7 @@ function AirImportJobCreate() {
                                   null,
                                 roe: cr.roe ?? null,
                                 amount:
-                                  cr.total_cost ??
-                                  cr.cost_local_amount ??
-                                  cr.amount ??
-                                  null,
+                                  resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr(cr.supplier_code),
                                 supplier_name: toStr(cr.supplier_name),
                               };
@@ -5228,7 +5255,7 @@ function AirImportJobCreate() {
         </Tabs.Panel>
 
         {jobData?.id != null && (
-          <Tabs.Panel value="4">
+          <Tabs.Panel value="4" className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -5473,7 +5500,7 @@ function AirImportJobCreate() {
                                       >
                                         View
                                       </Menu.Item>
-                                      {isUnposted ? (
+                                      {isUnposted && !isReadOnly ? (
                                         <>
                                           <Menu.Item
                                             leftSection={
@@ -5541,7 +5568,7 @@ function AirImportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : isPosted ? (
+                                      ) : isPosted && !isReadOnly ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -5766,6 +5793,7 @@ function AirImportJobCreate() {
                                                   >
                                                     <JobReverseInvoiceAccountMenu
                                                       rev={rev}
+                                                      readOnly={isReadOnly}
                                                       parentRow={row}
                                                       jobBasePath="/air/import-job"
                                                       navigate={navigate}
@@ -5837,7 +5865,7 @@ function AirImportJobCreate() {
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
         rows={jobDocuments.document_modal_rows}
-        readOnly={isReadOnly}
+        readOnly={documentsReadOnly}
         uploading={jobDocuments.documentUploading}
         docTypeOptions={jobDocuments.docTypeOptions}
         docCodeErrors={jobDocuments.docCodeErrors}
@@ -5876,7 +5904,7 @@ function AirImportJobCreate() {
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
-            {isReadOnly ? "View Documents" : "Attach Documents"}
+            {documentsReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
           {!isReadOnly && (
             <Button
@@ -5995,7 +6023,7 @@ function AirImportJobCreate() {
                       </Badge>
                     )}
                   </Group>
-                  {isReadOnly ? (
+                  {isViewOnly ? (
                     <Button
                       variant="light"
                       color="#105476"
@@ -6004,6 +6032,16 @@ function AirImportJobCreate() {
                       onClick={() => handleEditHawbDetail(index)}
                     >
                       View
+                    </Button>
+                  ) : isReadOnly ? (
+                    <Button
+                      variant="light"
+                      color="#105476"
+                      size="xs"
+                      leftSection={<IconEdit size={14} />}
+                      onClick={() => handleEditHawbDetail(index)}
+                    >
+                      Edit
                     </Button>
                   ) : (
                     <Group gap="xs">

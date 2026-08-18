@@ -88,3 +88,52 @@ export function costLocalAmountForPayload(
   const n = calcCostLocalAmount(totalCost, roe);
   return n != null ? n : "";
 }
+
+type SupplierInvoiceCostRow = {
+  total_cost?: unknown;
+  unit_cost?: unknown;
+  cost_per_unit?: unknown;
+  no_of_unit?: unknown;
+  roe?: unknown;
+};
+
+/**
+ * Estimates "Total" is qty × cost/unit × ROE. Supplier Invoice Amount is
+ * currency cost (qty × cost/unit), then that screen applies ROE for local.
+ * Never uses sell `amount`.
+ */
+export function resolveSupplierInvoiceEstimateCostAmount(
+  row: SupplierInvoiceCostRow,
+): number | null {
+  const qty = toChargeNumber(row.no_of_unit);
+  const cpu = toChargeNumber(row.cost_per_unit);
+  if (qty != null && cpu != null && qty > 0) {
+    return roundChargeAmount(qty * cpu);
+  }
+
+  const total = toChargeNumber(row.total_cost);
+  if (total == null) return null;
+  const roe = toChargeNumber(row.roe);
+  if (roe != null && roe !== 0) {
+    return roundChargeAmount(total / roe);
+  }
+  return roundChargeAmount(total);
+}
+
+/**
+ * House Total Cost is already currency cost (qty × unit cost).
+ * Never uses sell `amount` or cost_local_amount.
+ */
+export function resolveSupplierInvoiceHouseCostAmount(
+  row: SupplierInvoiceCostRow,
+): number | null {
+  const total = toChargeNumber(row.total_cost);
+  if (total != null) return roundChargeAmount(total);
+
+  const qty = toChargeNumber(row.no_of_unit);
+  const unitCost = toChargeNumber(row.unit_cost ?? row.cost_per_unit);
+  if (qty != null && unitCost != null) {
+    return roundChargeAmount(qty * unitCost);
+  }
+  return null;
+}

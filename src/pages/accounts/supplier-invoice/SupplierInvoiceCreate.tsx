@@ -1,10 +1,13 @@
 import {
+  ActionIcon,
   Badge,
   Box,
   Button,
+  Center,
   Grid,
   Group,
   Loader,
+  Menu,
   Modal,
   NumberInput,
   Stack,
@@ -16,6 +19,8 @@ import { useForm } from "@mantine/form";
 import {
   IconArrowLeft,
   IconChevronRight,
+  IconDotsVertical,
+  IconEye,
   IconPlus,
   IconTrash,
   IconUpload,
@@ -802,12 +807,16 @@ export default function SupplierInvoiceCreate({
     Inv_Crn_no?: string;
     status?: string;
   } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
     null,
   );
   const saveResponseRef = useRef<typeof saveResponse>(null);
   /** Reversal payloads: is_agent from source/reversal invoice, not reversal daybook. */
   const reversalIsAgentRef = useRef<boolean | null>(null);
+  /** OVERSEAS daybook / agent vendor: State is optional. Ref so validate sees latest. */
+  const isAgentVendorFlowRef = useRef(false);
   useEffect(() => {
     saveResponseRef.current = saveResponse;
   }, [saveResponse]);
@@ -1094,7 +1103,9 @@ export default function SupplierInvoiceCreate({
       },
       currency_id: (v) => (!v ? "Currency is required" : null),
       state_id: (v) =>
-        isIndiaUser && !v ? "State is required" : null,
+        isIndiaUser && !isAgentVendorFlowRef.current && !v
+          ? "State is required"
+          : null,
       Inv_Crn_no: (v) =>
         !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
       Inv_Crn_note: (v) => (!v ? "Inv/Crn Date is required" : null),
@@ -1292,6 +1303,16 @@ export default function SupplierInvoiceCreate({
     if (reversalIsAgentRef.current != null) return reversalIsAgentRef.current;
     return false;
   };
+
+  const isAgentVendorFlow =
+    isOverseasCrjDaybook || resolveIsAgentForPayload();
+  isAgentVendorFlowRef.current = isAgentVendorFlow;
+
+  useEffect(() => {
+    if (!isIndiaUser || !isAgentVendorFlow) return;
+    if (form.errors.state_id) form.clearFieldError("state_id");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAgentVendorFlow, isIndiaUser]);
 
   const isDaybookSelected = !!form.values.day_book_id;
 
@@ -2655,6 +2676,62 @@ export default function SupplierInvoiceCreate({
     }
   };
 
+  const handleSupplierInvoicePdfPreview = async () => {
+    const pdfId =
+      saveResponse?.id ??
+      (supplierInvoiceIdFromRoute
+        ? Number(supplierInvoiceIdFromRoute)
+        : undefined);
+    if (!pdfId) return;
+    setPreviewOpen(true);
+    setPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.supplierInvoice}${pdfId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      setPdfBlob(window.URL.createObjectURL(blob));
+    } catch (error) {
+      console.error("Error fetching supplier invoice PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load PDF preview",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (!pdfBlob) return;
+    const docNo =
+      saveResponse?.crj_number ??
+      saveResponse?.Inv_Crn_no ??
+      saveResponse?.id ??
+      "draft";
+    const link = document.createElement("a");
+    link.href = pdfBlob;
+    link.download = `Supplier-Invoice-${docNo}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
   const isInvoicePosted = saveResponse != null && statusUpper === "POSTED";
   const isReadOnly = isViewMode || isInvoicePosted;
@@ -2946,6 +3023,25 @@ export default function SupplierInvoiceCreate({
                 </Group>
               </Group>
             )}
+            {saveResponse?.id != null && !isReversal && (
+              <Menu shadow="md" width={200}>
+                <Menu.Target>
+                  <ActionIcon variant="light" color="#105476" size="lg">
+                    <IconDotsVertical size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<IconEye size={14} />}
+                    onClick={handleSupplierInvoicePdfPreview}
+                  >
+                    {statusUpper === "POSTED"
+                      ? "Supplier Invoice PDF"
+                      : "Draft Supplier Invoice PDF"}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            )}
             <Button
               variant="outline"
               color="#105476"
@@ -3173,7 +3269,7 @@ export default function SupplierInvoiceCreate({
                   value={form.values.state_id || null}
                   onChange={(v) => form.setFieldValue("state_id", v ?? "")}
                   searchable
-                  withAsterisk
+                  withAsterisk={!isAgentVendorFlow}
                   error={form.errors.state_id}
                   disabled={
                     isStateLoading ||
@@ -4928,6 +5024,72 @@ export default function SupplierInvoiceCreate({
           </Group>
         </Box>
       </Stack>
+
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="PDF Preview"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }

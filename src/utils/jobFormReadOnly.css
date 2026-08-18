@@ -1,0 +1,46 @@
+/* Closed/view job fields stay visually unchanged but are not editable. */
+.job-form-readonly-panel {
+  cursor: not-allowed;
+}
+
+.job-form-readonly-panel * {
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+}
+
+/* Keep original field colors (do not grey out disabled/read-only inputs). */
+.job-form-readonly-panel :disabled,
+.job-form-readonly-panel [disabled],
+.job-form-readonly-panel [data-disabled],
+.job-form-readonly-panel [data-disabled="true"],
+.job-form-readonly-panel input:disabled,
+.job-form-readonly-panel textarea:disabled,
+.job-form-readonly-panel select:disabled,
+.job-form-readonly-panel .mantine-Input-input:disabled,
+.job-form-readonly-panel .mantine-Input-input[data-disabled],
+.job-form-readonly-panel .mantine-TextInput-input:disabled,
+.job-form-readonly-panel .mantine-Select-input:disabled,
+.job-form-readonly-panel .mantine-Textarea-input:disabled {
+  opacity: 1 !important;
+  color: #212529 !important;
+  -webkit-text-fill-color: #212529 !important;
+  background-color: #fff !important;
+  border-color: #ced4da !important;
+  filter: none !important;
+}
+
+.job-form-readonly-panel fieldset:disabled,
+.job-form-readonly-panel fieldset[disabled] {
+  opacity: 1 !important;
+}
+
+/* Accounts stays clickable so View remains available. */
+.job-form-readonly-panel.job-accounts-tab-panel {
+  cursor: default;
+}
+
+.job-form-readonly-panel.job-accounts-tab-panel,
+.job-form-readonly-panel.job-accounts-tab-panel * {
+  pointer-events: auto !important;
+  cursor: auto !important;
+}

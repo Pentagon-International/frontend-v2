@@ -1,4 +1,13 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ActionIcon,
   Badge,
@@ -58,7 +67,11 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import { buildDocumentIdsPayloadField } from "../../../utils/jobDocuments";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import {
   JobMasterPartyDetailsPanel,
   type JobMasterPartyDetailsValues,
@@ -87,6 +100,7 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { buildJobUnitOptions } from "../../../utils/houseCargoChargeableWeight";
+import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
 import { formatInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import dayjs from "dayjs";
@@ -249,7 +263,9 @@ function resolveFreightPpCc(...candidates: unknown[]): string {
 }
 
 /** Export services → Prepaid; Import services → Collect. */
-function getDefaultPpCcFromService(importExport?: string): "Prepaid" | "Collect" {
+function getDefaultPpCcFromService(
+  importExport?: string,
+): "Prepaid" | "Collect" {
   const raw = String(importExport ?? "")
     .trim()
     .toUpperCase();
@@ -306,15 +322,11 @@ function seedSavedPartyAddress(
   return { options: [], search: "", custom: true };
 }
 
-function getMasterAwbField(
-  transportMode: string,
-): "mawb_no" | "mbl_number" {
+function getMasterAwbField(transportMode: string): "mawb_no" | "mbl_number" {
   return isAirTransportMode(transportMode) ? "mawb_no" : "mbl_number";
 }
 
-function getHouseAwbField(
-  transportMode: string,
-): "hawb_no" | "hbl_number" {
+function getHouseAwbField(transportMode: string): "hawb_no" | "hbl_number" {
   return isAirTransportMode(transportMode) ? "hawb_no" : "hbl_number";
 }
 
@@ -379,8 +391,8 @@ function readChargesFromHouse(
 ): unknown[] {
   const air = isAirTransportMode(transportMode);
   const src = air
-    ? house.mawb_charges ?? house.charges
-    : house.mbl_charges ?? house.charges;
+    ? (house.mawb_charges ?? house.charges)
+    : (house.mbl_charges ?? house.charges);
   return Array.isArray(src) ? src : [];
 }
 
@@ -427,7 +439,8 @@ function mapChargesForPayload(
       null,
     unit_cost: roundMoneyToDecimals(charge.cost_per_unit) ?? null,
     total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
-    cost_local_amount: roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
+    cost_local_amount:
+      roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
   }));
 }
 
@@ -435,11 +448,9 @@ function mapChargeFromApi(
   charge: Record<string, unknown>,
 ): ServiceJobChargeDetail {
   const unitDetails = charge.unit_details as
-    | { unit_id?: number; unit_code?: string }
-    | undefined;
+    { unit_id?: number; unit_code?: string } | undefined;
   const currencyDetails = charge.currency_details as
-    | { currency_id?: number; currency_code?: string }
-    | undefined;
+    { currency_id?: number; currency_code?: string } | undefined;
   const toNum = (v: unknown): number | null => {
     if (v == null) return null;
     if (typeof v === "number" && !Number.isNaN(v)) return v;
@@ -481,8 +492,9 @@ function mapChargeFromApi(
     amount_per_unit: toNum(charge.amount_per_unit),
     amount: toNum(charge.amount),
     local_amount:
-      roundLocalMoneyToDecimals(charge.sell_local_amount ?? charge.local_amount) ??
-      null,
+      roundLocalMoneyToDecimals(
+        charge.sell_local_amount ?? charge.local_amount,
+      ) ?? null,
     cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
     total_cost: toNum(charge.total_cost),
     cost_local_amount:
@@ -611,7 +623,9 @@ const ServiceJobPortField = memo(function ServiceJobPortField({
       key={portKey}
       label={label}
       placeholder={
-        disabled ? "Select service first" : `Type ${label.toLowerCase()} code or name`
+        disabled
+          ? "Select service first"
+          : `Type ${label.toLowerCase()} code or name`
       }
       apiEndpoint={URL.portMaster}
       searchFields={["port_code", "port_name"]}
@@ -703,7 +717,9 @@ function ServiceJobChargesSection({
   const chargeAmountPerUnits = form.values.charges
     .map((c) => c.amount_per_unit)
     .join(",");
-  const chargeNoOfUnits = form.values.charges.map((c) => c.no_of_unit).join(",");
+  const chargeNoOfUnits = form.values.charges
+    .map((c) => c.no_of_unit)
+    .join(",");
   const chargeRoes = form.values.charges.map((c) => c.roe).join(",");
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
   const chargeTotalCosts = form.values.charges
@@ -726,7 +742,12 @@ function ServiceJobChargesSection({
           ) ?? 0;
         if (calculatedAmount > 0) next.amount = calculatedAmount;
       }
-      if (next.amount != null && next.amount > 0 && next.roe != null && next.roe > 0) {
+      if (
+        next.amount != null &&
+        next.amount > 0 &&
+        next.roe != null &&
+        next.roe > 0
+      ) {
         next.local_amount =
           roundLocalMoneyToDecimals(next.amount * next.roe) ?? null;
       } else {
@@ -755,7 +776,14 @@ function ServiceJobChargesSection({
     });
     if (hasChanges) form.setValues({ charges: updatedCharges });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeAmountPerUnits, chargeNoOfUnits, chargeRoes, chargeAmounts, chargeTotalCosts, readOnly]);
+  }, [
+    chargeAmountPerUnits,
+    chargeNoOfUnits,
+    chargeRoes,
+    chargeAmounts,
+    chargeTotalCosts,
+    readOnly,
+  ]);
 
   const clearChargeError = (index: number, field: string) => {
     setChargeErrors((prev) => {
@@ -832,12 +860,32 @@ function ServiceJobChargesSection({
         <Grid.Col span={0.7} />
         <Grid.Col span={0.7} />
         <Grid.Col span={2.55}>
-          <Box style={{ border: "1.5px solid #228be6", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#228be6", fontSize: 12, fontWeight: 700 }}>
+          <Box
+            style={{
+              border: "1.5px solid #228be6",
+              borderRadius: 6,
+              textAlign: "center",
+              padding: "2px 0",
+              color: "#228be6",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
             SELL
           </Box>
         </Grid.Col>
         <Grid.Col span={3.65}>
-          <Box style={{ border: "1.5px solid #e67700", borderRadius: 6, textAlign: "center", padding: "2px 0", color: "#e67700", fontSize: 12, fontWeight: 700 }}>
+          <Box
+            style={{
+              border: "1.5px solid #e67700",
+              borderRadius: 6,
+              textAlign: "center",
+              padding: "2px 0",
+              color: "#e67700",
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
             COST
           </Box>
         </Grid.Col>
@@ -845,20 +893,48 @@ function ServiceJobChargesSection({
       </Grid>
 
       <Grid mb="xs" style={{ fontWeight: 600, color: "#105476" }} gutter="sm">
-        <Grid.Col span={1.4}><RequiredLabel label="Charge Name" required={false} /></Grid.Col>
-        <Grid.Col span={0.9}><RequiredLabel label="Prepaid / Collect" required={false} /></Grid.Col>
-        <Grid.Col span={0.8}><RequiredLabel label="Unit" required={false} /></Grid.Col>
-        <Grid.Col span={0.8}><RequiredLabel label="Currency" required={false} /></Grid.Col>
-        <Grid.Col span={0.7}><RequiredLabel label="ROE" required={false} /></Grid.Col>
-        <Grid.Col span={0.7}><RequiredLabel label="No of Unit" required={false} /></Grid.Col>
-        <Grid.Col span={0.85}><RequiredLabel label="Amount/Unit" required={false} /></Grid.Col>
-        <Grid.Col span={0.85}><RequiredLabel label="Amount" required={false} /></Grid.Col>
-        <Grid.Col span={0.85}><RequiredLabel label="Local Amount" required={false} /></Grid.Col>
-        <Grid.Col span={0.85}><RequiredLabel label="Cost/Unit" required={false} /></Grid.Col>
-        <Grid.Col span={0.85}><RequiredLabel label="Total Cost" required={false} /></Grid.Col>
-        <Grid.Col span={0.85}><RequiredLabel label="Local Amount" required={false} /></Grid.Col>
-        <Grid.Col span={1.1}><RequiredLabel label="Supplier" required={false} /></Grid.Col>
-        <Grid.Col span={0.5}><RequiredLabel label="Actions" required={false} /></Grid.Col>
+        <Grid.Col span={1.4}>
+          <RequiredLabel label="Charge Name" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.9}>
+          <RequiredLabel label="Prepaid / Collect" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.8}>
+          <RequiredLabel label="Unit" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.8}>
+          <RequiredLabel label="Currency" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.7}>
+          <RequiredLabel label="ROE" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.7}>
+          <RequiredLabel label="No of Unit" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.85}>
+          <RequiredLabel label="Amount/Unit" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.85}>
+          <RequiredLabel label="Amount" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.85}>
+          <RequiredLabel label="Local Amount" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.85}>
+          <RequiredLabel label="Cost/Unit" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.85}>
+          <RequiredLabel label="Total Cost" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.85}>
+          <RequiredLabel label="Local Amount" required={false} />
+        </Grid.Col>
+        <Grid.Col span={1.1}>
+          <RequiredLabel label="Supplier" required={false} />
+        </Grid.Col>
+        <Grid.Col span={0.5}>
+          <RequiredLabel label="Actions" required={false} />
+        </Grid.Col>
       </Grid>
 
       {form.values.charges.map((charge, index) => (
@@ -873,8 +949,14 @@ function ServiceJobChargesSection({
               displayValue={charge.charge_name || undefined}
               readOnly={readOnly}
               onChange={(value, selectedData) => {
-                form.setFieldValue(`charges.${index}.charge_id`, value ? Number(value) : null);
-                form.setFieldValue(`charges.${index}.charge_name`, selectedData?.label ?? "");
+                form.setFieldValue(
+                  `charges.${index}.charge_id`,
+                  value ? Number(value) : null,
+                );
+                form.setFieldValue(
+                  `charges.${index}.charge_name`,
+                  selectedData?.label ?? "",
+                );
                 clearChargeError(index, "charge_name");
               }}
               error={chargeErrors[index]?.charge_name}
@@ -928,7 +1010,9 @@ function ServiceJobChargesSection({
               disabled={readOnly}
               onChange={(value) => {
                 const currencyId = value ?? "";
-                const code = currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
+                const code =
+                  currencyOptions.find((o) => o.value === currencyId)?.label ??
+                  "";
                 form.setFieldValue(`charges.${index}.currency_id`, currencyId);
                 form.setFieldValue(`charges.${index}.currency`, code);
                 if (isChargeBaseCurrencyFor(charge, currencyData as never[])) {
@@ -949,7 +1033,10 @@ function ServiceJobChargesSection({
               min={0}
               hideControls
               decimalScale={ROE_DECIMAL_PLACES}
-              readOnly={readOnly || isChargeBaseCurrencyFor(charge, currencyData as never[])}
+              readOnly={
+                readOnly ||
+                isChargeBaseCurrencyFor(charge, currencyData as never[])
+              }
               value={charge.roe || undefined}
               onChange={(value) => {
                 const roe = value as number | null;
@@ -982,11 +1069,27 @@ function ServiceJobChargesSection({
                 const noOfUnit = value as number | null;
                 form.setFieldValue(`charges.${index}.no_of_unit`, noOfUnit);
                 const current = form.values.charges[index];
-                if (current.amount_per_unit != null && current.amount_per_unit > 0 && noOfUnit != null && noOfUnit > 0) {
-                  form.setFieldValue(`charges.${index}.amount`, noOfUnit * current.amount_per_unit);
+                if (
+                  current.amount_per_unit != null &&
+                  current.amount_per_unit > 0 &&
+                  noOfUnit != null &&
+                  noOfUnit > 0
+                ) {
+                  form.setFieldValue(
+                    `charges.${index}.amount`,
+                    noOfUnit * current.amount_per_unit,
+                  );
                 }
-                if (current.cost_per_unit != null && current.cost_per_unit > 0 && noOfUnit != null && noOfUnit > 0) {
-                  form.setFieldValue(`charges.${index}.total_cost`, noOfUnit * current.cost_per_unit);
+                if (
+                  current.cost_per_unit != null &&
+                  current.cost_per_unit > 0 &&
+                  noOfUnit != null &&
+                  noOfUnit > 0
+                ) {
+                  form.setFieldValue(
+                    `charges.${index}.total_cost`,
+                    noOfUnit * current.cost_per_unit,
+                  );
                 }
               }}
             />
@@ -1001,10 +1104,21 @@ function ServiceJobChargesSection({
               value={charge.amount_per_unit || undefined}
               onChange={(value) => {
                 const amountPerUnit = value as number | null;
-                form.setFieldValue(`charges.${index}.amount_per_unit`, amountPerUnit);
+                form.setFieldValue(
+                  `charges.${index}.amount_per_unit`,
+                  amountPerUnit,
+                );
                 const current = form.values.charges[index];
-                if (amountPerUnit != null && amountPerUnit > 0 && current.no_of_unit != null && current.no_of_unit > 0) {
-                  form.setFieldValue(`charges.${index}.amount`, current.no_of_unit * amountPerUnit);
+                if (
+                  amountPerUnit != null &&
+                  amountPerUnit > 0 &&
+                  current.no_of_unit != null &&
+                  current.no_of_unit > 0
+                ) {
+                  form.setFieldValue(
+                    `charges.${index}.amount`,
+                    current.no_of_unit * amountPerUnit,
+                  );
                 }
               }}
             />
@@ -1018,7 +1132,10 @@ function ServiceJobChargesSection({
               readOnly={readOnly}
               value={charge.amount || undefined}
               onChange={(value) => {
-                form.setFieldValue(`charges.${index}.amount`, value as number | null);
+                form.setFieldValue(
+                  `charges.${index}.amount`,
+                  value as number | null,
+                );
               }}
             />
           </Grid.Col>
@@ -1032,7 +1149,10 @@ function ServiceJobChargesSection({
               readOnly={readOnly}
               value={charge.local_amount || undefined}
               onChange={(value) => {
-                form.setFieldValue(`charges.${index}.local_amount`, value as number | null);
+                form.setFieldValue(
+                  `charges.${index}.local_amount`,
+                  value as number | null,
+                );
               }}
             />
           </Grid.Col>
@@ -1046,10 +1166,21 @@ function ServiceJobChargesSection({
               value={charge.cost_per_unit || undefined}
               onChange={(value) => {
                 const costPerUnit = value as number | null;
-                form.setFieldValue(`charges.${index}.cost_per_unit`, costPerUnit);
+                form.setFieldValue(
+                  `charges.${index}.cost_per_unit`,
+                  costPerUnit,
+                );
                 const current = form.values.charges[index];
-                if (costPerUnit != null && costPerUnit > 0 && current.no_of_unit != null && current.no_of_unit > 0) {
-                  form.setFieldValue(`charges.${index}.total_cost`, current.no_of_unit * costPerUnit);
+                if (
+                  costPerUnit != null &&
+                  costPerUnit > 0 &&
+                  current.no_of_unit != null &&
+                  current.no_of_unit > 0
+                ) {
+                  form.setFieldValue(
+                    `charges.${index}.total_cost`,
+                    current.no_of_unit * costPerUnit,
+                  );
                 }
               }}
             />
@@ -1064,7 +1195,10 @@ function ServiceJobChargesSection({
               readOnly={readOnly}
               value={charge.total_cost || undefined}
               onChange={(value) => {
-                form.setFieldValue(`charges.${index}.total_cost`, value as number | null);
+                form.setFieldValue(
+                  `charges.${index}.total_cost`,
+                  value as number | null,
+                );
               }}
             />
           </Grid.Col>
@@ -1078,7 +1212,10 @@ function ServiceJobChargesSection({
               readOnly={readOnly}
               value={charge.cost_local_amount || undefined}
               onChange={(value) => {
-                form.setFieldValue(`charges.${index}.cost_local_amount`, value as number | null);
+                form.setFieldValue(
+                  `charges.${index}.cost_local_amount`,
+                  value as number | null,
+                );
               }}
             />
           </Grid.Col>
@@ -1092,16 +1229,29 @@ function ServiceJobChargesSection({
               displayValue={charge.supplier_name || undefined}
               readOnly={readOnly}
               onChange={(value, selectedData) => {
-                form.setFieldValue(`charges.${index}.supplier_code`, value || "");
-                form.setFieldValue(`charges.${index}.supplier_name`, selectedData?.label || "");
+                form.setFieldValue(
+                  `charges.${index}.supplier_code`,
+                  value || "",
+                );
+                form.setFieldValue(
+                  `charges.${index}.supplier_name`,
+                  selectedData?.label || "",
+                );
               }}
               minSearchLength={2}
               dropdownZIndex={1000}
             />
           </Grid.Col>
-          <Grid.Col span={0.5} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <Grid.Col
+            span={0.5}
+            style={{ display: "flex", gap: 6, alignItems: "center" }}
+          >
             {!readOnly && form.values.charges.length > 1 && (
-              <ActionIcon variant="light" color="red" onClick={() => form.removeListItem("charges", index)}>
+              <ActionIcon
+                variant="light"
+                color="red"
+                onClick={() => form.removeListItem("charges", index)}
+              >
                 <IconTrash size={16} />
               </ActionIcon>
             )}
@@ -1203,10 +1353,19 @@ function ServiceJobAccountsSection({
         Accounts
       </Text>
       {invoiceListLoading ? (
-        <Center py="xl"><Loader color="#105476" size="lg" /></Center>
+        <Center py="xl">
+          <Loader color="#105476" size="lg" />
+        </Center>
       ) : (
         <ScrollArea>
-          <Table withTableBorder withColumnBorders striped highlightOnHover style={{ minWidth: 700 }} styles={{ th: { padding: "8px" }, td: { padding: "8px" } }}>
+          <Table
+            withTableBorder
+            withColumnBorders
+            striped
+            highlightOnHover
+            style={{ minWidth: 700 }}
+            styles={{ th: { padding: "8px" }, td: { padding: "8px" } }}
+          >
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Daybook</Table.Th>
@@ -1221,7 +1380,9 @@ function ServiceJobAccountsSection({
               {invoiceList.length === 0 ? (
                 <Table.Tr>
                   <Table.Td colSpan={6}>
-                    <Center py="xl"><Text c="dimmed">No invoices to display</Text></Center>
+                    <Center py="xl">
+                      <Text c="dimmed">No invoices to display</Text>
+                    </Center>
                   </Table.Td>
                 </Table.Tr>
               ) : (
@@ -1229,7 +1390,8 @@ function ServiceJobAccountsSection({
                   const statusUpper = (row.status ?? "").toUpperCase();
                   const isPosted =
                     statusUpper === "POSTED" || row.status === "posted";
-                  const isUnposted = statusUpper === "UNPOSTED" || row.status === "unpost";
+                  const isUnposted =
+                    statusUpper === "UNPOSTED" || row.status === "unpost";
                   const rowKey = `${row.id}-${idx}`;
                   const isExpanded = expandedInvoiceRowId === rowKey;
                   const reverseInvoices = row.reverse_invoices ?? [];
@@ -1238,18 +1400,27 @@ function ServiceJobAccountsSection({
                   return (
                     <Fragment key={rowKey}>
                       <Table.Tr
-                        style={hasReverseInvoices ? { cursor: "pointer" } : undefined}
+                        style={
+                          hasReverseInvoices ? { cursor: "pointer" } : undefined
+                        }
                         onClick={() => {
                           if (!hasReverseInvoices) {
                             setExpandedInvoiceRowId(null);
                             return;
                           }
-                          setExpandedInvoiceRowId((prev) => (prev === rowKey ? null : rowKey));
+                          setExpandedInvoiceRowId((prev) =>
+                            prev === rowKey ? null : rowKey,
+                          );
                         }}
                       >
                         <Table.Td>
                           <Group gap="xs" wrap="nowrap">
-                            {hasReverseInvoices && (isExpanded ? <IconChevronUp size={14} color="#105476" /> : <IconChevronDown size={14} color="#105476" />)}
+                            {hasReverseInvoices &&
+                              (isExpanded ? (
+                                <IconChevronUp size={14} color="#105476" />
+                              ) : (
+                                <IconChevronDown size={14} color="#105476" />
+                              ))}
                             {row.day_book_name ?? "-"}
                           </Group>
                         </Table.Td>
@@ -1257,7 +1428,11 @@ function ServiceJobAccountsSection({
                         <Table.Td>{row.document_date ?? "-"}</Table.Td>
                         <Table.Td>{row.total ?? "-"}</Table.Td>
                         <Table.Td>
-                          <Badge size="sm" variant="light" color={getInvoiceStatusBadgeColor(row.status)}>
+                          <Badge
+                            size="sm"
+                            variant="light"
+                            color={getInvoiceStatusBadgeColor(row.status)}
+                          >
                             {row.status ?? "-"}
                           </Badge>
                         </Table.Td>
@@ -1276,7 +1451,11 @@ function ServiceJobAccountsSection({
                             }}
                           >
                             <Menu.Target>
-                              <ActionIcon variant="subtle" color="#105476" size="sm">
+                              <ActionIcon
+                                variant="subtle"
+                                color="#105476"
+                                size="sm"
+                              >
                                 <IconDotsVertical size={16} />
                               </ActionIcon>
                             </Menu.Target>
@@ -1369,18 +1548,40 @@ function ServiceJobAccountsSection({
                           </Menu>
                         </Table.Td>
                       </Table.Tr>
-                      {isExpanded && reverseInvoices.map((rev, revIdx) => (
-                        <Table.Tr key={`${rowKey}-rev-${revIdx}`} bg="gray.0">
-                          <Table.Td pl="xl">{rev.day_book_name ?? "Reverse"}</Table.Td>
-                          <Table.Td>{rev.reverse_document_no ?? rev.document_no ?? "-"}</Table.Td>
-                          <Table.Td>{rev.document_date ?? "-"}</Table.Td>
-                          <Table.Td>{rev.total ?? "-"}</Table.Td>
-                          <Table.Td><Badge size="sm" variant="light">{rev.status ?? "-"}</Badge></Table.Td>
-                          <Table.Td onClick={(e) => e.stopPropagation()}>
-                            <JobReverseInvoiceAccountMenu rev={rev} parentRow={row} jobBasePath="/service-job" navigate={navigate} job={jobData} deletingReverseId={invoiceDeletingId} onRequestDeleteReverseInvoice={requestDeleteReverseInvoice} />
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
+                      {isExpanded &&
+                        reverseInvoices.map((rev, revIdx) => (
+                          <Table.Tr key={`${rowKey}-rev-${revIdx}`} bg="gray.0">
+                            <Table.Td pl="xl">
+                              {rev.day_book_name ?? "Reverse"}
+                            </Table.Td>
+                            <Table.Td>
+                              {rev.reverse_document_no ??
+                                rev.document_no ??
+                                "-"}
+                            </Table.Td>
+                            <Table.Td>{rev.document_date ?? "-"}</Table.Td>
+                            <Table.Td>{rev.total ?? "-"}</Table.Td>
+                            <Table.Td>
+                              <Badge size="sm" variant="light">
+                                {rev.status ?? "-"}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td onClick={(e) => e.stopPropagation()}>
+                              <JobReverseInvoiceAccountMenu
+                                rev={rev}
+                                readOnly={isReadOnly}
+                                parentRow={row}
+                                jobBasePath="/service-job"
+                                navigate={navigate}
+                                job={jobData}
+                                deletingReverseId={invoiceDeletingId}
+                                onRequestDeleteReverseInvoice={
+                                  requestDeleteReverseInvoice
+                                }
+                              />
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
                     </Fragment>
                   );
                 })
@@ -1408,9 +1609,10 @@ export default function ServiceJobCreate() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const stateJobFromNav =
     (location.state as { job?: Record<string, unknown> } | null)?.job ?? null;
-  const [resolvedJob, setResolvedJob] = useState<Record<string, unknown> | null>(
-    null,
-  );
+  const [resolvedJob, setResolvedJob] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const jobData = resolvedJob ?? stateJobFromNav;
   const mode = useMemo(() => {
     const pathname = location.pathname.toLowerCase();
@@ -1423,13 +1625,11 @@ export default function ServiceJobCreate() {
       | null
       | undefined;
     if (
-      pathname.includes("/view") ||
-      state?.viewMode === true ||
-      String(state?.actionType ?? "").toLowerCase() === "view" ||
-      isJobClosed(state?.job?.status) ||
-      isJobClosed(
-        (jobData as { status?: string | null } | null)?.status,
-      )
+      isJobOpenedAsView({
+        pathname,
+        viewMode: state?.viewMode,
+        actionType: state?.actionType,
+      })
     ) {
       return "view";
     }
@@ -1437,10 +1637,13 @@ export default function ServiceJobCreate() {
       return "edit";
     }
     return "create";
-  }, [location.pathname, location.state, jobData, routeId]);
-  const isReadOnly =
-    mode === "view" ||
-    isJobClosed((jobData as { status?: string | null } | null)?.status);
+  }, [location.pathname, location.state, routeId]);
+  const isViewOnly = mode === "view";
+  const isClosedJob = isJobClosed(
+    (jobData as { status?: string | null } | null)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  const documentsReadOnly = isViewOnly;
   const jobDocuments = useJobDocuments();
 
   const { getBranchCurrencyDefaults } = useExchangeRateRoe();
@@ -1556,7 +1759,8 @@ export default function ServiceJobCreate() {
         return {
           value: String(s.id),
           // Include code in label so searchable Dropdown filters by code or name
-          label: code && name ? `${code} - ${name}` : name || code || String(s.id),
+          label:
+            code && name ? `${code} - ${name}` : name || code || String(s.id),
         };
       }),
     [activeServices],
@@ -1579,12 +1783,9 @@ export default function ServiceJobCreate() {
     [selectedService?.transport_mode, selectedService?.full_groupage],
   );
   const defaultPpCc = getDefaultPpCcFromService(selectedService?.import_export);
-  const isSeaJob =
-    Boolean(transportMode) && !isAirTransportMode(transportMode);
+  const isSeaJob = Boolean(transportMode) && !isAirTransportMode(transportMode);
   const awbFieldLabel = isSeaJob ? "BL Number" : "AWB Number";
-  const awbFieldPlaceholder = isSeaJob
-    ? "Enter BL number"
-    : "Enter AWB number";
+  const awbFieldPlaceholder = isSeaJob ? "Enter BL number" : "Enter AWB number";
 
   useEffect(() => {
     const next = resolveServiceJobDate(
@@ -1655,8 +1856,7 @@ export default function ServiceJobCreate() {
 
   const populateFromJob = useCallback(
     (job: Record<string, unknown>) => {
-      const serviceId =
-        job.service_id != null ? String(job.service_id) : "";
+      const serviceId = job.service_id != null ? String(job.service_id) : "";
       const svc =
         serviceMasterList.find((s) => String(s.id) === serviceId) ?? null;
       const mode = svc?.transport_mode ?? "";
@@ -1714,12 +1914,8 @@ export default function ServiceJobCreate() {
             job.shipper_code ??
             "",
         ),
-        shipper_name: String(
-          house?.shipper_name ?? job.shipper_name ?? "",
-        ),
-        shipper_email: String(
-          house?.shipper_email ?? job.shipper_email ?? "",
-        ),
+        shipper_name: String(house?.shipper_name ?? job.shipper_name ?? ""),
+        shipper_email: String(house?.shipper_email ?? job.shipper_email ?? ""),
         shipper_address_id: String(
           house?.shipper_address_id ?? job.shipper_address_id ?? "",
         ),
@@ -1760,9 +1956,7 @@ export default function ServiceJobCreate() {
           house?.carrier_agent_email ?? job.carrier_agent_email ?? "",
         ),
         carrier_agent_address_id: String(
-          house?.carrier_agent_address_id ??
-            job.carrier_agent_address_id ??
-            "",
+          house?.carrier_agent_address_id ?? job.carrier_agent_address_id ?? "",
         ),
         carrier_agent_address: String(
           house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
@@ -1788,9 +1982,7 @@ export default function ServiceJobCreate() {
         String(
           house?.carrier_agent_address_id ?? job.carrier_agent_address_id ?? "",
         ),
-        String(
-          house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
-        ),
+        String(house?.carrier_agent_address ?? job.carrier_agent_address ?? ""),
         String(house?.carrier_agent_email ?? job.carrier_agent_email ?? ""),
       );
       setCarrierAgentAddressOptions(carrierSeed.options);
@@ -1846,13 +2038,11 @@ export default function ServiceJobCreate() {
   );
 
   useEffect(() => {
-    const navState = location.state as
-      | {
-          document_ids?: number[];
-          document_display_list?: unknown[];
-          document_modal_rows?: unknown[];
-        }
-      | null;
+    const navState = location.state as {
+      document_ids?: number[];
+      document_display_list?: unknown[];
+      document_modal_rows?: unknown[];
+    } | null;
     if (
       navState?.document_ids != null ||
       navState?.document_display_list != null ||
@@ -2097,13 +2287,7 @@ export default function ServiceJobCreate() {
         ...(jobData && { job: jobData }),
       },
     });
-  }, [
-    editPath,
-    housingDetailForInvoice,
-    jobData,
-    navigate,
-    transportMode,
-  ]);
+  }, [editPath, housingDetailForInvoice, jobData, navigate, transportMode]);
 
   const handleCreateSupplierInvoice = useCallback(() => {
     const toStr = (v: unknown) => String(v ?? "").trim();
@@ -2123,7 +2307,11 @@ export default function ServiceJobCreate() {
         charge_name: e.charge_name ?? "",
         currency_id: e.currency_id || null,
         roe: e.roe ?? null,
-        amount: e.total_cost ?? null,
+        amount: resolveSupplierInvoiceHouseCostAmount({
+          total_cost: e.total_cost,
+          unit_cost: e.cost_per_unit,
+          no_of_unit: e.no_of_unit,
+        }),
         supplier_code: toStr(e.supplier_code),
         supplier_name: toStr(e.supplier_name),
       }))
@@ -2161,8 +2349,7 @@ export default function ServiceJobCreate() {
     const chargesFromEstimates = charges
       .filter(
         (e) =>
-          e.charge_id != null ||
-          (e.charge_name && e.charge_name.trim() !== ""),
+          e.charge_id != null || (e.charge_name && e.charge_name.trim() !== ""),
       )
       .map((e) => ({
         charge_id: e.charge_id,
@@ -2289,8 +2476,7 @@ export default function ServiceJobCreate() {
             message?: string;
             error?: string;
           };
-          message =
-            parsed.detail || parsed.message || parsed.error || message;
+          message = parsed.detail || parsed.message || parsed.error || message;
         } catch {
           /* keep default */
         }
@@ -2384,7 +2570,11 @@ export default function ServiceJobCreate() {
   }
 
   return (
-    <Box p="md" mx="auto" style={{display: "flex", flexDirection: "column", height: "100%"}}>
+    <Box
+      p="md"
+      mx="auto"
+      style={{ display: "flex", flexDirection: "column", height: "100%" }}
+    >
       <Group justify="space-between" align="center" mb="md">
         <Group gap="md">
           <EditPageHeadingRow
@@ -2393,7 +2583,7 @@ export default function ServiceJobCreate() {
             animateKey={(jobData as { id?: number })?.id}
           >
             <Text size="xl" fw={600} c="#105476">
-              {isReadOnly
+              {isViewOnly
                 ? "View Service Job"
                 : isEditMode
                   ? "Edit Service Job"
@@ -2410,143 +2600,153 @@ export default function ServiceJobCreate() {
           )}
           {String(jobData?.job_id ?? "").trim() !== "" && (
             <ERPListJobStatusPill
-              status={
-                (jobData as { status?: string | null } | null)?.status
-              }
+              status={(jobData as { status?: string | null } | null)?.status}
             />
           )}
         </Group>
         {!isReadOnly ? (
-        <Group gap="sm">
-          {isEditMode && String(jobData?.job_id ?? "").trim() !== "" && (
-            <Menu shadow="md" width={240} position="bottom-end">
-              <Menu.Target>
-                <ActionIcon
-                  variant="subtle"
-                  color="#105476"
-                  size="lg"
-                  aria-label="Service job actions"
+          <Group gap="sm">
+            {isEditMode && String(jobData?.job_id ?? "").trim() !== "" && (
+              <Menu shadow="md" width={240} position="bottom-end">
+                <Menu.Target>
+                  <ActionIcon
+                    variant="subtle"
+                    color="#105476"
+                    size="lg"
+                    aria-label="Service job actions"
+                    styles={{
+                      root: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        border: "1px solid #E9ECEF",
+                        borderRadius: "8px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
+                      },
+                    }}
+                  >
+                    <IconDotsVertical size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown
                   styles={{
-                    root: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
+                    dropdown: {
                       border: "1px solid #E9ECEF",
                       borderRadius: "8px",
-                      "&:hover": {
-                        backgroundColor: "#F8F9FA",
-                      },
+                      padding: "8px",
+                      boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
                     },
                   }}
                 >
-                  <IconDotsVertical size={18} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown
-                styles={{
-                  dropdown: {
-                    border: "1px solid #E9ECEF",
-                    borderRadius: "8px",
-                    padding: "8px",
-                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                  },
-                }}
-              >
-                <Menu.Item
-                  leftSection={
-                    <Box
-                      style={{
-                        backgroundColor: "#E7F5FF",
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconFileInvoice size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
                         borderRadius: "6px",
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <IconFileInvoice size={16} color="#105476" />
-                    </Box>
-                  }
-                  styles={{
-                    item: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      borderRadius: "6px",
-                      padding: "10px 12px",
-                      marginBottom: "4px",
-                      "&:hover": {
-                        backgroundColor: "#F8F9FA",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
                       },
-                    },
-                    itemLabel: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                    },
-                  }}
-                  onClick={handleOpenJobLedger}
-                >
-                  Job Ledger
-                </Menu.Item>
-                <Menu.Item
-                  leftSection={
-                    <Box
-                      style={{
-                        backgroundColor: "#E7F5FF",
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={handleOpenJobLedger}
+                  >
+                    Job Ledger
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={
+                      <Box
+                        style={{
+                          backgroundColor: "#E7F5FF",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <IconFileAnalytics size={16} color="#105476" />
+                      </Box>
+                    }
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
                         borderRadius: "6px",
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <IconFileAnalytics size={16} color="#105476" />
-                    </Box>
-                  }
-                  styles={{
-                    item: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      borderRadius: "6px",
-                      padding: "10px 12px",
-                      marginBottom: "4px",
-                      "&:hover": {
-                        backgroundColor: "#F8F9FA",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": {
+                          backgroundColor: "#F8F9FA",
+                        },
                       },
-                    },
-                    itemLabel: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                    },
-                  }}
-                  onClick={() => void handleJobCostSheet()}
-                  disabled={costSheetLoading}
-                >
-                  Job Cost Sheet
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          )}
-          <Button
-            color="#105476"
-            leftSection={<IconCheck size={18} />}
-            loading={isSubmitting}
-            onClick={handleSubmit}
-          >
-            {isEditMode ? "Update" : "Create"}
-          </Button>
-        </Group>
+                      itemLabel: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#424242",
+                      },
+                    }}
+                    onClick={() => void handleJobCostSheet()}
+                    disabled={costSheetLoading}
+                  >
+                    Job Cost Sheet
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            )}
+            <Button
+              color="#105476"
+              leftSection={<IconCheck size={18} />}
+              loading={isSubmitting}
+              onClick={handleSubmit}
+            >
+              {isEditMode ? "Update" : "Create"}
+            </Button>
+          </Group>
         ) : (
-          <ClosedJobMasterLedgerMenu
-            jobId={jobData?.job_id as string | number | null | undefined}
-            serviceName="Service Job"
-            returnTo={location.pathname}
-            returnToState={location.state}
-          />
+          <Group gap="sm">
+            <ClosedJobMasterLedgerMenu
+              jobId={jobData?.job_id as string | number | null | undefined}
+              serviceName="Service Job"
+              returnTo={location.pathname}
+              returnToState={location.state}
+            />
+            {mode === "edit" && (
+              <Button
+                color="#105476"
+                leftSection={<IconCheck size={18} />}
+                loading={isSubmitting}
+                onClick={handleSubmit}
+              >
+                Update
+              </Button>
+            )}
+          </Group>
         )}
       </Group>
 
@@ -2555,6 +2755,7 @@ export default function ServiceJobCreate() {
         onChange={(v) => v != null && setActiveTab(Number(v))}
         color="#105476"
         style={{ flex: 1, paddingBottom: 20 }}
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -2565,13 +2766,14 @@ export default function ServiceJobCreate() {
             borderBottom: "none",
           }}
         >
-          <Tabs.Tab 
-            value={String(JOB_DETAILS_TAB)} 
+          <Tabs.Tab
+            value={String(JOB_DETAILS_TAB)}
             style={{
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: activeTab === JOB_DETAILS_TAB ? "3px solid #105476" : "none",
+              borderBottom:
+                activeTab === JOB_DETAILS_TAB ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
               fontWeight: activeTab === JOB_DETAILS_TAB ? 600 : 400,
@@ -2609,13 +2811,14 @@ export default function ServiceJobCreate() {
           >
             Cargo Details
           </Tabs.Tab>
-          <Tabs.Tab 
+          <Tabs.Tab
             value={String(CHARGES_TAB)}
             style={{
               textAlign: "center",
               padding: "12px",
               backgroundColor: "transparent",
-              borderBottom: activeTab === CHARGES_TAB ? "3px solid #105476" : "none",
+              borderBottom:
+                activeTab === CHARGES_TAB ? "3px solid #105476" : "none",
               color: "#105476",
               fontSize: 16,
               fontWeight: activeTab === CHARGES_TAB ? 600 : 400,
@@ -2624,13 +2827,14 @@ export default function ServiceJobCreate() {
             Charges
           </Tabs.Tab>
           {isEditMode && jobData?.id != null && (
-            <Tabs.Tab 
+            <Tabs.Tab
               value={String(ACCOUNTS_TAB)}
               style={{
                 textAlign: "center",
                 padding: "12px",
                 backgroundColor: "transparent",
-                borderBottom: activeTab === ACCOUNTS_TAB ? "3px solid #105476" : "none",
+                borderBottom:
+                  activeTab === ACCOUNTS_TAB ? "3px solid #105476" : "none",
                 color: "#105476",
                 fontSize: 16,
                 fontWeight: activeTab === ACCOUNTS_TAB ? 600 : 400,
@@ -2661,9 +2865,12 @@ export default function ServiceJobCreate() {
                     form.setFieldValue("destination_name", "");
                     resetCargoState();
                     const svc =
-                      activeServices.find((s) => String(s.id) === (value || "")) ??
-                      null;
-                    const nextPpCc = getDefaultPpCcFromService(svc?.import_export);
+                      activeServices.find(
+                        (s) => String(s.id) === (value || ""),
+                      ) ?? null;
+                    const nextPpCc = getDefaultPpCcFromService(
+                      svc?.import_export,
+                    );
                     // Only retarget blank charge rows so user-edited values stay intact
                     const nextCharges = chargesForm.values.charges.map((c) => {
                       const isBlankRow =
@@ -2938,9 +3145,7 @@ export default function ServiceJobCreate() {
             transportMode={transportMode}
             defaultPpCc={defaultPpCc}
             readOnly={isReadOnly}
-            showCreateInvoice={
-              isEditMode && jobData?.id != null && !isReadOnly
-            }
+            showCreateInvoice={isEditMode && jobData?.id != null && !isReadOnly}
             onCreateInvoice={handleCreateInvoice}
             showCreateSupplierInvoice={
               isEditMode && jobData?.id != null && !isReadOnly
@@ -2952,7 +3157,7 @@ export default function ServiceJobCreate() {
         </Tabs.Panel>
 
         {isEditMode && jobData?.id != null && (
-          <Tabs.Panel value={String(ACCOUNTS_TAB)}>
+          <Tabs.Panel value={String(ACCOUNTS_TAB)} className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <ServiceJobAccountsSection
               activeTab={activeTab}
               accountsTabIndex={ACCOUNTS_TAB}
@@ -3002,7 +3207,7 @@ export default function ServiceJobCreate() {
               leftSection={<IconPaperclip size={16} />}
               onClick={jobDocuments.openDocumentsModal}
             >
-              {isReadOnly ? "View Documents" : "Attach Documents"}
+              {documentsReadOnly ? "View Documents" : "Attach Documents"}
             </Button>
             <Button
               color="#105476"
@@ -3020,7 +3225,7 @@ export default function ServiceJobCreate() {
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
         rows={jobDocuments.document_modal_rows}
-        readOnly={isReadOnly}
+        readOnly={documentsReadOnly}
         uploading={jobDocuments.documentUploading}
         docTypeOptions={jobDocuments.docTypeOptions}
         docCodeErrors={jobDocuments.docCodeErrors}

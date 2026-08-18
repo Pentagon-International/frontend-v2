@@ -69,6 +69,7 @@ type JobReverseInvoiceAccountMenuProps = {
   job?: unknown;
   deletingReverseId: number | null;
   onRequestDeleteReverseInvoice: (reverseInvoiceId: number) => void;
+  readOnly?: boolean;
   resolveDocumentSegment?: (
     rev: JobReverseInvoiceRow,
     parentRow: JobInvoiceParentRow,
@@ -108,6 +109,7 @@ export function JobReverseInvoiceAccountMenu({
   deletingReverseId,
   onRequestDeleteReverseInvoice,
   resolveDocumentSegment,
+  readOnly = false,
 }: JobReverseInvoiceAccountMenuProps) {
   const reverseInvoiceId = Number(
     rev.reverse_invoice_id ?? parentRow.reverse_invoice_id,
@@ -195,7 +197,7 @@ export function JobReverseInvoiceAccountMenu({
         >
           View
         </Menu.Item>
-        {isUnposted ? (
+        {isUnposted && !readOnly ? (
           <>
             <Menu.Item
               leftSection={

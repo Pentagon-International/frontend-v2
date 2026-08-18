@@ -86,31 +86,20 @@ export function ERPListJobActionMenu({
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        {showEdit &&
-          (isClosed ? (
-            onView ? (
-              <Menu.Item
-                leftSection={<IconEye size={14} />}
-                onClick={onView}
-              >
-                View
-              </Menu.Item>
-            ) : (
-              <DisabledMenuItemWithTooltip
-                label="Edit"
-                tooltip="This job is already closed"
-                leftSection={<IconEdit size={14} />}
-              />
-            )
-          ) : (
-            <Menu.Item
-              leftSection={<IconEdit size={14} />}
-              disabled={isCancel}
-              onClick={onEdit}
-            >
-              Edit
-            </Menu.Item>
-          ))}
+        {showEdit && isClosed && onView && (
+          <Menu.Item leftSection={<IconEye size={14} />} onClick={onView}>
+            View
+          </Menu.Item>
+        )}
+        {showEdit && (
+          <Menu.Item
+            leftSection={<IconEdit size={14} />}
+            disabled={isCancel}
+            onClick={onEdit}
+          >
+            Edit
+          </Menu.Item>
+        )}
 
         {showCancel &&
           (isClosed ? (

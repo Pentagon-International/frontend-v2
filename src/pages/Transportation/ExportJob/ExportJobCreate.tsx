@@ -76,7 +76,11 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import { resolvePackageTypeName, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -115,6 +119,8 @@ import {
   calcCostLocalAmount,
   calcSellLocalAmount,
   resolveSellAmount,
+  resolveSupplierInvoiceEstimateCostAmount,
+  resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
 import {
   JobMasterPartyDetailsPanel,
@@ -753,12 +759,14 @@ function ExportJobCreate() {
         }
       | null
       | undefined;
-    // View must win over hasJobData so closed/view navigations stay read-only.
+    // View must win over hasJobData so /view stays read-only.
+    // Closed jobs on /edit stay in edit so Attach Documents can persist.
     if (
-      pathname.includes("/view") ||
-      state?.viewMode === true ||
-      String(state?.actionType ?? "").toLowerCase() === "view" ||
-      isJobClosed(state?.job?.status)
+      isJobOpenedAsView({
+        pathname,
+        viewMode: state?.viewMode,
+        actionType: state?.actionType,
+      })
     ) {
       return "view";
     }
@@ -769,8 +777,12 @@ function ExportJobCreate() {
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly =
-    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
+  const isViewOnly = mode === "view";
+  const isClosedJob = isJobClosed(
+    (jobData as { status?: string | null } | undefined)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2846,8 +2858,8 @@ function ExportJobCreate() {
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
-          // Closed / view-only jobs open house in read-only mode
-          ...(isReadOnly && { viewMode: true }),
+          // View-only jobs open house in read-only mode
+          ...(isViewOnly && { viewMode: true }),
         },
       });
     },
@@ -2861,7 +2873,7 @@ function ExportJobCreate() {
       jobWithMergedHousingDetails,
       jobDocuments,
       jobData,
-      isReadOnly,
+      isViewOnly,
       navigate,
     ],
   );
@@ -4011,6 +4023,21 @@ function ExportJobCreate() {
               returnToState={location.state}
             />
           )}
+          {isReadOnly && mode === "edit" && (
+            <Button
+              color="#105476"
+              variant={canCreateJob ? "filled" : "outline"}
+              onClick={handleSubmit}
+              loading={isSubmitting}
+              disabled={!canCreateJob}
+              leftSection={<IconPlus size={14} />}
+              style={{
+                cursor: canCreateJob ? "pointer" : "not-allowed",
+              }}
+            >
+              Update
+            </Button>
+          )}
         </Group>
       </Group>
 
@@ -4021,6 +4048,7 @@ function ExportJobCreate() {
           setActive(Number(v));
         }}
         color="#105476"
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -4511,6 +4539,7 @@ function ExportJobCreate() {
           <Box mt="md">
             <JobMasterPartyDetailsPanel
               idPrefix="ocean-export-party"
+              disabled={isReadOnly}
               partyDetailsForm={partyDetailsForm}
               shipperAddressOptions={shipperAddressOptions}
               setShipperAddressOptions={setShipperAddressOptions}
@@ -5368,7 +5397,7 @@ function ExportJobCreate() {
                           charge_name: e.charge_name ?? "",
                           currency_id: e.currency_id ?? null,
                           roe: e.roe ?? null,
-                          amount: e.total_cost ?? null,
+                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
                           supplier_code: toStr(e.supplier_code),
                           supplier_name: toStr(e.supplier_name),
                         }))
@@ -5407,10 +5436,7 @@ function ExportJobCreate() {
                                   null,
                                 roe: (cr as any).roe ?? null,
                                 amount:
-                                  (cr as any).total_cost ??
-                                  (cr as any).cost_local_amount ??
-                                  (cr as any).amount ??
-                                  null,
+                                  resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr((cr as any).supplier_code),
                                 supplier_name: toStr((cr as any).supplier_name),
                               };
@@ -5560,7 +5586,7 @@ function ExportJobCreate() {
         </Tabs.Panel>
 
         {mode === "edit" && jobData?.id && (
-          <Tabs.Panel value="5">
+          <Tabs.Panel value="5" className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -5807,7 +5833,7 @@ function ExportJobCreate() {
                                       >
                                         View
                                       </Menu.Item>
-                                      {isUnposted ? (
+                                      {isUnposted && !isReadOnly ? (
                                         <>
                                           <Menu.Item
                                             leftSection={
@@ -5875,7 +5901,7 @@ function ExportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : isPosted ? (
+                                      ) : isPosted && !isReadOnly ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -6106,6 +6132,7 @@ function ExportJobCreate() {
                                                   >
                                                     <JobReverseInvoiceAccountMenu
                                                       rev={rev}
+                                                      readOnly={isReadOnly}
                                                       parentRow={row}
                                                       jobBasePath="/SeaExport/export-job"
                                                       navigate={navigate}
@@ -6161,7 +6188,7 @@ function ExportJobCreate() {
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
         rows={jobDocuments.document_modal_rows}
-        readOnly={isReadOnly}
+        readOnly={documentsReadOnly}
         uploading={jobDocuments.documentUploading}
         docTypeOptions={jobDocuments.docTypeOptions}
         docCodeErrors={jobDocuments.docCodeErrors}
@@ -6535,7 +6562,7 @@ function ExportJobCreate() {
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
-            {isReadOnly ? "View Documents" : "Attach Documents"}
+            {documentsReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
           {!isReadOnly && (
             <Button
@@ -6684,7 +6711,7 @@ function ExportJobCreate() {
                       </Badge>
                     )}
                   </Group>
-                  {isReadOnly ? (
+                  {isViewOnly ? (
                     <Button
                       variant="light"
                       color="#105476"
@@ -6693,6 +6720,16 @@ function ExportJobCreate() {
                       onClick={() => handleEditHousingDetail(index)}
                     >
                       View
+                    </Button>
+                  ) : isReadOnly ? (
+                    <Button
+                      variant="light"
+                      color="#105476"
+                      size="xs"
+                      leftSection={<IconEdit size={14} />}
+                      onClick={() => handleEditHousingDetail(index)}
+                    >
+                      Edit
                     </Button>
                   ) : (
                     <Group gap="xs">

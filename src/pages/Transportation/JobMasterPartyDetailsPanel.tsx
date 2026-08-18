@@ -45,7 +45,12 @@ export const getJobMasterAddressOptions = (
     }))
     .filter((item) => item.value && item.address)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
-    .map(({ value, label, email, address }) => ({ value, label, email, address }));
+    .map(({ value, label, email, address }) => ({
+      value,
+      label,
+      email,
+      address,
+    }));
 };
 
 const PARTY_CUSTOMER_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
@@ -148,10 +153,22 @@ export function JobMasterPartyDetailsPanel({
               const options = getJobMasterAddressOptions(originalData);
               const primary = options[0];
               partyDetailsForm.setFieldValue("shipper_id", value || "");
-              partyDetailsForm.setFieldValue("shipper_name", selectedData?.label || "");
-              partyDetailsForm.setFieldValue("shipper_email", primary?.email || "");
-              partyDetailsForm.setFieldValue("shipper_address_id", primary?.value || "");
-              partyDetailsForm.setFieldValue("shipper_address", primary?.address || "");
+              partyDetailsForm.setFieldValue(
+                "shipper_name",
+                selectedData?.label || "",
+              );
+              partyDetailsForm.setFieldValue(
+                "shipper_email",
+                primary?.email || "",
+              );
+              partyDetailsForm.setFieldValue(
+                "shipper_address_id",
+                primary?.value || "",
+              );
+              partyDetailsForm.setFieldValue(
+                "shipper_address",
+                primary?.address || "",
+              );
               if (!value) {
                 partyDetailsForm.setFieldValue("shipper_name", "");
                 partyDetailsForm.setFieldValue("shipper_email", "");
@@ -173,7 +190,10 @@ export function JobMasterPartyDetailsPanel({
             readOnly={disabled}
             value={partyDetailsForm.values.shipper_email}
             onChange={(e) =>
-              partyDetailsForm.setFieldValue("shipper_email", e.currentTarget.value)
+              partyDetailsForm.setFieldValue(
+                "shipper_email",
+                e.currentTarget.value,
+              )
             }
           />
         </Grid.Col>
@@ -182,7 +202,8 @@ export function JobMasterPartyDetailsPanel({
           (!!partyDetailsForm.values.shipper_address &&
             (!partyDetailsForm.values.shipper_address_id ||
               !shipperAddressOptions.some(
-                (item) => item.value === partyDetailsForm.values.shipper_address_id,
+                (item) =>
+                  item.value === partyDetailsForm.values.shipper_address_id,
               ))) ? (
             <FormTextInput
               label="Shipper Address"
@@ -222,11 +243,22 @@ export function JobMasterPartyDetailsPanel({
                 }
               }}
               onChange={(value) => {
-                const selected = shipperAddressOptions.find((item) => item.value === value);
-                partyDetailsForm.setFieldValue("shipper_address_id", value || "");
-                partyDetailsForm.setFieldValue("shipper_address", selected?.address || "");
+                const selected = shipperAddressOptions.find(
+                  (item) => item.value === value,
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_address_id",
+                  value || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_address",
+                  selected?.address || "",
+                );
                 if (value) {
-                  partyDetailsForm.setFieldValue("shipper_email", selected?.email || "");
+                  partyDetailsForm.setFieldValue(
+                    "shipper_email",
+                    selected?.email || "",
+                  );
                 }
                 setShipperAddressSearch(selected?.label || "");
                 setShipperAddressCustom(false);
@@ -261,10 +293,22 @@ export function JobMasterPartyDetailsPanel({
               const options = getJobMasterAddressOptions(originalData);
               const primary = options[0];
               partyDetailsForm.setFieldValue("consignee_id", value || "");
-              partyDetailsForm.setFieldValue("consignee_name", selectedData?.label || "");
-              partyDetailsForm.setFieldValue("consignee_email", primary?.email || "");
-              partyDetailsForm.setFieldValue("consignee_address_id", primary?.value || "");
-              partyDetailsForm.setFieldValue("consignee_address", primary?.address || "");
+              partyDetailsForm.setFieldValue(
+                "consignee_name",
+                selectedData?.label || "",
+              );
+              partyDetailsForm.setFieldValue(
+                "consignee_email",
+                primary?.email || "",
+              );
+              partyDetailsForm.setFieldValue(
+                "consignee_address_id",
+                primary?.value || "",
+              );
+              partyDetailsForm.setFieldValue(
+                "consignee_address",
+                primary?.address || "",
+              );
               if (!value) {
                 partyDetailsForm.setFieldValue("consignee_name", "");
                 partyDetailsForm.setFieldValue("consignee_email", "");
@@ -286,7 +330,10 @@ export function JobMasterPartyDetailsPanel({
             readOnly={disabled}
             value={partyDetailsForm.values.consignee_email}
             onChange={(e) =>
-              partyDetailsForm.setFieldValue("consignee_email", e.currentTarget.value)
+              partyDetailsForm.setFieldValue(
+                "consignee_email",
+                e.currentTarget.value,
+              )
             }
           />
         </Grid.Col>
@@ -295,7 +342,8 @@ export function JobMasterPartyDetailsPanel({
           (!!partyDetailsForm.values.consignee_address &&
             (!partyDetailsForm.values.consignee_address_id ||
               !consigneeAddressOptions.some(
-                (item) => item.value === partyDetailsForm.values.consignee_address_id,
+                (item) =>
+                  item.value === partyDetailsForm.values.consignee_address_id,
               ))) ? (
             <FormTextInput
               label="Consignee Address"
@@ -335,11 +383,22 @@ export function JobMasterPartyDetailsPanel({
                 }
               }}
               onChange={(value) => {
-                const selected = consigneeAddressOptions.find((item) => item.value === value);
-                partyDetailsForm.setFieldValue("consignee_address_id", value || "");
-                partyDetailsForm.setFieldValue("consignee_address", selected?.address || "");
+                const selected = consigneeAddressOptions.find(
+                  (item) => item.value === value,
+                );
+                partyDetailsForm.setFieldValue(
+                  "consignee_address_id",
+                  value || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "consignee_address",
+                  selected?.address || "",
+                );
                 if (value) {
-                  partyDetailsForm.setFieldValue("consignee_email", selected?.email || "");
+                  partyDetailsForm.setFieldValue(
+                    "consignee_email",
+                    selected?.email || "",
+                  );
                 }
                 setConsigneeAddressSearch(selected?.label || "");
                 setConsigneeAddressCustom(false);
@@ -425,7 +484,8 @@ export function JobMasterPartyDetailsPanel({
             (!partyDetailsForm.values.carrier_agent_address_id ||
               !carrierAgentAddressOptions.some(
                 (item) =>
-                  item.value === partyDetailsForm.values.carrier_agent_address_id,
+                  item.value ===
+                  partyDetailsForm.values.carrier_agent_address_id,
               ))) ? (
             <FormTextInput
               label="Carrier Agent Address"
@@ -433,11 +493,17 @@ export function JobMasterPartyDetailsPanel({
               value={partyDetailsForm.values.carrier_agent_address}
               onChange={(e) => {
                 const nextValue = e.currentTarget.value;
-                partyDetailsForm.setFieldValue("carrier_agent_address", nextValue);
+                partyDetailsForm.setFieldValue(
+                  "carrier_agent_address",
+                  nextValue,
+                );
                 if (!nextValue.trim()) {
                   setCarrierAgentAddressCustom(false);
                   setCarrierAgentAddressSearch("");
-                  partyDetailsForm.setFieldValue("carrier_agent_address_id", "");
+                  partyDetailsForm.setFieldValue(
+                    "carrier_agent_address_id",
+                    "",
+                  );
                 }
               }}
             />
@@ -460,15 +526,24 @@ export function JobMasterPartyDetailsPanel({
                   !addressSearchMatchesOption(carrierAgentAddressOptions, value)
                 ) {
                   setCarrierAgentAddressCustom(true);
-                  partyDetailsForm.setFieldValue("carrier_agent_address_id", "");
-                  partyDetailsForm.setFieldValue("carrier_agent_address", value);
+                  partyDetailsForm.setFieldValue(
+                    "carrier_agent_address_id",
+                    "",
+                  );
+                  partyDetailsForm.setFieldValue(
+                    "carrier_agent_address",
+                    value,
+                  );
                 }
               }}
               onChange={(value) => {
                 const selected = carrierAgentAddressOptions.find(
                   (item) => item.value === value,
                 );
-                partyDetailsForm.setFieldValue("carrier_agent_address_id", value || "");
+                partyDetailsForm.setFieldValue(
+                  "carrier_agent_address_id",
+                  value || "",
+                );
                 partyDetailsForm.setFieldValue(
                   "carrier_agent_address",
                   selected?.address || "",

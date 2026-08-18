@@ -247,6 +247,7 @@ import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
 import GstReport from "../pages/reports/gstReport/GstReport";
+import FapiaoReport from "../pages/reports/fapiaoReport/FapiaoReport";
 import DocumentWiseOutstanding from "../pages/reports/documentWiseOutstanding/DocumentWiseOutstanding";
 import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
 import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
@@ -686,6 +687,14 @@ const NavigationRoutes = () => {
           />
           <Route path="purchase-register" element={<PurchaseRegister />} />
           <Route path="gst-report" element={<GstReport />} />
+          <Route
+            path="cost-fapiao-report"
+            element={<FapiaoReport side="cost" />}
+          />
+          <Route
+            path="sell-fapiao-report"
+            element={<FapiaoReport side="sell" />}
+          />
           <Route
             path="document-wise-outstanding"
             element={<DocumentWiseOutstanding />}

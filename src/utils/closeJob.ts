@@ -7,6 +7,20 @@ export function isJobClosed(status?: string | null): boolean {
   return String(status ?? "").trim().toUpperCase() === "CLOSED";
 }
 
+/** True when the page was opened as View (/view, viewMode, or actionType=view). */
+export function isJobOpenedAsView(options: {
+  pathname?: string | null;
+  viewMode?: boolean | null;
+  actionType?: string | null;
+}): boolean {
+  const pathname = String(options.pathname ?? "").toLowerCase();
+  return (
+    pathname.includes("/view") ||
+    options.viewMode === true ||
+    String(options.actionType ?? "").toLowerCase() === "view"
+  );
+}
+
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message.trim()) {
     return err.message;

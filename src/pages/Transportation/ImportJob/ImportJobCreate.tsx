@@ -102,7 +102,11 @@ import {
   getInvoiceDocumentNo,
 } from "../../../utils/invoiceDocumentNumber";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import {
   pickPackageTypeCodeFromCargo,
   resolvePackageTypeName,
@@ -113,6 +117,10 @@ import {
   hasMeaningfulHouseChargeData,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
+import {
+  resolveSupplierInvoiceEstimateCostAmount,
+  resolveSupplierInvoiceHouseCostAmount,
+} from "../../../utils/houseChargeAmounts";
 import {
   formatHouseCargoChargeableForPayload,
   formatHouseCargoWeightForPayload,
@@ -687,12 +695,14 @@ function ImportJobCreate() {
         }
       | null
       | undefined;
-    // View must win over hasJobData so closed/view navigations stay read-only.
+    // View must win over hasJobData so /view stays read-only.
+    // Closed jobs on /edit stay in edit so Attach Documents can persist.
     if (
-      pathname.includes("/view") ||
-      state?.viewMode === true ||
-      String(state?.actionType ?? "").toLowerCase() === "view" ||
-      isJobClosed(state?.job?.status)
+      isJobOpenedAsView({
+        pathname,
+        viewMode: state?.viewMode,
+        actionType: state?.actionType,
+      })
     ) {
       return "view";
     }
@@ -703,9 +713,12 @@ function ImportJobCreate() {
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly =
-    mode === "view" ||
-    isJobClosed((jobData as { status?: string | null } | undefined)?.status);
+  const isViewOnly = mode === "view";
+  const isClosedJob = isJobClosed(
+    (jobData as { status?: string | null } | undefined)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2569,7 +2582,7 @@ function ImportJobCreate() {
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
-          ...(isReadOnly && { viewMode: true }),
+          ...(isViewOnly && { viewMode: true }),
         },
       });
     },
@@ -2583,7 +2596,7 @@ function ImportJobCreate() {
       housingDetails,
       jobWithMergedHousingDetails,
       jobDocuments,
-      isReadOnly,
+      isViewOnly,
       navigate,
     ],
   );
@@ -4089,6 +4102,21 @@ function ImportJobCreate() {
             returnToState={location.state}
           />
         )}
+        {isReadOnly && mode === "edit" && (
+          <Button
+            color="#105476"
+            variant={canCreateJob ? "filled" : "outline"}
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            disabled={!canCreateJob}
+            leftSection={<IconPlus size={14} />}
+            style={{
+              cursor: canCreateJob ? "pointer" : "not-allowed",
+            }}
+          >
+            Update
+          </Button>
+        )}
       </Group>
 
       <Tabs
@@ -4098,6 +4126,7 @@ function ImportJobCreate() {
           setActive(Number(v));
         }}
         color="#105476"
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -4804,7 +4833,9 @@ function ImportJobCreate() {
                       partyDetailsForm.setFieldValue("consignee_address", "");
                     }
                     setConsigneeAddressOptions(value ? options : []);
-                    setConsigneeAddressSearch(value ? primary?.label || "" : "");
+                    setConsigneeAddressSearch(
+                      value ? primary?.label || "" : "",
+                    );
                     setConsigneeAddressCustom(false);
                   }}
                   minSearchLength={2}
@@ -6042,7 +6073,7 @@ function ImportJobCreate() {
                           charge_name: e.charge_name ?? "",
                           currency_id: e.currency_id ?? null,
                           roe: e.roe ?? null,
-                          amount: e.total_cost ?? null,
+                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
                           supplier_code: toStr((e as any).supplier_code),
                           supplier_name: toStr((e as any).supplier_name),
                         }))
@@ -6081,10 +6112,7 @@ function ImportJobCreate() {
                                   null,
                                 roe: (cr as any).roe ?? null,
                                 amount:
-                                  (cr as any).total_cost ??
-                                  (cr as any).cost_local_amount ??
-                                  (cr as any).amount ??
-                                  null,
+                                  resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr((cr as any).supplier_code),
                                 supplier_name: toStr((cr as any).supplier_name),
                               };
@@ -6231,7 +6259,7 @@ function ImportJobCreate() {
         </Tabs.Panel>
 
         {mode === "edit" && jobData?.id && (
-          <Tabs.Panel value="5">
+          <Tabs.Panel value="5" className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -6476,7 +6504,7 @@ function ImportJobCreate() {
                                       >
                                         View
                                       </Menu.Item>
-                                      {isUnposted ? (
+                                      {isUnposted && !isReadOnly ? (
                                         <>
                                           <Menu.Item
                                             leftSection={
@@ -6544,7 +6572,7 @@ function ImportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : isPosted ? (
+                                      ) : isPosted && !isReadOnly ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -6777,6 +6805,7 @@ function ImportJobCreate() {
                                                   >
                                                     <JobReverseInvoiceAccountMenu
                                                       rev={rev}
+                                                      readOnly={isReadOnly}
                                                       parentRow={row}
                                                       jobBasePath="/SeaExport/import-job"
                                                       navigate={navigate}
@@ -6848,7 +6877,7 @@ function ImportJobCreate() {
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
         rows={jobDocuments.document_modal_rows}
-        readOnly={isReadOnly}
+        readOnly={documentsReadOnly}
         uploading={jobDocuments.documentUploading}
         docTypeOptions={jobDocuments.docTypeOptions}
         docCodeErrors={jobDocuments.docCodeErrors}
@@ -6892,7 +6921,7 @@ function ImportJobCreate() {
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
-            {isReadOnly ? "View Documents" : "Attach Documents"}
+            {documentsReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
           {!isReadOnly && (
             <Button
@@ -7038,7 +7067,7 @@ function ImportJobCreate() {
                       </Badge>
                     )}
                   </Group>
-                  {isReadOnly ? (
+                  {isViewOnly ? (
                     <Button
                       variant="light"
                       color="#105476"
@@ -7047,6 +7076,16 @@ function ImportJobCreate() {
                       onClick={() => handleEditHousingDetail(index)}
                     >
                       View
+                    </Button>
+                  ) : isReadOnly ? (
+                    <Button
+                      variant="light"
+                      color="#105476"
+                      size="xs"
+                      leftSection={<IconEdit size={14} />}
+                      onClick={() => handleEditHousingDetail(index)}
+                    >
+                      Edit
                     </Button>
                   ) : (
                     <Group gap="xs">

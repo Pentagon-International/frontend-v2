@@ -57,7 +57,11 @@ import {
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { applyShipmentTermsSelection } from "../../../utils/shipmentTermsFreight";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -498,8 +502,12 @@ function HouseCreate() {
     enabled: !!editData?.shipment_id,
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
+  const isViewOnly = isJobOpenedAsView({
+    viewMode: location.state?.viewMode,
+    actionType: location.state?.actionType,
+  });
   const isReadOnly =
-    location.state?.viewMode === true ||
+    isViewOnly ||
     isJobClosed(
       (location.state?.job as { status?: string | null } | undefined)?.status,
     );
@@ -1581,7 +1589,11 @@ function HouseCreate() {
   };
 
   const pickPrimaryPartyAddress = <
-    T extends { address?: string; email?: string; address_type?: string | null },
+    T extends {
+      address?: string;
+      email?: string;
+      address_type?: string | null;
+    },
   >(
     addresses: T[],
   ): T | undefined =>
@@ -2285,7 +2297,7 @@ function HouseCreate() {
     updatedHousingDetails: typeof existingHousingDetails,
   ) => {
     const isInEditMode = location.state?.job && location.state.job.id;
-    const navigatePath = isReadOnly
+    const navigatePath = isViewOnly
       ? "/inland/import-job/view"
       : isInEditMode
         ? "/inland/import-job/edit"
@@ -2296,7 +2308,7 @@ function HouseCreate() {
         fromHouseCreate: true,
         hawbDetails: updatedHousingDetails,
         housingDetails: updatedHousingDetails,
-        ...(isReadOnly && { viewMode: true, actionType: "view" }),
+        ...(isViewOnly && { viewMode: true, actionType: "view" }),
         ...(location.state?.fromGlobalSearch && {
           fromGlobalSearch: location.state.fromGlobalSearch,
         }),
@@ -2321,7 +2333,7 @@ function HouseCreate() {
   };
 
   const handleSave = () => {
-    if (isReadOnly) return;
+    if (isViewOnly) return;
     // Prepare cargo details (container_number removed for Air)
     // Keep payload stable; only round known numeric cargo fields to 2dp
     const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
@@ -2564,7 +2576,7 @@ function HouseCreate() {
       <Group justify="space-between" mb="lg">
         <Group gap="md">
           <Text size="xl" fw={600} c="#105476">
-            {isReadOnly
+            {isViewOnly
               ? "View AWB Details"
               : isEditMode
                 ? "Edit AWB Details"
@@ -2604,7 +2616,7 @@ function HouseCreate() {
           >
             Back to Import Job
           </Button> */}
-          {!isReadOnly && (
+          {!isViewOnly && (
             <Button
               color="#105476"
               variant="outline"
@@ -2850,7 +2862,7 @@ function HouseCreate() {
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
-        styles={isReadOnly ? { panel: { pointerEvents: "none" } } : undefined}
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -3451,7 +3463,8 @@ function HouseCreate() {
                         });
                       setConsigneeAddressOptions(addressOptions);
 
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      const primaryAddr =
+                        pickPrimaryPartyAddress(addressesData);
 
                       // Reset address value so it always replaces on re-select
                       form.setFieldValue("consignee_address", "");
@@ -3609,7 +3622,8 @@ function HouseCreate() {
                         });
                       setNotifyCustomerAddressOptions(addressOptions);
 
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      const primaryAddr =
+                        pickPrimaryPartyAddress(addressesData);
 
                       form.setFieldValue(
                         "notify1_customer_name",
@@ -3775,7 +3789,8 @@ function HouseCreate() {
                         });
                       setNotify2CustomerAddressOptions(addressOptions);
 
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      const primaryAddr =
+                        pickPrimaryPartyAddress(addressesData);
 
                       form.setFieldValue(
                         "notify2_customer_name",
@@ -3922,7 +3937,8 @@ function HouseCreate() {
                         }),
                       );
 
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      const primaryAddr =
+                        pickPrimaryPartyAddress(addressesData);
 
                       const keepExisting =
                         !!previousAddress &&
@@ -3954,9 +3970,7 @@ function HouseCreate() {
                         form.setFieldValue("agent_address", matched.value);
                         form.setFieldValue(
                           "agent_email",
-                          String(
-                            matched.email || previousEmail || "",
-                          ),
+                          String(matched.email || previousEmail || ""),
                         );
                       } else if (keepExisting && previousAddress) {
                         form.setFieldValue("agent_address", previousAddress);
@@ -4012,7 +4026,10 @@ function HouseCreate() {
                         const selected = agentAddressOptions.find(
                           (item) => item.value === value,
                         );
-                        form.setFieldValue("agent_email", selected?.email || "");
+                        form.setFieldValue(
+                          "agent_email",
+                          selected?.email || "",
+                        );
                       }
                     }}
                     error={form.errors.agent_address}
@@ -5239,7 +5256,7 @@ function HouseCreate() {
         </Tabs.Panel>
 
         {isEditMode && (
-          <Tabs.Panel value="4">
+          <Tabs.Panel value="4" className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -5488,7 +5505,7 @@ function HouseCreate() {
                                       >
                                         View
                                       </Menu.Item>
-                                      {isUnposted ? (
+                                      {isUnposted && !isReadOnly ? (
                                         <>
                                           <Menu.Item
                                             leftSection={
@@ -5556,7 +5573,7 @@ function HouseCreate() {
                                             }
                                           />
                                         </>
-                                      ) : isPosted ? (
+                                      ) : isPosted && !isReadOnly ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -5789,6 +5806,7 @@ function HouseCreate() {
                                                   >
                                                     <JobReverseInvoiceAccountMenu
                                                       rev={rev}
+                                                      readOnly={isReadOnly}
                                                       parentRow={row}
                                                       jobBasePath="/inland/import-job"
                                                       navigate={navigate}
@@ -5840,7 +5858,10 @@ function HouseCreate() {
 
       <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
 
-      <HousePageDocumentsModal documents={housePageDocuments} />
+      <HousePageDocumentsModal
+        documents={housePageDocuments}
+        readOnly={isViewOnly}
+      />
 
       <Group justify="space-between" mt="xl">
         <Button
@@ -5855,7 +5876,10 @@ function HouseCreate() {
         </Button>
 
         <Group>
-          <HousePageDocumentsButton documents={housePageDocuments} />
+          <HousePageDocumentsButton
+            documents={housePageDocuments}
+            readOnly={isViewOnly}
+          />
           {active > 0 && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
@@ -5875,7 +5899,7 @@ function HouseCreate() {
               Next
             </Button>
           )}
-          {active === 3 && !isReadOnly && (
+          {active === 3 && !isViewOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"

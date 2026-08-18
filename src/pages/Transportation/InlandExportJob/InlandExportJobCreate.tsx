@@ -84,7 +84,11 @@ import {
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import * as yup from "yup";
@@ -101,6 +105,10 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
+import {
+  resolveSupplierInvoiceEstimateCostAmount,
+  resolveSupplierInvoiceHouseCostAmount,
+} from "../../../utils/houseChargeAmounts";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -555,12 +563,14 @@ function InlandExportJobCreate() {
         }
       | null
       | undefined;
-    // View must win over hasJobData so closed/view navigations stay read-only.
+    // View must win over hasJobData so /view stays read-only.
+    // Closed jobs on /edit stay in edit so Attach Documents can persist.
     if (
-      pathname.includes("/view") ||
-      state?.viewMode === true ||
-      String(state?.actionType ?? "").toLowerCase() === "view" ||
-      isJobClosed(state?.job?.status)
+      isJobOpenedAsView({
+        pathname,
+        viewMode: state?.viewMode,
+        actionType: state?.actionType,
+      })
     ) {
       return "view";
     }
@@ -571,8 +581,12 @@ function InlandExportJobCreate() {
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly =
-    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
+  const isViewOnly = mode === "view";
+  const isClosedJob = isJobClosed(
+    (jobData as { status?: string | null } | undefined)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  const documentsReadOnly = isViewOnly;
 
   const { data: inlandExportServices = [] } = useQuery({
     queryKey: ["serviceMaster", "inland_export"],
@@ -2288,7 +2302,7 @@ function InlandExportJobCreate() {
           estimates: estimatesForm.values.estimates,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
-          ...(isReadOnly && { viewMode: true }),
+          ...(isViewOnly && { viewMode: true }),
         },
       });
 
@@ -2307,7 +2321,7 @@ function InlandExportJobCreate() {
       location.state,
       navigate,
       jobDocuments,
-      isReadOnly,
+      isViewOnly,
     ],
   );
 
@@ -2899,9 +2913,7 @@ function InlandExportJobCreate() {
               {jobData?.job_id ? `Job ID: ${jobData.job_id}` : ""}
             </Badge>
           )}
-          {jobData?.job_id && (
-            <ERPListJobStatusPill status={jobData?.status} />
-          )}
+          {jobData?.job_id && <ERPListJobStatusPill status={jobData?.status} />}
         </Group>
         {!isReadOnly && (
           <Group gap="sm">
@@ -3199,12 +3211,28 @@ function InlandExportJobCreate() {
             returnToState={location.state}
           />
         )}
+        {isReadOnly && mode === "edit" && (
+          <Button
+            color="#105476"
+            variant={canCreateJob ? "filled" : "outline"}
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            disabled={!canCreateJob}
+            leftSection={<IconPlus size={14} />}
+            style={{
+              cursor: canCreateJob ? "pointer" : "not-allowed",
+            }}
+          >
+            Update
+          </Button>
+        )}
       </Group>
 
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -3536,10 +3564,7 @@ function InlandExportJobCreate() {
                   value={mawbDetailsForm.values.pp_cc || null}
                   disabled={isReadOnly}
                   onChange={(value) => {
-                    mawbDetailsForm.setFieldValue(
-                      "pp_cc",
-                      value || "Collect",
-                    );
+                    mawbDetailsForm.setFieldValue("pp_cc", value || "Collect");
                   }}
                 />
               </Grid.Col>
@@ -3660,6 +3685,7 @@ function InlandExportJobCreate() {
           <Box mt="md">
             <JobMasterPartyDetailsPanel
               idPrefix="air-export-party"
+              disabled={isReadOnly}
               partyDetailsForm={
                 partyDetailsForm as unknown as UseFormReturnType<JobMasterPartyDetailsValues>
               }
@@ -4249,7 +4275,7 @@ function InlandExportJobCreate() {
                           charge_name: e.charge_name ?? "",
                           currency_id: e.currency_id ?? null,
                           roe: e.roe ?? null,
-                          amount: e.total_cost ?? null,
+                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
                           supplier_code: toStr(e.supplier_code),
                           supplier_name: toStr(e.supplier_name),
                         }))
@@ -4288,10 +4314,7 @@ function InlandExportJobCreate() {
                                   null,
                                 roe: (cr as any).roe ?? null,
                                 amount:
-                                  (cr as any).total_cost ??
-                                  (cr as any).cost_local_amount ??
-                                  (cr as any).amount ??
-                                  null,
+                                  resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr((cr as any).supplier_code),
                                 supplier_name: toStr((cr as any).supplier_name),
                               };
@@ -4441,7 +4464,7 @@ function InlandExportJobCreate() {
         </Tabs.Panel>
 
         {jobData?.id != null && (
-          <Tabs.Panel value="4">
+          <Tabs.Panel value="4" className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -4686,7 +4709,7 @@ function InlandExportJobCreate() {
                                       >
                                         View
                                       </Menu.Item>
-                                      {isUnposted ? (
+                                      {isUnposted && !isReadOnly ? (
                                         <>
                                           <Menu.Item
                                             leftSection={
@@ -4754,7 +4777,7 @@ function InlandExportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : isPosted ? (
+                                      ) : isPosted && !isReadOnly ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -4979,6 +5002,7 @@ function InlandExportJobCreate() {
                                                   >
                                                     <JobReverseInvoiceAccountMenu
                                                       rev={rev}
+                                                      readOnly={isReadOnly}
                                                       parentRow={row}
                                                       jobBasePath="/inland/export-job"
                                                       navigate={navigate}
@@ -5034,7 +5058,7 @@ function InlandExportJobCreate() {
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
         rows={jobDocuments.document_modal_rows}
-        readOnly={isReadOnly}
+        readOnly={documentsReadOnly}
         uploading={jobDocuments.documentUploading}
         docTypeOptions={jobDocuments.docTypeOptions}
         docCodeErrors={jobDocuments.docCodeErrors}
@@ -5073,7 +5097,7 @@ function InlandExportJobCreate() {
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
-            {isReadOnly ? "View Documents" : "Attach Documents"}
+            {documentsReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
           {!isReadOnly && (
             <Button
@@ -5401,7 +5425,7 @@ function InlandExportJobCreate() {
                     )}
                   </Group>
                   <Group gap="xs">
-                    {isReadOnly && (
+                    {isViewOnly && (
                       <Button
                         variant="light"
                         color="#105476"
@@ -5412,27 +5436,27 @@ function InlandExportJobCreate() {
                         View
                       </Button>
                     )}
+                    {!isViewOnly && (
+                      <Button
+                        variant="light"
+                        color="#105476"
+                        size="xs"
+                        leftSection={<IconEdit size={14} />}
+                        onClick={() => handleEditHawbDetail(index)}
+                      >
+                        Edit
+                      </Button>
+                    )}
                     {!isReadOnly && (
-                      <>
-                        <Button
-                          variant="light"
-                          color="#105476"
-                          size="xs"
-                          leftSection={<IconEdit size={14} />}
-                          onClick={() => handleEditHawbDetail(index)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="light"
-                          color="red"
-                          size="xs"
-                          leftSection={<IconTrash size={14} />}
-                          onClick={() => removeHawbDetail(index)}
-                        >
-                          Remove
-                        </Button>
-                      </>
+                      <Button
+                        variant="light"
+                        color="red"
+                        size="xs"
+                        leftSection={<IconTrash size={14} />}
+                        onClick={() => removeHawbDetail(index)}
+                      >
+                        Remove
+                      </Button>
                     )}
                     <Menu
                       shadow="md"

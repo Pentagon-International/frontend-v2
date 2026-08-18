@@ -12,9 +12,13 @@ import {
   IconClockHour4,
   IconFileInvoice,
   IconReceiptTax,
+  IconFileSpreadsheet,
 } from "@tabler/icons-react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import MasterCard from "../../components/MasterCard";
+import useAuthStore from "../../store/authStore";
+import { isChinaDefaultBranch } from "./fapiaoReport/FapiaoReport";
 
 type ReportItem = {
   label: string;
@@ -24,8 +28,13 @@ type ReportItem = {
 
 export default function ReportsPage() {
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const showFapiaoReports = isChinaDefaultBranch(
+    user?.branches,
+    user?.country,
+  );
 
-  const sections: { title: string; items: ReportItem[] }[] = [
+  const sections: { title: string; items: ReportItem[] }[] = useMemo(() => [
     {
       title: "Accounting Report",
       items: [
@@ -67,6 +76,20 @@ export default function ReportsPage() {
           icon: <IconFileInvoice size={28} color="#105476" />,
           path: "/reports/document-wise-outstanding",
         },
+        ...(showFapiaoReports
+          ? [
+              {
+                label: "Fapiao Report - Cost",
+                icon: <IconFileSpreadsheet size={28} color="#105476" />,
+                path: "/reports/cost-fapiao-report",
+              },
+              {
+                label: "Fapiao Report - Sell",
+                icon: <IconFileSpreadsheet size={28} color="#105476" />,
+                path: "/reports/sell-fapiao-report",
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -91,7 +114,7 @@ export default function ReportsPage() {
         },
       ],
     },
-  ];
+  ], [showFapiaoReports]);
 
   return (
     <Box h="100%">

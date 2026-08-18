@@ -79,7 +79,11 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
-import { isJobClosed } from "../../../utils/closeJob";
+import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
+import {
+  getJobFormReadOnlyTabProps,
+  JOB_ACCOUNTS_TAB_PANEL_CLASS,
+} from "../../../utils/jobFormReadOnly";
 import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
@@ -97,7 +101,14 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
-import { buildJobCreatePayloadFromBooking, fetchJobRecordByDetailsId } from "../../../utils/bookingCreateJob";
+import {
+  resolveSupplierInvoiceEstimateCostAmount,
+  resolveSupplierInvoiceHouseCostAmount,
+} from "../../../utils/houseChargeAmounts";
+import {
+  buildJobCreatePayloadFromBooking,
+  fetchJobRecordByDetailsId,
+} from "../../../utils/bookingCreateJob";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -480,9 +491,9 @@ function AirExportJobCreate() {
   const [bookingLinkBookings, setBookingLinkBookings] = useState<
     Record<string, unknown>[]
   >([]);
-  const [bookingLinkSelectedIds, setBookingLinkSelectedIds] = useState<number[]>(
-    [],
-  );
+  const [bookingLinkSelectedIds, setBookingLinkSelectedIds] = useState<
+    number[]
+  >([]);
   const [bookingLinkConfirmOpen, setBookingLinkConfirmOpen] = useState(false);
 
   // Track if forms have been initialized from jobData (one-time initialization)
@@ -559,12 +570,14 @@ function AirExportJobCreate() {
         }
       | null
       | undefined;
-    // View must win over hasJobData so closed/view navigations stay read-only.
+    // View must win over hasJobData so /view stays read-only.
+    // Closed jobs on /edit stay in edit so Attach Documents can persist.
     if (
-      pathname.includes("/view") ||
-      state?.viewMode === true ||
-      String(state?.actionType ?? "").toLowerCase() === "view" ||
-      isJobClosed(state?.job?.status)
+      isJobOpenedAsView({
+        pathname,
+        viewMode: state?.viewMode,
+        actionType: state?.actionType,
+      })
     ) {
       return "view";
     }
@@ -575,8 +588,12 @@ function AirExportJobCreate() {
     return "create";
   }, [location.pathname, location.state]);
 
-  const isReadOnly =
-    mode === "view" || isJobClosed((jobData as { status?: string | null } | undefined)?.status);
+  const isViewOnly = mode === "view";
+  const isClosedJob = isJobClosed(
+    (jobData as { status?: string | null } | undefined)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2233,7 +2250,7 @@ function AirExportJobCreate() {
           cargoDetails: cargoDetailsForm.values,
           ...jobDocuments.getNavigationState(),
           ...(options?.openEventsModal && { openEventsModal: true }),
-          ...(isReadOnly && { viewMode: true }),
+          ...(isViewOnly && { viewMode: true }),
         },
       });
 
@@ -2253,7 +2270,7 @@ function AirExportJobCreate() {
       location.state,
       navigate,
       jobDocuments,
-      isReadOnly,
+      isViewOnly,
     ],
   );
 
@@ -2289,7 +2306,8 @@ function AirExportJobCreate() {
     ) {
       missingFields.push("Origin Agent");
     }
-    if (!mawbDetailsForm.values.origin_code?.trim()) missingFields.push("Origin");
+    if (!mawbDetailsForm.values.origin_code?.trim())
+      missingFields.push("Origin");
     if (!mawbDetailsForm.values.destination_code?.trim())
       missingFields.push("Destination");
     if (!mawbDetailsForm.values.etd) missingFields.push("ETD");
@@ -2327,7 +2345,9 @@ function AirExportJobCreate() {
 
       const rawList: unknown =
         (response as unknown as { data?: unknown }).data ?? response;
-      const list = Array.isArray(rawList) ? (rawList as Record<string, unknown>[]) : [];
+      const list = Array.isArray(rawList)
+        ? (rawList as Record<string, unknown>[])
+        : [];
 
       const existingHouseNumbers = new Set(
         hawbDetails
@@ -2394,10 +2414,9 @@ function AirExportJobCreate() {
         const bookingId = selectedIds[index];
         const bookingDetail =
           (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
-        const bookingRecord =
-          (Array.isArray(bookingDetail)
-            ? bookingDetail[0]
-            : bookingDetail) as Record<string, unknown>;
+        const bookingRecord = (
+          Array.isArray(bookingDetail) ? bookingDetail[0] : bookingDetail
+        ) as Record<string, unknown>;
 
         const payload = buildJobCreatePayloadFromBooking(
           bookingRecord,
@@ -2430,7 +2449,9 @@ function AirExportJobCreate() {
       const existingBookingIds = Array.from(
         new Set(
           [
-            ...(Array.isArray((jobData as { booking_ids?: unknown }).booking_ids)
+            ...(Array.isArray(
+              (jobData as { booking_ids?: unknown }).booking_ids,
+            )
               ? ((jobData as { booking_ids?: unknown[] }).booking_ids ?? [])
               : []),
             ...hawbDetails.map((h) => h.booking_id),
@@ -2438,7 +2459,8 @@ function AirExportJobCreate() {
           ]
             .map((v) => (v == null || v === "" ? null : Number(v)))
             .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n) && n > 0,
+              (n): n is number =>
+                typeof n === "number" && !Number.isNaN(n) && n > 0,
             ),
         ),
       );
@@ -2962,124 +2984,126 @@ function AirExportJobCreate() {
         housing_details: hawbDetails.map((hawb) => {
           const housingId = resolveHousingDetailsPrimaryKey(hawb);
           return {
-          // Include housing id on update so backend updates instead of delete+recreate
-          ...(housingId > 0 && { id: housingId }),
-          ...(hawb.shipment_id && { shipment_id: hawb.shipment_id }),
-          hawb_no: hawb.hawb_number,
-          routed: hawb.routed,
-          routed_by: hawb.routed_by || null,
-          pp_cc: resolveJobFreightPpCc(
-            hawb.pp_cc,
-            (hawb as { freight?: string }).freight,
-          ),
-          origin_code: hawb.origin_code,
-          destination_code: hawb.destination_code,
-          customer_service: hawb.customer_service || "",
-          trade: hawb.trade,
-          agent_name: hawb.agent_name,
-          agent_address: hawb.agent_address || "",
-          agent_email: hawb.agent_email || "",
-          cha_name: (hawb as { cha_name?: string }).cha_name || null,
-          cha_address: (hawb as { cha_address?: string }).cha_address || null,
-          shipper_code: hawb.shipper_code,
-          shipper_name: hawb.shipper_name,
-          shipper_address: hawb.shipper_address || "",
-          shipper_email: hawb.shipper_email || "",
-          consignee_code: hawb.consignee_code,
-          consignee_name: hawb.consignee_name,
-          consignee_address: hawb.consignee_address || "",
-          consignee_email: hawb.consignee_email || "",
-          notify1_customer_name:
-            hawb.notify1_customer_name ?? hawb.notify_customer1_name ?? "",
-          notify1_customer_address:
-            hawb.notify1_customer_address ??
-            hawb.notify_customer1_address ??
-            "",
-          notify1_customer_email:
-            hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
-          notify2_customer_name: hawb.notify2_customer_name ?? "",
-          notify2_customer_address: hawb.notify2_customer_address ?? "",
-          notify2_customer_email: hawb.notify2_customer_email ?? "",
-          commodity_description: hawb.commodity_description || null,
-          handling_information: hawb.handling_information || null,
-          is_agreed_charges: hawb.is_agreed_charges ?? false,
-          marks_no: hawb.marks_no || null,
-          note: hawb.note || "",
-          item_no: (hawb as { item_no?: string }).item_no ?? "",
-          sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
-          ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
-          ...(hawb.shipment_terms_code != null &&
-            hawb.shipment_terms_code !== "" && {
-              shipment_terms_code: hawb.shipment_terms_code,
-            }),
-          ...buildDocumentIdsPayloadField(hawb.document_ids),
-          events: Array.isArray((hawb as { events?: unknown }).events)
-            ? (
-                (
-                  hawb as {
-                    events?: Array<{
-                      id?: number;
-                      type?: string;
-                      date?: string;
-                    }>;
-                  }
-                ).events ?? []
-              ).map((e) => ({
-                ...(e.id != null && { id: Number(e.id) }),
-                type: String(e.type ?? ""),
-                date: String(e.date ?? ""),
-              }))
-            : [],
-          cargo_details: (hawb.cargo_details || []).map((c) => ({
-            ...(c.id != null && { id: Number(c.id) }),
-            package_type_code:
-              pickPackageTypeCodeFromCargo(c as Record<string, unknown>) ||
-              null,
-            no_of_packages: c.no_of_packages ?? 0,
-            gross_weight:
-              formatHouseCargoWeightForPayload(c.gross_weight) ?? "",
-            volume: formatHouseCargoWeightForPayload(c.volume) ?? "",
-            chargeable_weight:
-              formatHouseCargoChargeableForPayload(
-                c.gross_weight,
-                c.volume,
-                "air",
-              ) ?? "",
-            haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
-          })),
-          mawb_charges: (() => {
-            const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
-            if (meaningful.length === 0) return [];
-            return meaningful.map((charge) => ({
-              ...(charge.id != null &&
-                charge.id !== undefined && { id: Number(charge.id) }),
-              charge_id: charge.charge_id ?? null,
-              supplier_code:
-                charge.supplier_code != null
-                  ? String(charge.supplier_code)
-                  : null,
-              pp_cc: charge.pp_cc || "",
-              unit_id: charge.unit_id ? String(charge.unit_id) : "",
-              no_of_unit: roundToDecimals(charge.no_of_unit) || null,
-              currency_id: charge.currency_id ? String(charge.currency_id) : "",
-              roe: roundRoeForPayload(charge.roe) ?? null,
-              amount_per_unit:
-                roundMoneyToDecimals(charge.amount_per_unit) ?? null,
-              amount: roundMoneyToDecimals(charge.amount) ?? null,
-              sell_local_amount:
-                roundLocalMoneyToDecimals(charge.sell_local_amount) ??
-                roundLocalMoneyToDecimals(charge.local_amount) ??
+            // Include housing id on update so backend updates instead of delete+recreate
+            ...(housingId > 0 && { id: housingId }),
+            ...(hawb.shipment_id && { shipment_id: hawb.shipment_id }),
+            hawb_no: hawb.hawb_number,
+            routed: hawb.routed,
+            routed_by: hawb.routed_by || null,
+            pp_cc: resolveJobFreightPpCc(
+              hawb.pp_cc,
+              (hawb as { freight?: string }).freight,
+            ),
+            origin_code: hawb.origin_code,
+            destination_code: hawb.destination_code,
+            customer_service: hawb.customer_service || "",
+            trade: hawb.trade,
+            agent_name: hawb.agent_name,
+            agent_address: hawb.agent_address || "",
+            agent_email: hawb.agent_email || "",
+            cha_name: (hawb as { cha_name?: string }).cha_name || null,
+            cha_address: (hawb as { cha_address?: string }).cha_address || null,
+            shipper_code: hawb.shipper_code,
+            shipper_name: hawb.shipper_name,
+            shipper_address: hawb.shipper_address || "",
+            shipper_email: hawb.shipper_email || "",
+            consignee_code: hawb.consignee_code,
+            consignee_name: hawb.consignee_name,
+            consignee_address: hawb.consignee_address || "",
+            consignee_email: hawb.consignee_email || "",
+            notify1_customer_name:
+              hawb.notify1_customer_name ?? hawb.notify_customer1_name ?? "",
+            notify1_customer_address:
+              hawb.notify1_customer_address ??
+              hawb.notify_customer1_address ??
+              "",
+            notify1_customer_email:
+              hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
+            notify2_customer_name: hawb.notify2_customer_name ?? "",
+            notify2_customer_address: hawb.notify2_customer_address ?? "",
+            notify2_customer_email: hawb.notify2_customer_email ?? "",
+            commodity_description: hawb.commodity_description || null,
+            handling_information: hawb.handling_information || null,
+            is_agreed_charges: hawb.is_agreed_charges ?? false,
+            marks_no: hawb.marks_no || null,
+            note: hawb.note || "",
+            item_no: (hawb as { item_no?: string }).item_no ?? "",
+            sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
+            ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
+            ...(hawb.shipment_terms_code != null &&
+              hawb.shipment_terms_code !== "" && {
+                shipment_terms_code: hawb.shipment_terms_code,
+              }),
+            ...buildDocumentIdsPayloadField(hawb.document_ids),
+            events: Array.isArray((hawb as { events?: unknown }).events)
+              ? (
+                  (
+                    hawb as {
+                      events?: Array<{
+                        id?: number;
+                        type?: string;
+                        date?: string;
+                      }>;
+                    }
+                  ).events ?? []
+                ).map((e) => ({
+                  ...(e.id != null && { id: Number(e.id) }),
+                  type: String(e.type ?? ""),
+                  date: String(e.date ?? ""),
+                }))
+              : [],
+            cargo_details: (hawb.cargo_details || []).map((c) => ({
+              ...(c.id != null && { id: Number(c.id) }),
+              package_type_code:
+                pickPackageTypeCodeFromCargo(c as Record<string, unknown>) ||
                 null,
-              unit_cost:
-                roundMoneyToDecimals(charge.unit_cost) ??
-                roundMoneyToDecimals(charge.cost_per_unit) ??
-                null,
-              total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
-              cost_local_amount:
-                roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
-            }));
-          })(),
-        };
+              no_of_packages: c.no_of_packages ?? 0,
+              gross_weight:
+                formatHouseCargoWeightForPayload(c.gross_weight) ?? "",
+              volume: formatHouseCargoWeightForPayload(c.volume) ?? "",
+              chargeable_weight:
+                formatHouseCargoChargeableForPayload(
+                  c.gross_weight,
+                  c.volume,
+                  "air",
+                ) ?? "",
+              haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
+            })),
+            mawb_charges: (() => {
+              const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
+              if (meaningful.length === 0) return [];
+              return meaningful.map((charge) => ({
+                ...(charge.id != null &&
+                  charge.id !== undefined && { id: Number(charge.id) }),
+                charge_id: charge.charge_id ?? null,
+                supplier_code:
+                  charge.supplier_code != null
+                    ? String(charge.supplier_code)
+                    : null,
+                pp_cc: charge.pp_cc || "",
+                unit_id: charge.unit_id ? String(charge.unit_id) : "",
+                no_of_unit: roundToDecimals(charge.no_of_unit) || null,
+                currency_id: charge.currency_id
+                  ? String(charge.currency_id)
+                  : "",
+                roe: roundRoeForPayload(charge.roe) ?? null,
+                amount_per_unit:
+                  roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+                amount: roundMoneyToDecimals(charge.amount) ?? null,
+                sell_local_amount:
+                  roundLocalMoneyToDecimals(charge.sell_local_amount) ??
+                  roundLocalMoneyToDecimals(charge.local_amount) ??
+                  null,
+                unit_cost:
+                  roundMoneyToDecimals(charge.unit_cost) ??
+                  roundMoneyToDecimals(charge.cost_per_unit) ??
+                  null,
+                total_cost: roundMoneyToDecimals(charge.total_cost) ?? null,
+                cost_local_amount:
+                  roundLocalMoneyToDecimals(charge.cost_local_amount) ?? null,
+              }));
+            })(),
+          };
         }),
         estimates: (() => {
           const raw = estimatesForm.values.estimates ?? [];
@@ -3191,9 +3215,7 @@ function AirExportJobCreate() {
               {`Job ID: ${formatDisplayJobId(jobData.job_id, jobData.service_code)}`}
             </Badge>
           )}
-          {jobData?.job_id && (
-            <ERPListJobStatusPill status={jobData?.status} />
-          )}
+          {jobData?.job_id && <ERPListJobStatusPill status={jobData?.status} />}
         </Group>
         {!isReadOnly && (
           <Group gap="sm">
@@ -3553,12 +3575,28 @@ function AirExportJobCreate() {
             returnToState={location.state}
           />
         )}
+        {isReadOnly && mode === "edit" && (
+          <Button
+            color="#105476"
+            variant={canCreateJob ? "filled" : "outline"}
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            disabled={!canCreateJob}
+            leftSection={<IconPlus size={14} />}
+            style={{
+              cursor: canCreateJob ? "pointer" : "not-allowed",
+            }}
+          >
+            Update
+          </Button>
+        )}
       </Group>
 
       <Tabs
         value={String(active)}
         onChange={(v) => v !== null && setActive(Number(v))}
         color="#105476"
+        {...getJobFormReadOnlyTabProps(isReadOnly)}
       >
         <Tabs.List
           mb="md"
@@ -4010,6 +4048,7 @@ function AirExportJobCreate() {
           <Box mt="md">
             <JobMasterPartyDetailsPanel
               idPrefix="air-export-party"
+              disabled={isReadOnly}
               partyDetailsForm={
                 partyDetailsForm as unknown as UseFormReturnType<JobMasterPartyDetailsValues>
               }
@@ -4667,7 +4706,7 @@ function AirExportJobCreate() {
                           charge_name: e.charge_name ?? "",
                           currency_id: e.currency_id ?? null,
                           roe: e.roe ?? null,
-                          amount: e.total_cost ?? null,
+                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
                           supplier_code: toStr(e.supplier_code),
                           supplier_name: toStr(e.supplier_name),
                         }))
@@ -4706,10 +4745,7 @@ function AirExportJobCreate() {
                                   null,
                                 roe: (cr as any).roe ?? null,
                                 amount:
-                                  (cr as any).total_cost ??
-                                  (cr as any).cost_local_amount ??
-                                  (cr as any).amount ??
-                                  null,
+                                  resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr((cr as any).supplier_code),
                                 supplier_name: toStr((cr as any).supplier_name),
                               };
@@ -4859,7 +4895,7 @@ function AirExportJobCreate() {
         </Tabs.Panel>
 
         {jobData?.id != null && (
-          <Tabs.Panel value="5">
+          <Tabs.Panel value="5" className={JOB_ACCOUNTS_TAB_PANEL_CLASS}>
             <Box mt="md">
               <Text size="md" fw={600} c="#105476" mb="md">
                 Accounts
@@ -5104,7 +5140,7 @@ function AirExportJobCreate() {
                                       >
                                         View
                                       </Menu.Item>
-                                      {isUnposted ? (
+                                      {isUnposted && !isReadOnly ? (
                                         <>
                                           <Menu.Item
                                             leftSection={
@@ -5172,7 +5208,7 @@ function AirExportJobCreate() {
                                             }
                                           />
                                         </>
-                                      ) : isPosted ? (
+                                      ) : isPosted && !isReadOnly ? (
                                         <Menu.Item
                                           leftSection={
                                             <Box
@@ -5397,6 +5433,7 @@ function AirExportJobCreate() {
                                                   >
                                                     <JobReverseInvoiceAccountMenu
                                                       rev={rev}
+                                                      readOnly={isReadOnly}
                                                       parentRow={row}
                                                       jobBasePath="/air/export-job"
                                                       navigate={navigate}
@@ -5452,7 +5489,7 @@ function AirExportJobCreate() {
         opened={jobDocuments.documentsModalOpen}
         onClose={() => jobDocuments.setDocumentsModalOpen(false)}
         rows={jobDocuments.document_modal_rows}
-        readOnly={isReadOnly}
+        readOnly={documentsReadOnly}
         uploading={jobDocuments.documentUploading}
         docTypeOptions={jobDocuments.docTypeOptions}
         docCodeErrors={jobDocuments.docCodeErrors}
@@ -5519,7 +5556,9 @@ function AirExportJobCreate() {
                         key={idNum}
                         style={{
                           cursor: "pointer",
-                          backgroundColor: bookingLinkSelectedIds.includes(idNum)
+                          backgroundColor: bookingLinkSelectedIds.includes(
+                            idNum,
+                          )
                             ? "rgba(16, 84, 118, 0.08)"
                             : undefined,
                         }}
@@ -5559,9 +5598,7 @@ function AirExportJobCreate() {
                         <Table.Td style={{ paddingRight: 16 }}>
                           {String(b.origin_name ?? "-")}
                         </Table.Td>
-                        <Table.Td>
-                          {String(b.destination_name ?? "-")}
-                        </Table.Td>
+                        <Table.Td>{String(b.destination_name ?? "-")}</Table.Td>
                       </Table.Tr>
                     );
                   })}
@@ -5586,7 +5623,9 @@ function AirExportJobCreate() {
               color="#105476"
               leftSection={<IconLink size={16} />}
               onClick={() => setBookingLinkConfirmOpen(true)}
-              disabled={bookingLinkSelectedIds.length === 0 || bookingLinkLoading}
+              disabled={
+                bookingLinkSelectedIds.length === 0 || bookingLinkLoading
+              }
               loading={bookingLinkLoading}
             >
               Link Booking{bookingLinkSelectedIds.length > 1 ? "s" : ""}
@@ -5655,7 +5694,7 @@ function AirExportJobCreate() {
             leftSection={<IconPaperclip size={16} />}
             onClick={jobDocuments.openDocumentsModal}
           >
-            {isReadOnly ? "View Documents" : "Attach Documents"}
+            {documentsReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
           {!isReadOnly && (
             <Button
@@ -6086,7 +6125,7 @@ function AirExportJobCreate() {
                     )}
                   </Group>
                   <Group gap="xs">
-                    {isReadOnly && (
+                    {isViewOnly && (
                       <Button
                         variant="light"
                         color="#105476"
@@ -6097,27 +6136,27 @@ function AirExportJobCreate() {
                         View
                       </Button>
                     )}
+                    {!isViewOnly && (
+                      <Button
+                        variant="light"
+                        color="#105476"
+                        size="xs"
+                        leftSection={<IconEdit size={14} />}
+                        onClick={() => handleEditHawbDetail(index)}
+                      >
+                        Edit
+                      </Button>
+                    )}
                     {!isReadOnly && (
-                      <>
-                        <Button
-                          variant="light"
-                          color="#105476"
-                          size="xs"
-                          leftSection={<IconEdit size={14} />}
-                          onClick={() => handleEditHawbDetail(index)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="light"
-                          color="red"
-                          size="xs"
-                          leftSection={<IconTrash size={14} />}
-                          onClick={() => removeHawbDetail(index)}
-                        >
-                          Remove
-                        </Button>
-                      </>
+                      <Button
+                        variant="light"
+                        color="red"
+                        size="xs"
+                        leftSection={<IconTrash size={14} />}
+                        onClick={() => removeHawbDetail(index)}
+                      >
+                        Remove
+                      </Button>
                     )}
                     <Menu
                       shadow="md"
