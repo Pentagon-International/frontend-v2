@@ -13,8 +13,8 @@ export type AmountFormat = "WESTERN" | "INDIAN" | "EUROPEAN";
 const COUNTRY_AMOUNT_FORMAT: Record<string, AmountFormat> = {
   IN: "INDIAN",
   IND: "INDIAN",
-  VN: "EUROPEAN",
-  VNM: "EUROPEAN",
+  VN: "WESTERN",
+  VNM: "WESTERN",
   US: "WESTERN",
   USA: "WESTERN",
   AE: "WESTERN",
