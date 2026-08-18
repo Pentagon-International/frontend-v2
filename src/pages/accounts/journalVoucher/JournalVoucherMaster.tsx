@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import {
@@ -637,7 +637,7 @@ function JournalVoucherMaster() {
           const val = cell.getValue<unknown>();
           if (val == null || val === "") return "-";
           const n = typeof val === "number" ? val : parseFloat(String(val));
-          return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(val);
+          return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(val);
         },
       },
       {
@@ -648,7 +648,7 @@ function JournalVoucherMaster() {
           const val = cell.getValue<unknown>();
           if (val == null || val === "") return "-";
           const n = typeof val === "number" ? val : parseFloat(String(val));
-          return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(val);
+          return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(val);
         },
       },
       {
@@ -665,7 +665,7 @@ function JournalVoucherMaster() {
               c={Math.abs(num) > 0.005 ? "red" : primary}
               style={{ fontFamily: erpTheme.fontSans }}
             >
-              {Number.isFinite(num) ? formatMoneyAmountBound(num) : val || "-"}
+              {Number.isFinite(num) ? formatMoneyAmountForUi(num) : val || "-"}
             </Text>
           );
         },

@@ -18,6 +18,7 @@ import {
   formatUserInteger,
   getDefaultBranchCountryCode,
 } from "../utils/userNumberFormat";
+import { formatMoneyAmountForUi } from "../utils/nonDecimalMoneyAmount";
 import {
   MantineReactTable,
   MRT_ColumnDef,
@@ -29,6 +30,40 @@ import {
  * Each known column key has its own width; unknown keys use `default`.
  * Array-valued columns fall back to `arrayColumnFallback` when the field key has no entry.
  */
+const MONEY_TOTAL_KEYS = new Set([
+  "outstanding",
+  "overdue",
+  "local_outstanding",
+  "total_cost",
+  "total_sell",
+  "profit",
+  "expected_profit",
+  "potential_profit",
+  "credit_amount",
+  "actual_budget",
+  "sales_budget",
+  "incentive_amount",
+  "potential",
+  "pipeline",
+  "gained",
+  "lost",
+  "quote",
+  "quoted",
+  "quoted_created",
+  "expected",
+  "POTENTIAL",
+  "PIPELINE",
+  "GAINED",
+  "LOST",
+  "QUOTED",
+  "EXPECTED",
+]);
+
+function formatMoneyTotalCell(value: unknown): string {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(value ?? "");
+}
+
 const PIPELINE_REPORT_DRILL2_COL_WIDTH: Record<string, number> = {
   default: 120,
   arrayColumnFallback: 170,
@@ -526,12 +561,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           ),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
-            const displayValue =
-              typeof cellValue === "number"
-                ? cellValue.toLocaleString()
-                : typeof cellValue === "string" && !isNaN(parseFloat(cellValue))
-                  ? parseFloat(cellValue).toLocaleString()
-                  : cellValue;
+            const displayValue = formatMoneyTotalCell(cellValue);
             return (
               <Badge
                 color={
@@ -577,13 +607,7 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           header: getHeaderText(),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
-            const displayValue =
-              typeof cellValue === "number"
-                ? formatPipelineNumber(cellValue)
-                : typeof cellValue === "string" &&
-                    !Number.isNaN(parseFloat(cellValue))
-                  ? formatPipelineNumber(parseFloat(cellValue))
-                  : cellValue;
+            const displayValue = formatMoneyTotalCell(cellValue);
             return (
               <Badge color={getBadgeColor()} size="md" variant="filled">
                 {displayValue}
@@ -765,9 +789,10 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
           ),
           Cell: ({ row }) => {
             const cellValue = row.original[key];
-            const displayValue =
-              moduleType === "pipelineReport" &&
-              typeof cellValue === "number"
+            const displayValue = MONEY_TOTAL_KEYS.has(key)
+              ? formatMoneyTotalCell(cellValue)
+              : moduleType === "pipelineReport" &&
+                  typeof cellValue === "number"
                 ? formatPipelineNumber(cellValue)
                 : typeof cellValue === "number"
                   ? cellValue.toLocaleString()

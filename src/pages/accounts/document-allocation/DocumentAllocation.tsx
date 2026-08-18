@@ -32,6 +32,7 @@ import {
   bindMoneyWholeNumberMode,
   formatMoneyAmount,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import useAuthStore from "../../../store/authStore";
@@ -273,7 +274,7 @@ const AllocationTotalsSummary = ({
                 c={valueColor}
                 style={{ fontFamily: "Inter" }}
               >
-                {formatMoneyAmountBound(item.value)}
+                {formatMoneyAmountForUi(item.value)}
               </Text>
             </Box>
           </Grid.Col>

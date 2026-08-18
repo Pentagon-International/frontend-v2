@@ -77,6 +77,7 @@ import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
   roundMoneyToDecimals,
@@ -6121,6 +6122,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <FormNumberInput
                           value={charge.total_sell || ""}
                           decimalScale={localAmountDecimalScale}
+                          groupThousands
                           readOnly
                           size="xs"
                         />
@@ -6129,6 +6131,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         <FormNumberInput
                           value={charge.total_cost || ""}
                           decimalScale={localAmountDecimalScale}
+                          groupThousands
                           readOnly
                           size="xs"
                         />
@@ -6182,7 +6185,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={1} pl={8}>
                   <Text size="sm" fw={600} mb="md" c="#105476">
-                    {formatMoneyAmountBound(
+                    {formatMoneyAmountForUi(
                       charges.reduce((sum, charge) => {
                         const totalSell = parseFloat(charge.total_sell) || 0;
                         return sum + totalSell;
@@ -6192,7 +6195,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={1} pl={8}>
                   <Text size="sm" fw={600} mb="md" c="#105476">
-                    {formatMoneyAmountBound(
+                    {formatMoneyAmountForUi(
                       charges.reduce((sum, charge) => {
                         const totalCost = parseFloat(charge.total_cost) || 0;
                         return sum + totalCost;

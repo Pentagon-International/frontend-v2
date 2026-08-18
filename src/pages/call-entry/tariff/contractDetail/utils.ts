@@ -6,6 +6,8 @@ import type {
   ContractRateLine,
   ContractSurcharge,
 } from "./types";
+import { formatAmountForDisplay } from "../../../../utils/amountDisplayFormat";
+import { isMoneyWholeNumberMode } from "../../../../utils/nonDecimalMoneyAmount";
 
 const SERVICE_MODE_LABELS: Record<string, string> = {
   FCL: "Ocean FCL",
@@ -81,9 +83,10 @@ export function formatMoney(
   if (value === null || value === undefined || value === "") return "—";
   const amount = typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
   if (!Number.isFinite(amount)) return String(value);
-  return `${getCurrencyPrefix(currencyCode)}${amount.toLocaleString("en-US", {
-    maximumFractionDigits: options?.decimals ?? 0,
-    minimumFractionDigits: options?.decimals ?? 0,
+  const digits =
+    options?.decimals ?? (isMoneyWholeNumberMode() ? 0 : 2);
+  return `${getCurrencyPrefix(currencyCode)}${formatAmountForDisplay(amount, {
+    fractionDigits: digits,
   })}`;
 }
 

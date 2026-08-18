@@ -10,6 +10,13 @@ import RootRouter from "./Routes/RootRouter";
 import { defaultTheme } from "./theme/brandThemeDefault";
 import useAuthStore from "./store/authStore";
 import { setGlobalQueryClient } from "./utils/queryClient";
+import { bindAmountDisplayFromUser } from "./utils/amountDisplayFormat";
+
+function BindAmountDisplayFormat() {
+  const user = useAuthStore((state) => state.user);
+  bindAmountDisplayFromUser(user);
+  return null;
+}
 
 function App() {
   requestInterceptor();
@@ -43,6 +50,7 @@ function App() {
       <MantineProvider theme={defaultTheme} stylesTransform={emotionTransform}>
         <Toaster position="top-center" reverseOrder={false} />
         <QueryClientProvider client={queryClient}>
+          <BindAmountDisplayFormat />
           <RootRouter />
         </QueryClientProvider>
       </MantineProvider>

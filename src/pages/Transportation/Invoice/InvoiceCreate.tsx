@@ -75,8 +75,7 @@ import {
   bindMoneyWholeNumberMode,
   clampMoneyAmount,
   clampMoneyAmountBound,
-  formatMoneyAmountBound,
-  formatMoneyAmount,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isMoneyWholeNumberMode,
   isVietnamBranchFromUser,
@@ -6164,6 +6163,7 @@ function InvoiceCreate({
                         placeholder={`Amount in ${form.values.currency ? form.values.currency.toUpperCase() : "(billing currency)"}`}
                         min={0}
                         hideControls
+                        groupThousands
                         decimalScale={headerAmountDecimalScale}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
@@ -6184,6 +6184,7 @@ function InvoiceCreate({
                         placeholder="Local Amount"
                         min={0}
                         hideControls
+                        groupThousands
                         decimalScale={localAmountDecimalScale}
                         withAsterisk
                         // disabled={isReadOnly}
@@ -6665,7 +6666,7 @@ function InvoiceCreate({
                             Local Amount Total
                           </Text>
                           <Text size="lg" fw={600} c="#105476">
-                            {formatMoneyAmountBound(
+                            {formatMoneyAmountForUi(
                               chargeSectionTotals.local_total,
                             )}
                           </Text>
@@ -6678,7 +6679,7 @@ function InvoiceCreate({
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmount(
+                              {formatMoneyAmountForUi(
                                 vatSectionTotal,
                                 vatTotalWholeNumbersOnly,
                               )}
@@ -6694,7 +6695,7 @@ function InvoiceCreate({
                                 IGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountBound(
+                                {formatMoneyAmountForUi(
                                   gstSectionTotals.igst_total,
                                 )}
                               </Text>
@@ -6706,7 +6707,7 @@ function InvoiceCreate({
                                 CGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountBound(
+                                {formatMoneyAmountForUi(
                                   gstSectionTotals.cgst_total,
                                 )}
                               </Text>
@@ -6718,7 +6719,7 @@ function InvoiceCreate({
                                 SGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountBound(
+                                {formatMoneyAmountForUi(
                                   gstSectionTotals.sgst_total,
                                 )}
                               </Text>
@@ -6805,7 +6806,7 @@ function InvoiceCreate({
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {row.taxable_total != null
-                                      ? formatMoneyAmountBound(
+                                      ? formatMoneyAmountForUi(
                                           Number(row.taxable_total),
                                         )
                                       : "—"}

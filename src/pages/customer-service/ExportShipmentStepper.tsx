@@ -13,6 +13,7 @@ import {
   Divider,
   Textarea,
 } from "@mantine/core";
+import { formatMoneyAmountForUi } from "../../utils/nonDecimalMoneyAmount";
 import {
   carrierDisplayFormat,
   carrierTransportParamsFromMoveType,
@@ -3283,14 +3284,26 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                     </Grid.Col>
                     <Grid.Col span={1}>
                       <TextInput
-                        value={charge.total_sell || ""}
+                        value={
+                          charge.total_sell
+                            ? formatMoneyAmountForUi(
+                                parseFloat(String(charge.total_sell)),
+                              )
+                            : ""
+                        }
                         readOnly
                         size="xs"
                       />
                     </Grid.Col>
                     <Grid.Col span={1}>
                       <TextInput
-                        value={charge.total_cost || ""}
+                        value={
+                          charge.total_cost
+                            ? formatMoneyAmountForUi(
+                                parseFloat(String(charge.total_cost)),
+                              )
+                            : ""
+                        }
                         readOnly
                         size="xs"
                       />

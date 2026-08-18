@@ -59,6 +59,7 @@ import { formatCoordinateForPayload } from "../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../utils/nonDecimalMoneyAmount";
@@ -1667,7 +1668,7 @@ function CallEntryNew() {
           const raw = cell.getValue();
           if (raw === null || raw === undefined || raw === "") return "—";
           const n = Number(raw);
-          return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(raw);
+          return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(raw);
         },
       },
     ],

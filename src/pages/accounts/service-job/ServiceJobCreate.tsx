@@ -1027,6 +1027,7 @@ function ServiceJobChargesSection({
               placeholder="Local Amount"
               min={0}
               hideControls
+              groupThousands
               decimalScale={localAmountDecimalScale}
               readOnly={readOnly}
               value={charge.local_amount || undefined}
@@ -1058,6 +1059,7 @@ function ServiceJobChargesSection({
               placeholder="Total Cost"
               min={0}
               hideControls
+              groupThousands
               decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
               value={charge.total_cost || undefined}
@@ -1071,6 +1073,7 @@ function ServiceJobChargesSection({
               placeholder="Local Amount"
               min={0}
               hideControls
+              groupThousands
               decimalScale={localAmountDecimalScale}
               readOnly={readOnly}
               value={charge.cost_local_amount || undefined}

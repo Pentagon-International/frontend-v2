@@ -1,10 +1,24 @@
 import { NumberInput, NumberInputProps } from "@mantine/core";
 import React from "react";
+import { getAmountNumberInputFormatProps } from "../utils/amountDisplayFormat";
 
-const FormNumberInput: React.FC<NumberInputProps> = (props) => {
+export type FormNumberInputProps = NumberInputProps & {
+  /** Country grouping for auto-calc total columns only. Value stays numeric. */
+  groupThousands?: boolean;
+};
+
+const FormNumberInput: React.FC<FormNumberInputProps> = ({
+  groupThousands = false,
+  ...props
+}) => {
+  const grouping = groupThousands
+    ? getAmountNumberInputFormatProps()
+    : undefined;
+
   return (
     <NumberInput
       decimalScale={2}   // default: restrict input to 2 decimal places
+      {...grouping}
       {...props}
       styles={{
         label: {

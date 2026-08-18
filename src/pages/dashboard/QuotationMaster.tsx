@@ -75,7 +75,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import useAuthStore from "../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../utils/nonDecimalMoneyAmount";
 import { useListFilterStore } from "../../store/listFilterStore";
@@ -85,7 +85,7 @@ function formatQuotationMoneyDisplay(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "-";
   const n = Number(raw);
   if (!Number.isFinite(n)) return String(raw);
-  return formatMoneyAmountBound(n);
+  return formatMoneyAmountForUi(n);
 }
 
 const PdfEditor = lazy(() =>

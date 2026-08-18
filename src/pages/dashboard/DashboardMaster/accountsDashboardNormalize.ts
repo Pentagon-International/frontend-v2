@@ -9,6 +9,7 @@ import type {
   TrendDirection,
 } from "./accountsDashboardTypes";
 import { ALL_BREAKDOWN_DIMENSIONS } from "./accountsDashboardEmpty";
+import { formatCurrencyAmountForUi } from "../../../utils/nonDecimalMoneyAmount";
 
 function safeNumber(value: unknown, fallback = 0): number {
   const n = Number(value);
@@ -616,7 +617,7 @@ export function formatCrLAmount(value: number): string {
   if (abs >= 1 && abs < 1000) {
     return `${sign}₹${abs.toFixed(abs >= 10 ? 2 : 1)}${abs >= 1 ? " Cr" : ""}`;
   }
-  return `${sign}₹${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  return `${sign}₹${formatCurrencyAmountForUi(abs)}`;
 }
 
 /** Values from API are typically in crores when unit is Cr. */

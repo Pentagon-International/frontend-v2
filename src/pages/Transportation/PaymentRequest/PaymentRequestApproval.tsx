@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import {
@@ -165,13 +165,12 @@ type FilterState = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function calcLocalAmount(charges?: PaymentRequestCharge[]): string {
-  if (!charges?.length) return formatMoneyAmountBound(0);
-  const total = charges.reduce(
+function calcLocalAmount(charges?: PaymentRequestCharge[]): number {
+  if (!charges?.length) return 0;
+  return charges.reduce(
     (sum, c) => sum + (c.local_amount ? parseFloat(c.local_amount) : 0),
     0,
   );
-  return formatMoneyAmountBound(total);
 }
 
 function getFirstJobNo(charges?: PaymentRequestCharge[]): string {
@@ -533,7 +532,7 @@ function PaymentRequestApproval() {
   const listStats = useMemo(() => {
     let pageAmount = 0;
     for (const r of tableData) {
-      pageAmount += parseFloat(calcLocalAmount(r.charges)) || 0;
+      pageAmount += calcLocalAmount(r.charges) || 0;
     }
     const summary = paymentRequestListResult?.summary;
     if (summary) {
@@ -752,7 +751,7 @@ function PaymentRequestApproval() {
         id: "local_amount",
         header: "Local Amount",
         size: 130,
-        Cell: ({ row }) => calcLocalAmount(row.original.charges),
+        Cell: ({ row }) => formatMoneyAmountForUi(calcLocalAmount(row.original.charges)),
       },
       {
         accessorKey: "payment_type",

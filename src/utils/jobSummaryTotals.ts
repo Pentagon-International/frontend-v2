@@ -1,10 +1,10 @@
 import {
-  formatUserDecimal,
   getDefaultBranchCountryCode,
   getDefaultBranchCurrencyCode,
   getDefaultUserBranch,
   type BranchCurrencyContext,
 } from "./userNumberFormat";
+import { formatAmountForDisplay } from "./amountDisplayFormat";
 import {
   isVietnamBranch,
   roundMoneyAmount,
@@ -171,12 +171,13 @@ export function formatJobSummaryAmount(
   branches?: BranchCurrencyContext[] | null,
 ): string {
   if (value == null) return "-";
-  const currencyCode = getDefaultBranchCurrencyCode(branches);
-  const countryCode = getDefaultBranchCountryCode(branches);
+  const branch = getDefaultUserBranch(branches);
   const noDecimals = isNonDecimalMoneyBranch(branches);
   const displayValue = roundMoneyAmount(value, noDecimals);
-  return formatUserDecimal(displayValue, countryCode, currencyCode, {
-    minimumFractionDigits: noDecimals ? 0 : 2,
-    maximumFractionDigits: noDecimals ? 0 : 2,
+  return formatAmountForDisplay(displayValue, {
+    countryCode:
+      branch?.country?.country_code ?? getDefaultBranchCountryCode(branches),
+    countryName: branch?.country?.country_name,
+    fractionDigits: noDecimals ? 0 : 2,
   });
 }

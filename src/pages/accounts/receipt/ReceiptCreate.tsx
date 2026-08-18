@@ -62,10 +62,12 @@ import {
   clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import {
   mergeEditPageAuditSources,
@@ -489,10 +491,10 @@ function formatOutstandingDocumentAmountInLocal(
   if (amountInLocal == null || amountInLocal === "") return "—";
   if (typeof amountInLocal === "number")
     return Number.isFinite(amountInLocal)
-      ? formatMoneyAmountBound(amountInLocal)
+      ? formatMoneyAmountForUi(amountInLocal)
       : "—";
   const n = parseFloat(String(amountInLocal).trim());
-  return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(amountInLocal);
+  return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(amountInLocal);
 }
 
 /** First non-empty trimmed string — API often returns `receipt_no: ""` where `??` would not fall back. */
@@ -2665,6 +2667,7 @@ export default function ReceiptCreate({
                 readOnly
                 min={0}
                 decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                 max={AMOUNT_MAX}
                 hideControls
                 styles={adjustmentFieldStyles}
@@ -3098,6 +3101,7 @@ export default function ReceiptCreate({
                               form.values.details[idx].local_amount ?? undefined
                             }
                             decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                             max={AMOUNT_MAX}
                             styles={adjustmentFieldStyles}
                           />
@@ -3395,6 +3399,7 @@ export default function ReceiptCreate({
                             undefined
                           }
                           decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                           max={AMOUNT_MAX}
                           styles={adjustmentFieldStyles}
                         />

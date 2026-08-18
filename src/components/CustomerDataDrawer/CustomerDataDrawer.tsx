@@ -9,17 +9,10 @@ import {
   Grid,
   Card,
 } from "@mantine/core";
-import { useMemo } from "react";
-import DateRangeInput from "../DateRangeInput"; // <-- If needed, adjust path
-import useAuthStore from "../../store/authStore";
+import DateRangeInput from "../DateRangeInput";
 import useDateFormat from "../../hooks/useDateFormat";
 import { formatDateForUi } from "../../utils/dateFormat";
-import {
-  getDefaultBranchCountryCode,
-  getDefaultBranchCurrencyCode,
-  formatUserDecimal,
-} from "../../utils/userNumberFormat";
-import { isVietnamBranchFromUser } from "../../utils/nonDecimalMoneyAmount";
+import { formatMoneyAmountForUi } from "../../utils/nonDecimalMoneyAmount";
 
 interface CustomerDataDrawerProps {
   opened: boolean;
@@ -89,19 +82,8 @@ export default function CustomerDataDrawer({
 
   onQuotationClick,
 }: CustomerDataDrawerProps) {
-  const user = useAuthStore((state) => state.user);
   const dateFormat = useDateFormat();
-  const isVietnamBranch = useMemo(
-    () => isVietnamBranchFromUser(user),
-    [user],
-  );
-  const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
-  const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
-  const formatDrawerMoney = (value: number) =>
-    formatUserDecimal(value, branchCountryCode, branchCurrencyCode, {
-      maximumFractionDigits: isVietnamBranch ? 0 : 2,
-      minimumFractionDigits: 0,
-    });
+  const formatDrawerMoney = (value: number) => formatMoneyAmountForUi(value);
 
   return (
     <Drawer

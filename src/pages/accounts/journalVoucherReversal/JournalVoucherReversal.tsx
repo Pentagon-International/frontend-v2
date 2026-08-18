@@ -61,10 +61,12 @@ import {
   clampMoneyAmountBound,
   formatMoneyAmount,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 
 // ─── API Fetchers ────────────────────────────────────────────────────────────
@@ -1761,6 +1763,7 @@ function JournalVoucherReversal() {
                             placeholder="Local Amt"
                             hideControls
                             decimalScale={localAmountDecimalScale}
+                            {...getAmountNumberInputFormatProps()}
                             readOnly
                             value={row.local_amount ?? undefined}
                             styles={{
@@ -1889,7 +1892,7 @@ function JournalVoucherReversal() {
                       c="#105476"
                       style={{ fontFamily: "Inter" }}
                     >
-                      {formatMoneyAmountBound(totals.debit)}
+                      {formatMoneyAmountForUi(totals.debit)}
                     </Text>
                   </Box>
                 </Grid.Col>
@@ -1919,7 +1922,7 @@ function JournalVoucherReversal() {
                       c="#105476"
                       style={{ fontFamily: "Inter" }}
                     >
-                      {formatMoneyAmountBound(totals.credit)}
+                      {formatMoneyAmountForUi(totals.credit)}
                     </Text>
                   </Box>
                 </Grid.Col>
@@ -1954,7 +1957,7 @@ function JournalVoucherReversal() {
                       }
                       style={{ fontFamily: "Inter" }}
                     >
-                      {formatMoneyAmountBound(totals.difference)}
+                      {formatMoneyAmountForUi(totals.difference)}
                     </Text>
                   </Box>
                 </Grid.Col>

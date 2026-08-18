@@ -49,10 +49,12 @@ import {
     clampMoneyAmountBound,
     formatMoneyAmount,
     formatMoneyAmountBound,
+    formatMoneyAmountForUi,
     getAmountDecimalScale,
     isVietnamBranchFromUser,
     roundLocalMoneyToDecimals,
   } from "../../../utils/nonDecimalMoneyAmount";
+  import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
   import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
   import {
     formatRoeForAccountsPayload,
@@ -1709,7 +1711,7 @@ import {
         if (diff !== 0) {
           ToastNotification({
             type: "error",
-            message: `Difference Amount must be ${formatMoneyAmountBound(0)} to post. Current: ${formatMoneyAmountBound(diff)}.`,
+            message: `Difference Amount must be ${formatMoneyAmountForUi(0)} to post. Current: ${formatMoneyAmountForUi(diff)}.`,
           });
           return;
         }
@@ -2398,6 +2400,7 @@ import {
                   onChange={() => {}}
                   min={0}
                   decimalScale={localAmountDecimalScale}
+                  {...getAmountNumberInputFormatProps()}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2411,6 +2414,7 @@ import {
                   onChange={() => {}}
                   min={0}
                   decimalScale={localAmountDecimalScale}
+                  {...getAmountNumberInputFormatProps()}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -2423,6 +2427,7 @@ import {
                   value={form.values.difference_amount ?? undefined}
                   onChange={() => {}}
                   decimalScale={localAmountDecimalScale}
+                  {...getAmountNumberInputFormatProps()}
                   hideControls
                   styles={effectiveInputStyles}
                 />
@@ -3185,6 +3190,7 @@ import {
                           readOnly
                           min={0}
                           decimalScale={localAmountDecimalScale}
+                          {...getAmountNumberInputFormatProps()}
                           hideControls
                           styles={readOnlyFieldStyles}
                         />

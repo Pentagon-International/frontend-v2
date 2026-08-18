@@ -57,6 +57,7 @@ import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -1385,7 +1386,7 @@ function DestinationCreate() {
                                           Per Container{" : "}
                                         </Text>
                                         <Text size="sm" fw={600} c="dimmed">
-                                          {formatMoneyAmountBound(
+                                          {formatMoneyAmountForUi(
                                             total / numberOfContainers,
                                           )}
                                         </Text>
@@ -1398,7 +1399,7 @@ function DestinationCreate() {
                                     </Grid.Col>
                                     <Grid.Col span={!isViewMode ? 1.6 : 2}>
                                       <Text size="md" pl="sm" fw={600} c="#105476">
-                                        {formatMoneyAmountBound(total)}
+                                        {formatMoneyAmountForUi(total)}
                                       </Text>
                                     </Grid.Col>
                                     

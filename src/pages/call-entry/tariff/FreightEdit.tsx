@@ -24,7 +24,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 
@@ -286,7 +286,7 @@ export default function FreightEdit() {
                   Amount:{" "}
                   {charge.amount != null && charge.amount !== ""
                     ? Number.isFinite(Number(charge.amount))
-                      ? formatMoneyAmountBound(Number(charge.amount))
+                      ? formatMoneyAmountForUi(Number(charge.amount))
                       : charge.amount
                     : "N/A"}{" "}
                   {charge.currency || ""}

@@ -72,6 +72,7 @@ import {
   openGlobalSearchItem,
   runGlobalSearchQuery,
 } from "../../../utils/globalSearchNavigation";
+import { formatMoneyAmountForUi } from "../../../utils/nonDecimalMoneyAmount";
 
 type CoaItem = {
   id?: number;
@@ -250,7 +251,7 @@ function formatAmount(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "";
   }
-  return String(value);
+  return formatMoneyAmountForUi(value);
 }
 
 function formatSubledgerCell(

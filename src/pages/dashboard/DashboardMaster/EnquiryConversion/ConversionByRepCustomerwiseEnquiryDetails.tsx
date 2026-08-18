@@ -19,9 +19,12 @@ import { enquiryConversionColors } from "./enquiryConversionTokens";
 import { stageLabelFromApiStatus } from "./enquiryConversionDashboardMappers";
 import {
   firstQuoteService,
+  formatInrLakhs,
   laneFromEnquiry,
+  parseMoney,
   winProbLabel,
 } from "./customerwiseEnquiryHelpers";
+import { formatMoneyAmountForUi } from "../../../../utils/nonDecimalMoneyAmount";
 import {
   EnquiryConversionDrawerBack,
   EnquiryConversionDrawerHeaderSeparator,
@@ -709,9 +712,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                         <Table.Td ta="right">
                           <Text fz={13} fw={600} style={{ fontVariantNumeric: "tabular-nums" }}>
                             {c.total_sell != null
-                              ? parseMoney(c.total_sell).toLocaleString("en-IN", {
-                                  maximumFractionDigits: 2,
-                                })
+                              ? formatMoneyAmountForUi(parseMoney(c.total_sell))
                               : "—"}
                           </Text>
                         </Table.Td>
@@ -731,7 +732,7 @@ export function ConversionByRepCustomerwiseEnquiryDetails({
                   </Text>
                   <Text fz={15} fw={700} c="#0F172A" style={{ fontVariantNumeric: "tabular-nums" }}>
                     {totalSell > 0
-                      ? totalSell.toLocaleString("en-IN", { maximumFractionDigits: 2 })
+                      ? formatMoneyAmountForUi(totalSell)
                       : "—"}
                   </Text>
                 </Group>

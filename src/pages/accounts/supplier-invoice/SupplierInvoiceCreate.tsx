@@ -60,10 +60,12 @@ import {
   clampMoneyAmountBound,
   formatMoneyAmount,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
 import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
@@ -2580,7 +2582,7 @@ export default function SupplierInvoiceCreate({
       if (diff !== 0) {
         ToastNotification({
           type: "error",
-          message: `Difference Amount must be ${formatMoneyAmountBound(0)} to post. Current: ${formatMoneyAmountBound(diff)}.`,
+          message: `Difference Amount must be ${formatMoneyAmountForUi(0)} to post. Current: ${formatMoneyAmountForUi(diff)}.`,
         });
         return;
       }
@@ -3528,6 +3530,7 @@ export default function SupplierInvoiceCreate({
                 onChange={() => {}}
                 min={0}
                 decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3541,6 +3544,7 @@ export default function SupplierInvoiceCreate({
                 onChange={() => {}}
                 min={0}
                 decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -3553,6 +3557,7 @@ export default function SupplierInvoiceCreate({
                 value={form.values.difference_amount ?? undefined}
                 onChange={() => {}}
                 decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                 hideControls
                 styles={effectiveInputStyles}
               />
@@ -4371,6 +4376,7 @@ export default function SupplierInvoiceCreate({
                         readOnly
                         min={0}
                         decimalScale={localAmountDecimalScale}
+                        {...getAmountNumberInputFormatProps()}
                         hideControls
                         styles={readOnlyFieldStyles}
                       />

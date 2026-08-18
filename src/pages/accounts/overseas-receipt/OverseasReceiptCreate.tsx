@@ -69,10 +69,12 @@ import {
     clampCurrencyMoneyAmountBound,
     clampMoneyAmountBound,
     formatMoneyAmountBound,
+    formatMoneyAmountForUi,
     getAmountDecimalScale,
     isVietnamBranchFromUser,
     roundLocalMoneyToDecimals,
   } from "../../../utils/nonDecimalMoneyAmount";
+  import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
   
   const RECEIPT_TYPE_OPTIONS = [
     { value: "CHEQUE", label: "CHEQUE" },
@@ -483,11 +485,11 @@ import {
     if (amountInLocal == null || amountInLocal === "") return "—";
     if (typeof amountInLocal === "number")
       return Number.isFinite(amountInLocal)
-        ? formatMoneyAmountBound(amountInLocal)
+        ? formatMoneyAmountForUi(amountInLocal)
         : "—";
     const n = parseFloat(String(amountInLocal).trim());
     return Number.isFinite(n)
-      ? formatMoneyAmountBound(n)
+      ? formatMoneyAmountForUi(n)
       : String(amountInLocal);
   }
 
@@ -2651,6 +2653,7 @@ import {
                   readOnly
                   min={0}
                   decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                   max={AMOUNT_MAX}
                   hideControls
                   styles={adjustmentFieldStyles}
@@ -3043,6 +3046,7 @@ import {
                                 form.values.details[idx].local_amount ?? undefined
                               }
                               decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                               max={AMOUNT_MAX}
                               styles={adjustmentFieldStyles}
                             />
@@ -3342,6 +3346,7 @@ import {
                               undefined
                             }
                             decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                             max={AMOUNT_MAX}
                             styles={adjustmentFieldStyles}
                           />

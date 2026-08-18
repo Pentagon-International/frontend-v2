@@ -66,8 +66,8 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmount,
-  formatMoneyAmountBound,
+  formatCurrencyAmountForUi,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import dayjs from "dayjs";
@@ -103,7 +103,7 @@ function parseSupplierInvoiceAmount(value: unknown): number | null {
 function formatSupplierInvoiceAmount(value: unknown): string {
   const n = parseSupplierInvoiceAmount(value);
   if (n == null) return "-";
-  return formatMoneyAmountBound(n);
+  return formatMoneyAmountForUi(n);
 }
 
 function getSupplierInvoiceCurrencyAmount(row: SupplierInvoiceRow): number | null {
@@ -668,7 +668,7 @@ function SupplierInvoiceMaster() {
           const total = getSupplierInvoiceCurrencyAmount(row.original);
           return (
             <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              {total == null ? "-" : formatMoneyAmount(total, false)}
+              {total == null ? "-" : formatCurrencyAmountForUi(total)}
             </Text>
           );
         },

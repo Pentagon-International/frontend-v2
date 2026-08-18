@@ -36,7 +36,7 @@ import {
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  isMoneyWholeNumberMode,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import "./tariffContractsList.css";
@@ -121,9 +121,7 @@ function formatRateDisplay(row: TariffContractRow): string {
   if (row.avg_buy_rate && row.rate_unit) {
     const amount = Number(row.avg_buy_rate);
     const formattedAmount = Number.isFinite(amount)
-      ? amount.toLocaleString("en-US", {
-          maximumFractionDigits: isMoneyWholeNumberMode() ? 0 : 2,
-        })
+      ? formatMoneyAmountForUi(amount)
       : row.avg_buy_rate;
     const unit = row.rate_unit.replace(/\s+/g, "");
     return `${prefix}${formattedAmount}/${unit}`;

@@ -2,8 +2,7 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmount,
-  formatMoneyAmountBound,
+  formatCurrencyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { useNavigate } from "react-router-dom";
@@ -473,7 +472,7 @@ export default function DebitCreditNoteTradeMaster() {
           if (!Number.isFinite(total) || total === 0) return <Text size="sm">-</Text>;
           return (
             <Text size="sm">
-              {formatMoneyAmount(total, false)}
+              {formatCurrencyAmountForUi(total)}
             </Text>
           );
         },

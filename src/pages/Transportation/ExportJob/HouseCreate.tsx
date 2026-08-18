@@ -5537,6 +5537,7 @@ function HouseCreate() {
                       placeholder="Sell Local Amt"
                       min={0}
                       hideControls
+                      groupThousands
                       decimalScale={localAmountDecimalScale}
                       value={charge.sell_local_amount || undefined}
                       onChange={(value) => {
@@ -5587,6 +5588,7 @@ function HouseCreate() {
                       placeholder="Total Cost"
                       min={0}
                       hideControls
+                      groupThousands
                       decimalScale={currencyAmountDecimalScale}
                       value={charge.total_cost || undefined}
                       onChange={(value) => {
@@ -5602,6 +5604,7 @@ function HouseCreate() {
                       placeholder="Cost Local Amt"
                       min={0}
                       hideControls
+                      groupThousands
                       decimalScale={localAmountDecimalScale}
                       value={charge.cost_local_amount || undefined}
                       onChange={(value) => {

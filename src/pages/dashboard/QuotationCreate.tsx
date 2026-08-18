@@ -99,6 +99,7 @@ import {
   clampMoneyAmountBound,
   formatMoneyAmount,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../utils/nonDecimalMoneyAmount";
@@ -172,14 +173,14 @@ function formatHistoryCurrencyMoney(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "-";
   const n = parseFloat(String(raw));
   if (!Number.isFinite(n)) return "-";
-  return formatMoneyAmount(n, false);
+  return formatMoneyAmountForUi(n, false);
 }
 
 function formatHistoryLocalMoney(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "-";
   const n = parseFloat(String(raw));
   if (!Number.isFinite(n)) return "-";
-  return formatMoneyAmountBound(n);
+  return formatMoneyAmountForUi(n);
 }
 
 const QUOTATION_APPROVAL_PATH = "/quotation-approval";
@@ -616,7 +617,7 @@ function QuotationCreate({
   } = useExchangeRateRoe();
   const branchCurrencyCode = defaultBranchCurrency;
   const formatMoneyDisplay = useCallback(
-    (value: number) => formatMoneyAmountBound(value),
+    (value: number) => formatMoneyAmountForUi(value),
     // Recompute when Vietnam mode changes (bound formatter reads session flag).
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isVietnamBranch],
@@ -6293,6 +6294,7 @@ function QuotationCreate({
                                   formatMoneyAmountBound(0),
                               )}
                               decimalScale={localAmountDecimalScale}
+                              groupThousands
                               hideControls
                               readOnly
                               disabled={isViewMode}
@@ -6319,6 +6321,7 @@ function QuotationCreate({
                                   formatMoneyAmountBound(0),
                               )}
                               decimalScale={localAmountDecimalScale}
+                              groupThousands
                               hideControls
                               readOnly
                               disabled={isViewMode}
@@ -7600,6 +7603,7 @@ function QuotationCreate({
                                 formatMoneyAmountBound(0),
                             )}
                             decimalScale={localAmountDecimalScale}
+                            groupThousands
                             hideControls
                             readOnly
                             disabled={isViewMode}
@@ -7624,6 +7628,7 @@ function QuotationCreate({
                                 formatMoneyAmountBound(0),
                             )}
                             decimalScale={localAmountDecimalScale}
+                            groupThousands
                             hideControls
                             readOnly
                             disabled={isViewMode}
@@ -8491,7 +8496,7 @@ function QuotationCreate({
                               ta="center"
                               fw={600}
                             >
-                              ₹{carrier.all_inclusive_total.toLocaleString()}
+                              ₹{formatMoneyAmountForUi(carrier.all_inclusive_total)}
                             </Text>
                           </Stack>
                         </Card>
@@ -8578,7 +8583,7 @@ function QuotationCreate({
                               ta="center"
                               fw={600}
                             >
-                              ₹{carrier.all_inclusive_total.toLocaleString()}
+                              ₹{formatMoneyAmountForUi(carrier.all_inclusive_total)}
                             </Text>
                           </Stack>
                         </Card>

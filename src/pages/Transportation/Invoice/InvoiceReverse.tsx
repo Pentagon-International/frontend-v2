@@ -53,7 +53,7 @@ import {
   bindMoneyWholeNumberMode,
   clampMoneyAmount,
   clampMoneyAmountBound,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -3130,6 +3130,7 @@ function InvoiceReverse() {
                           min={0}
                           decimalScale={amountDecimalScale}
                           hideControls
+                          groupThousands
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                         />
@@ -3137,6 +3138,7 @@ function InvoiceReverse() {
                       <Grid.Col span={0.8}>
                         <FormNumberInput
                           placeholder="Local Amount"
+                          groupThousands
                           value={charge.amount_in_local ?? undefined}
                           onChange={(v) => {
                             form.setFieldValue(
@@ -3512,7 +3514,7 @@ function InvoiceReverse() {
                             Local Amount Total
                           </Text>
                           <Text size="lg" fw={600} c="#105476">
-                            {formatMoneyAmountBound(
+                            {formatMoneyAmountForUi(
                               chargeSectionTotals.local_total,
                             )}
                           </Text>
@@ -3525,7 +3527,7 @@ function InvoiceReverse() {
                               VAT Total
                             </Text>
                             <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmountBound(vatSectionTotal)}
+                              {formatMoneyAmountForUi(vatSectionTotal)}
                             </Text>
                           </Box>
                         </Grid.Col>
@@ -3538,7 +3540,7 @@ function InvoiceReverse() {
                                 IGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountBound(
+                                {formatMoneyAmountForUi(
                                   gstSectionTotals.igst_total,
                                 )}
                               </Text>
@@ -3550,7 +3552,7 @@ function InvoiceReverse() {
                                 CGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountBound(
+                                {formatMoneyAmountForUi(
                                   gstSectionTotals.cgst_total,
                                 )}
                               </Text>
@@ -3562,7 +3564,7 @@ function InvoiceReverse() {
                                 SGST Total
                               </Text>
                               <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountBound(
+                                {formatMoneyAmountForUi(
                                   gstSectionTotals.sgst_total,
                                 )}
                               </Text>
@@ -3652,7 +3654,7 @@ function InvoiceReverse() {
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {row.taxable_total != null
-                                      ? formatMoneyAmountBound(
+                                      ? formatMoneyAmountForUi(
                                           Number(row.taxable_total),
                                         )
                                       : "—"}

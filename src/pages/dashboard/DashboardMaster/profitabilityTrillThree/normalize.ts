@@ -1,4 +1,5 @@
 import { branchDotColor } from "../accountsDashboardNormalize";
+import { formatMoneyAmountForUi } from "../../../../utils/nonDecimalMoneyAmount";
 import type { JobProfitabilityDetail, JobPlLine } from "../profitabilityTrillTwo/types";
 import type { JobLinkedDocument } from "../profitabilityTrillTwo/types";
 import type {
@@ -29,7 +30,7 @@ function toLakhs(value: unknown): number {
 }
 
 function formatInrFull(value: number): string {
-  return `₹${Math.round(value).toLocaleString("en-IN")}`;
+  return `₹${formatMoneyAmountForUi(value)}`;
 }
 
 function formatLakhsDisplay(valueL: number): string {

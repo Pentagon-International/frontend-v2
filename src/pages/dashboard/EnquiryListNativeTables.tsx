@@ -45,7 +45,7 @@ import type { PreviewColDef } from "./EnquiryListPreviewBuild";
 import useAuthStore from "../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../utils/nonDecimalMoneyAmount";
 
@@ -1742,7 +1742,7 @@ function renderPreviewCell({
     col.key === "profit"
   ) {
     const n = Number(v);
-    const str = Number.isFinite(n) ? formatMoneyAmountBound(n) : String(v);
+    const str = Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(v);
     return (
       <TextLineClampTooltip
         text={str}

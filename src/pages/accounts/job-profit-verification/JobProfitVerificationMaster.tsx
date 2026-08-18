@@ -65,7 +65,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -271,7 +271,7 @@ function CustomerNamesDisplay({
 
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  return formatMoneyAmountBound(value);
+  return formatMoneyAmountForUi(value);
 }
 
 function formatCurrencyAmount(

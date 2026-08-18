@@ -10,6 +10,7 @@
 
 import { getDefaultUserBranch } from "./userNumberFormat";
 import { roundToDecimals } from "./numberInputUtils";
+import { formatAmountForDisplay } from "./amountDisplayFormat";
 
 export type VietnamBranchDetectInput = {
   countryCode?: string | null;
@@ -163,6 +164,27 @@ export function formatMoneyAmountBound(
   value: number | null | undefined,
 ): string {
   return formatMoneyAmount(value, moneyWholeNumberMode);
+}
+
+/**
+ * UI-only grouped amount (totals / amount columns).
+ * Keeps Vietnam whole-number rounding. Do not use for inputs or payloads.
+ */
+export function formatMoneyAmountForUi(
+  value: number | null | undefined,
+  noDecimals = moneyWholeNumberMode,
+): string {
+  const clamped = clampMoneyAmount(value ?? 0, noDecimals);
+  return formatAmountForDisplay(clamped ?? 0, {
+    fractionDigits: noDecimals ? 0 : 2,
+  });
+}
+
+/** UI-only grouped currency amount (always 2 decimal places). */
+export function formatCurrencyAmountForUi(
+  value: number | null | undefined,
+): string {
+  return formatMoneyAmountForUi(value, false);
 }
 
 export function getBoundAmountDecimalScale(): 0 | 2 {

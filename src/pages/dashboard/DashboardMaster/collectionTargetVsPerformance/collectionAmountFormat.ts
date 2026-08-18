@@ -1,3 +1,5 @@
+import { formatCurrencyAmountForUi } from "../../../../utils/nonDecimalMoneyAmount";
+
 export function currencyCodeLabel(code?: string): string {
   return code?.trim().toUpperCase() || "INR";
 }
@@ -12,5 +14,5 @@ export function formatCollectionCrLAmount(value: number, currencyCode = "INR"): 
   if (abs >= 1 && abs < 1000) {
     return `${sign}${code} ${abs.toFixed(abs >= 10 ? 2 : 1)}${abs >= 1 ? " Cr" : ""}`;
   }
-  return `${sign}${code} ${abs.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  return `${sign}${code} ${formatCurrencyAmountForUi(abs)}`;
 }

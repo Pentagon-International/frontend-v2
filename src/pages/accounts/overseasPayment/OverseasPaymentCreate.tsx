@@ -69,10 +69,12 @@ import {
   clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 
 const PAYMENT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -537,10 +539,10 @@ function formatOutstandingDocumentAmountInLocal(
   if (amountInLocal == null || amountInLocal === "") return "—";
   if (typeof amountInLocal === "number")
     return Number.isFinite(amountInLocal)
-      ? formatMoneyAmountBound(amountInLocal)
+      ? formatMoneyAmountForUi(amountInLocal)
       : "—";
   const n = parseFloat(String(amountInLocal).trim());
-  return Number.isFinite(n) ? formatMoneyAmountBound(n) : String(amountInLocal);
+  return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(amountInLocal);
 }
 
 /** First non-empty trimmed string — API often returns `payment_no: ""` where `??` would not fall back. */
@@ -2806,6 +2808,7 @@ export default function OverseasPaymentCreate({
                 readOnly
                 min={0}
                 decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                 max={AMOUNT_MAX}
                 hideControls
                 styles={adjustmentFieldStyles}
@@ -3198,6 +3201,7 @@ export default function OverseasPaymentCreate({
                               form.values.details[idx].local_amount ?? undefined
                             }
                             decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                             max={AMOUNT_MAX}
                             styles={adjustmentFieldStyles}
                           />
@@ -3489,6 +3493,7 @@ export default function OverseasPaymentCreate({
                             undefined
                           }
                           decimalScale={localAmountDecimalScale}
+                {...getAmountNumberInputFormatProps()}
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>

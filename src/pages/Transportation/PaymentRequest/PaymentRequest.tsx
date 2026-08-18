@@ -53,10 +53,11 @@ import dayjs from "dayjs";
 import {
   bindMoneyWholeNumberMode,
   clampMoneyAmountBound,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 
@@ -3020,6 +3021,7 @@ function PaymentRequest() {
                     placeholder="Local Amt"
                     hideControls
                     decimalScale={amountDecimalScale}
+                    {...getAmountNumberInputFormatProps()}
                     readOnly
                     value={charge.amount_in_local ?? undefined}
                     styles={{
@@ -3177,7 +3179,7 @@ function PaymentRequest() {
               {/* Local Amt column */}
               <Grid.Col span={0.9}>
                 <Text size="sm" fw={700} c="#105476">
-                  {formatMoneyAmountBound(
+                  {formatMoneyAmountForUi(
                     form.values.charges.reduce(
                       (sum, c) => sum + (c.amount_in_local ?? 0),
                       0,

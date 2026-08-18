@@ -42,7 +42,7 @@ import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmount,
+  formatCurrencyAmountForUi,
   getAmountDecimalScale,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -246,7 +246,7 @@ function sumAmounts(
 }
 
 function formatAmount(value: number): string {
-  return formatMoneyAmount(value, false);
+  return formatCurrencyAmountForUi(value);
 }
 
 function formatChartOfAccountsLabel(

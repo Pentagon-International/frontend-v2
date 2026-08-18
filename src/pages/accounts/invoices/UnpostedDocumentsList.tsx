@@ -62,7 +62,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
@@ -210,7 +210,7 @@ function formatAmount(value: unknown): string {
   if (value == null || value === "") return "-";
   const n = typeof value === "number" ? value : parseFloat(String(value));
   if (Number.isNaN(n)) return "-";
-  return formatMoneyAmountBound(n);
+  return formatMoneyAmountForUi(n);
 }
 
 function formatArrayCell(value: unknown): string {

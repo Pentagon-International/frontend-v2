@@ -35,6 +35,7 @@ import { apiCallProtected } from "../api/axios";
 import { API_HEADER } from "../store/storeKeys";
 import { useIsAdminUser } from "../hooks/useIsAdminUser";
 import { postAPICall } from "../service/postApiCall";
+import { formatMoneyAmountForUi } from "../utils/nonDecimalMoneyAmount";
 
 const fetchDaybookByType = async (
   documentType: "CRJ" | "CRJREV" = "CRJ",
@@ -343,7 +344,14 @@ function ExtractedPayloadBreakdown({
                                   </Badge>
                                 </Table.Td>
                                 <Table.Td>₹{c.amount ?? "—"}</Table.Td>
-                                <Table.Td>₹{c.amount_in_local ?? "—"}</Table.Td>
+                                <Table.Td>
+                                  ₹
+                                  {c.amount_in_local == null
+                                    ? "—"
+                                    : formatMoneyAmountForUi(
+                                        Number(c.amount_in_local),
+                                      )}
+                                </Table.Td>
                                 <Table.Td>{c.roe ?? "—"}</Table.Td>
                                 <Table.Td>
                                   {c.cgst != null

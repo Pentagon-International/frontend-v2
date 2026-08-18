@@ -38,6 +38,7 @@ import type { ContractDetailResponse } from "./contractDetail/types";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmountBound,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import "./createContract.css";
@@ -169,7 +170,7 @@ function getCurrencyPrefix(currencyCode: string): string {
 }
 
 function formatMoney(amount: number, currencyCode: string): string {
-  return `${getCurrencyPrefix(currencyCode)}${formatMoneyAmountBound(amount)}`;
+  return `${getCurrencyPrefix(currencyCode)}${formatMoneyAmountForUi(amount)}`;
 }
 
 function isPercentRate(value: string): boolean {

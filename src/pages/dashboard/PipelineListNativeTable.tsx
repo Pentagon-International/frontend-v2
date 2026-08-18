@@ -40,6 +40,7 @@ import {
   erpListTdPaddingStyle,
   erpListThStyle,
 } from "../../components/ERPListPage/erpListTableStyles";
+import { formatMoneyAmountForUi } from "../../utils/nonDecimalMoneyAmount";
 
 /** One origin→destination pair extracted from a pipeline entry. */
 export type PipelineRoutePair = {
@@ -856,7 +857,7 @@ export function PipelineListNativeTable({
                   color: muted,
                 }}
               >
-                {(row.total_profit ?? 0).toLocaleString()}
+                {formatMoneyAmountForUi(row.total_profit ?? 0)}
               </td>
               <td
                 style={{

@@ -48,6 +48,8 @@ import {
   bindMoneyWholeNumberMode,
   clampCurrencyMoneyAmountBound,
   clampMoneyAmountBound,
+  formatCurrencyAmountForUi,
+  formatMoneyAmountForUi,
   isVietnamBranchFromUser,
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -1986,8 +1988,11 @@ export function DebitCreditNoteCreateBase({
                 </Grid.Col>
                 <Grid.Col span={1}>
                   <FormTextInput
-                    type="number"
-                    value={l.local_amount === "" ? "" : String(l.local_amount)}
+                    value={
+                      l.local_amount === ""
+                        ? ""
+                        : formatMoneyAmountForUi(Number(l.local_amount))
+                    }
                     onChange={(e) => {
                       const v = e.currentTarget.value;
                       setLineById(l.id, {
@@ -2001,9 +2006,10 @@ export function DebitCreditNoteCreateBase({
                 </Grid.Col>
                 <Grid.Col span={1}>
                   <FormTextInput
-                    type="number"
                     value={
-                      l.amount_in_inr === "" ? "" : String(l.amount_in_inr)
+                      l.amount_in_inr === ""
+                        ? ""
+                        : formatCurrencyAmountForUi(Number(l.amount_in_inr))
                     }
                     onChange={(e) => {
                       const v = e.currentTarget.value;

@@ -3,6 +3,7 @@ import type {
   EnquiryDrilldownQuotationService,
 } from "../../../../service/dashboard.service";
 import { enquiryConversionColors } from "./enquiryConversionTokens";
+import { formatMoneyAmountForUi } from "../../../../utils/nonDecimalMoneyAmount";
 
 export function modeAbbrev(code: string): string {
   const u = code.toUpperCase();
@@ -33,7 +34,7 @@ export function formatInrLakhs(amount: number): string {
   if (lakhs >= 1) return `₹${lakhs >= 10 ? lakhs.toFixed(1) : lakhs.toFixed(2)} L`;
   const thousands = amount / 1000;
   if (thousands >= 1) return `₹${thousands.toFixed(1)} K`;
-  return `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+  return `₹${formatMoneyAmountForUi(amount)}`;
 }
 
 export function parseMoney(s?: string | number | null): number {

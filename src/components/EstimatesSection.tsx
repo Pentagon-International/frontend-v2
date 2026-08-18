@@ -703,6 +703,7 @@ export function EstimatesSection({
               placeholder="Total"
               min={0}
               hideControls
+              groupThousands
               decimalScale={currencyAmountDecimalScale}
               value={row.total_cost ?? undefined}
               onChange={(value) => {

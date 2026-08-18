@@ -56,6 +56,7 @@ import { apiCallProtected } from "../../api/axios";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { useListFilterStore } from "../../store/listFilterStore";
+import { formatMoneyAmountForUi } from "../../utils/nonDecimalMoneyAmount";
 
 type PipelineData = {
   id: number;
@@ -1219,7 +1220,7 @@ function Pipeline() {
                     icon={<IconCoin size={14} color="#059669" />}
                     iconBackground="#d1fae5"
                     iconColor="#059669"
-                    value={Math.round(pipelineStats.profit).toLocaleString()}
+                    value={formatMoneyAmountForUi(pipelineStats.profit)}
                     label="Total profit"
                   />
                   <ERPListStatPill

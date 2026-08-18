@@ -1,4 +1,5 @@
 import { formatUserDecimal, isVietnameseUserCountry } from "../../utils/userNumberFormat";
+import { formatAmountForDisplay } from "../../utils/amountDisplayFormat";
 
 /** Mirrors default instruction lines rendered in QuotationPDFTemplate (not imported from PDF file). */
 export const DEFAULT_QUOTATION_INSTRUCTIONS = [
@@ -241,9 +242,9 @@ export function formatPdfChargeTotalAmount(
   const isVietnam = isVietnameseUserCountry(branchCountryCode);
   const exactDecimals = Boolean(options?.exactDecimals);
   const useWholeNumbers = isVietnam && !exactDecimals;
-  return formatUserDecimal(safe, branchCountryCode, branchCurrencyCode, {
-    minimumFractionDigits: useWholeNumbers ? 0 : 2,
-    maximumFractionDigits: useWholeNumbers ? 0 : 2,
+  return formatAmountForDisplay(safe, {
+    countryCode: branchCountryCode,
+    fractionDigits: useWholeNumbers ? 0 : 2,
   });
 }
 

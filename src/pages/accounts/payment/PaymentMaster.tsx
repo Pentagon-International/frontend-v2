@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
-  formatMoneyAmount,
-  formatMoneyAmountBound,
+  formatCurrencyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import {
@@ -601,8 +600,9 @@ export default function PaymentMaster() {
         size: 120,
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
-          if (val == null) return "-";
-          return typeof val === "number" ? formatMoneyAmount(val, false) : String(val);
+          if (val == null || val === "") return "-";
+          const n = typeof val === "number" ? val : parseFloat(String(val));
+          return Number.isFinite(n) ? formatCurrencyAmountForUi(n) : String(val);
         },
       },
       {
