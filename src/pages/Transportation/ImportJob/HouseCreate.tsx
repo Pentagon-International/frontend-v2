@@ -172,6 +172,7 @@ type HouseDetailsForm = {
   shipment_terms_code: string;
   shipment_terms_name: string;
   pp_cc: string;
+  bl_type: string;
   routed: string;
   routed_by: string;
   origin_code: string;
@@ -977,6 +978,14 @@ function HouseCreate() {
         (editData as { pp_cc?: unknown } | undefined)?.pp_cc ??
           (editData as { freight?: unknown } | undefined)?.freight,
       ),
+      bl_type: (() => {
+        const raw = String(
+          (editData as { bl_type?: unknown } | undefined)?.bl_type ?? "",
+        ).trim();
+        if (raw === "Original") return "ORIGINAL";
+        if (raw === "Surrender" || raw === "SURRENDER") return "SURRENDERED";
+        return raw;
+      })(),
       routed: normalizeRoutedValue(editData?.routed),
       routed_by: editData?.routed_by || "",
       origin_code:
@@ -2529,6 +2538,7 @@ function HouseCreate() {
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
       pp_cc: form.values.pp_cc || "Collect",
+      bl_type: form.values.bl_type || "",
       routed: form.values.routed,
       routed_by: form.values.routed_by,
       origin_code: form.values.origin_code,
@@ -2706,6 +2716,7 @@ function HouseCreate() {
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
       pp_cc: v.pp_cc || "Collect",
+      bl_type: v.bl_type || "",
       routed: v.routed,
       routed_by: v.routed_by,
       origin_code: v.origin_code,
@@ -3156,10 +3167,7 @@ function HouseCreate() {
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
         note: form.values.note || "",
-        bl_type:
-          String(
-            (editData as { bl_type?: unknown } | undefined)?.bl_type ?? "",
-          ) || "",
+        bl_type: form.values.bl_type || "",
         pp_cc: freightPpCc,
         freight: freightPpCc,
         package_type: housingPackageType,
@@ -3208,7 +3216,7 @@ function HouseCreate() {
         container_details: containerDetailsForPdf,
         housing_details: existingHousingDetails,
       };
-      const blType = String(housingData.bl_type ?? "");
+      const blType = String(form.values.bl_type || housingData.bl_type || "");
 
       const blobUrl = generateBillOfLadingPDF(
         jobDataForBol,
@@ -4394,6 +4402,20 @@ function HouseCreate() {
                   value={form.values.house_date}
                   onChange={(d) => form.setFieldValue("house_date", d)}
                   size="sm"
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                <Dropdown
+                  label="BL Type"
+                  placeholder="Select BL Type"
+                  searchable
+                  data={[
+                    { value: "ORIGINAL", label: "ORIGINAL" },
+                    { value: "SEAWAY BILL", label: "SEAWAY BILL" },
+                    { value: "SURRENDERED", label: "SURRENDERED" },
+                  ]}
+                  {...form.getInputProps("bl_type")}
                 />
               </Grid.Col>
 

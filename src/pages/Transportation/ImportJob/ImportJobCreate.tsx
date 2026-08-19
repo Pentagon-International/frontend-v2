@@ -456,6 +456,7 @@ type HousingDetail = HouseDocumentFields & {
   commodity_description: string;
   marks_no: string;
   note?: string;
+  bl_type?: string;
   item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
@@ -1261,6 +1262,15 @@ function ImportJobCreate() {
               note: (house as { note?: unknown }).note
                 ? String((house as { note?: unknown }).note)
                 : "",
+              bl_type: (() => {
+                const raw = String(
+                  (house as { bl_type?: unknown }).bl_type ?? "",
+                ).trim();
+                if (raw === "Original") return "ORIGINAL";
+                if (raw === "Surrender" || raw === "SURRENDER")
+                  return "SURRENDERED";
+                return raw;
+              })(),
               item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
@@ -3574,6 +3584,7 @@ function ImportJobCreate() {
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
           note: house.note || "",
+          bl_type: house.bl_type || "",
           item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
           ref_no: house.ref_no || "",
