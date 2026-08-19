@@ -98,6 +98,9 @@ const Navbar = ({
   );
   const showQuotationApproval =
     isManagerOrAdmin && hasQuotationApprovalPermission;
+  const showFinanceDashboard =
+    Boolean(user?.is_staff) ||
+    Boolean(user?.screen_permissions?.finance_dashboard);
   const showCheckerPage = useCanAccessCheckerPage();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
@@ -343,6 +346,7 @@ const Navbar = ({
                   }}
                 />
               </CollapsibleNav>
+              {showFinanceDashboard && (
               <CollapsibleNav
                 label="Finance Dashboard"
                 openedLocal={isFinanceDashboardOpen}
@@ -410,6 +414,7 @@ const Navbar = ({
                   }}
                 />
               </CollapsibleNav>
+              )}
               <Box>
                 <CollapsibleNav
                   label="Sales"

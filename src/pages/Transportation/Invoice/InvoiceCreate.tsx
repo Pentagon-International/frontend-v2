@@ -2396,6 +2396,12 @@ function InvoiceCreate({
         } else if (firstHawb.shipment_id) {
           form.setFieldValue("shipment_no", String(firstHawb.shipment_id));
         }
+        const newChargeShipmentId =
+          String(
+            isFromAirExportJob
+              ? ((job as { job_id?: unknown })?.job_id ?? "")
+              : (firstHawb.shipment_id ?? ""),
+          ).trim() || undefined;
 
         // Map house charges → invoice lines.
         // Agent: Collect from every HAWB (charges or mawb_charges); each line uses same billing currency as header.
@@ -2736,6 +2742,7 @@ function InvoiceCreate({
               {
                 charge_id: null,
                 charge_name: "",
+                shipment_id: newChargeShipmentId,
                 unit_code: "",
                 unit_id: "",
                 no_of_unit: null,
@@ -2758,10 +2765,17 @@ function InvoiceCreate({
       if (isFromAirExportJob && job && (job as { id?: number }).id != null) {
         form.setFieldValue("shipment_no", String((job as { id: number }).id));
       }
+      const newChargeShipmentId =
+        String(
+          isFromAirExportJob && job && (job as { id?: number }).id != null
+            ? (job as { id: number }).id
+            : (form.values.shipment_no ?? ""),
+        ).trim() || undefined;
       form.setFieldValue("charges", [
         {
           charge_id: null,
           charge_name: "",
+          shipment_id: newChargeShipmentId,
           unit_code: "",
           no_of_unit: null,
           currency: "",
@@ -3020,6 +3034,8 @@ function InvoiceCreate({
                 {
                   charge_id: null,
                   charge_name: "",
+                  shipment_id:
+                    String(invoiceData.shipment_no ?? "").trim() || undefined,
                   unit_code: "",
                   unit_id: "",
                   no_of_unit: null,
@@ -6597,20 +6613,9 @@ function InvoiceCreate({
                                     "");
                                 const newIndex = form.values.charges.length;
                                 chargeUnitsByIndexRef.current[newIndex] = "|";
-                                const defaultShipmentId = (() => {
-                                  if (!isAgentInvoice) return undefined;
-                                  const fromExisting = form.values.charges.find(
-                                    (c) =>
-                                      c.shipment_id != null &&
-                                      String(c.shipment_id).trim() !== "",
-                                  )?.shipment_id;
-                                  if (fromExisting)
-                                    return String(fromExisting).trim();
-                                  const headerShipment = String(
-                                    form.values.shipment_no ?? "",
-                                  ).trim();
-                                  return headerShipment || undefined;
-                                })();
+                                const defaultShipmentId =
+                                  String(form.values.shipment_no ?? "").trim() ||
+                                  undefined;
                                 void ensureRoeForCurrency(
                                   newChargeCurrency,
                                 ).then((roe) => {

@@ -3,7 +3,6 @@ import { apiCallProtected } from "../api/axios";
 import { API_HEADER } from "../store/storeKeys";
 import { URL } from "../api/serverUrls";
 import { ToastNotification } from "../components";
-import { isJobClosed } from "./closeJob";
 
 export type GlobalSearchItem = {
   id: string;
@@ -233,19 +232,11 @@ export const openGlobalSearchItem = async (
       (record as Record<string, unknown>)?.id ??
       (record as Record<string, unknown>)?.job_id ??
       id;
-    const closed = isJobClosed(
-      (record as Record<string, unknown>)?.status as string | null | undefined,
-    );
-    // Closed jobs open in view-only: details + document download, no edit/create.
-    // Handles both `/edit` and `/edit/:id` → `/view` / `/view/:id`.
-    const path = closed
-      ? target.path.replace(/\/edit(?=\/|$)/, "/view")
-      : target.path;
-    navigate(path, {
+    // Closed jobs stay on /edit so Attach Documents can persist.
+    // Job pages already lock all other fields when status is CLOSED.
+    navigate(target.path, {
       state: {
         ...baseState,
-        actionType: closed ? "view" : "edit",
-        viewMode: closed,
         job: record,
         jobId,
       },

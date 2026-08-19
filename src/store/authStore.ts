@@ -64,6 +64,7 @@ interface ScreenPermissions {
   customer_approval_screen?: boolean;
   maker_checker?: boolean;
   checker?: boolean;
+  finance_dashboard?: boolean;
 }
 
 interface User {
