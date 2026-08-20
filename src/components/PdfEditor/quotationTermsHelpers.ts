@@ -1,5 +1,6 @@
 import { formatUserDecimal, isVietnameseUserCountry } from "../../utils/userNumberFormat";
 import { formatAmountForDisplay } from "../../utils/amountDisplayFormat";
+import { fetchExchangeRateMaster } from "../../utils/exchangeRateRoe";
 
 /** Mirrors default instruction lines rendered in QuotationPDFTemplate (not imported from PDF file). */
 export const DEFAULT_QUOTATION_INSTRUCTIONS = [
@@ -116,25 +117,31 @@ export function normalizeConditionText(value: string): string {
     : `- ${trimmed}`;
 }
 
+function normalizeCurrencyCode(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+/** Charge line currency as stored on quotation PDF / API payloads. */
+export function getChargeCurrencyCode(charge: Record<string, unknown>): string {
+  return normalizeCurrencyCode(
+    charge.currency ?? charge.currency_country_code ?? charge.currency_code,
+  );
+}
+
 /** ROE used when converting charge totals (mirrors QuotationPDFTemplate charge table). */
 export function getRoeForQuoteCurrency(
   charges: Record<string, unknown>[],
   quoteCurrency: string,
 ): number {
+  const quote = normalizeCurrencyCode(quoteCurrency);
   for (const charge of charges) {
-    if (
-      String(charge.currency ?? "").toUpperCase() === quoteCurrency.toUpperCase()
-    ) {
+    if (getChargeCurrencyCode(charge) === quote) {
       return Number(charge.roe || 1);
     }
   }
   return 1;
-}
-
-function normalizeCurrencyCode(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase();
 }
 
 export function shouldConvertPdfChargeTotalToQuoteCurrency(
@@ -146,13 +153,106 @@ export function shouldConvertPdfChargeTotalToQuoteCurrency(
   return Boolean(quote && base && quote !== base);
 }
 
-/** PDF preview: amount in quote currency when branch base currency differs from quote currency. */
+/**
+ * Resolve quote-currency ROE for PDF totals.
+ * Prefers fetched exchange-rate master value, then a matching charge line ROE.
+ */
+export function resolveQuoteCurrencyRoeForPdf(
+  quoteCurrency: string,
+  baseCurrency: string,
+  fetchedRoe?: number | null,
+  charges?: Record<string, unknown>[],
+): number {
+  const quote = normalizeCurrencyCode(quoteCurrency);
+  const base = normalizeCurrencyCode(baseCurrency);
+  if (quote && base && quote === base) return 1;
+
+  if (fetchedRoe != null && Number(fetchedRoe) > 0) {
+    return Number(fetchedRoe);
+  }
+
+  if (charges?.length) {
+    for (const charge of charges) {
+      if (getChargeCurrencyCode(charge) !== quote) continue;
+      const roe = Number(charge.roe || 0);
+      if (roe > 0) return roe;
+    }
+  }
+
+  return 1;
+}
+
+/**
+ * Fetch quote-currency ROEs from exchange-rate master for quotations that have
+ * at least one charge whose currency differs from the quote currency.
+ */
+export async function fetchQuoteCurrencyRoeMapForQuotations(
+  quotations: Array<{ quote_currency?: unknown; charges?: unknown[] }> | null | undefined,
+  countryCode: string | null | undefined,
+  baseCurrency: string | null | undefined,
+): Promise<Record<string, number>> {
+  const map: Record<string, number> = {};
+  const base = normalizeCurrencyCode(baseCurrency);
+  const country = String(countryCode ?? "").trim().toUpperCase();
+  const toFetch = new Set<string>();
+
+  for (const quotation of quotations ?? []) {
+    const quote = normalizeCurrencyCode(quotation?.quote_currency);
+    if (!quote) continue;
+    if (base && quote === base) {
+      map[quote] = 1;
+      continue;
+    }
+
+    const charges = Array.isArray(quotation?.charges) ? quotation.charges : [];
+    const hasMismatch = charges.some(
+      (charge) =>
+        getChargeCurrencyCode((charge ?? {}) as Record<string, unknown>) !== quote,
+    );
+    if (!hasMismatch) continue;
+    toFetch.add(quote);
+  }
+
+  await Promise.all(
+    [...toFetch].map(async (quote) => {
+      if (!country) return;
+      try {
+        const rate = await fetchExchangeRateMaster(country, quote);
+        if (rate != null && rate > 0) {
+          map[quote] = rate;
+        }
+      } catch {
+        // Leave unset so resolveQuoteCurrencyRoeForPdf can fall back to charge ROE.
+      }
+    }),
+  );
+
+  return map;
+}
+
+/**
+ * PDF Total Amount column:
+ * - charge currency ≠ quote currency → total_sell ÷ quote-currency ROE
+ * - otherwise keep existing quote≠base / charge.roe conversion
+ */
 export function computePdfPreviewChargeTotalInQuoteCurrency(
   charge: Record<string, unknown>,
   quoteCurrency: string,
   baseCurrency: string,
+  quoteCurrencyRoe?: number | null,
 ): number {
   const amount = Number(charge.total_sell || 0);
+  const chargeCurrency = getChargeCurrencyCode(charge);
+  const quote = normalizeCurrencyCode(quoteCurrency);
+
+  if (quote && chargeCurrency && chargeCurrency !== quote) {
+    const effectiveQuoteRoe =
+      quoteCurrencyRoe != null && Number(quoteCurrencyRoe) > 0
+        ? Number(quoteCurrencyRoe)
+        : 1;
+    return amount / effectiveQuoteRoe;
+  }
+
   if (!shouldConvertPdfChargeTotalToQuoteCurrency(quoteCurrency, baseCurrency)) {
     return amount;
   }
@@ -253,7 +353,7 @@ export function getChargeTotalDisplayAmount(
   charge: Record<string, unknown>,
   quoteCurrency: string,
   baseCurrency: string,
-  _roeForQuote?: number,
+  roeForQuote?: number,
   branchCountryCode?: string | null,
 ): string {
   const exactDecimals = shouldUseExactPdfQuoteCurrencyDecimals(
@@ -266,6 +366,7 @@ export function getChargeTotalDisplayAmount(
       charge,
       quoteCurrency,
       baseCurrency,
+      roeForQuote,
     ),
     branchCountryCode,
     baseCurrency,
@@ -308,6 +409,15 @@ export function parseChargeTotalDisplayInput(
 ): number {
   const parsed = Number(String(rawInput).replace(/,/g, "").trim());
   if (Number.isNaN(parsed)) return 0;
+
+  const chargeCurrency = charge ? getChargeCurrencyCode(charge) : "";
+  const quote = normalizeCurrencyCode(quoteCurrency);
+
+  if (quote && chargeCurrency && chargeCurrency !== quote) {
+    const effectiveQuoteRoe = Number(roeForQuote) > 0 ? Number(roeForQuote) : 1;
+    return parsed * effectiveQuoteRoe;
+  }
+
   if (!shouldConvertPdfChargeTotalToQuoteCurrency(quoteCurrency, baseCurrency)) {
     return parsed;
   }

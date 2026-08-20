@@ -6,8 +6,10 @@ import pentagonPrimeChina from "../../assets/images/PentagonPrimeChina.png";
 import cargoConsolidators from "../../assets/images/CCIPL.png";
 import {
   computePdfPreviewChargeTotalInQuoteCurrency,
+  fetchQuoteCurrencyRoeMapForQuotations,
   formatPdfChargeTotalAmount,
   getChargeUnitDisplayAmount,
+  resolveQuoteCurrencyRoeForPdf,
   shouldUseExactPdfQuoteCurrencyDecimals,
 } from "../../components/PdfEditor/quotationTermsHelpers";
 import {
@@ -440,6 +442,7 @@ export const generateNewQuotationPDF = async (
   defaultBranch: any,
   country?: any,
   baseCurrency?: any,
+  quoteCurrencyRoeByCode?: Record<string, number>,
 ): Promise<string> => {
   const hideUpcomingSchedule = hideUpcomingScheduleForDubaiUser(
     country,
@@ -503,6 +506,14 @@ export const generateNewQuotationPDF = async (
     const amountCurrencyCode = String(
       baseCurrency ?? defaultBranch?.currency?.currency_code ?? "",
     ).trim();
+    const resolvedQuoteCurrencyRoeByCode =
+      quoteCurrencyRoeByCode ??
+      (await fetchQuoteCurrencyRoeMapForQuotations(
+        Array.isArray(rowData?.quotation) ? rowData.quotation : [],
+        amountCountryCode ||
+          String(country?.country_code ?? "").trim(),
+        amountCurrencyCode,
+      ));
 
     // Approval URL - get from environment variable
     const baseApprovalUrl = window.location.origin;
@@ -1259,6 +1270,14 @@ export const generateNewQuotationPDF = async (
               branchBaseCurrency,
               amountCountryCode,
             );
+            const quoteCurrencyRoe = resolveQuoteCurrencyRoeForPdf(
+              quoteCurrency,
+              branchBaseCurrency,
+              resolvedQuoteCurrencyRoeByCode[
+                String(quoteCurrency ?? "").trim().toUpperCase()
+              ],
+              validCharges,
+            );
 
             validCharges.forEach((charge: any) => {
               const description = String(charge.charge_name || "N/A");
@@ -1284,6 +1303,7 @@ export const generateNewQuotationPDF = async (
                 charge,
                 quoteCurrency,
                 branchBaseCurrency,
+                quoteCurrencyRoe,
               );
               totalAmount += finalAmount;
               const formattedFinalAmount = formatPdfChargeTotalAmount(

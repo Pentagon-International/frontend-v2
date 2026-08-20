@@ -80,6 +80,7 @@ import {
 } from "../../utils/nonDecimalMoneyAmount";
 import { useListFilterStore } from "../../store/listFilterStore";
 import { generateNewQuotationPDF } from "./QuotationPDFTemplate";
+import { fetchQuoteCurrencyRoeMapForQuotations } from "../../components/PdfEditor/quotationTermsHelpers";
 
 function formatQuotationMoneyDisplay(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "-";
@@ -317,6 +318,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
   const [previewUserCurrency, setPreviewUserCurrency] = useState<
     string | undefined
   >(undefined);
+  const [previewQuoteCurrencyRoeByCode, setPreviewQuoteCurrencyRoeByCode] =
+    useState<Record<string, number>>({});
   const [previewHasUnsavedChanges, setPreviewHasUnsavedChanges] =
     useState(false);
   const [currentQuotation, setCurrentQuotation] = useState<any>(null);
@@ -2087,6 +2090,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
     setPdfBlob(null);
     setCurrentQuotation(null);
     setPreviewUserCurrency(undefined);
+    setPreviewQuoteCurrencyRoeByCode({});
     setPreviewHasUnsavedChanges(false);
     if (pdfBlob) {
       window.URL.revokeObjectURL(pdfBlob);
@@ -2433,11 +2437,24 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       const branchBaseCurrency =
         defaultBranch?.currency?.currency_code ?? null;
       setPreviewUserCurrency(branchBaseCurrency);
+      const countryCode =
+        country?.country_code ??
+        defaultBranch?.country?.country_code ??
+        user?.country?.country_code ??
+        "";
+      const quoteCurrencyRoeByCode =
+        await fetchQuoteCurrencyRoeMapForQuotations(
+          Array.isArray(rowData?.quotation) ? rowData.quotation : [],
+          countryCode,
+          branchBaseCurrency,
+        );
+      setPreviewQuoteCurrencyRoeByCode(quoteCurrencyRoeByCode);
       const blobUrl = await generateNewQuotationPDF(
         rowData,
         defaultBranch,
         country,
         branchBaseCurrency,
+        quoteCurrencyRoeByCode,
       );
       setPdfBlob(blobUrl);
     } catch (error) {
@@ -2451,11 +2468,28 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
 
   const regeneratePreviewPdf = async (rowData: any) => {
     const country = defaultBranch?.country ?? user?.country ?? null;
+    const branchBaseCurrency =
+      previewUserCurrency ??
+      defaultBranch?.currency?.currency_code ??
+      null;
+    const countryCode =
+      country?.country_code ??
+      defaultBranch?.country?.country_code ??
+      user?.country?.country_code ??
+      "";
+    const quoteCurrencyRoeByCode =
+      await fetchQuoteCurrencyRoeMapForQuotations(
+        Array.isArray(rowData?.quotation) ? rowData.quotation : [],
+        countryCode,
+        branchBaseCurrency,
+      );
+    setPreviewQuoteCurrencyRoeByCode(quoteCurrencyRoeByCode);
     const blobUrl = await generateNewQuotationPDF(
       rowData,
       defaultBranch,
       country,
-      previewUserCurrency,
+      branchBaseCurrency,
+      quoteCurrencyRoeByCode,
     );
     return blobUrl;
   };
@@ -3848,6 +3882,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
                         defaultBranch?.country?.country_code ??
                         user?.country?.country_code ??
                         undefined,
+                      quoteCurrencyRoeByCode: previewQuoteCurrencyRoeByCode,
                     }}
                     editable
                   />

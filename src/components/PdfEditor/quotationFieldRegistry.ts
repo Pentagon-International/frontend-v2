@@ -10,16 +10,18 @@ import {
   getChargeUnitDisplayAmount,
   getEffectiveConditions,
   getEffectiveNotes,
-  getRoeForQuoteCurrency,
   isPentagonCompanyForTerms,
   normalizeConditionText,
   parseChargeTotalDisplayInput,
+  resolveQuoteCurrencyRoeForPdf,
   stripNumberedPrefix,
 } from "./quotationTermsHelpers";
 
 export type PdfEditorContext = {
   userCurrency?: string;
   branchCountryCode?: string;
+  /** Quote-currency ROE from exchange-rate master, keyed by currency code. */
+  quoteCurrencyRoeByCode?: Record<string, number>;
 };
 
 export type EditableFieldDef = {
@@ -434,7 +436,13 @@ export function buildQuotationFieldRegistry(
             if (!c) return "";
             const quoteCurrency = String(q.quote_currency ?? "");
             const userCurrency = String(ctx.userCurrency ?? quoteCurrency);
-            const roeForQuote = getRoeForQuoteCurrency(chargeList, quoteCurrency);
+            const quoteKey = quoteCurrency.trim().toUpperCase();
+            const roeForQuote = resolveQuoteCurrencyRoeForPdf(
+              quoteCurrency,
+              userCurrency,
+              ctx.quoteCurrencyRoeByCode?.[quoteKey],
+              chargeList,
+            );
             return getChargeTotalDisplayAmount(
               c,
               quoteCurrency,
@@ -683,7 +691,13 @@ export function applyFieldEdit(
     const userCurrency = String(ctx.userCurrency ?? quoteCurrency);
     const chargeList = Array.isArray(quotation.charges) ? quotation.charges : [];
     const charge = chargeList[chargeIndex] as Record<string, unknown> | undefined;
-    const roeForQuote = getRoeForQuoteCurrency(chargeList, quoteCurrency);
+    const quoteKey = quoteCurrency.trim().toUpperCase();
+    const roeForQuote = resolveQuoteCurrencyRoeForPdf(
+      quoteCurrency,
+      userCurrency,
+      ctx.quoteCurrencyRoeByCode?.[quoteKey],
+      chargeList,
+    );
     const totalSell = parseChargeTotalDisplayInput(
       rawInput,
       quoteCurrency,
