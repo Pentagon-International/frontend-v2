@@ -177,6 +177,8 @@ import NetworkMaster from "./masters/network-master/NetworkMaster";
 import NetworkCreate from "./masters/network-master/NetworkCreate";
 import ChartOfAccountsMaster from "./masters/chart-of-accounts/ChartOfAccountsMaster";
 import ChartOfAccountsCreate from "./masters/chart-of-accounts/ChartOfAccountsCreate";
+import SubledgerMaster from "./masters/subledger-master/SubledgerMaster";
+import SubledgerMasterCreate from "./masters/subledger-master/SubledgerMasterCreate";
 import GLChargeMappingMaster from "./masters/gl-charge-mapping/GLChargeMappingMaster";
 import GLChargeMappingCreate from "./masters/gl-charge-mapping/GLChargeMappingCreate";
 import MakerCheckerMapping from "./masters/maker-checker-mapping/MakerCheckerMapping";
@@ -296,6 +298,8 @@ export {
   NetworkCreate,
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
+  SubledgerMaster,
+  SubledgerMasterCreate,
   GLChargeMappingMaster,
   GLChargeMappingCreate,
   MakerCheckerMapping,

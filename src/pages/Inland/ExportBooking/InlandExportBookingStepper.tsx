@@ -199,6 +199,9 @@ interface FormValues {
   iata: string;
   is_direct: boolean;
   is_coload: boolean;
+  /** Root booking ETD/ETA (same payload shape as Ocean schedule) */
+  etd: Date | null;
+  eta: Date | null;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -319,6 +322,8 @@ const validationSchema = yup.object({
   iata: yup.string().trim().nullable().notRequired(),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
+  etd: yup.date().nullable().required("ETD is required"),
+  eta: yup.date().nullable().required("ETA is required"),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -1132,6 +1137,8 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       iata: String(data.iata ?? ""),
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
+      eta: data.eta ? new Date(String(data.eta)) : null,
+      etd: data.etd ? new Date(String(data.etd)) : null,
 
       // Routing Details - map from routing_details array
       routingDetails: data.routing_details
@@ -1359,6 +1366,8 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       iata: "",
       is_direct: false,
       is_coload: false,
+      etd: null,
+      eta: null,
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -2744,6 +2753,8 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
+        "etd",
+        "eta",
       ];
 
       const validation = form.validate();
@@ -2796,6 +2807,14 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         return `${year}-${month}-${day}`;
       };
 
+      const formatDateOrNull = (
+        dateValue: Date | string | null | undefined,
+      ) => {
+        if (!dateValue) return null;
+        const formatted = formatDate(dateValue);
+        return formatted || null;
+      };
+
       // Transform form data to match API payload structure
       const payload: Record<string, unknown> = {
         customer_code: form.values.customer_code,
@@ -2818,6 +2837,8 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         iata: form.values.iata?.trim() || null,
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
+        eta: formatDateOrNull(form.values.eta),
+        etd: formatDateOrNull(form.values.etd),
 
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
@@ -3729,6 +3750,30 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     value={form.values.iata}
                     onChange={(e) => form.setFieldValue("iata", e.target.value)}
                     error={form.errors.iata}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETD (Estimated Time of Departure)"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.etd ?? undefined}
+                    onChange={(date) => {
+                      form.setFieldValue("etd", date ?? null);
+                    }}
+                    error={form.errors.etd}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETA (Estimated Time of Arrival)"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.eta ?? undefined}
+                    onChange={(date) => {
+                      form.setFieldValue("eta", date ?? null);
+                    }}
+                    error={form.errors.eta}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||

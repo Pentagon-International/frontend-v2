@@ -815,11 +815,12 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
         const routingNames = (
           initialData.routing_details as Array<Record<string, unknown>>
         ).map((route: Record<string, unknown>) => ({
+          // Store plain names only; UI formats as `name (code)` when both exist
           from: route.from_location_name
-            ? `${String(route.from_location_name)} (${String(route.from_location_code || "")})`
+            ? String(route.from_location_name).split(" (")[0]
             : null,
           to: route.to_location_name
-            ? `${String(route.to_location_name)} (${String(route.to_location_code || "")})`
+            ? String(route.to_location_name).split(" (")[0]
             : null,
           carrier: route.carrier_name ? String(route.carrier_name) : null,
         }));
@@ -1332,14 +1333,32 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
                   })}
-                  value={form.values.origin_code}
-                  displayValue={form.values.origin_name}
+                  key={
+                    form.values.origin_code
+                      ? `origin-${form.values.origin_code}`
+                      : "origin-empty"
+                  }
+                  value={form.values.origin_code || null}
+                  displayValue={
+                    form.values.origin_code
+                      ? form.values.origin_name
+                        ? `${form.values.origin_name.split(" (")[0]} (${form.values.origin_code})`
+                        : form.values.origin_code
+                      : ""
+                  }
                   onChange={(value, selectedData) => {
+                    if (value === null) {
+                      form.setFieldValue("origin_code", "");
+                      form.setFieldValue("origin_name", "");
+                      return;
+                    }
                     form.setFieldValue("origin_code", value || "");
-                    form.setFieldValue(
-                      "origin_name",
-                      selectedData?.label || ""
-                    );
+                    if (selectedData) {
+                      form.setFieldValue(
+                        "origin_name",
+                        selectedData.label.split(" (")[0] || ""
+                      );
+                    }
                   }}
                   error={form.errors.origin_code as string}
                   minSearchLength={3}
@@ -1356,14 +1375,32 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
                   })}
-                  value={form.values.destination_code}
-                  displayValue={form.values.destination_name}
+                  key={
+                    form.values.destination_code
+                      ? `destination-${form.values.destination_code}`
+                      : "destination-empty"
+                  }
+                  value={form.values.destination_code || null}
+                  displayValue={
+                    form.values.destination_code
+                      ? form.values.destination_name
+                        ? `${form.values.destination_name.split(" (")[0]} (${form.values.destination_code})`
+                        : form.values.destination_code
+                      : ""
+                  }
                   onChange={(value, selectedData) => {
+                    if (value === null) {
+                      form.setFieldValue("destination_code", "");
+                      form.setFieldValue("destination_name", "");
+                      return;
+                    }
                     form.setFieldValue("destination_code", value || "");
-                    form.setFieldValue(
-                      "destination_name",
-                      selectedData?.label || ""
-                    );
+                    if (selectedData) {
+                      form.setFieldValue(
+                        "destination_name",
+                        selectedData.label.split(" (")[0] || ""
+                      );
+                    }
                   }}
                   error={form.errors.destination_code as string}
                   minSearchLength={3}
@@ -1702,23 +1739,49 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                           value: String(item.port_code),
                           label: `${item.port_name} (${item.port_code})`,
                         })}
+                        key={
+                          form.values.routingDetails[index]?.from_location_code
+                            ? `routing-from-${index}-${form.values.routingDetails[index].from_location_code}`
+                            : `routing-from-${index}-empty`
+                        }
                         value={
                           form.values.routingDetails[index]
-                            ?.from_location_code || ""
+                            ?.from_location_code || null
                         }
-                        displayValue={routingDisplayNames[index]?.from || null}
+                        displayValue={
+                          form.values.routingDetails[index]?.from_location_code
+                            ? routingDisplayNames[index]?.from
+                              ? `${routingDisplayNames[index].from} (${form.values.routingDetails[index].from_location_code})`
+                              : form.values.routingDetails[index]
+                                  .from_location_code
+                            : ""
+                        }
                         onChange={(value, selectedData) => {
+                          if (value === null) {
+                            form.setFieldValue(
+                              `routingDetails.${index}.from_location_code`,
+                              ""
+                            );
+                            const updatedDisplayNames = [...routingDisplayNames];
+                            updatedDisplayNames[index] = {
+                              ...updatedDisplayNames[index],
+                              from: null,
+                            };
+                            setRoutingDisplayNames(updatedDisplayNames);
+                            return;
+                          }
                           form.setFieldValue(
                             `routingDetails.${index}.from_location_code`,
                             value || ""
                           );
-                          // Update display name state
-                          const updatedDisplayNames = [...routingDisplayNames];
-                          updatedDisplayNames[index] = {
-                            ...updatedDisplayNames[index],
-                            from: selectedData?.label || null,
-                          };
-                          setRoutingDisplayNames(updatedDisplayNames);
+                          if (selectedData) {
+                            const updatedDisplayNames = [...routingDisplayNames];
+                            updatedDisplayNames[index] = {
+                              ...updatedDisplayNames[index],
+                              from: selectedData.label.split(" (")[0] || null,
+                            };
+                            setRoutingDisplayNames(updatedDisplayNames);
+                          }
                         }}
                         minSearchLength={3}
                       />
@@ -1733,23 +1796,49 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                           value: String(item.port_code),
                           label: `${item.port_name} (${item.port_code})`,
                         })}
+                        key={
+                          form.values.routingDetails[index]?.to_location_code
+                            ? `routing-to-${index}-${form.values.routingDetails[index].to_location_code}`
+                            : `routing-to-${index}-empty`
+                        }
                         value={
                           form.values.routingDetails[index]?.to_location_code ||
-                          ""
+                          null
                         }
-                        displayValue={routingDisplayNames[index]?.to || null}
+                        displayValue={
+                          form.values.routingDetails[index]?.to_location_code
+                            ? routingDisplayNames[index]?.to
+                              ? `${routingDisplayNames[index].to} (${form.values.routingDetails[index].to_location_code})`
+                              : form.values.routingDetails[index]
+                                  .to_location_code
+                            : ""
+                        }
                         onChange={(value, selectedData) => {
+                          if (value === null) {
+                            form.setFieldValue(
+                              `routingDetails.${index}.to_location_code`,
+                              ""
+                            );
+                            const updatedDisplayNames = [...routingDisplayNames];
+                            updatedDisplayNames[index] = {
+                              ...updatedDisplayNames[index],
+                              to: null,
+                            };
+                            setRoutingDisplayNames(updatedDisplayNames);
+                            return;
+                          }
                           form.setFieldValue(
                             `routingDetails.${index}.to_location_code`,
                             value || ""
                           );
-                          // Update display name state
-                          const updatedDisplayNames = [...routingDisplayNames];
-                          updatedDisplayNames[index] = {
-                            ...updatedDisplayNames[index],
-                            to: selectedData?.label || null,
-                          };
-                          setRoutingDisplayNames(updatedDisplayNames);
+                          if (selectedData) {
+                            const updatedDisplayNames = [...routingDisplayNames];
+                            updatedDisplayNames[index] = {
+                              ...updatedDisplayNames[index],
+                              to: selectedData.label.split(" (")[0] || null,
+                            };
+                            setRoutingDisplayNames(updatedDisplayNames);
+                          }
                         }}
                         minSearchLength={3}
                       />
@@ -2849,14 +2938,30 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
                   })}
-                  value={form.values.pickup_from_code}
-                  displayValue={pickupFromDisplayName}
+                  key={
+                    form.values.pickup_from_code
+                      ? `pickup-from-${form.values.pickup_from_code}`
+                      : "pickup-from-empty"
+                  }
+                  value={form.values.pickup_from_code || null}
+                  displayValue={
+                    form.values.pickup_from_code
+                      ? pickupFromDisplayName
+                        ? `${pickupFromDisplayName.split(" (")[0]} (${form.values.pickup_from_code})`
+                        : form.values.pickup_from_code
+                      : ""
+                  }
                   onChange={(value, selectedData) => {
-                    form.setFieldValue("pickup_from_code", value || "");
-                    if (value && selectedData) {
-                      setPickupFromDisplayName(selectedData.label);
-                    } else {
+                    if (value === null) {
+                      form.setFieldValue("pickup_from_code", "");
                       setPickupFromDisplayName(null);
+                      return;
+                    }
+                    form.setFieldValue("pickup_from_code", value || "");
+                    if (selectedData) {
+                      setPickupFromDisplayName(
+                        selectedData.label.split(" (")[0] || null
+                      );
                     }
                   }}
                   error={form.errors.pickup_from_code as string}
@@ -2995,14 +3100,30 @@ const FCLExportGenerationStepper: React.FC<ExportShipmentStepperProps> = ({
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
                   })}
-                  value={form.values.delivery_from_code}
-                  displayValue={deliveryFromDisplayName}
+                  key={
+                    form.values.delivery_from_code
+                      ? `delivery-from-${form.values.delivery_from_code}`
+                      : "delivery-from-empty"
+                  }
+                  value={form.values.delivery_from_code || null}
+                  displayValue={
+                    form.values.delivery_from_code
+                      ? deliveryFromDisplayName
+                        ? `${deliveryFromDisplayName.split(" (")[0]} (${form.values.delivery_from_code})`
+                        : form.values.delivery_from_code
+                      : ""
+                  }
                   onChange={(value, selectedData) => {
-                    form.setFieldValue("delivery_from_code", value || "");
-                    if (value && selectedData) {
-                      setDeliveryFromDisplayName(selectedData.label);
-                    } else {
+                    if (value === null) {
+                      form.setFieldValue("delivery_from_code", "");
                       setDeliveryFromDisplayName(null);
+                      return;
+                    }
+                    form.setFieldValue("delivery_from_code", value || "");
+                    if (selectedData) {
+                      setDeliveryFromDisplayName(
+                        selectedData.label.split(" (")[0] || null
+                      );
                     }
                   }}
                   error={form.errors.delivery_from_code as string}

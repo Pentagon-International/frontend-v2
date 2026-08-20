@@ -180,6 +180,9 @@ interface FormValues {
   flight_no: string | null;
   is_direct: boolean;
   is_coload: boolean;
+  /** Root booking ETD/ETA (same payload shape as Ocean schedule) */
+  etd: Date | null;
+  eta: Date | null;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -303,6 +306,8 @@ const validationSchema = yup.object({
   flight_no: yup.string().nullable().optional(),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
+  etd: yup.date().nullable().required("ETD is required"),
+  eta: yup.date().nullable().required("ETA is required"),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -1099,6 +1104,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       flight_no: data.flight_no ? String(data.flight_no) : null,
       is_direct: Boolean(data.is_direct),
       is_coload: Boolean(data.is_coload),
+      eta: data.eta ? new Date(String(data.eta)) : null,
+      etd: data.etd ? new Date(String(data.etd)) : null,
 
       // Routing Details - map from routing_details array
       routingDetails: data.routing_details
@@ -1327,6 +1334,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       flight_no: null,
       is_direct: false,
       is_coload: false,
+      etd: null,
+      eta: null,
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -2697,6 +2706,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
+        "etd",
+        "eta",
       ];
 
       const validation = form.validate();
@@ -2749,6 +2760,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         return `${year}-${month}-${day}`;
       };
 
+      const formatDateOrNull = (
+        dateValue: Date | string | null | undefined,
+      ) => {
+        if (!dateValue) return null;
+        const formatted = formatDate(dateValue);
+        return formatted || null;
+      };
+
       // Transform form data to match API payload structure
       const payload: Record<string, unknown> = {
         customer_code: form.values.customer_code,
@@ -2770,6 +2789,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         flight_no: form.values.flight_no,
         is_direct: form.values.is_direct,
         is_coload: form.values.is_coload,
+        eta: formatDateOrNull(form.values.eta),
+        etd: formatDateOrNull(form.values.etd),
 
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
@@ -3881,6 +3902,30 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       );
                     }}
                     error={form.errors.flight_no as string}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETD (Estimated Time of Departure)"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.etd ?? undefined}
+                    onChange={(date) => {
+                      form.setFieldValue("etd", date ?? null);
+                    }}
+                    error={form.errors.etd}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETA (Estimated Time of Arrival)"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.eta ?? undefined}
+                    onChange={(date) => {
+                      form.setFieldValue("eta", date ?? null);
+                    }}
+                    error={form.errors.eta}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||

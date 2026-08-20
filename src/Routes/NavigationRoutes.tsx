@@ -93,6 +93,8 @@ import {
   NetworkCreate,
   ChartOfAccountsMaster,
   ChartOfAccountsCreate,
+  SubledgerMaster,
+  SubledgerMasterCreate,
   GLChargeMappingMaster,
   GLChargeMappingCreate,
   MakerCheckerMapping,
@@ -1241,6 +1243,12 @@ const NavigationRoutes = () => {
             <Route index element={<ChartOfAccountsMaster />} />
             <Route path="create" element={<ChartOfAccountsCreate />} />
             <Route path="edit" element={<ChartOfAccountsCreate />} />
+          </Route>
+
+          <Route path="subledger-master">
+            <Route index element={<SubledgerMaster />} />
+            <Route path="create" element={<SubledgerMasterCreate />} />
+            <Route path="edit" element={<SubledgerMasterCreate />} />
           </Route>
 
           <Route path="gl-charge-mapping">

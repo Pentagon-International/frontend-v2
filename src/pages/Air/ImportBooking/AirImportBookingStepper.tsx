@@ -174,6 +174,9 @@ interface FormValues {
   carrier_code: string;
   carrier_name: string;
   flight_no: string | null;
+  /** Root booking ETD/ETA (same payload shape as Ocean schedule) */
+  etd: Date | null;
+  eta: Date | null;
 
   // Routing Details
   routingDetails: RoutingDetail[];
@@ -300,6 +303,8 @@ const validationSchema = yup.object({
   carrier_code: yup.string().optional(),
   carrier_name: yup.string().optional(),
   flight_no: yup.string().nullable().optional(),
+  etd: yup.date().nullable().required("ETD is required"),
+  eta: yup.date().nullable().required("ETA is required"),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -1074,6 +1079,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       carrier_code: String(data.carrier_code ?? ""),
       carrier_name: String(data.carrier_name ?? ""),
       flight_no: data.flight_no ? String(data.flight_no) : null,
+      eta: data.eta ? new Date(String(data.eta)) : null,
+      etd: data.etd ? new Date(String(data.etd)) : null,
 
       // Routing Details - map from routing_details array (include from/to/carrier codes and names from API)
       routingDetails: data.routing_details
@@ -1314,6 +1321,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       carrier_code: "",
       carrier_name: "",
       flight_no: null,
+      etd: null,
+      eta: null,
 
       // Routing Details - start with one empty row
       routingDetails: [
@@ -2603,6 +2612,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         "destination_agent_address_id",
         "destination_agent_address",
         "destination_agent_email",
+        "etd",
+        "eta",
       ];
 
       const validation = form.validate();
@@ -2655,6 +2666,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         return `${year}-${month}-${day}`;
       };
 
+      const formatDateOrNull = (
+        dateValue: Date | string | null | undefined,
+      ) => {
+        if (!dateValue) return null;
+        const formatted = formatDate(dateValue);
+        return formatted || null;
+      };
+
       // Transform form data to match API payload structure
       const payload: Record<string, unknown> = {
         customer_code: form.values.customer_code,
@@ -2673,6 +2692,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         master_no: form.values.master_no,
         carrier_code: form.values.carrier_code || null,
         flight_no: form.values.flight_no,
+        eta: formatDateOrNull(form.values.eta),
+        etd: formatDateOrNull(form.values.etd),
 
         // Routing Details
         routing_details: form.values.routingDetails.map((route) => {
@@ -3703,6 +3724,30 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       );
                     }}
                     error={form.errors.flight_no as string}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETD (Estimated Time of Departure)"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.etd ?? undefined}
+                    onChange={(date) => {
+                      form.setFieldValue("etd", date ?? null);
+                    }}
+                    error={form.errors.etd}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <SingleDateInput
+                    label="ETA (Estimated Time of Arrival)"
+                    placeholder="YYYY-MM-DD"
+                    withAsterisk
+                    value={form.values.eta ?? undefined}
+                    onChange={(date) => {
+                      form.setFieldValue("eta", date ?? null);
+                    }}
+                    error={form.errors.eta}
                   />
                 </Grid.Col>
                 {(form.values.service === "AIR" ||

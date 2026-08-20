@@ -22,7 +22,7 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
@@ -184,6 +184,7 @@ function InlandExportJobGenerationCreate() {
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
+  const jobDetailsHydratedRef = useRef<string | null>(null);
 
   const [bookingList, setBookingList] = useState<BookingData[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
@@ -276,6 +277,9 @@ function InlandExportJobGenerationCreate() {
 
   useEffect(() => {
     if (jobData && (mode === "edit" || mode === "view")) {
+      const hydrateKey = `${mode}:${String(jobData.id ?? "")}`;
+      if (jobDetailsHydratedRef.current === hydrateKey) return;
+      jobDetailsHydratedRef.current = hydrateKey;
       if (jobData.id) setJobId(jobData.id as number);
 
       const etaStr = (jobData.eta as string) || "";
@@ -872,16 +876,32 @@ function InlandExportJobGenerationCreate() {
                       label: `${port.port_name} (${port.port_code})`,
                     };
                   }}
-                  value={jobDetailsForm.values.origin_code}
+                  key={
+                    jobDetailsForm.values.origin_code
+                      ? `origin-${jobDetailsForm.values.origin_code}`
+                      : "origin-empty"
+                  }
+                  value={jobDetailsForm.values.origin_code || null}
                   displayValue={
-                    jobDetailsForm.values.origin_name
-                      ? `${jobDetailsForm.values.origin_name} (${jobDetailsForm.values.origin_code})`
-                      : jobDetailsForm.values.origin_code
+                    jobDetailsForm.values.origin_code
+                      ? jobDetailsForm.values.origin_name
+                        ? `${jobDetailsForm.values.origin_name.split(" (")[0]} (${jobDetailsForm.values.origin_code})`
+                        : jobDetailsForm.values.origin_code
+                      : ""
                   }
                   onChange={(value, selectedData) => {
+                    if (value === null) {
+                      jobDetailsForm.setFieldValue("origin_code", "");
+                      jobDetailsForm.setFieldValue("origin_name", "");
+                      return;
+                    }
                     jobDetailsForm.setFieldValue("origin_code", value || "");
-                    if (selectedData)
-                      jobDetailsForm.setFieldValue("origin_name", selectedData.label.split(" (")[0] || "");
+                    if (selectedData) {
+                      jobDetailsForm.setFieldValue(
+                        "origin_name",
+                        selectedData.label.split(" (")[0] || "",
+                      );
+                    }
                   }}
                   error={jobDetailsForm.errors.origin_code as string}
                   minSearchLength={3}
@@ -904,16 +924,32 @@ function InlandExportJobGenerationCreate() {
                       label: `${port.port_name} (${port.port_code})`,
                     };
                   }}
-                  value={jobDetailsForm.values.destination_code}
+                  key={
+                    jobDetailsForm.values.destination_code
+                      ? `destination-${jobDetailsForm.values.destination_code}`
+                      : "destination-empty"
+                  }
+                  value={jobDetailsForm.values.destination_code || null}
                   displayValue={
-                    jobDetailsForm.values.destination_name
-                      ? `${jobDetailsForm.values.destination_name} (${jobDetailsForm.values.destination_code})`
-                      : jobDetailsForm.values.destination_code
+                    jobDetailsForm.values.destination_code
+                      ? jobDetailsForm.values.destination_name
+                        ? `${jobDetailsForm.values.destination_name.split(" (")[0]} (${jobDetailsForm.values.destination_code})`
+                        : jobDetailsForm.values.destination_code
+                      : ""
                   }
                   onChange={(value, selectedData) => {
+                    if (value === null) {
+                      jobDetailsForm.setFieldValue("destination_code", "");
+                      jobDetailsForm.setFieldValue("destination_name", "");
+                      return;
+                    }
                     jobDetailsForm.setFieldValue("destination_code", value || "");
-                    if (selectedData)
-                      jobDetailsForm.setFieldValue("destination_name", selectedData.label.split(" (")[0] || "");
+                    if (selectedData) {
+                      jobDetailsForm.setFieldValue(
+                        "destination_name",
+                        selectedData.label.split(" (")[0] || "",
+                      );
+                    }
                   }}
                   error={jobDetailsForm.errors.destination_code as string}
                   minSearchLength={3}
@@ -1191,15 +1227,32 @@ function InlandExportJobGenerationCreate() {
                           const port = item as { port_code: string; port_name: string };
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
-                        value={routingForm.values.routings[index].from_port_code}
+                        key={
+                          routingForm.values.routings[index].from_port_code
+                            ? `routing-from-${index}-${routingForm.values.routings[index].from_port_code}`
+                            : `routing-from-${index}-empty`
+                        }
+                        value={routingForm.values.routings[index].from_port_code || null}
                         displayValue={
-                          routingForm.values.routings[index].from_port_name
-                            ? `${routingForm.values.routings[index].from_port_name} (${routingForm.values.routings[index].from_port_code})`
-                            : routingForm.values.routings[index].from_port_code
+                          routingForm.values.routings[index].from_port_code
+                            ? routingForm.values.routings[index].from_port_name
+                              ? `${routingForm.values.routings[index].from_port_name.split(" (")[0]} (${routingForm.values.routings[index].from_port_code})`
+                              : routingForm.values.routings[index].from_port_code
+                            : ""
                         }
                         onChange={(value, selectedData) => {
+                          if (value === null) {
+                            routingForm.setFieldValue(`routings.${index}.from_port_code`, "");
+                            routingForm.setFieldValue(`routings.${index}.from_port_name`, "");
+                            return;
+                          }
                           routingForm.setFieldValue(`routings.${index}.from_port_code`, value || "");
-                          if (selectedData) routingForm.setFieldValue(`routings.${index}.from_port_name`, selectedData.label.split(" (")[0] || "");
+                          if (selectedData) {
+                            routingForm.setFieldValue(
+                              `routings.${index}.from_port_name`,
+                              selectedData.label.split(" (")[0] || "",
+                            );
+                          }
                         }}
                         minSearchLength={3}
                         additionalParams={
@@ -1220,15 +1273,32 @@ function InlandExportJobGenerationCreate() {
                           const port = item as { port_code: string; port_name: string };
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
-                        value={routingForm.values.routings[index].to_port_code}
+                        key={
+                          routingForm.values.routings[index].to_port_code
+                            ? `routing-to-${index}-${routingForm.values.routings[index].to_port_code}`
+                            : `routing-to-${index}-empty`
+                        }
+                        value={routingForm.values.routings[index].to_port_code || null}
                         displayValue={
-                          routingForm.values.routings[index].to_port_name
-                            ? `${routingForm.values.routings[index].to_port_name} (${routingForm.values.routings[index].to_port_code})`
-                            : routingForm.values.routings[index].to_port_code
+                          routingForm.values.routings[index].to_port_code
+                            ? routingForm.values.routings[index].to_port_name
+                              ? `${routingForm.values.routings[index].to_port_name.split(" (")[0]} (${routingForm.values.routings[index].to_port_code})`
+                              : routingForm.values.routings[index].to_port_code
+                            : ""
                         }
                         onChange={(value, selectedData) => {
+                          if (value === null) {
+                            routingForm.setFieldValue(`routings.${index}.to_port_code`, "");
+                            routingForm.setFieldValue(`routings.${index}.to_port_name`, "");
+                            return;
+                          }
                           routingForm.setFieldValue(`routings.${index}.to_port_code`, value || "");
-                          if (selectedData) routingForm.setFieldValue(`routings.${index}.to_port_name`, selectedData.label.split(" (")[0] || "");
+                          if (selectedData) {
+                            routingForm.setFieldValue(
+                              `routings.${index}.to_port_name`,
+                              selectedData.label.split(" (")[0] || "",
+                            );
+                          }
                         }}
                         minSearchLength={3}
                         additionalParams={

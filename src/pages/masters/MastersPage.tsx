@@ -25,6 +25,7 @@ import {
   IconCalculator,
   IconTruck,
   IconPackage,
+  IconBook2,
 } from "@tabler/icons-react";
 import MasterCard from "../../components/MasterCard";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -246,6 +247,10 @@ export default function MastersPage() {
           {
             icon: <IconChartBar size={28} color="#105476" />,
             label: "Chart of Accounts",
+          },
+          {
+            icon: <IconBook2 size={28} color="#105476" />,
+            label: "Subledger Master",
           },
           {
             icon: <IconExchange size={28} color="#105476" />,

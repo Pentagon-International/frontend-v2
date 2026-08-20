@@ -184,6 +184,7 @@ function OceanJobGenerationCreate() {
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState(false);
   const [jobId, setJobId] = useState<number | null>(null);
+  const jobDetailsHydratedRef = useRef<string | null>(null);
 
   // Detect service type from URL pathname or state
   const serviceType = useMemo(() => {
@@ -313,6 +314,9 @@ function OceanJobGenerationCreate() {
   // Load job data if in edit or view mode
   useEffect(() => {
     if (jobData && (mode === "edit" || mode === "view")) {
+      const hydrateKey = `${mode}:${String(jobData.id ?? "")}`;
+      if (jobDetailsHydratedRef.current === hydrateKey) return;
+      jobDetailsHydratedRef.current = hydrateKey;
       // Set job ID for edit mode
       if (jobData.id) {
         setJobId(jobData.id);
@@ -1260,13 +1264,25 @@ function OceanJobGenerationCreate() {
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
                   })}
-                  value={jobDetailsForm.values.origin_code}
+                  key={
+                    jobDetailsForm.values.origin_code
+                      ? `origin-${jobDetailsForm.values.origin_code}`
+                      : "origin-empty"
+                  }
+                  value={jobDetailsForm.values.origin_code || null}
                   displayValue={
-                    jobDetailsForm.values.origin_name
-                      ? `${jobDetailsForm.values.origin_name} (${jobDetailsForm.values.origin_code})`
-                      : jobDetailsForm.values.origin_code
+                    jobDetailsForm.values.origin_code
+                      ? jobDetailsForm.values.origin_name
+                        ? `${jobDetailsForm.values.origin_name.split(" (")[0]} (${jobDetailsForm.values.origin_code})`
+                        : jobDetailsForm.values.origin_code
+                      : ""
                   }
                   onChange={(value, selectedData) => {
+                    if (value === null) {
+                      jobDetailsForm.setFieldValue("origin_code", "");
+                      jobDetailsForm.setFieldValue("origin_name", "");
+                      return;
+                    }
                     jobDetailsForm.setFieldValue("origin_code", value || "");
                     if (selectedData) {
                       jobDetailsForm.setFieldValue(
@@ -1294,13 +1310,25 @@ function OceanJobGenerationCreate() {
                     value: String(item.port_code),
                     label: `${item.port_name} (${item.port_code})`,
                   })}
-                  value={jobDetailsForm.values.destination_code}
+                  key={
+                    jobDetailsForm.values.destination_code
+                      ? `destination-${jobDetailsForm.values.destination_code}`
+                      : "destination-empty"
+                  }
+                  value={jobDetailsForm.values.destination_code || null}
                   displayValue={
-                    jobDetailsForm.values.destination_name
-                      ? `${jobDetailsForm.values.destination_name} (${jobDetailsForm.values.destination_code})`
-                      : jobDetailsForm.values.destination_code
+                    jobDetailsForm.values.destination_code
+                      ? jobDetailsForm.values.destination_name
+                        ? `${jobDetailsForm.values.destination_name.split(" (")[0]} (${jobDetailsForm.values.destination_code})`
+                        : jobDetailsForm.values.destination_code
+                      : ""
                   }
                   onChange={(value, selectedData) => {
+                    if (value === null) {
+                      jobDetailsForm.setFieldValue("destination_code", "");
+                      jobDetailsForm.setFieldValue("destination_name", "");
+                      return;
+                    }
                     jobDetailsForm.setFieldValue(
                       "destination_code",
                       value || "",
@@ -1816,18 +1844,36 @@ function OceanJobGenerationCreate() {
                           const port = item as { port_code: string; port_name: string };
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
-                        value={route.from_port_code}
+                        key={
+                          route.from_port_code
+                            ? `routing-from-${index}-${route.from_port_code}`
+                            : `routing-from-${index}-empty`
+                        }
+                        value={route.from_port_code || null}
                         displayValue={
-                          route.from_port_name
-                            ? `${route.from_port_name} (${route.from_port_code})`
-                            : route.from_port_code
+                          route.from_port_code
+                            ? route.from_port_name
+                              ? `${route.from_port_name.split(" (")[0]} (${route.from_port_code})`
+                              : route.from_port_code
+                            : ""
                         }
                         onChange={(value, selectedData) => {
                           const updated = [...routingDetails];
+                          if (value === null) {
+                            updated[index] = {
+                              ...updated[index],
+                              from_port_code: "",
+                              from_port_name: "",
+                            };
+                            setRoutingDetails(updated);
+                            return;
+                          }
                           updated[index] = {
                             ...updated[index],
                             from_port_code: value || "",
-                            from_port_name: parseCarrierNameFromLabel(selectedData?.label || ""),
+                            from_port_name: parseCarrierNameFromLabel(
+                              selectedData?.label || "",
+                            ),
                           };
                           setRoutingDetails(updated);
                         }}
@@ -1850,18 +1896,36 @@ function OceanJobGenerationCreate() {
                           const port = item as { port_code: string; port_name: string };
                           return { value: String(port.port_code), label: `${port.port_name} (${port.port_code})` };
                         }}
-                        value={route.to_port_code}
+                        key={
+                          route.to_port_code
+                            ? `routing-to-${index}-${route.to_port_code}`
+                            : `routing-to-${index}-empty`
+                        }
+                        value={route.to_port_code || null}
                         displayValue={
-                          route.to_port_name
-                            ? `${route.to_port_name} (${route.to_port_code})`
-                            : route.to_port_code
+                          route.to_port_code
+                            ? route.to_port_name
+                              ? `${route.to_port_name.split(" (")[0]} (${route.to_port_code})`
+                              : route.to_port_code
+                            : ""
                         }
                         onChange={(value, selectedData) => {
                           const updated = [...routingDetails];
+                          if (value === null) {
+                            updated[index] = {
+                              ...updated[index],
+                              to_port_code: "",
+                              to_port_name: "",
+                            };
+                            setRoutingDetails(updated);
+                            return;
+                          }
                           updated[index] = {
                             ...updated[index],
                             to_port_code: value || "",
-                            to_port_name: parseCarrierNameFromLabel(selectedData?.label || ""),
+                            to_port_name: parseCarrierNameFromLabel(
+                              selectedData?.label || "",
+                            ),
                           };
                           setRoutingDetails(updated);
                         }}
