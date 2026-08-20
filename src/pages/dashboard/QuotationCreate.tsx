@@ -625,6 +625,9 @@ function QuotationCreate({
   const [chargeRoeErrors, setChargeRoeErrors] = useState<
     Record<number, string>
   >({});
+  const [fetchedQuoteCurrencyRoe, setFetchedQuoteCurrencyRoe] = useState<
+    number | null
+  >(null);
   const [carrierComparisonData, setCarrierComparisonData] =
     useState<CarrierComparisonData | null>(null);
   const [isLoadingCarriers, setIsLoadingCarriers] = useState(false);
@@ -3204,10 +3207,39 @@ function QuotationCreate({
       normalizedLocalCurrency &&
       normalizedQuoteCurrency !== normalizedLocalCurrency,
   );
-  const quoteCurrencyRoe = getQuoteCurrencyRoeFromCharges(
+
+  // Fetch quote-currency ROE from exchange-rate master when quote ≠ branch currency.
+  useEffect(() => {
+    let cancelled = false;
+    if (!showQuoteCurrencyProfit || !normalizedQuoteCurrency) {
+      setFetchedQuoteCurrencyRoe(null);
+      return;
+    }
+
+    void ensureRoeForCurrency(normalizedQuoteCurrency).then((roe) => {
+      if (cancelled) return;
+      setFetchedQuoteCurrencyRoe(roe != null && roe > 0 ? roe : null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showQuoteCurrencyProfit,
+    normalizedQuoteCurrency,
+    ensureRoeForCurrency,
+  ]);
+
+  const quoteCurrencyRoeFromCharges = getQuoteCurrencyRoeFromCharges(
     quoteCurrencyCode,
     charges,
   );
+  const quoteCurrencyRoe =
+    fetchedQuoteCurrencyRoe != null && fetchedQuoteCurrencyRoe > 0
+      ? fetchedQuoteCurrencyRoe
+      : quoteCurrencyRoeFromCharges > 0
+        ? quoteCurrencyRoeFromCharges
+        : 1;
   const profitInQuoteCurrency =
     quoteCurrencyRoe > 0 ? profit / quoteCurrencyRoe : profit;
 
@@ -6439,7 +6471,7 @@ function QuotationCreate({
                         </Grid.Col>
                         <Grid.Col span={1}>
                           {" "}
-                          {formatMoneyDisplay(profitInQuoteCurrency)}
+                          {formatMoneyAmountForUi(profitInQuoteCurrency, false)}
                         </Grid.Col>
                       </Grid>
                     )}
@@ -7732,7 +7764,7 @@ function QuotationCreate({
                       </Grid.Col>
                       <Grid.Col span={1}>
                         {" "}
-                        {formatMoneyDisplay(profitInQuoteCurrency)}
+                        {formatMoneyAmountForUi(profitInQuoteCurrency, false)}
                       </Grid.Col>
                     </Grid>
                   )}

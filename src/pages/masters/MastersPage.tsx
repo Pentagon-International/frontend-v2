@@ -181,7 +181,7 @@ export default function MastersPage() {
                 },
                 {
                   icon: <IconUserHexagon size={28} color="#105476" />,
-                  label: "Create Agent-PAN",
+                  label: "Agent for Approval",
                 },
               ]
             : [

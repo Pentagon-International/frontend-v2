@@ -54,6 +54,8 @@ import {
 } from "../../../components";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { URL } from "../../../api/serverUrls";
+import { getAPICall } from "../../../service/getApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
 import {
   approveCustomerPan,
   extractApiErrorMessage,
@@ -152,6 +154,49 @@ const TERM_CODE_OPTIONS = [
 
 const MODAL_DROPDOWN_Z_INDEX = 1000;
 
+type GeoCountry = {
+  country_code: string;
+  country_name: string;
+  status: string;
+};
+
+type GeoState = {
+  id: number;
+  state_code: string;
+  state_name: string;
+  status: string;
+  country_code: string;
+};
+
+type GeoCity = {
+  id: number;
+  city_code: string;
+  city_name: string;
+  status: string;
+};
+
+function isIndiaAddressCountry(country: string | null | undefined): boolean {
+  const raw = String(country ?? "").trim();
+  if (!raw) return false;
+  if (raw.toUpperCase() === "IN") return true;
+  return raw.toLowerCase().includes("india");
+}
+
+async function fetchGeoList<T>(endpoint: string): Promise<T[]> {
+  try {
+    const response = (await getAPICall(endpoint, API_HEADER)) as {
+      success?: boolean;
+      data?: T[];
+    };
+    if (response && Array.isArray(response.data)) return response.data;
+    if (Array.isArray(response)) return response as T[];
+    return [];
+  } catch (error) {
+    console.error(`Error fetching ${endpoint}:`, error);
+    return [];
+  }
+}
+
 function normalizeTermCodeValue(termCode?: string | null): string | null {
   const normalized = String(termCode ?? "").trim().toUpperCase();
   if (!normalized) return null;
@@ -217,7 +262,7 @@ function countPendingNewSupportingDocuments(
 /** Client-side checks before saving an approval-edit row. */
 function getApprovalEditValidationError(
   row: CustomerPanApprovalRow,
-  requireIndiaTaxIds: boolean,
+  _requireIndiaTaxIds: boolean,
 ): string | null {
   const term = String(row.term_code ?? "").trim().toUpperCase();
   if (term === "CREDIT") {
@@ -231,23 +276,6 @@ function getApprovalEditValidationError(
     if (!amount) return "Credit amount is required when Credit Type is Credit";
     if (!/^\d+(\.\d{1,2})?$/.test(amount) && !/^\d+$/.test(amount)) {
       return "Enter a valid credit amount";
-    }
-  }
-
-  if (requireIndiaTaxIds) {
-    const addresses = row.addresses_data ?? [];
-    for (let i = 0; i < addresses.length; i += 1) {
-      const address = addresses[i];
-      const label = addresses.length > 1 ? ` (address ${i + 1})` : "";
-      if (!String(address.iec_code ?? "").trim()) {
-        return `IEC Code is required${label}`;
-      }
-      if (!String(address.tan_no ?? "").trim()) {
-        return `TAN is required${label}`;
-      }
-      if (!String(address.arn_no ?? "").trim()) {
-        return `ARN is required${label}`;
-      }
     }
   }
 
@@ -411,7 +439,7 @@ export function CustomerPanApprovalDetails({
   editable?: boolean;
   onChange?: (next: CustomerPanApprovalRow) => void;
   partyType?: ApprovalPartyType;
-  /** When true (India users), IEC/TAN/ARN are marked required in edit mode. */
+  /** When true (India users), show India tax/GST address fields in edit mode. */
   requireIndiaTaxIds?: boolean;
   foreignBranchProfile?: ForeignBranchProfile;
   onAttachDocuments?: () => void;
@@ -1186,6 +1214,179 @@ function CustomerPanAddressDetails({
     isChinaUser: false,
   };
 
+  const { data: countries = [] } = useQuery({
+    queryKey: ["countries"],
+    queryFn: () => fetchGeoList<GeoCountry>(URL.country),
+    staleTime: 5 * 60 * 1000,
+    enabled: editable,
+  });
+
+  const { data: states = [] } = useQuery({
+    queryKey: ["states"],
+    queryFn: () => fetchGeoList<GeoState>(URL.state),
+    staleTime: 5 * 60 * 1000,
+    enabled: editable,
+  });
+
+  const { data: cities = [] } = useQuery({
+    queryKey: ["cities"],
+    queryFn: () => fetchGeoList<GeoCity>(URL.city),
+    staleTime: 5 * 60 * 1000,
+    enabled: editable,
+  });
+
+  const countryOptions = useMemo(
+    () =>
+      countries
+        .filter((country) => String(country.status).toUpperCase() === "ACTIVE")
+        .map((country) => ({
+          value: country.country_code,
+          label: country.country_name,
+        })),
+    [countries],
+  );
+
+  const selectedCountryCode = useMemo(() => {
+    const raw = String(address.country ?? "").trim();
+    if (!raw) return "";
+    const byCode = countries.find(
+      (c) => c.country_code.toUpperCase() === raw.toUpperCase(),
+    );
+    if (byCode) return byCode.country_code;
+    const byName = countries.find(
+      (c) => c.country_name.toLowerCase() === raw.toLowerCase(),
+    );
+    return byName?.country_code ?? "";
+  }, [address.country, countries]);
+
+  const stateOptions = useMemo(
+    () =>
+      states
+        .filter(
+          (state) =>
+            String(state.status).toLowerCase() === "active" &&
+            state.country_code === selectedCountryCode,
+        )
+        .map((state) => ({
+          value: state.id.toString(),
+          label: state.state_name,
+        })),
+    [states, selectedCountryCode],
+  );
+
+  const selectedStateId = useMemo(() => {
+    const raw = String(address.state ?? "").trim();
+    if (!raw) return "";
+    const match = states.find(
+      (s) =>
+        s.state_code.toUpperCase() === raw.toUpperCase() ||
+        s.state_name.toLowerCase() === raw.toLowerCase(),
+    );
+    return match ? match.id.toString() : "";
+  }, [address.state, states]);
+
+  const cityOptions = useMemo(
+    () =>
+      cities
+        .filter((city) => String(city.status).toLowerCase() === "active")
+        .map((city) => ({
+          value: city.id.toString(),
+          label: city.city_name,
+        })),
+    [cities],
+  );
+
+  const selectedCityId = useMemo(() => {
+    const raw = String(address.city ?? "").trim();
+    if (!raw) return "";
+    const match = cities.find(
+      (c) =>
+        c.city_name.toLowerCase() === raw.toLowerCase() ||
+        c.city_code.toUpperCase() === raw.toUpperCase(),
+    );
+    return match ? match.id.toString() : "";
+  }, [address.city, cities]);
+
+  const [customCity, setCustomCity] = useState(false);
+  const [citySearchValue, setCitySearchValue] = useState("");
+
+  useEffect(() => {
+    if (!editable) return;
+    const raw = String(address.city ?? "").trim();
+    if (!raw || cities.length === 0) {
+      setCustomCity(false);
+      return;
+    }
+    const exists = cities.some(
+      (c) =>
+        c.city_name.toLowerCase() === raw.toLowerCase() ||
+        c.city_code.toUpperCase() === raw.toUpperCase(),
+    );
+    setCustomCity(!exists);
+    if (!exists) setCitySearchValue(raw);
+  }, [editable, address.city, cities]);
+
+  const isStateRequired = isIndiaAddressCountry(
+    selectedCountryCode || address.country,
+  );
+
+  const handleCountryChange = (countryCode: string) => {
+    const country = countries.find((c) => c.country_code === countryCode);
+    if (!country) return;
+    setCustomCity(false);
+    setCitySearchValue("");
+    onChange?.({
+      country: country.country_code,
+      state: "",
+      city: "",
+    });
+  };
+
+  const handleStateChange = (stateId: string) => {
+    const state = states.find((s) => s.id.toString() === stateId);
+    if (!state) return;
+    onChange?.({ state: state.state_code });
+  };
+
+  const handleCityChange = (cityId: string) => {
+    const city = cities.find((c) => c.id.toString() === cityId);
+    if (!city) return;
+    setCustomCity(false);
+    setCitySearchValue("");
+    onChange?.({ city: city.city_name });
+  };
+
+  const handleCustomCityChange = (cityName: string) => {
+    setCustomCity(true);
+    setCitySearchValue(cityName);
+    onChange?.({ city: cityName });
+  };
+
+  const handleCitySearch = (searchValue: string) => {
+    setCitySearchValue(searchValue);
+    if (searchValue && searchValue.length > 2) {
+      const lower = searchValue.toLowerCase();
+      const exactMatch = cities.find(
+        (c) =>
+          c.city_name.toLowerCase() === lower ||
+          c.city_code.toLowerCase() === lower,
+      );
+      const partialMatch = cities.find(
+        (c) =>
+          c.city_name.toLowerCase().startsWith(lower) ||
+          c.city_code.toLowerCase().startsWith(lower),
+      );
+      if (!exactMatch && !partialMatch) {
+        setCustomCity(true);
+        onChange?.({ city: searchValue });
+      } else {
+        setCustomCity(false);
+      }
+    } else if (!searchValue) {
+      setCustomCity(false);
+    }
+  };
+
   const foreignTaxFields: DetailField[] = [];
   if (!requireIndiaTaxIds) {
     if (branchProfile.isDubaiUser) {
@@ -1345,21 +1546,75 @@ function CustomerPanAddressDetails({
             value={address.address ?? ""}
             onChange={(e) => onChange?.({ address: e.target.value })}
           />
-          <FormTextInput format="normal"
-            label="City"
-            value={address.city ?? ""}
-            onChange={(e) => onChange?.({ city: e.target.value })}
-          />
-          <FormTextInput format="normal"
-            label="State"
-            value={address.state ?? ""}
-            onChange={(e) => onChange?.({ state: e.target.value })}
-          />
-          <FormTextInput format="normal"
+          <Dropdown
             label="Country"
-            value={address.country ?? ""}
-            onChange={(e) => onChange?.({ country: e.target.value })}
+            placeholder="Select country"
+            searchable
+            data={countryOptions}
+            value={selectedCountryCode || null}
+            onChange={(value) => value && handleCountryChange(value)}
+            limit={50}
+            maxDropdownHeight={300}
+            dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
           />
+          <Dropdown
+            label="State"
+            withAsterisk={isStateRequired}
+            placeholder="Select state"
+            searchable
+            data={stateOptions}
+            disabled={!selectedCountryCode}
+            value={selectedStateId || null}
+            onChange={(value) => value && handleStateChange(value)}
+            limit={50}
+            maxDropdownHeight={300}
+            dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
+          />
+          {customCity ? (
+            <FormTextInput
+              format="normal"
+              label="City"
+              placeholder="Enter city name"
+              value={
+                citySearchValue ||
+                address.city ||
+                ""
+              }
+              onChange={(e) => handleCustomCityChange(e.target.value)}
+              rightSection={
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => {
+                    setCustomCity(false);
+                    setCitySearchValue("");
+                    onChange?.({ city: "" });
+                  }}
+                  title="Switch to dropdown"
+                >
+                  <IconX size={16} />
+                </ActionIcon>
+              }
+            />
+          ) : (
+            <Dropdown
+              key={`approval-city-${index}-${address.city || ""}`}
+              label="City"
+              placeholder="Select or search city"
+              searchable
+              data={cityOptions}
+              value={selectedCityId || null}
+              onChange={(value) => {
+                if (value) handleCityChange(value);
+              }}
+              onSearchChange={handleCitySearch}
+              searchValue={citySearchValue}
+              limit={100}
+              maxDropdownHeight={300}
+              nothingFoundMessage="City not found - type to enter custom city"
+              dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
+            />
+          )}
           <FormTextInput format="normal"
             label={requireIndiaTaxIds ? "Pin Code" : "Pin/Zip Code"}
             value={address.pincode ?? ""}
@@ -1419,19 +1674,16 @@ function CustomerPanAddressDetails({
           />
           <FormTextInput format="normal"
             label="IEC Code"
-            withAsterisk={requireIndiaTaxIds}
             value={address.iec_code ?? ""}
             onChange={(e) => onChange?.({ iec_code: e.target.value })}
           />
           <FormTextInput format="normal"
             label="TAN"
-            withAsterisk={requireIndiaTaxIds}
             value={address.tan_no ?? ""}
             onChange={(e) => onChange?.({ tan_no: e.target.value })}
           />
           <FormTextInput format="normal"
             label="ARN"
-            withAsterisk={requireIndiaTaxIds}
             value={address.arn_no ?? ""}
             onChange={(e) => onChange?.({ arn_no: e.target.value })}
           />

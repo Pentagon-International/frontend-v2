@@ -230,15 +230,6 @@ function validateAdditionalDetails(
   } else if (form.credit_day.trim() && !/^\d+$/.test(form.credit_day.trim())) {
     errors.credit_day = "Enter a valid number of days";
   }
-  if (!form.iec_code.trim()) {
-    errors.iec_code = "IEC Code is required";
-  }
-  if (!form.tan_no.trim()) {
-    errors.tan_no = "TAN is required";
-  }
-  if (!form.arn_no.trim()) {
-    errors.arn_no = "ARN is required";
-  }
   if (
     form.email.trim() &&
     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
@@ -1021,7 +1012,6 @@ export default function CustomerPanMaster({
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <FormTextInput
                       label="IEC Code"
-                      withAsterisk
                       placeholder="Enter IEC Code"
                       format="capital"
                       value={additionalDetails.iec_code}
@@ -1034,7 +1024,6 @@ export default function CustomerPanMaster({
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <FormTextInput
                       label="TAN No"
-                      withAsterisk
                       placeholder="Enter TAN number"
                       format="capital"
                       value={additionalDetails.tan_no}
@@ -1047,7 +1036,6 @@ export default function CustomerPanMaster({
                   <Grid.Col span={{ base: 12, sm: 4 }}>
                     <FormTextInput
                       label="ARN No"
-                      withAsterisk
                       placeholder="Enter ARN number"
                       format="normal"
                       value={additionalDetails.arn_no}

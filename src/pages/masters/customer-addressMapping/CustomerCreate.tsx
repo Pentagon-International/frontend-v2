@@ -634,15 +634,15 @@ function buildAddressValidationSchema(
     }),
     iec_code: yup
       .string()
-      .required("IEC Code is required")
+      .optional()
       .max(20, "IEC Code must not exceed 20 characters"),
     tan_no: yup
       .string()
-      .required("TAN is required")
+      .optional()
       .max(20, "TAN must not exceed 20 characters"),
     arn_no: yup
       .string()
-      .required("ARN is required")
+      .optional()
       .max(30, "ARN must not exceed 30 characters"),
     sez_valid_date: yup.string().when("sez", {
       is: (value: boolean | string | number | null | undefined) =>
@@ -1563,7 +1563,6 @@ const AddressCard = ({
               <Grid.Col span={4}>
                 <FormTextInput
                   label="IEC Code"
-                  withAsterisk={isIndiaUser}
                   placeholder="Enter IEC Code"
                   format="capital"
                   disabled={isViewMode}
@@ -1587,7 +1586,6 @@ const AddressCard = ({
               <Grid.Col span={4}>
                 <FormTextInput
                   label="TAN No"
-                  withAsterisk={isIndiaUser}
                   placeholder="Enter TAN number"
                   format="capital"
                   disabled={isViewMode}
@@ -1599,7 +1597,6 @@ const AddressCard = ({
               <Grid.Col span={4}>
                 <FormTextInput
                   label="ARN No"
-                  withAsterisk={isIndiaUser}
                   placeholder="Enter ARN number"
                   format="normal"
                   disabled={isViewMode}
@@ -2446,7 +2443,13 @@ function CustomerCreate() {
   );
 
   useEffect(() => {
-    if (isVerificationCreateRoute && isIndiaUser) {
+    // India: customer/vendor create-for-approval goes through PAN.
+    // Agent uses the same approval form as overseas (no PAN flow).
+    if (
+      isVerificationCreateRoute &&
+      isIndiaUser &&
+      !isAgentVerificationRoute
+    ) {
       navigate(
         isVendorVerificationRoute
           ? "/master/create-vendor-pan"
@@ -2457,6 +2460,7 @@ function CustomerCreate() {
   }, [
     isVerificationCreateRoute,
     isVendorVerificationRoute,
+    isAgentVerificationRoute,
     isIndiaUser,
     navigate,
   ]);
