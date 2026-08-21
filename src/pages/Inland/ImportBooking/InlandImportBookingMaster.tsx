@@ -51,6 +51,7 @@ import {
   IconSearch,
   IconX,
   IconCopy,
+  IconPlus,
 } from "@tabler/icons-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +71,7 @@ import {
   erpListStickyActionTdStyle,
   erpListStickyActionThStyle,
   erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   BookingCreateJobLoader,
   getBookingRowAirVolume,
@@ -1500,11 +1502,10 @@ function InlandImportBookingMaster() {
     setShouldRestore,
   ]);
 
-  // Create New hidden: bookings must be created from gained quotations
-  // const persistListAndNavigate = useCallback(() => {
-  //   persistListState();
-  //   navigate("./create");
-  // }, [persistListState, navigate]);
+  const persistListAndNavigate = useCallback(() => {
+    persistListState();
+    navigate("./create");
+  }, [persistListState, navigate]);
 
   // ---- refetch effects ----
   useEffect(() => {
@@ -2047,7 +2048,6 @@ function InlandImportBookingMaster() {
                   >
                     {showFilters ? "Hide filters" : "Filters"}
                   </Button>
-                  {/* Create New hidden: bookings must be created from gained quotations
                   <Button
                     size="xs"
                     leftSection={<IconPlus size={14} />}
@@ -2056,7 +2056,6 @@ function InlandImportBookingMaster() {
                   >
                     New Booking
                   </Button>
-                  */}
                 </>
               ),
             }}

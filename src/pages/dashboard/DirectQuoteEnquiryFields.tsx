@@ -24,13 +24,23 @@ import {
 } from "react";
 import { URL } from "../../api/serverUrls";
 import {
+  CustomerNameSelect,
   Dropdown,
   SearchableSelect,
 } from "../../components";
 import FormNumberInput from "../../components/FormNumberInput";
 import { getAPICall } from "../../service/getApiCall";
 import { postAPICall } from "../../service/postApiCall";
+import useAuthStore from "../../store/authStore";
 import { API_HEADER } from "../../store/storeKeys";
+import {
+  buildCustomerCreatePayloadFields,
+  INITIAL_CUSTOMER_SELECTION,
+  isNewCustomerDetailsPending,
+  NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+  type CustomerSelectionState,
+  type CustomerSelectionType,
+} from "../../utils/customerSelection";
 import {
   isOtherServiceInland,
   resolveEffectiveServiceType,
@@ -102,6 +112,31 @@ type SalespersonRow = {
   sales_coordinator: string;
   customer_service: string;
 };
+
+function resolveCurrentUserSalespersonOption(
+  options: SalespersonRow[],
+  user: ReturnType<typeof useAuthStore.getState>["user"],
+): SalespersonRow | null {
+  if (!user || !options.length) return null;
+  const candidates = [
+    String(user.email ?? "").trim().toLowerCase(),
+    String(user.full_name ?? "").trim().toLowerCase(),
+    String(user.username ?? "").trim().toLowerCase(),
+  ].filter(Boolean);
+  if (!candidates.length) return null;
+
+  for (const option of options) {
+    const person = String(option.value ?? option.label ?? "")
+      .trim()
+      .toLowerCase();
+    if (!person) continue;
+    if (candidates.some((c) => c === person)) return option;
+    if (candidates.some((c) => person.includes(c) || c.includes(person))) {
+      return option;
+    }
+  }
+  return null;
+}
 
 type SalespersonsResponse = {
   success?: boolean;
@@ -200,9 +235,12 @@ export default function DirectQuoteEnquiryFields({
   onEnquiryDataSync,
   validateEnquiryRef,
 }: DirectQuoteEnquiryFieldsProps) {
+  const { user } = useAuthStore();
   const [customerDisplayName, setCustomerDisplayName] = useState<string | null>(
     null,
   );
+  const [customerSelection, setCustomerSelection] =
+    useState<CustomerSelectionState>(INITIAL_CUSTOMER_SELECTION);
 
   const customerForm = useForm({
     initialValues: {
@@ -326,6 +364,54 @@ export default function DirectQuoteEnquiryFields({
     }
   };
 
+  const handleDirectQuoteCustomerChange = ({
+    value,
+    customerName,
+    selectionType,
+    tempCode,
+  }: {
+    value: string;
+    customerName: string;
+    selectionType: CustomerSelectionType;
+    tempCode: string | null;
+    originalData?: Record<string, unknown> | null;
+  }) => {
+    customerForm.setFieldValue("customer_code", value || "");
+    setCustomerSelection({
+      selectionType,
+      customerName,
+      tempCode,
+    });
+
+    if (selectionType !== "freeText") {
+      customerForm.clearFieldError("customer_code");
+    }
+
+    if (value) {
+      setCustomerDisplayName(customerName);
+
+      if (selectionType === "master") {
+        handleCustomerSelection(value);
+      } else {
+        const selfSalesperson = resolveCurrentUserSalespersonOption(
+          salespersonsData,
+          user,
+        );
+        if (selfSalesperson) {
+          customerForm.setFieldValue(
+            "sales_person",
+            selfSalesperson.value || "",
+          );
+        }
+      }
+    } else {
+      setCustomerDisplayName(null);
+      setCustomerSelection(INITIAL_CUSTOMER_SELECTION);
+      customerForm.clearFieldError("customer_code");
+      handleCustomerSelection("");
+    }
+  };
+
   const calculateChargeableWeight = useCallback(
     (grossWeight: number | null, volumeWeight: number | null) => {
       if (!grossWeight && !volumeWeight) return 0;
@@ -389,6 +475,14 @@ export default function DirectQuoteEnquiryFields({
   useEffect(() => {
     if (!validateEnquiryRef) return;
     validateEnquiryRef.current = () => {
+      if (isNewCustomerDetailsPending(customerSelection)) {
+        customerForm.setFieldError(
+          "customer_code",
+          NEW_CUSTOMER_DETAILS_PENDING_ERROR,
+        );
+        return false;
+      }
+
       const customerResult = customerForm.validate();
       const serviceResult = serviceForm.validate();
 
@@ -418,15 +512,26 @@ export default function DirectQuoteEnquiryFields({
     return () => {
       validateEnquiryRef.current = null;
     };
-  }, [validateEnquiryRef, customerForm, serviceForm, isInlandOtherService]);
+  }, [
+    validateEnquiryRef,
+    customerForm,
+    serviceForm,
+    isInlandOtherService,
+    customerSelection,
+  ]);
 
   useEffect(() => {
     if (!onEnquiryDataSync) return;
     onEnquiryDataSync({
       actionType: "createQuote",
       fromQuotationList: true,
-      customer_code: customerForm.values.customer_code,
-      customer_name: customerDisplayName || "",
+      ...buildCustomerCreatePayloadFields({
+        selection: customerSelection,
+        customerFieldValue: customerForm.values.customer_code,
+        fieldKey: "customer_code",
+      }),
+      customer_name:
+        customerDisplayName || customerSelection.customerName || "",
       enquiry_received_date: dayjs().format("YYYY-MM-DD"),
       sales_person: customerForm.values.sales_person,
       services: serviceForm.values.service_details.map(
@@ -455,6 +560,7 @@ export default function DirectQuoteEnquiryFields({
     customerForm.values,
     serviceForm.values,
     customerDisplayName,
+    customerSelection,
   ]);
 
   const resetServiceAfterTypeChange = (idx: number) => {
@@ -477,7 +583,7 @@ export default function DirectQuoteEnquiryFields({
     <Box px="md" py="xs">
       <Grid gutter="sm">
         <Grid.Col span={4}>
-          <SearchableSelect
+          <CustomerNameSelect
             label="Customer Name"
             required
             apiEndpoint={URL.customer}
@@ -488,16 +594,9 @@ export default function DirectQuoteEnquiryFields({
             displayFormat={directQuoteCustomerDisplayFormat}
             value={customerForm.values.customer_code}
             displayValue={customerDisplayName}
-            onChange={(value, selectedData) => {
-              customerForm.setFieldValue("customer_code", value || "");
-              if (value && selectedData) {
-                setCustomerDisplayName(selectedData.label);
-                handleCustomerSelection(value);
-              } else {
-                setCustomerDisplayName(null);
-                handleCustomerSelection("");
-              }
-            }}
+            allowFreeText
+            selectionType={customerSelection.selectionType}
+            onCustomerChange={handleDirectQuoteCustomerChange}
             error={customerForm.errors.customer_code as string}
             minSearchLength={3}
           />

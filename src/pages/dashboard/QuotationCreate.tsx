@@ -105,6 +105,7 @@ import {
 } from "../../utils/nonDecimalMoneyAmount";
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
 import { buildEnquiryServicePayload } from "../../utils/buildEnquiryServicePayload";
+import { buildCustomerCreatePayloadFields } from "../../utils/customerSelection";
 import {
   getBookingCreatePath,
   type OtherServiceOption,
@@ -454,6 +455,7 @@ type QuotationCreateProps = {
     actionType?: string;
     customer_code?: string; // Added for destination flow
     customer_name: string;
+    temp_code?: string;
     enquiry_received_date: string;
     sales_person: string;
     sales_coordinator: string;
@@ -2534,7 +2536,15 @@ function QuotationCreate({
 
           // Prepare enquiry payload matching EnquiryCreate.getEnquiryPayload
           const enquiryPayload = {
-            customer_code: actualEnquiryData?.customer_code,
+            ...buildCustomerCreatePayloadFields({
+              selection: {
+                selectionType: actualEnquiryData?.temp_code ? "temp" : "master",
+                customerName: actualEnquiryData?.customer_name || "",
+                tempCode: actualEnquiryData?.temp_code || null,
+              },
+              customerFieldValue: actualEnquiryData?.customer_code || "",
+              fieldKey: "customer_code",
+            }),
             enquiry_received_date: actualEnquiryData?.enquiry_received_date,
             sales_person: actualEnquiryData?.sales_person,
             sales_coordinator: actualEnquiryData?.sales_coordinator || null,

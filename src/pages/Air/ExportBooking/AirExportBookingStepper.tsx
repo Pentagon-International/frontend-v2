@@ -317,12 +317,8 @@ const validationSchema = yup.object({
         move_type: yup.string(),
         from_location_code: yup.string(),
         to_location_code: yup.string(),
-        etd: yup.date().nullable().required("ETD is required"),
-        eta: yup
-          .date()
-          .nullable()
-          .required("ETA is required")
-          .min(yup.ref("etd"), "ETA must be after ETD"),
+        etd: yup.date().nullable(),
+        eta: yup.date().nullable(),
         carrier_code: yup.string(),
         flight_no: yup.string().nullable(),
         status: yup.string(),
@@ -4012,10 +4008,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <RequiredLabel label="To" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
-                  <RequiredLabel label="ETD" required={true} />
+                  <RequiredLabel label="ETD" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
-                  <RequiredLabel label="ETA" required={true} />
+                  <RequiredLabel label="ETA" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.5}>
                   <RequiredLabel label="Carrier" required={false} />
