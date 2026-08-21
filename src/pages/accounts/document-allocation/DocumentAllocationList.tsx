@@ -77,6 +77,8 @@ type DocumentAllocationListItem = {
   allocation_no?: string;
   allocation_date?: string;
   document_status?: string;
+  jv_id?: number | null;
+  jv_no?: string | null;
   allocation?: Array<Record<string, unknown>>;
 };
 

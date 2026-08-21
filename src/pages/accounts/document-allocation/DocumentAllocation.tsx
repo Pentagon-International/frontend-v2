@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Box,
   Button,
@@ -38,6 +38,7 @@ import {
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import { useGlobalSearchDocumentNavigation } from "../../../hooks/useGlobalSearchDocumentNavigation";
 import dayjs from "dayjs";
 
 type CoaItem = {
@@ -80,6 +81,8 @@ type AllocationDocumentsHeader = {
   subledger_code?: string;
   allocation_date?: string;
   allocation_no?: string;
+  jv_id?: number | null;
+  jv_no?: string | null;
   allocation?: DocumentAllocationRow[];
 };
 
@@ -93,6 +96,8 @@ type AllocationDocumentsApiResponse = {
     subledger_code?: string;
     allocation_date?: string;
     allocation_no?: string;
+    jv_id?: number | null;
+    jv_no?: string | null;
     allocation?: DocumentAllocationRow[];
   };
 };
@@ -301,6 +306,8 @@ type AllocationDocumentNavRow = {
   allocation_no?: string;
   allocation_date?: string;
   document_status?: string;
+  jv_id?: number | null;
+  jv_no?: string | null;
   allocation?: DocumentAllocationRow[];
 };
 
@@ -356,6 +363,8 @@ const fetchAllocationDocumentFromApi = async (
   account_name?: string;
   allocation_date?: string;
   allocation_no?: string;
+  jv_id?: number | null;
+  jv_no?: string | null;
   allocation?: DocumentAllocationRow[];
 } | null> => {
   const tryPost = async (filters: Record<string, unknown>) => {
@@ -373,6 +382,8 @@ const fetchAllocationDocumentFromApi = async (
           account_name?: string;
           allocation_date?: string;
           allocation_no?: string;
+          jv_id?: number | null;
+          jv_no?: string | null;
           allocation?: DocumentAllocationRow[];
         }>;
       };
@@ -440,6 +451,8 @@ const createAllocationDocuments = async (
       subledger_code: doc.subledger_code,
       allocation_date: doc.allocation_date,
       allocation_no: doc.allocation_no,
+      jv_id: doc.jv_id ?? null,
+      jv_no: doc.jv_no ?? null,
       allocation: Array.isArray(doc.allocation) ? doc.allocation : [],
     };
   } catch (error) {
@@ -466,6 +479,8 @@ const putAllocationDocuments = async (
       subledger_code: doc.subledger_code,
       allocation_date: doc.allocation_date,
       allocation_no: doc.allocation_no,
+      jv_id: doc.jv_id ?? null,
+      jv_no: doc.jv_no ?? null,
       allocation: Array.isArray(doc.allocation) ? doc.allocation : [],
     };
   } catch (error) {
@@ -503,6 +518,18 @@ export default function DocumentAllocation() {
     null,
   );
 
+  const getDocumentNavigationOptions = useCallback(
+    () => ({
+      returnTo: location.pathname,
+      returnToState: location.state,
+    }),
+    [location.pathname, location.state],
+  );
+  const { onDocumentNoClick, documentNavUi } =
+    useGlobalSearchDocumentNavigation({
+      getOptions: getDocumentNavigationOptions,
+    });
+
   const selectedGlAccountCode = selectedAccount?.gl_account_code ?? "";
   const selectedSlCode = selectedAccount?.sl_code ?? "";
 
@@ -510,6 +537,8 @@ export default function DocumentAllocation() {
     String(savedHeader?.status ?? "").toUpperCase() === "POSTED" ||
     isViewMode;
   const hasSavedId = savedHeader?.id != null;
+  const foreignExchangeJvNo = String(savedHeader?.jv_no ?? "").trim();
+  const showForeignExchangeGainLossButton = Boolean(foreignExchangeJvNo);
 
   const allocationTotals = useMemo(
     () => computeAllocationTotals(rows),
@@ -562,6 +591,8 @@ export default function DocumentAllocation() {
             account_name: row.account_name,
             allocation_date: row.allocation_date,
             allocation_no: row.allocation_no,
+            jv_id: row.jv_id,
+            jv_no: row.jv_no,
             allocation: row.allocation,
           };
         } else {
@@ -598,6 +629,8 @@ export default function DocumentAllocation() {
           subledger_code: resolvedSlCode,
           allocation_date: resolvedAllocationDate,
           allocation_no: doc.allocation_no ?? row.allocation_no,
+          jv_id: doc.jv_id ?? row.jv_id ?? null,
+          jv_no: doc.jv_no ?? row.jv_no ?? null,
         });
 
         setSelectedAccount({
@@ -1692,28 +1725,56 @@ export default function DocumentAllocation() {
                   Back
                 </Button>
 
-                {rows.length > 0 ? (
+                {rows.length > 0 || showForeignExchangeGainLossButton ? (
                   <Group gap="sm">
-                    <Button
-                      size="sm"
-                      style={{ backgroundColor: "#105476" }}
-                      onClick={handleSaveOrUpdate}
-                      loading={isSaving}
-                      disabled={isLocked || rows.length === 0}
-                    >
-                      {hasSavedId ? "Update" : "Save"}
-                    </Button>
+                    {rows.length > 0 ? (
+                      <>
+                        {showForeignExchangeGainLossButton ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            color="#105476"
+                            onClick={() =>
+                              void onDocumentNoClick(foreignExchangeJvNo)
+                            }
+                          >
+                            Foreign exchange gain/loss
+                          </Button>
+                        ) : null}
 
-                    {hasSavedId && canPostDocuments ? (
+                        <Button
+                          size="sm"
+                          style={{ backgroundColor: "#105476" }}
+                          onClick={handleSaveOrUpdate}
+                          loading={isSaving}
+                          disabled={isLocked || rows.length === 0}
+                        >
+                          {hasSavedId ? "Update" : "Save"}
+                        </Button>
+
+                        {hasSavedId && canPostDocuments ? (
+                          <Button
+                            size="sm"
+                            color="black"
+                            variant="filled"
+                            onClick={handlePost}
+                            loading={isPosting}
+                            disabled={isLocked}
+                          >
+                            Post
+                          </Button>
+                        ) : null}
+                      </>
+                    ) : showForeignExchangeGainLossButton ? (
                       <Button
                         size="sm"
-                        color="black"
-                        variant="filled"
-                        onClick={handlePost}
-                        loading={isPosting}
-                        disabled={isLocked}
+                        variant="outline"
+                        color="#105476"
+                        onClick={() =>
+                          void onDocumentNoClick(foreignExchangeJvNo)
+                        }
                       >
-                        Post
+                        Foreign exchange gain/loss
                       </Button>
                     ) : null}
                   </Group>
@@ -1723,6 +1784,7 @@ export default function DocumentAllocation() {
           </Box>
         </Flex>
       </Box>
+      {documentNavUi}
     </Box>
   );
 }
