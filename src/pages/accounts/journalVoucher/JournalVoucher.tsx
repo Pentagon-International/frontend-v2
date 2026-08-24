@@ -546,7 +546,7 @@ function JournalVoucher() {
     if (!isReversalMode) {
       setSaveResponse({
         id: d.id,
-        journal_no: d.document_no ?? "",
+        journal_no: d.journal_no ?? "",
         status: d.status ?? "",
       });
     }
@@ -600,7 +600,7 @@ function JournalVoucher() {
 
     form.setValues({
       document_id: isReversalMode ? "" : d.id ? String(d.id) : "",
-      journal_no: isReversalMode ? "" : (d.document_no ?? ""),
+      journal_no: isReversalMode ? "" : (d.journal_no ?? ""),
       day_book_id: d.daybook_id != null ? String(d.daybook_id) : "",
       note: d.note ?? "",
       narration: d.narration ?? "",
@@ -1101,27 +1101,7 @@ function JournalVoucher() {
           <Group gap="md" wrap="nowrap">
             {saveResponse && (
               <Group gap="sm" wrap="nowrap">
-                {(saveResponse.id || form.values.document_id) && (
-                  <Group gap="xs" wrap="nowrap" align="center">
-                    <Text
-                      size="sm"
-                      fw={500}
-                      c="dimmed"
-                      style={{ fontFamily: "Inter" }}
-                    >
-                      Document ID
-                    </Text>
-                    <Badge
-                      size="sm"
-                      variant="light"
-                      color="#105476"
-                      styles={{ root: { textTransform: "none" } }}
-                    >
-                      {form.values.document_id || "—"}
-                    </Badge>
-                  </Group>
-                )}
-                {saveResponse.journal_no && (
+                {(saveResponse.journal_no || form.values.journal_no) && (
                   <Group gap="xs" wrap="nowrap" align="center">
                     <Text
                       size="sm"
@@ -1137,7 +1117,7 @@ function JournalVoucher() {
                       color="#105476"
                       styles={{ root: { textTransform: "none" } }}
                     >
-                      {saveResponse.journal_no}
+                      {saveResponse.journal_no || form.values.journal_no}
                     </Badge>
                   </Group>
                 )}

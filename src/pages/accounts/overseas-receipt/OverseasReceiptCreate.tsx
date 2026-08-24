@@ -526,6 +526,31 @@ import {
   function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
     return side === "Dr" ? "Cr" : "Dr";
   }
+
+  /**
+   * Reversal create from a source receipt: invert party Dr/Cr.
+   * TDS rows (`is_tds_calcualted_record`) invert the receipt line; other party
+   * rows invert the Dr/Cr the user selected on the receipt.
+   */
+  function invertPartyDrCrForReversalCreate(p: {
+    dr_cr?: string;
+    is_tds_calcualted_record?: unknown;
+    is_tds_calculated_record?: unknown;
+  }): "Dr" | "Cr" {
+    const sourceDrCr = receiptPartyDrCrToSide(p.dr_cr);
+    if (isPartyTdsCalculatedRecord(p)) return flipDrCr(sourceDrCr);
+    return flipDrCr(sourceDrCr);
+  }
+
+  /** Receipt header nets Cr − Dr; reversal nets Dr − Cr so the header amount matches the source. */
+  function partyHeaderNetSign(
+    drCr: "Cr" | "Dr",
+    isReversal: boolean,
+  ): 1 | -1 {
+    const isDr = drCr === "Dr";
+    if (isReversal) return isDr ? 1 : -1;
+    return isDr ? -1 : 1;
+  }
   
   type ReceiptCreateProps = {
     titleOverride?: string;
@@ -804,7 +829,8 @@ import {
       const parties = Array.isArray(receiptFromState.parties)
         ? receiptFromState.parties
         : [];
-      // Party details: same as ReceiptCreate (reversal create: Dr, or flip receipt Dr/Cr for TDS rows).
+      // Party details: same as ReceiptCreate (reversal create: invert user-selected
+      // party Dr/Cr; TDS rows also invert).
       const details: DetailRow[] =
         parties.length > 0
           ? parties.map((p) => ({
@@ -820,13 +846,10 @@ import {
               roe: parseNum(p.roe) ?? 1,
               amount: parseNum(p.amount),
               local_amount: toLocalAmount(p.local_amount),
-              dr_cr: _isReversal
-                ? isReversalEditOrView
-                  ? receiptPartyDrCrToSide(p.dr_cr)
-                  : isPartyTdsCalculatedRecord(p)
-                    ? flipDrCr(receiptPartyDrCrToSide(p.dr_cr))
-                    : ("Dr" as const)
-                : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
+              dr_cr:
+                _isReversal && !isReversalEditOrView
+                  ? invertPartyDrCrForReversalCreate(p)
+                  : receiptPartyDrCrToSide(p.dr_cr),
             }))
           : [getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal)];
   
@@ -973,7 +996,7 @@ import {
       syncRoeForCurrencyChange,
     ]);
   
-    // When party details change: header amount = Σ(Cr) − Σ(Dr) (same as ReceiptCreate)
+    // Receipt: header amount = Σ(Cr) − Σ(Dr). Reversal: Σ(Dr) − Σ(Cr) so the header matches the source receipt.
     const partyNetSnapshot = form.values.details
       .map(
         (d) =>
@@ -983,9 +1006,8 @@ import {
     useEffect(() => {
       const details = form.values.details ?? [];
       const netAmount = details.reduce((s, d) => {
-        const sign = d.dr_cr === "Dr" ? -1 : 1;
         const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-        return s + sign * amt;
+        return s + partyHeaderNetSign(d.dr_cr, _isReversal) * amt;
       }, 0);
       const headerAmount = clampAmount(netAmount);
       const roeVal = form.values.roe;
@@ -1003,7 +1025,7 @@ import {
       if (form.values.local_amount !== headerLocal) {
         form.setFieldValue("local_amount", headerLocal);
       }
-    }, [partyNetSnapshot, form.values.roe]);
+    }, [partyNetSnapshot, form.values.roe, _isReversal]);
 
     // Header: keep local_amount aligned with amount only when no party rows exist
     useEffect(() => {

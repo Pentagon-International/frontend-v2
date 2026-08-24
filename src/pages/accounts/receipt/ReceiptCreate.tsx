@@ -535,6 +535,31 @@ function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
   return side === "Dr" ? "Cr" : "Dr";
 }
 
+/**
+ * Reversal create from a source receipt: invert party Dr/Cr.
+ * TDS rows (`is_tds_calcualted_record`) invert the receipt line; other party
+ * rows invert the Dr/Cr the user selected on the receipt.
+ */
+function invertPartyDrCrForReversalCreate(p: {
+  dr_cr?: string;
+  is_tds_calcualted_record?: unknown;
+  is_tds_calculated_record?: unknown;
+}): "Dr" | "Cr" {
+  const sourceDrCr = receiptPartyDrCrToSide(p.dr_cr);
+  if (isPartyTdsCalculatedRecord(p)) return flipDrCr(sourceDrCr);
+  return flipDrCr(sourceDrCr);
+}
+
+/** Receipt header nets Cr − Dr; reversal nets Dr − Cr so the header amount matches the source. */
+function partyHeaderNetSign(
+  drCr: "Cr" | "Dr",
+  isReversal: boolean,
+): 1 | -1 {
+  const isDr = drCr === "Dr";
+  if (isReversal) return isDr ? 1 : -1;
+  return isDr ? -1 : 1;
+}
+
 type ReceiptCreateProps = {
   titleOverride?: string;
   backPath?: string;
@@ -811,7 +836,8 @@ export default function ReceiptCreate({
       ? receiptFromState.parties
       : [];
     // Party details: subledger_name = UI label (Account Name), subledger_code = value sent in payload. Set both for every row.
-    // Reversal create (from receipt): normal party Dr; TDS row (is_tds_calcualted_record) flips receipt Dr/Cr. Edit/view: saved values.
+    // Reversal create (from receipt): invert user-selected party Dr/Cr; TDS rows
+    // (is_tds_calcualted_record) also invert. Edit/view: saved values.
     const details: DetailRow[] =
       parties.length > 0
         ? parties.map((p) => ({
@@ -828,13 +854,10 @@ export default function ReceiptCreate({
             roe: parseNum(p.roe) ?? 1,
             amount: parseNum(p.amount),
             local_amount: toLocalAmount(p.local_amount),
-            dr_cr: _isReversal
-              ? isReversalEditOrView
-                ? receiptPartyDrCrToSide(p.dr_cr)
-                : isPartyTdsCalculatedRecord(p)
-                  ? flipDrCr(receiptPartyDrCrToSide(p.dr_cr))
-                  : ("Dr" as const)
-              : ((p.dr_cr === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr"),
+            dr_cr:
+              _isReversal && !isReversalEditOrView
+                ? invertPartyDrCrForReversalCreate(p)
+                : receiptPartyDrCrToSide(p.dr_cr),
           }))
         : [getDefaultDetailRow(localCurrency, _isReversal)];
 
@@ -977,7 +1000,7 @@ export default function ReceiptCreate({
     syncRoeForCurrencyChange,
   ]);
 
-  // When party details change: header amount = Σ(Cr) − Σ(Dr)
+  // Receipt: header amount = Σ(Cr) − Σ(Dr). Reversal: Σ(Dr) − Σ(Cr) so the header matches the source receipt.
   // This is important because backend may append extra party rows (ex: TDS) on save.
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
@@ -1003,10 +1026,9 @@ export default function ReceiptCreate({
 
     if (partyAmountsChanged) {
       const netAmount = details.reduce((s, d) => {
-        const sign = d.dr_cr === "Dr" ? -1 : 1;
         const amt =
           d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-        return s + sign * amt;
+        return s + partyHeaderNetSign(d.dr_cr, _isReversal) * amt;
       }, 0);
       const headerAmount = clampAmount(netAmount);
       if (form.values.amount !== headerAmount) {
@@ -1017,12 +1039,11 @@ export default function ReceiptCreate({
 
     if (partyLocalChanged) {
       const netLocal = details.reduce((s, d) => {
-        const sign = d.dr_cr === "Dr" ? -1 : 1;
         const local =
           d.local_amount != null && Number.isFinite(d.local_amount)
             ? d.local_amount
             : 0;
-        return s + sign * local;
+        return s + partyHeaderNetSign(d.dr_cr, _isReversal) * local;
       }, 0);
       const headerLocal = clampLocalAmount(netLocal);
       if (form.values.local_amount !== headerLocal) {
@@ -1045,7 +1066,12 @@ export default function ReceiptCreate({
     prevPartyLocalRef.current = partyLocalAmountsSnapshot;
     prevPartyAmountsRef.current = partyAmountsSnapshot;
     prevHeaderAmountRoeRef.current = headerAmountRoeKey;
-  }, [partyLocalAmountsSnapshot, partyAmountsSnapshot, headerAmountRoeKey]);
+  }, [
+    partyLocalAmountsSnapshot,
+    partyAmountsSnapshot,
+    headerAmountRoeKey,
+    _isReversal,
+  ]);
 
   /** Skip one amount→local recalculation after allocation sync (adj local is the source). */
   const skipPartyLocalFromAmountRef = useRef(false);
