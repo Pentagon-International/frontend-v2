@@ -118,6 +118,10 @@ import {
   syncBookingChargesWithCargoNoOfUnits,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
+import {
+  findUnitOptionValueByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
 import { commonSearchAPI } from "../../../service/searchApi";
 import OceanBookingCarrierSelect from "../components/OceanBookingCarrierSelect";
 
@@ -6626,19 +6630,50 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             value: String(item.id ?? ""),
                             label: String(item.charge_name ?? ""),
                           })}
-                          onChange={(val, selectedItem) => {
+                          returnOriginalData
+                          onChange={(val, selectedItem, originalData) => {
                             setCharges((prev) =>
-                              prev.map((c, i) =>
-                                i === index
-                                  ? {
-                                      ...c,
-                                      charge_id: val ?? "",
-                                      charge_name: val
-                                        ? (selectedItem?.label ?? "")
-                                        : "",
-                                    }
-                                  : c,
-                              ),
+                              prev.map((c, i) => {
+                                if (i !== index) return c;
+                                const next = {
+                                  ...c,
+                                  charge_id: val ?? "",
+                                  charge_name: val
+                                    ? (selectedItem?.label ?? "")
+                                    : "",
+                                };
+                                if (!val) return next;
+                                const defaultUnitCode =
+                                  resolveAutoUnitForNewCharge({
+                                    calculationType: (
+                                      originalData as {
+                                        calculation_type?: string;
+                                      } | null
+                                    )?.calculation_type,
+                                    service: form.values.service,
+                                    currentUnit: c.unit,
+                                  });
+                                if (!defaultUnitCode) return next;
+                                const unitValue =
+                                  findUnitOptionValueByCode(
+                                    defaultUnitCode,
+                                    unitOptions,
+                                  ) ?? defaultUnitCode;
+                                // Preserve populated qty; only cargo-fill when empty
+                                if (
+                                  c.no_of_units != null &&
+                                  String(c.no_of_units).trim() !== ""
+                                ) {
+                                  return { ...next, unit: unitValue };
+                                }
+                                return applyBookingChargeUnitChange(
+                                  next,
+                                  unitValue,
+                                  form.values.service,
+                                  form.values.cargo_details,
+                                  unitOptions,
+                                );
+                              }),
                             );
                           }}
                         />

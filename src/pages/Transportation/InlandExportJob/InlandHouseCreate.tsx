@@ -111,6 +111,10 @@ import {
   withRecalculatedChargeableWeight,
   type HouseCargoWeightValue,
 } from "../../../utils/houseCargoChargeableWeight";
+import {
+  findJobUnitOptionByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
 import { resolveHousingDetailsPrimaryKey } from "../../../utils/airWayBillPdf";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { postAPICall } from "../../../service/postApiCall";
@@ -4683,7 +4687,8 @@ function HouseCreate() {
                           : null
                       }
                       displayValue={charge.charge_name || undefined}
-                      onChange={(value, selectedData) => {
+                      returnOriginalData
+                      onChange={(value, selectedData, originalData) => {
                         const chargeId = value ? Number(value) : null;
                         const chargeName = selectedData?.label ?? "";
                         chargesForm.setFieldValue(
@@ -4702,6 +4707,52 @@ function HouseCreate() {
                               delete newErrors[index];
                           }
                           setChargeErrors(newErrors);
+                        }
+
+                        if (!value) return;
+                        const defaultUnitCode = resolveAutoUnitForNewCharge({
+                          calculationType: (
+                            originalData as {
+                              calculation_type?: string;
+                            } | null
+                          )?.calculation_type,
+                          service: jobService,
+                          currentUnitId: charge.unit_id,
+                          currentUnitCode: charge.unit_code,
+                        });
+                        if (!defaultUnitCode) return;
+                        const unitOpt = findJobUnitOptionByCode(
+                          defaultUnitCode,
+                          unitOptions,
+                        );
+                        if (!unitOpt) return;
+                        const updated = applyJobChargeUnitChange(
+                          {
+                            ...charge,
+                            charge_id: chargeId,
+                            charge_name: chargeName,
+                          },
+                          unitOpt.value,
+                          unitOptions,
+                          jobService,
+                          bookingCargoForCharges,
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_id`,
+                          updated.unit_id ?? "",
+                        );
+                        chargesForm.setFieldValue(
+                          `charges.${index}.unit_code`,
+                          updated.unit_code ?? "",
+                        );
+                        if (
+                          charge.no_of_unit === null ||
+                          charge.no_of_unit === undefined
+                        ) {
+                          chargesForm.setFieldValue(
+                            `charges.${index}.no_of_unit`,
+                            updated.no_of_unit ?? null,
+                          );
                         }
                       }}
                       error={chargeErrors[index]?.charge_name}

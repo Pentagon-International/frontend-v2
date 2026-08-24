@@ -71,6 +71,10 @@ import {
   parseNoOfUnitForPayload,
 } from "../../utils/houseCargoChargeableWeight";
 import {
+  findUnitOptionValueByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../utils/chargeCalculationTypeUnit";
+import {
   ToastNotification,
   ServiceDetailsSlider,
   Dropdown,
@@ -4120,8 +4124,8 @@ function QuotationCreate({
       const { serviceType, cargoDetails, primaryCargo } = context;
       const unitUpper = unit.toUpperCase();
 
-      // AIR service logic
-      if (serviceType === "AIR") {
+      // AIR / Inland: KG → chargeable weight
+      if (serviceType === "AIR" || serviceType === "INLAND") {
         if (unitUpper === "KG") {
           return formatQuotationNoOfUnitsFromApi(
             primaryCargo.chargable_weight ?? primaryCargo.chargeable_weight,
@@ -6049,6 +6053,7 @@ function QuotationCreate({
                                   const original = (originalData || {}) as {
                                     id?: number;
                                     charge_name?: string;
+                                    calculation_type?: string;
                                   };
                                   const name =
                                     original.charge_name !== undefined &&
@@ -6076,6 +6081,40 @@ function QuotationCreate({
                                       `charges.${index}.charge_id`,
                                       null,
                                     );
+                                  }
+
+                                  if (!value) return;
+                                  const defaultUnitCode =
+                                    resolveAutoUnitForNewCharge({
+                                      calculationType:
+                                        original.calculation_type,
+                                      service: selectedService?.service,
+                                      currentUnit:
+                                        dynamicForm.values.charges[index]
+                                          ?.unit,
+                                    });
+                                  if (!defaultUnitCode) return;
+                                  const unitValue =
+                                    findUnitOptionValueByCode(
+                                      defaultUnitCode,
+                                      unitData,
+                                    ) ?? defaultUnitCode;
+                                  const currentQty =
+                                    dynamicForm.values.charges[index]
+                                      ?.no_of_units;
+                                  if (
+                                    currentQty != null &&
+                                    String(currentQty).trim() !== ""
+                                  ) {
+                                    dynamicForm.setFieldValue(
+                                      `charges.${index}.unit`,
+                                      unitValue,
+                                    );
+                                    syncChargeTotalsAtIndex(index, {
+                                      unit: unitValue,
+                                    });
+                                  } else {
+                                    applyChargeUnitSelection(index, unitValue);
                                   }
                                 }}
                                 readOnly={isViewMode}
@@ -7446,6 +7485,7 @@ function QuotationCreate({
                                 const original = (originalData || {}) as {
                                   id?: number;
                                   charge_name?: string;
+                                  calculation_type?: string;
                                 };
                                 const name =
                                   original.charge_name !== undefined &&
@@ -7473,6 +7513,37 @@ function QuotationCreate({
                                     `charges.${index}.charge_id`,
                                     null,
                                   );
+                                }
+
+                                if (!value) return;
+                                const defaultUnitCode =
+                                  resolveAutoUnitForNewCharge({
+                                    calculationType: original.calculation_type,
+                                    service: selectedService?.service,
+                                    currentUnit:
+                                      dynamicForm.values.charges[index]?.unit,
+                                  });
+                                if (!defaultUnitCode) return;
+                                const unitValue =
+                                  findUnitOptionValueByCode(
+                                    defaultUnitCode,
+                                    unitData,
+                                  ) ?? defaultUnitCode;
+                                const currentQty =
+                                  dynamicForm.values.charges[index]?.no_of_units;
+                                if (
+                                  currentQty != null &&
+                                  String(currentQty).trim() !== ""
+                                ) {
+                                  dynamicForm.setFieldValue(
+                                    `charges.${index}.unit`,
+                                    unitValue,
+                                  );
+                                  syncChargeTotalsAtIndex(index, {
+                                    unit: unitValue,
+                                  });
+                                } else {
+                                  applyChargeUnitSelection(index, unitValue);
                                 }
                               }}
                               readOnly={isViewMode}

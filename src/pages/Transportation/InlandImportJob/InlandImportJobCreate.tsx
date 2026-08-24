@@ -4486,6 +4486,7 @@ function InlandImportJobCreate() {
               roeSubmitValidateRef={estimatesRoeValidateRef}
               conditionalRequired
               debugTag="AIR_EXPORT_JOB"
+              jobUnitDefaults={{ service: "AIR" }}
               summaryEstimatesTotalCost={
                 (jobData as { summary?: { estimates_total_cost?: unknown } })
                   ?.summary?.estimates_total_cost

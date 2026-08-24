@@ -100,6 +100,10 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import { buildJobUnitOptions } from "../../../utils/houseCargoChargeableWeight";
+import {
+  findJobUnitOptionByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
 import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
 import { formatInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
 import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
@@ -948,7 +952,8 @@ function ServiceJobChargesSection({
               value={charge.charge_id != null ? String(charge.charge_id) : null}
               displayValue={charge.charge_name || undefined}
               readOnly={readOnly}
-              onChange={(value, selectedData) => {
+              returnOriginalData
+              onChange={(value, selectedData, originalData) => {
                 form.setFieldValue(
                   `charges.${index}.charge_id`,
                   value ? Number(value) : null,
@@ -958,6 +963,30 @@ function ServiceJobChargesSection({
                   selectedData?.label ?? "",
                 );
                 clearChargeError(index, "charge_name");
+
+                if (!value) return;
+                const defaultUnitCode = resolveAutoUnitForNewCharge({
+                  calculationType: (
+                    originalData as { calculation_type?: string } | null
+                  )?.calculation_type,
+                  service: isAirTransportMode(transportMode) ? "AIR" : "",
+                  currentUnitId: charge.unit_id,
+                  currentUnitCode: charge.unit_code,
+                });
+                if (!defaultUnitCode) return;
+                const unitOpt = findJobUnitOptionByCode(
+                  defaultUnitCode,
+                  unitOptions,
+                );
+                if (!unitOpt) return;
+                form.setFieldValue(
+                  `charges.${index}.unit_id`,
+                  unitOpt.value,
+                );
+                form.setFieldValue(
+                  `charges.${index}.unit_code`,
+                  unitOpt.unit_code || unitOpt.label,
+                );
               }}
               error={chargeErrors[index]?.charge_name}
               minSearchLength={2}

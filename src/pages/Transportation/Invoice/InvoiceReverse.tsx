@@ -40,6 +40,10 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
+import {
+  findUnitOptionValueByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
 import { fetchReverseInvoiceById } from "../../../utils/fetchReverseInvoiceById";
 import {
   parseInvoiceMutationResponse,
@@ -1314,6 +1318,7 @@ function InvoiceReverse() {
     return data.map((item) => ({
       value: String(item.unit_code || item.code || item.id || ""),
       label: item.unit_name || item.name || "",
+      unit_code: String(item.unit_code || item.code || ""),
     }));
   }, [unitData]);
 
@@ -2896,7 +2901,8 @@ function InvoiceReverse() {
                               : null
                           }
                           displayValue={charge.charge_name || undefined}
-                          onChange={(value, selectedData) => {
+                          returnOriginalData
+                          onChange={(value, selectedData, originalData) => {
                             const chargeId = value ? Number(value) : null;
                             const chargeName = selectedData?.label ?? "";
                             form.setFieldValue(
@@ -2917,6 +2923,37 @@ function InvoiceReverse() {
                               }
                               setChargeErrors(newErrors);
                             }
+
+                            if (value) {
+                              const navState = location.state as {
+                                serviceType?: string;
+                                job?: { service?: string };
+                              } | null;
+                              const defaultUnitCode =
+                                resolveAutoUnitForNewCharge({
+                                  calculationType: (
+                                    originalData as {
+                                      calculation_type?: string;
+                                    } | null
+                                  )?.calculation_type,
+                                  service:
+                                    navState?.serviceType ||
+                                    navState?.job?.service,
+                                  currentUnit: charge.unit_code,
+                                });
+                              if (defaultUnitCode) {
+                                const unitValue =
+                                  findUnitOptionValueByCode(
+                                    defaultUnitCode,
+                                    unitOptions,
+                                  ) ?? defaultUnitCode;
+                                form.setFieldValue(
+                                  `charges.${index}.unit_code`,
+                                  unitValue,
+                                );
+                              }
+                            }
+
                             if (
                               chargeId != null &&
                               jobServiceId != null &&

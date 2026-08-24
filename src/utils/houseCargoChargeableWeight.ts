@@ -425,7 +425,8 @@ export function resolveBookingChargeNoOfUnits(
 
   const primaryCargo = resolvePrimaryBookingCargo(cargoDetails);
 
-  if (service === "AIR") {
+  // AIR and Inland: KG → chargeable weight
+  if (service === "AIR" || service === "INLAND") {
     if (isKgChargeUnit(unitCode, unitLabel)) {
       return formatBookingNoOfUnitsValue(
         resolveAirChargeableWeightSource(primaryCargo),
@@ -473,7 +474,7 @@ function isBookingChargeCargoConfiguredUnit(
 ): boolean {
   if (isShipmentOrDocChargeUnit(unitCode, unitLabel)) return true;
 
-  if (service === "AIR") {
+  if (service === "AIR" || service === "INLAND") {
     return isKgChargeUnit(unitCode, unitLabel);
   }
 

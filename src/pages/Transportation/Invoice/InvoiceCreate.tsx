@@ -58,6 +58,10 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
 import {
+  findJobUnitOptionByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
+import {
   formatExchangeSellRate,
   ROE_DECIMAL_PLACES,
   roundRoeForPayload,
@@ -2021,6 +2025,7 @@ function InvoiceCreate({
       return {
         value: id || unitCode,
         label: item.unit_name || item.name || unitCode || "",
+        unit_code: String(unitCode || ""),
       };
     });
   }, [unitData]);
@@ -5529,7 +5534,8 @@ function InvoiceCreate({
                             : null
                         }
                         displayValue={charge.charge_name || undefined}
-                        onChange={(value, selectedData) => {
+                        returnOriginalData
+                        onChange={(value, selectedData, originalData) => {
                           const chargeId = value ? Number(value) : null;
                           const chargeName = selectedData?.label ?? "";
                           form.setFieldValue(
@@ -5557,6 +5563,37 @@ function InvoiceCreate({
                             }
                             setChargeErrors(newErrors);
                           }
+
+                          if (value) {
+                            const defaultUnitCode = resolveAutoUnitForNewCharge({
+                              calculationType: (
+                                originalData as {
+                                  calculation_type?: string;
+                                } | null
+                              )?.calculation_type,
+                              service: location.state?.serviceType,
+                              currentUnitId: charge.unit_id,
+                              currentUnitCode: charge.unit_code,
+                            });
+                            if (defaultUnitCode) {
+                              const unitOpt = findJobUnitOptionByCode(
+                                defaultUnitCode,
+                                unitOptions,
+                              );
+                              if (unitOpt) {
+                                form.setFieldValue(
+                                  `charges.${index}.unit_id`,
+                                  unitOpt.value,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.unit_code`,
+                                  unitOpt.unit_code ||
+                                    String(unitOpt.label || unitOpt.value),
+                                );
+                              }
+                            }
+                          }
+
                           if (
                             chargeId != null &&
                             jobServiceId != null &&

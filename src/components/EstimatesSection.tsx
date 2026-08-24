@@ -22,6 +22,10 @@ import {
   type JobChargeNoOfUnitContext,
 } from "../utils/houseCargoChargeableWeight";
 import {
+  findJobUnitOptionByCode,
+  resolveAutoUnitForNewCharge,
+} from "../utils/chargeCalculationTypeUnit";
+import {
   calcEstimatesTotalCost,
   formatJobSummaryAmount,
   parseSummaryAmount,
@@ -487,7 +491,8 @@ export function EstimatesSection({
               })}
               value={row.charge_id != null ? String(row.charge_id) : null}
               displayValue={row.charge_name || undefined}
-              onChange={(value, selectedData) => {
+              returnOriginalData
+              onChange={(value, selectedData, originalData) => {
                 form.setFieldValue(
                   `estimates.${index}.charge_id`,
                   value ? Number(value) : null,
@@ -495,6 +500,78 @@ export function EstimatesSection({
                 form.setFieldValue(
                   `estimates.${index}.charge_name`,
                   selectedData?.label || "",
+                );
+
+                if (!value) return;
+                const serviceForUnit =
+                  jobUnitDefaults?.service || serviceTypeValue;
+                const defaultUnitCode = resolveAutoUnitForNewCharge({
+                  calculationType: (
+                    originalData as { calculation_type?: string } | null
+                  )?.calculation_type,
+                  service: serviceForUnit,
+                  currentUnitId: row.unit_id,
+                  currentUnitCode: row.unit_code,
+                });
+                if (!defaultUnitCode) return;
+                const unitOpt = findJobUnitOptionByCode(
+                  defaultUnitCode,
+                  jobUnitOptions,
+                );
+                if (!unitOpt) return;
+
+                if (jobUnitDefaults?.service && jobUnitOptions.length) {
+                  const bookingCargo = toBookingCargoForNoOfUnits(
+                    jobUnitDefaults.jobCargoDetails ?? [],
+                  );
+                  const updated = applyJobChargeUnitChange(
+                    {
+                      unit_id: row.unit_id,
+                      unit_code: row.unit_code,
+                      no_of_unit: row.no_of_unit,
+                    },
+                    unitOpt.value,
+                    jobUnitOptions,
+                    jobUnitDefaults.service,
+                    bookingCargo,
+                    {
+                      containerDetails: jobUnitDefaults.containerDetails,
+                      jobCargoDetails: jobUnitDefaults.jobCargoDetails,
+                    },
+                  );
+                  form.setFieldValue(
+                    `estimates.${index}.unit_id`,
+                    updated.unit_id ?? "",
+                  );
+                  form.setFieldValue(
+                    `estimates.${index}.unit_code`,
+                    updated.unit_code ?? "",
+                  );
+                  // Only auto-fill qty when empty (do not overwrite user/API values)
+                  const qtyEmpty =
+                    row.no_of_unit === null || row.no_of_unit === undefined;
+                  if (qtyEmpty) {
+                    form.setFieldValue(
+                      `estimates.${index}.no_of_unit`,
+                      updated.no_of_unit,
+                    );
+                    const total = calcTotalCost(
+                      updated.no_of_unit,
+                      row.roe,
+                      row.cost_per_unit,
+                    );
+                    form.setFieldValue(`estimates.${index}.total_cost`, total);
+                  }
+                  return;
+                }
+
+                form.setFieldValue(
+                  `estimates.${index}.unit_id`,
+                  unitOpt.value,
+                );
+                form.setFieldValue(
+                  `estimates.${index}.unit_code`,
+                  unitOpt.unit_code || unitOpt.label,
                 );
               }}
               disabled={readOnly}
