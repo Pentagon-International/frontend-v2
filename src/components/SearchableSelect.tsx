@@ -2,6 +2,22 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Select, Loader } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { commonSearchAPI } from "../service/searchApi";
+import { postAPICall } from "../service/postApiCall";
+import { API_HEADER } from "../store/storeKeys";
+
+function extractSearchResults(response: unknown): Record<string, unknown>[] {
+  if (Array.isArray(response)) {
+    return response as Record<string, unknown>[];
+  }
+  if (response && typeof response === "object") {
+    const obj = response as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
+    if (Array.isArray(obj.users)) return obj.users as Record<string, unknown>[];
+    if (Array.isArray(obj.results))
+      return obj.results as Record<string, unknown>[];
+  }
+  return [];
+}
 
 interface SearchableSelectProps {
   apiEndpoint?: string;
@@ -41,6 +57,13 @@ interface SearchableSelectProps {
   }) => void;
   /** When true, hides the "No results found" dropdown message. */
   hideEmptyResultsMessage?: boolean;
+  /**
+   * When set, search uses POST with this body instead of GET ?search=.
+   * Other SearchableSelect usages omit this and keep the existing GET behavior.
+   */
+  postBody?: (query: string) => unknown;
+  /** With postBody, fetch even when the search box is empty (e.g. dropdown open). */
+  allowEmptyQuery?: boolean;
 }
 
 export default function SearchableSelect({
@@ -68,6 +91,8 @@ export default function SearchableSelect({
   autoFocus = false,
   onSearchComplete,
   hideEmptyResultsMessage = false,
+  postBody,
+  allowEmptyQuery = false,
 }: SearchableSelectProps) {
   // Initialize selected state - if no value but displayValue exists, create temp value
   // Use a stable hash of displayValue to avoid recreating on every render
@@ -166,13 +191,14 @@ export default function SearchableSelect({
     // 1. apiEndpoint is provided
     // 2. Search has minimum required characters
     // 3. User is actively in search mode (not just displaying selected item)
-    // 4. There's actually a search term
+    // 4. There's actually a search term (unless POST allowEmptyQuery)
     // 5. The search term has changed from last search
+    const canFetchEmpty = Boolean(postBody) && allowEmptyQuery;
     if (
       !apiEndpoint ||
       debounced.length < minSearchLength ||
       !isSearchMode ||
-      !debounced.trim()
+      (!canFetchEmpty && !debounced.trim())
     ) {
       return;
     }
@@ -191,10 +217,18 @@ export default function SearchableSelect({
         endpointWithParams = `${apiEndpoint}?${params.toString()}`;
       }
 
-      const response = await commonSearchAPI({
-        endpoint: endpointWithParams,
-        query: debounced,
-      });
+      const response = postBody
+        ? extractSearchResults(
+            await postAPICall(
+              endpointWithParams,
+              postBody(debounced),
+              API_HEADER,
+            ),
+          )
+        : await commonSearchAPI({
+            endpoint: endpointWithParams,
+            query: debounced,
+          });
 
       // Transform API response to Select data
       if (Array.isArray(response)) {
@@ -230,6 +264,8 @@ export default function SearchableSelect({
     minSearchLength,
     additionalParams,
     onSearchComplete,
+    postBody,
+    allowEmptyQuery,
   ]);
 
   useEffect(() => {
@@ -389,6 +425,13 @@ export default function SearchableSelect({
         searchValue={search} // Explicitly control displayed text
         onSearchChange={handleSearchChange}
         onChange={handleChange}
+        onDropdownOpen={
+          allowEmptyQuery
+            ? () => {
+                setIsSearchMode(true);
+              }
+            : undefined
+        }
         size={size}
         readOnly={readOnly}
         onKeyDown={(event) => {

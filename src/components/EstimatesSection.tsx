@@ -16,6 +16,7 @@ import ToastNotification from "./ToastNotification";
 import {
   applyJobChargeUnitChange,
   buildJobUnitOptions,
+  jobChargeNoOfUnitInputProps,
   mapJobChargesWithUnits,
   toBookingCargoForNoOfUnits,
   type JobChargeNoOfUnitContext,
@@ -143,24 +144,44 @@ function calcTotalCost(
   const rate = toNumberOrNull(roe);
   const cpu = toNumberOrNull(cost_per_unit);
   if (qty == null || cpu == null || rate == null) return null;
-  if (!Number.isFinite(qty) || !Number.isFinite(cpu) || !Number.isFinite(rate)) {
+  if (
+    !Number.isFinite(qty) ||
+    !Number.isFinite(cpu) ||
+    !Number.isFinite(rate)
+  ) {
     return null;
   }
   return clampCurrencyMoneyAmountBound(qty * rate * cpu);
 }
 
 function normalizePpCc(value: unknown): string {
-  const raw = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return String(value ?? "").trim();
+}
+
+const ESTIMATE_SUPPLIER_ENDPOINT = `${URL.customerFilter}?exclude-category=customer&index=0&limit=25`;
+
+function estimateSupplierPostBody(query: string) {
+  const q = query.trim();
+  return { filters: q ? { customer_name: q } : {} };
+}
+
+function estimateSupplierDisplayFormat(item: Record<string, unknown>) {
+  return {
+    value: String(item.customer_code ?? ""),
+    label: String(item.customer_name ?? ""),
+  };
 }
 
 export type EstimatesSectionProps = {
   form: UseFormReturnType<EstimatesFormValues>;
   serviceType?: string | string[];
   readOnly?: boolean;
-  /** Defaults to URL.supplierByType */
+  /** Defaults to customer filter excluding category=customer */
   supplierEndpoint?: string;
   /** Defaults to URL.chargeMaster */
   chargeEndpoint?: string;
@@ -186,7 +207,7 @@ export function EstimatesSection({
   form,
   serviceType,
   readOnly = false,
-  supplierEndpoint = URL.supplierByType,
+  supplierEndpoint = ESTIMATE_SUPPLIER_ENDPOINT,
   chargeEndpoint = URL.chargeMaster,
   debugTag,
   summaryEstimatesTotalCost,
@@ -196,11 +217,9 @@ export function EstimatesSection({
   defaultPpCc,
 }: EstimatesSectionProps) {
   const user = useAuthStore((state) => state.user);
-  const branches = userBranches ?? (user?.branches as BranchCurrencyContext[] | undefined);
-  const isVietnamBranch = useMemo(
-    () => isVietnamBranchFromUser(user),
-    [user],
-  );
+  const branches =
+    userBranches ?? (user?.branches as BranchCurrencyContext[] | undefined);
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const {
@@ -273,7 +292,9 @@ export function EstimatesSection({
   useEffect(() => {
     form.values.estimates.forEach((row, index) => {
       if (!row.currency_id || row.roe != null) return;
-      const code = String(row.currency_code ?? "").trim().toUpperCase();
+      const code = String(row.currency_code ?? "")
+        .trim()
+        .toUpperCase();
       if (!code) return;
       if (
         isChargeBaseCurrencyFor(
@@ -360,8 +381,7 @@ export function EstimatesSection({
   );
 
   const displayEstimatesTotal =
-    computedEstimatesTotal ??
-    parseSummaryAmount(summaryEstimatesTotalCost);
+    computedEstimatesTotal ?? parseSummaryAmount(summaryEstimatesTotalCost);
 
   // Resolve unit_id from unit_code when master loads; only auto-fill no_of_unit when empty.
   useEffect(() => {
@@ -421,11 +441,7 @@ export function EstimatesSection({
 
   return (
     <Box>
-      <Grid
-        mb="xs"
-        style={{ fontWeight: 600, color: "#105476" }}
-        gutter="sm"
-      >
+      <Grid mb="xs" style={{ fontWeight: 600, color: "#105476" }} gutter="sm">
         <Grid.Col span={1.75}>
           <RequiredLabel label="Charge" required={true} />
         </Grid.Col>
@@ -576,11 +592,18 @@ export function EstimatesSection({
             <FormNumberInput
               placeholder="Qty"
               min={0}
-              decimalScale={0}
               hideControls
+              {...jobChargeNoOfUnitInputProps(
+                row.unit_code ?? "",
+                unitOptions.find(
+                  (option) =>
+                    option.value === (selectStringId(row.unit_id) ?? ""),
+                )?.label,
+              )}
               value={row.no_of_unit ?? undefined}
               onChange={(value) => {
-                const v = typeof value === "number" ? value : toNumberOrNull(value);
+                const v =
+                  typeof value === "number" ? value : toNumberOrNull(value);
                 form.setFieldValue(`estimates.${index}.no_of_unit`, v);
                 const total = calcTotalCost(v, row.roe, row.cost_per_unit);
                 form.setFieldValue(`estimates.${index}.total_cost`, total);
@@ -603,12 +626,19 @@ export function EstimatesSection({
                 const code = String(
                   currItem?.currency_code ?? currItem?.code ?? "",
                 ).trim();
-                form.setFieldValue(`estimates.${index}.currency_id`, currencyId);
+                form.setFieldValue(
+                  `estimates.${index}.currency_id`,
+                  currencyId,
+                );
                 form.setFieldValue(`estimates.${index}.currency_code`, code);
                 clearEstimateError(index, "roe");
                 if (isBaseCurrency(code)) {
                   form.setFieldValue(`estimates.${index}.roe`, 1);
-                  const total = calcTotalCost(row.no_of_unit, 1, row.cost_per_unit);
+                  const total = calcTotalCost(
+                    row.no_of_unit,
+                    1,
+                    row.cost_per_unit,
+                  );
                   form.setFieldValue(`estimates.${index}.total_cost`, total);
                 } else {
                   void ensureRoeForCurrency(code).then((roe) => {
@@ -656,7 +686,8 @@ export function EstimatesSection({
                   form.setFieldValue(`estimates.${index}.roe`, 1);
                   return;
                 }
-                const v = typeof value === "number" ? value : toNumberOrNull(value);
+                const v =
+                  typeof value === "number" ? value : toNumberOrNull(value);
                 form.setFieldValue(`estimates.${index}.roe`, v);
                 const roeError = validateRoeField(
                   row.currency_code,
@@ -671,7 +702,11 @@ export function EstimatesSection({
                 } else {
                   clearEstimateError(index, "roe");
                 }
-                const total = calcTotalCost(row.no_of_unit, v, row.cost_per_unit);
+                const total = calcTotalCost(
+                  row.no_of_unit,
+                  v,
+                  row.cost_per_unit,
+                );
                 form.setFieldValue(`estimates.${index}.total_cost`, total);
               }}
               error={estimateErrors[index]?.roe}
@@ -687,7 +722,8 @@ export function EstimatesSection({
               decimalScale={currencyAmountDecimalScale}
               value={row.cost_per_unit ?? undefined}
               onChange={(value) => {
-                const v = typeof value === "number" ? value : toNumberOrNull(value);
+                const v =
+                  typeof value === "number" ? value : toNumberOrNull(value);
                 const rounded =
                   v == null ? null : clampCurrencyMoneyAmountBound(v);
                 form.setFieldValue(`estimates.${index}.cost_per_unit`, rounded);
@@ -707,7 +743,8 @@ export function EstimatesSection({
               decimalScale={currencyAmountDecimalScale}
               value={row.total_cost ?? undefined}
               onChange={(value) => {
-                const v = typeof value === "number" ? value : toNumberOrNull(value);
+                const v =
+                  typeof value === "number" ? value : toNumberOrNull(value);
                 form.setFieldValue(
                   `estimates.${index}.total_cost`,
                   v == null ? null : clampCurrencyMoneyAmountBound(v),
@@ -722,22 +759,23 @@ export function EstimatesSection({
             <SearchableSelect
               placeholder="Type supplier"
               apiEndpoint={supplierEndpoint}
+              postBody={estimateSupplierPostBody}
+              minSearchLength={2}
               searchFields={["customer_name", "customer_code"]}
-              displayFormat={(item: Record<string, unknown>) => ({
-                value: String(item.customer_code ?? ""),
-                label: String(item.customer_name ?? ""),
-              })}
+              displayFormat={estimateSupplierDisplayFormat}
               value={row.supplier_code || null}
               displayValue={row.supplier_name || undefined}
               onChange={(value, selectedData) => {
-                form.setFieldValue(`estimates.${index}.supplier_code`, value || "");
+                form.setFieldValue(
+                  `estimates.${index}.supplier_code`,
+                  value || "",
+                );
                 form.setFieldValue(
                   `estimates.${index}.supplier_name`,
                   selectedData?.label || "",
                 );
               }}
               disabled={readOnly}
-              minSearchLength={2}
               dropdownZIndex={1000}
               styles={{
                 input: {
@@ -757,7 +795,10 @@ export function EstimatesSection({
                     variant="light"
                     color="#105476"
                     onClick={() =>
-                      form.insertListItem("estimates", createDefaultEstimateRow())
+                      form.insertListItem(
+                        "estimates",
+                        createDefaultEstimateRow(),
+                      )
                     }
                   >
                     <IconPlus size={16} />
@@ -769,7 +810,9 @@ export function EstimatesSection({
                     color="red"
                     onClick={() => {
                       if (form.values.estimates.length <= 1) {
-                        form.setValues({ estimates: [createDefaultEstimateRow()] });
+                        form.setValues({
+                          estimates: [createDefaultEstimateRow()],
+                        });
                         return;
                       }
                       form.removeListItem("estimates", index);
@@ -819,9 +862,10 @@ export function useEstimatesForm(
   options?: { defaultPpCc?: "Prepaid" | "Collect" },
 ): UseFormReturnType<EstimatesFormValues> {
   const user = useAuthStore((state) => state.user);
-  const { branchCurrencyId, branchCurrencyCode } = getDefaultBranchCurrencyFromUser(
-    user?.branches as BranchCurrencyLike[] | undefined,
-  );
+  const { branchCurrencyId, branchCurrencyCode } =
+    getDefaultBranchCurrencyFromUser(
+      user?.branches as BranchCurrencyLike[] | undefined,
+    );
 
   return useForm<EstimatesFormValues>({
     initialValues: {
@@ -838,4 +882,3 @@ export function useEstimatesForm(
     },
   });
 }
-
