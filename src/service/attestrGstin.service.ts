@@ -9,6 +9,7 @@ export type AttestrGstinPrimaryAddress = {
   street?: string;
   locality?: string;
   district?: string;
+  city?: string;
   state?: string;
   zip?: string;
   latitude?: string;
@@ -84,4 +85,17 @@ export function buildAddressLine(address?: AttestrGstinPrimaryAddress): string {
     .map((part) => String(part ?? "").trim())
     .filter(Boolean)
     .join(", ");
+}
+
+export function hasUsableAttestrAddress(
+  record: AttestrGstinRecord | null | undefined,
+): boolean {
+  return Boolean(buildAddressLine(record?.primaryAddress).trim());
+}
+
+export function allAttestrAddressesEmpty(
+  records: AttestrGstinRecord[] | null | undefined,
+): boolean {
+  const list = records ?? [];
+  return list.length > 0 && list.every((record) => !hasUsableAttestrAddress(record));
 }
