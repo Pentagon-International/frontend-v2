@@ -109,6 +109,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
+import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -3040,23 +3041,8 @@ function InlandExportJobCreate() {
                       },
                     }}
                     onClick={() => {
-                      const allCollectCharges = hawbDetails.flatMap((hawb) =>
-                        (hawb.charges ?? [])
-                          .filter(
-                            (c) => String(c.pp_cc ?? "").trim() === "Collect",
-                          )
-                          .map((c) => ({
-                            ...c,
-                            shipment_id:
-                              (hawb as { shipment_id?: string }).shipment_id ??
-                              (hawb as { shipment_no?: string }).shipment_no ??
-                              "",
-                            shipper_id:
-                              (hawb as { shipper_code?: string })
-                                .shipper_code ??
-                              (hawb as { shipper_id?: string }).shipper_id ??
-                              "",
-                          })),
+                      const allCollectCharges = collectAgentChargesFromHousings(
+                        hawbDetails as unknown as Array<Record<string, unknown>>,
                       );
 
                       const firstHouse = hawbDetails[0];

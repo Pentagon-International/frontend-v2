@@ -1,11 +1,7 @@
-type HousingCharge = Record<string, unknown> & {
-  pp_cc?: string;
-  shipment_id?: string;
-  shipper_id?: string;
-};
+import { collectAgentChargesFromHousings } from "./collectAgentInvoiceCharges";
 
 type HousingDetail = Record<string, unknown> & {
-  charges?: HousingCharge[];
+  charges?: Array<Record<string, unknown>>;
   shipment_id?: string;
   shipment_no?: string;
   shipper_code?: string;
@@ -25,26 +21,9 @@ export function buildHouseAgentInvoiceNavigationState(
   locationState: HouseAgentInvoiceLocationState | null | undefined,
   serviceType: string | string[],
 ) {
-  const shipmentId = String(
-    fullDetail.shipment_id ?? fullDetail.shipment_no ?? "",
-  ).trim();
-
-  const collectCharges = (fullDetail.charges ?? [])
-    .filter((charge) => String(charge.pp_cc ?? "").trim() === "Collect")
-    .map((charge) => ({
-      ...charge,
-      shipment_id: String(charge.shipment_id ?? shipmentId).trim(),
-      shipper_id: String(
-        charge.shipper_id ??
-          fullDetail.shipper_code ??
-          fullDetail.shipper_id ??
-          "",
-      ).trim(),
-    }));
-
   const detailForInvoice = {
     ...fullDetail,
-    charges: collectCharges,
+    charges: collectAgentChargesFromHousings([fullDetail]),
   };
 
   return {
@@ -53,16 +32,18 @@ export function buildHouseAgentInvoiceNavigationState(
     housingDetails: [detailForInvoice],
     is_agent: true,
     fromHouseLevel: true,
-    ...(locationState?.job && { job: locationState.job }),
-    ...(locationState?.mblDetails && {
-      mblDetails: locationState.mblDetails,
-    }),
-    ...(locationState?.mawbDetails && {
-      mawbDetails: locationState.mawbDetails,
-    }),
-    ...(locationState?.carrierDetails && {
-      carrierDetails: locationState.carrierDetails,
-    }),
-    ...(locationState?.routings && { routings: locationState.routings }),
+    ...(locationState?.job != null ? { job: locationState.job } : {}),
+    ...(locationState?.mblDetails != null
+      ? { mblDetails: locationState.mblDetails }
+      : {}),
+    ...(locationState?.mawbDetails != null
+      ? { mawbDetails: locationState.mawbDetails }
+      : {}),
+    ...(locationState?.carrierDetails != null
+      ? { carrierDetails: locationState.carrierDetails }
+      : {}),
+    ...(locationState?.routings != null
+      ? { routings: locationState.routings }
+      : {}),
   };
 }

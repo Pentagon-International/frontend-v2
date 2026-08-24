@@ -80,6 +80,7 @@ import {
   isMoneyWholeNumberMode,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { resolveAgentInvoiceCollectCharges } from "../../../utils/collectAgentInvoiceCharges";
 
 // Fetch functions
 
@@ -1044,42 +1045,6 @@ function resolveCurrencyIdByCode(
       code,
   );
   return item?.id != null ? Number(item.id) : fallbackCurrencyId;
-}
-
-/** Charges on a housing row may be `charges` (air/sea) or `mawb_charges` (air import). */
-function getHousingChargeArray(
-  hawb: Record<string, unknown>,
-): Record<string, unknown>[] {
-  const ch = hawb.charges;
-  if (Array.isArray(ch) && ch.length > 0)
-    return ch as Record<string, unknown>[];
-  const mc = hawb.mawb_charges;
-  if (Array.isArray(mc) && mc.length > 0)
-    return mc as Record<string, unknown>[];
-  return [];
-}
-
-function isCollectChargeRow(c: Record<string, unknown>): boolean {
-  const pp = String(c.pp_cc ?? "")
-    .trim()
-    .toUpperCase();
-  return pp === "COLLECT" || pp === "CC";
-}
-
-/** Agent invoice: Collect charges from every housing (all houses on the job). */
-function collectAgentChargesFromHousings(
-  housings: Record<string, unknown>[],
-): Record<string, unknown>[] {
-  return housings.flatMap((hawb) =>
-    getHousingChargeArray(hawb)
-      .filter(isCollectChargeRow)
-      .map((c) => ({
-        ...c,
-        shipment_id:
-          c.shipment_id ?? hawb.shipment_id ?? hawb.shipment_no ?? "",
-        shipper_id: c.shipper_id ?? hawb.shipper_code ?? hawb.shipper_id ?? "",
-      })),
-  );
 }
 
 /** Map job/house party to master state_id for invoice State dropdown. */
@@ -2404,25 +2369,15 @@ function InvoiceCreate({
           ).trim() || undefined;
 
         // Map house charges → invoice lines.
-        // Agent: Collect from every HAWB (charges or mawb_charges); each line uses same billing currency as header.
+        // Agent master: Collect from every house. Agent house: only that house.
         const chargesSource: unknown[] = (() => {
           if (documentType === "CRN") return [];
           if (isAgent) {
-            const navHouses = hawbDetails as Array<Record<string, unknown>>;
-            const jobHouses = jobHousingArr;
-            const housesToScan = jobHouses.length > 0 ? jobHouses : navHouses;
-            let merged = collectAgentChargesFromHousings(housesToScan);
-            if (merged.length === 0 && navHouses.length > 0) {
-              merged = collectAgentChargesFromHousings(navHouses);
-            }
-            if (merged.length === 0 && navHouses[0]) {
-              const premerged = getHousingChargeArray(navHouses[0]).filter(
-                isCollectChargeRow,
-              );
-              if (premerged.length > 0) return premerged as unknown[];
-            }
-            if (merged.length > 0) return merged as unknown[];
-            return [];
+            return resolveAgentInvoiceCollectCharges({
+              fromHouseLevel: isFromHouseLevel,
+              navHouses: hawbDetails as Array<Record<string, unknown>>,
+              jobHouses: jobHousingArr,
+            });
           }
           if (
             firstHawb.charges &&
@@ -2799,6 +2754,7 @@ function InvoiceCreate({
     location.state?.hawbDetails,
     location.state?.housingDetails,
     isFromAirExportJob,
+    isFromHouseLevel,
   ]);
 
   // When opening invoice view screen from Accounts table (route has :id), fetch latest invoice details

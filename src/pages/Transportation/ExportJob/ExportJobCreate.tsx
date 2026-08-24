@@ -122,6 +122,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
+import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   JobMasterPartyDetailsPanel,
   type PartyAddressOption,
@@ -3893,28 +3894,10 @@ function ExportJobCreate() {
                         },
                       }}
                       onClick={() => {
-                        const allCollectCharges = housingDetails.flatMap(
-                          (house) =>
-                            (house.charges ?? [])
-                              .filter(
-                                (c) =>
-                                  String(c.pp_cc ?? "").trim() === "Collect",
-                              )
-                              .map((c) => ({
-                                ...c,
-                                shipment_id:
-                                  (house as { shipment_id?: string })
-                                    .shipment_id ??
-                                  (house as { shipment_no?: string })
-                                    .shipment_no ??
-                                  "",
-                                shipper_id:
-                                  (house as { shipper_code?: string })
-                                    .shipper_code ??
-                                  (house as { shipper_id?: string })
-                                    .shipper_id ??
-                                  "",
-                              })),
+                        const allCollectCharges = collectAgentChargesFromHousings(
+                          housingDetails as unknown as Array<
+                            Record<string, unknown>
+                          >,
                         );
 
                         const firstHouse = housingDetails[0];

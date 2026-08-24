@@ -110,6 +110,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
+import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -3348,38 +3349,12 @@ function AirImportJobCreate() {
                           },
                         }}
                         onClick={() => {
-                          const allCollectCharges = hawbDetails.flatMap(
-                            (hawb) => {
-                              const src = (hawb as { mawb_charges?: unknown })
-                                .mawb_charges;
-                              const arr: Record<string, unknown>[] =
-                                Array.isArray(src)
-                                  ? (src as Record<string, unknown>[])
-                                  : [];
-                              return arr
-                                .filter(
-                                  (c) =>
-                                    String(
-                                      (c as { pp_cc?: unknown }).pp_cc ?? "",
-                                    ).trim() === "Collect",
-                                )
-                                .map((c) => ({
-                                  ...c,
-                                  shipment_id:
-                                    (hawb as { shipment_id?: string })
-                                      .shipment_id ??
-                                    (hawb as { shipment_no?: string })
-                                      .shipment_no ??
-                                    "",
-                                  shipper_id:
-                                    (hawb as { shipper_code?: string })
-                                      .shipper_code ??
-                                    (hawb as { shipper_id?: string })
-                                      .shipper_id ??
-                                    "",
-                                }));
-                            },
-                          );
+                          const allCollectCharges =
+                            collectAgentChargesFromHousings(
+                              hawbDetails as unknown as Array<
+                                Record<string, unknown>
+                              >,
+                            );
 
                           const firstHouse = hawbDetails[0];
 
