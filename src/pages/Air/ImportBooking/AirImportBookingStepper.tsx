@@ -66,6 +66,12 @@ import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { toTitleCase } from "../../../utils/textFormatter";
 import {
+  mapShipmentPartyAddressOptions,
+  mapShipmentPartySearchResults,
+  shipmentPartyAddressMatchesSearch,
+  shouldUseCustomShipmentPartyAddress,
+} from "../../../utils/shipmentParty";
+import {
   applyShipmentTermsSelection,
   normalizeShipmentTermsFreight,
 } from "../../../utils/shipmentTermsFreight";
@@ -700,6 +706,11 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     null,
   );
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const [shipperAddressOptions, setShipperAddressOptions] = useState<
+    Array<{ value: string; label: string; email?: string }>
+  >([]);
+  const [shipperAddressSearch, setShipperAddressSearch] = useState("");
+  const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
   const [shipperIsSearching, setShipperIsSearching] = useState(false);
   const shipperSelectRef = useRef<HTMLInputElement | null>(null);
   const shipperTextRef = useRef<HTMLInputElement | null>(null);
@@ -748,15 +759,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         shipperDataRef.current = {};
         return;
       }
-      const map: Record<string, Record<string, unknown>> = {};
-      const opts = arr.map((item) => {
-        const id = String(item.id ?? "");
-        map[id] = item;
-        return {
-          value: id,
-          label: String(item.customer_name || ""),
-        };
-      });
+      const { options: opts, map } = mapShipmentPartySearchResults(arr);
       shipperDataRef.current = map;
       setShipperOptions(opts);
       setShipperHasResults(true);
@@ -1900,16 +1903,37 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
     // Set display names for SearchableSelect components
     if (jobData.shipper_name) {
-      form.setFieldValue("shipper_name", String(jobData.shipper_name));
-      setShipperSearch(String(jobData.shipper_name));
+      const name = String(jobData.shipper_name);
+      form.setFieldValue("shipper_name", name);
+      form.setFieldValue("shipper_code", name);
+      setShipperSearch(name);
+      setShipperOptions([{ value: name, label: name }]);
+      shipperDataRef.current[name] = { customer_name: name };
     }
     if (jobData.shipper_address) {
-      form.setFieldValue("shipper_address", String(jobData.shipper_address));
+      const addr = String(jobData.shipper_address);
+      form.setFieldValue("shipper_address", addr);
+      setShipperAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(jobData.shipper_email || ""),
+        },
+      ]);
+      setShipperAddressSearch(addr);
+      setShipperAddressCustom(false);
     } else if (jobData.shipper_address_text) {
-      form.setFieldValue(
-        "shipper_address",
-        String(jobData.shipper_address_text),
-      );
+      const addr = String(jobData.shipper_address_text);
+      form.setFieldValue("shipper_address", addr);
+      setShipperAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(jobData.shipper_email || ""),
+        },
+      ]);
+      setShipperAddressSearch(addr);
+      setShipperAddressCustom(false);
     }
     if (jobData.consignee_name) {
       setConsigneeDisplayName(String(jobData.consignee_name));
@@ -2099,19 +2123,37 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
     // Set display names for SearchableSelect components
     if (initialData.shipper_name) {
-      form.setFieldValue("shipper_name", String(initialData.shipper_name));
-      setShipperSearch(String(initialData.shipper_name));
+      const name = String(initialData.shipper_name);
+      form.setFieldValue("shipper_name", name);
+      form.setFieldValue("shipper_code", name);
+      setShipperSearch(name);
+      setShipperOptions([{ value: name, label: name }]);
+      shipperDataRef.current[name] = { customer_name: name };
     }
     if (initialData.shipper_address) {
-      form.setFieldValue(
-        "shipper_address",
-        String(initialData.shipper_address),
-      );
+      const addr = String(initialData.shipper_address);
+      form.setFieldValue("shipper_address", addr);
+      setShipperAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(initialData.shipper_email || ""),
+        },
+      ]);
+      setShipperAddressSearch(addr);
+      setShipperAddressCustom(false);
     } else if (initialData.shipper_address_text) {
-      form.setFieldValue(
-        "shipper_address",
-        String(initialData.shipper_address_text),
-      );
+      const addr = String(initialData.shipper_address_text);
+      form.setFieldValue("shipper_address", addr);
+      setShipperAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(initialData.shipper_email || ""),
+        },
+      ]);
+      setShipperAddressSearch(addr);
+      setShipperAddressCustom(false);
     }
     if (initialData.consignee_name) {
       setConsigneeDisplayName(String(initialData.consignee_name));
@@ -4187,6 +4229,14 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setShipperSearch(v);
                         form.setFieldValue("shipper_name", v);
                         form.setFieldValue("shipper_code", "");
+                        if (!v.trim()) {
+                          form.setFieldValue("shipper_address", "");
+                          form.setFieldValue("shipper_address_id", 0);
+                          form.setFieldValue("shipper_email", "");
+                          setShipperAddressOptions([]);
+                          setShipperAddressCustom(false);
+                          setShipperAddressSearch("");
+                        }
                       }}
                     />
                   ) : (
@@ -4217,6 +4267,10 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           form.setFieldValue("shipper_address", "");
                           form.setFieldValue("shipper_address_id", 0);
                           form.setFieldValue("shipper_email", "");
+                          setShipperAddressOptions([]);
+                          setShipperAddressCustom(false);
+                          setShipperAddressSearch("");
+                          setShipperSearch("");
                           return;
                         }
                         const original = shipperDataRef.current[value] || {};
@@ -4224,26 +4278,25 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           (original as Record<string, unknown>).customer_name ||
                             "",
                         );
-                        const addr = (
-                          ((
-                            (original as Record<string, unknown>)
-                              .addresses_data as
-                              | Array<{ address?: string }>
-                              | undefined
-                          )?.[0]?.address ?? "") as string
-                        ).toString();
-                        const email = String(
-                          (original as Record<string, unknown>)
-                            .customer_email || "",
+                        const addressOptions = mapShipmentPartyAddressOptions(
+                          original as Record<string, unknown>,
+                          toTitleCase,
                         );
+                        const primaryAddr = addressOptions[0];
+                        setShipperAddressOptions(addressOptions);
+                        setShipperAddressCustom(false);
                         form.setFieldValue("shipper_code", value);
                         form.setFieldValue("shipper_name", toTitleCase(name));
                         form.setFieldValue(
                           "shipper_address",
-                          toTitleCase(addr),
+                          primaryAddr?.value || "",
                         );
                         form.setFieldValue("shipper_address_id", 0);
-                        form.setFieldValue("shipper_email", email);
+                        form.setFieldValue(
+                          "shipper_email",
+                          primaryAddr?.email || "",
+                        );
+                        setShipperAddressSearch(primaryAddr?.value || "");
                         setShipperSearch(name);
                       }}
                       comboboxProps={{ zIndex: 10 }}
@@ -4275,15 +4328,67 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <FormTextInput
-                    label="Shipper Address"
-                    placeholder="Enter shipper address"
-                    value={form.values.shipper_address}
-                    onChange={(e) => {
-                      const v = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue("shipper_address", v);
-                    }}
-                  />
+                  {shouldUseCustomShipmentPartyAddress(
+                    shipperAddressCustom,
+                    form.values.shipper_address || "",
+                    shipperAddressOptions,
+                  ) ? (
+                    <FormTextInput
+                      label="Shipper Address"
+                      placeholder="Enter shipper address"
+                      value={form.values.shipper_address}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        form.setFieldValue("shipper_address", v);
+                        if (!v.trim()) {
+                          setShipperAddressCustom(false);
+                          setShipperAddressSearch("");
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Dropdown
+                      label="Shipper Address"
+                      placeholder="Select shipper address"
+                      searchable
+                      clearable
+                      data={shipperAddressOptions}
+                      value={form.values.shipper_address || ""}
+                      searchValue={shipperAddressSearch}
+                      onSearchChange={(value) => {
+                        setShipperAddressSearch(value);
+                        if (
+                          value.trim() &&
+                          !shipmentPartyAddressMatchesSearch(
+                            shipperAddressOptions,
+                            value,
+                          )
+                        ) {
+                          setShipperAddressCustom(true);
+                          form.setFieldValue(
+                            "shipper_address",
+                            toTitleCase(value),
+                          );
+                          form.setFieldValue("shipper_email", "");
+                        }
+                      }}
+                      onChange={(value) => {
+                        const selected = shipperAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "shipper_address",
+                          value ? toTitleCase(value) : "",
+                        );
+                        form.setFieldValue(
+                          "shipper_email",
+                          selected?.email || "",
+                        );
+                        setShipperAddressSearch(value || "");
+                        setShipperAddressCustom(false);
+                      }}
+                    />
+                  )}
                 </Grid.Col>
               </Grid>
 

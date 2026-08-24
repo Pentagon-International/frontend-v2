@@ -85,6 +85,12 @@ import { useBookingChargesRoe } from "../../../hooks/useBookingChargesRoe";
 import { useDebouncedCallback, useDisclosure } from "@mantine/hooks";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  mapShipmentPartyAddressOptions,
+  mapShipmentPartySearchResults,
+  shipmentPartyAddressMatchesSearch,
+  shouldUseCustomShipmentPartyAddress,
+} from "../../../utils/shipmentParty";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
   bindMoneyWholeNumberMode,
@@ -835,9 +841,17 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [billingCustomerAddressOptions, setBillingCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [notify2CustomerAddressOptions, setNotify2CustomerAddressOptions] =
-    useState<Array<{ value: string; label: string }>>([]);
+    useState<Array<{ value: string; label: string; email?: string }>>([]);
+  const [notifyCustomerAddressSearch, setNotifyCustomerAddressSearch] =
+    useState("");
+  const [notifyCustomerAddressCustom, setNotifyCustomerAddressCustom] =
+    useState(false);
+  const [notify2CustomerAddressSearch, setNotify2CustomerAddressSearch] =
+    useState("");
+  const [notify2CustomerAddressCustom, setNotify2CustomerAddressCustom] =
+    useState(false);
 
   // Notify Customer 1 (shipment-party) - same pattern as Consignee
   const [notifyCustomerSearch, setNotifyCustomerSearch] = useState("");
@@ -880,6 +894,11 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   >(null);
   const [consigneeIsSearching, setConsigneeIsSearching] = useState(false);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
+    Array<{ value: string; label: string; email?: string }>
+  >([]);
+  const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
+  const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
 
   const consigneeSelectRef = useRef<HTMLInputElement | null>(null);
   const consigneeTextRef = useRef<HTMLInputElement | null>(null);
@@ -2078,15 +2097,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           consigneeDataRef.current = {};
           return;
         }
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return {
-            value: id,
-            label: String(item.customer_name || ""),
-          };
-        });
+        const { options: opts, map } = mapShipmentPartySearchResults(arr);
         consigneeDataRef.current = map;
         setConsigneeOptions(opts);
         setConsigneeHasResults(true);
@@ -2133,12 +2144,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           notifyCustomerDataRef.current = {};
           return;
         }
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return { value: id, label: String(item.customer_name || "") };
-        });
+        const { options: opts, map } = mapShipmentPartySearchResults(arr);
         notifyCustomerDataRef.current = map;
         setNotifyCustomerOptions(opts);
         setNotifyCustomerHasResults(true);
@@ -2185,12 +2191,7 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           notify2CustomerDataRef.current = {};
           return;
         }
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return { value: id, label: String(item.customer_name || "") };
-        });
+        const { options: opts, map } = mapShipmentPartySearchResults(arr);
         notify2CustomerDataRef.current = map;
         setNotify2CustomerOptions(opts);
         setNotify2CustomerHasResults(true);
@@ -2233,7 +2234,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (jobData.consignee_name) {
       const name = String(jobData.consignee_name);
       form.setFieldValue("consignee_name", name);
+      form.setFieldValue("consignee_code", name);
       setConsigneeSearch(name);
+      setConsigneeOptions([{ value: name, label: name }]);
+      consigneeDataRef.current[name] = { customer_name: name };
     }
     if (jobData.forwarder_name)
       setForwarderDisplayName(String(jobData.forwarder_name));
@@ -2247,16 +2251,26 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const name = String(jobData.notify1_customer_name);
       setNotifyCustomerDisplayName(name);
       setNotifyCustomerSearch(name);
+      setNotifyCustomerOptions([{ value: name, label: name }]);
+      setNotifyCustomerSelectedId(name);
+      notifyCustomerDataRef.current[name] = { customer_name: name };
       setNotifyCustomerAddressOptions(
         jobData.notify1_customer_address
           ? [
               {
                 value: String(jobData.notify1_customer_address),
                 label: String(jobData.notify1_customer_address),
+                email: String(jobData.notify1_customer_email || ""),
               },
             ]
           : [],
       );
+      if (jobData.notify1_customer_address) {
+        setNotifyCustomerAddressSearch(
+          String(jobData.notify1_customer_address),
+        );
+        setNotifyCustomerAddressCustom(false);
+      }
     } else if (jobData.notify_customer_name) {
       const name = String(jobData.notify_customer_name);
       setNotifyCustomerDisplayName(name);
@@ -2269,16 +2283,26 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const name = String(jobData.notify2_customer_name);
       setNotify2CustomerDisplayName(name);
       setNotify2CustomerSearch(name);
+      setNotify2CustomerOptions([{ value: name, label: name }]);
+      setNotify2CustomerSelectedId(name);
+      notify2CustomerDataRef.current[name] = { customer_name: name };
       setNotify2CustomerAddressOptions(
         jobData.notify2_customer_address
           ? [
               {
                 value: String(jobData.notify2_customer_address),
                 label: String(jobData.notify2_customer_address),
+                email: String(jobData.notify2_customer_email || ""),
               },
             ]
           : [],
       );
+      if (jobData.notify2_customer_address) {
+        setNotify2CustomerAddressSearch(
+          String(jobData.notify2_customer_address),
+        );
+        setNotify2CustomerAddressCustom(false);
+      }
     }
     if (jobData.cha_name) setChaDisplayName(String(jobData.cha_name));
     else if (jobData.cha) setChaDisplayName(String(jobData.cha));
@@ -2316,15 +2340,29 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     }
 
     if (jobData.consignee_address) {
-      form.setFieldValue(
-        "consignee_address",
-        String(jobData.consignee_address),
-      );
+      const addr = String(jobData.consignee_address);
+      form.setFieldValue("consignee_address", addr);
+      setConsigneeAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(jobData.consignee_email || ""),
+        },
+      ]);
+      setConsigneeAddressSearch(addr);
+      setConsigneeAddressCustom(false);
     } else if (jobData.consignee_address_text) {
-      form.setFieldValue(
-        "consignee_address",
-        String(jobData.consignee_address_text),
-      );
+      const addr = String(jobData.consignee_address_text);
+      form.setFieldValue("consignee_address", addr);
+      setConsigneeAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(jobData.consignee_email || ""),
+        },
+      ]);
+      setConsigneeAddressSearch(addr);
+      setConsigneeAddressCustom(false);
     }
     if (jobData.forwarder_address_id && jobData.forwarder_address) {
       setForwarderAddressOptions([
@@ -2357,12 +2395,16 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ]);
     }
     if (jobData.notify1_customer_address && !jobData.notify1_customer_name) {
+      const addr = String(jobData.notify1_customer_address);
       setNotifyCustomerAddressOptions([
         {
-          value: String(jobData.notify1_customer_address),
-          label: String(jobData.notify1_customer_address),
+          value: addr,
+          label: addr,
+          email: String(jobData.notify1_customer_email || ""),
         },
       ]);
+      setNotifyCustomerAddressSearch(addr);
+      setNotifyCustomerAddressCustom(false);
     }
     if (jobData.cha_address_id && jobData.cha_address) {
       setChaAddressOptions([
@@ -2438,19 +2480,37 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       setShipperDisplayName(String(initialData.shipper_name));
     }
     if (initialData.consignee_name) {
-      form.setFieldValue("consignee_name", String(initialData.consignee_name));
-      setConsigneeSearch(String(initialData.consignee_name));
+      const name = String(initialData.consignee_name);
+      form.setFieldValue("consignee_name", name);
+      form.setFieldValue("consignee_code", name);
+      setConsigneeSearch(name);
+      setConsigneeOptions([{ value: name, label: name }]);
+      consigneeDataRef.current[name] = { customer_name: name };
     }
     if (initialData.consignee_address) {
-      form.setFieldValue(
-        "consignee_address",
-        String(initialData.consignee_address),
-      );
+      const addr = String(initialData.consignee_address);
+      form.setFieldValue("consignee_address", addr);
+      setConsigneeAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(initialData.consignee_email || ""),
+        },
+      ]);
+      setConsigneeAddressSearch(addr);
+      setConsigneeAddressCustom(false);
     } else if (initialData.consignee_address_text) {
-      form.setFieldValue(
-        "consignee_address",
-        String(initialData.consignee_address_text),
-      );
+      const addr = String(initialData.consignee_address_text);
+      form.setFieldValue("consignee_address", addr);
+      setConsigneeAddressOptions([
+        {
+          value: addr,
+          label: addr,
+          email: String(initialData.consignee_email || ""),
+        },
+      ]);
+      setConsigneeAddressSearch(addr);
+      setConsigneeAddressCustom(false);
     }
     if (initialData.forwarder_name) {
       setForwarderDisplayName(String(initialData.forwarder_name));
@@ -2471,13 +2531,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const name = String(initialData.notify1_customer_name);
       setNotifyCustomerDisplayName(name);
       setNotifyCustomerSearch(name);
+      setNotifyCustomerOptions([{ value: name, label: name }]);
+      setNotifyCustomerSelectedId(name);
+      notifyCustomerDataRef.current[name] = { customer_name: name };
       if (initialData.notify1_customer_address) {
+        const addr = String(initialData.notify1_customer_address);
         setNotifyCustomerAddressOptions([
           {
-            value: String(initialData.notify1_customer_address),
-            label: String(initialData.notify1_customer_address),
+            value: addr,
+            label: addr,
+            email: String(initialData.notify1_customer_email || ""),
           },
         ]);
+        setNotifyCustomerAddressSearch(addr);
+        setNotifyCustomerAddressCustom(false);
       }
     } else if (initialData.notify_customer_name) {
       const name = String(initialData.notify_customer_name);
@@ -2492,13 +2559,20 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       const name = String(initialData.notify2_customer_name);
       setNotify2CustomerDisplayName(name);
       setNotify2CustomerSearch(name);
+      setNotify2CustomerOptions([{ value: name, label: name }]);
+      setNotify2CustomerSelectedId(name);
+      notify2CustomerDataRef.current[name] = { customer_name: name };
       if (initialData.notify2_customer_address) {
+        const addr = String(initialData.notify2_customer_address);
         setNotify2CustomerAddressOptions([
           {
-            value: String(initialData.notify2_customer_address),
-            label: String(initialData.notify2_customer_address),
+            value: addr,
+            label: addr,
+            email: String(initialData.notify2_customer_email || ""),
           },
         ]);
+        setNotify2CustomerAddressSearch(addr);
+        setNotify2CustomerAddressCustom(false);
       }
     }
     // CHA - check for both cha_name and cha
@@ -2611,24 +2685,32 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       initialData.notify1_customer_address &&
       !initialData.notify1_customer_name
     ) {
+      const addr = String(initialData.notify1_customer_address);
       setNotifyCustomerAddressOptions([
         {
-          value: String(initialData.notify1_customer_address),
-          label: String(initialData.notify1_customer_address),
+          value: addr,
+          label: addr,
+          email: String(initialData.notify1_customer_email || ""),
         },
       ]);
+      setNotifyCustomerAddressSearch(addr);
+      setNotifyCustomerAddressCustom(false);
     }
     // Notify Customer 2 address options when we have address but didn't set from name
     if (
       initialData.notify2_customer_address &&
       !initialData.notify2_customer_name
     ) {
+      const addr = String(initialData.notify2_customer_address);
       setNotify2CustomerAddressOptions([
         {
-          value: String(initialData.notify2_customer_address),
-          label: String(initialData.notify2_customer_address),
+          value: addr,
+          label: addr,
+          email: String(initialData.notify2_customer_email || ""),
         },
       ]);
+      setNotify2CustomerAddressSearch(addr);
+      setNotify2CustomerAddressCustom(false);
     }
 
     // CHA Address
@@ -4776,6 +4858,14 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setConsigneeSearch(v);
                         form.setFieldValue("consignee_name", v);
                         form.setFieldValue("consignee_code", "");
+                        if (!v.trim()) {
+                          form.setFieldValue("consignee_address", "");
+                          form.setFieldValue("consignee_address_id", 0);
+                          form.setFieldValue("consignee_email", "");
+                          setConsigneeAddressOptions([]);
+                          setConsigneeAddressCustom(false);
+                          setConsigneeAddressSearch("");
+                        }
                       }}
                     />
                   ) : (
@@ -4806,6 +4896,10 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           form.setFieldValue("consignee_address", "");
                           form.setFieldValue("consignee_address_id", 0);
                           form.setFieldValue("consignee_email", "");
+                          setConsigneeAddressOptions([]);
+                          setConsigneeAddressCustom(false);
+                          setConsigneeAddressSearch("");
+                          setConsigneeSearch("");
                           return;
                         }
                         const original = consigneeDataRef.current[value] || {};
@@ -4813,26 +4907,25 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           (original as Record<string, unknown>).customer_name ||
                             "",
                         );
-                        const addr = (
-                          ((
-                            (original as Record<string, unknown>)
-                              .addresses_data as
-                              | Array<{ address?: string }>
-                              | undefined
-                          )?.[0]?.address ?? "") as string
-                        ).toString();
-                        const email = String(
-                          (original as Record<string, unknown>)
-                            .customer_email || "",
+                        const addressOptions = mapShipmentPartyAddressOptions(
+                          original as Record<string, unknown>,
+                          toTitleCase,
                         );
+                        const primaryAddr = addressOptions[0];
+                        setConsigneeAddressOptions(addressOptions);
+                        setConsigneeAddressCustom(false);
                         form.setFieldValue("consignee_code", value);
                         form.setFieldValue("consignee_name", toTitleCase(name));
                         form.setFieldValue(
                           "consignee_address",
-                          toTitleCase(addr),
+                          primaryAddr?.value || "",
                         );
                         form.setFieldValue("consignee_address_id", 0);
-                        form.setFieldValue("consignee_email", email);
+                        form.setFieldValue(
+                          "consignee_email",
+                          primaryAddr?.email || "",
+                        );
+                        setConsigneeAddressSearch(primaryAddr?.value || "");
                         setConsigneeSearch(name);
                       }}
                       comboboxProps={{ zIndex: 10 }}
@@ -4864,15 +4957,67 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <FormTextInput
-                    label="Consignee Address"
-                    placeholder="Enter consignee address"
-                    value={form.values.consignee_address}
-                    onChange={(e) => {
-                      const v = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue("consignee_address", v);
-                    }}
-                  />
+                  {shouldUseCustomShipmentPartyAddress(
+                    consigneeAddressCustom,
+                    form.values.consignee_address || "",
+                    consigneeAddressOptions,
+                  ) ? (
+                    <FormTextInput
+                      label="Consignee Address"
+                      placeholder="Enter consignee address"
+                      value={form.values.consignee_address}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        form.setFieldValue("consignee_address", v);
+                        if (!v.trim()) {
+                          setConsigneeAddressCustom(false);
+                          setConsigneeAddressSearch("");
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Dropdown
+                      label="Consignee Address"
+                      placeholder="Select consignee address"
+                      searchable
+                      clearable
+                      data={consigneeAddressOptions}
+                      value={form.values.consignee_address || ""}
+                      searchValue={consigneeAddressSearch}
+                      onSearchChange={(value) => {
+                        setConsigneeAddressSearch(value);
+                        if (
+                          value.trim() &&
+                          !shipmentPartyAddressMatchesSearch(
+                            consigneeAddressOptions,
+                            value,
+                          )
+                        ) {
+                          setConsigneeAddressCustom(true);
+                          form.setFieldValue(
+                            "consignee_address",
+                            toTitleCase(value),
+                          );
+                          form.setFieldValue("consignee_email", "");
+                        }
+                      }}
+                      onChange={(value) => {
+                        const selected = consigneeAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "consignee_address",
+                          value ? toTitleCase(value) : "",
+                        );
+                        form.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                        setConsigneeAddressSearch(value || "");
+                        setConsigneeAddressCustom(false);
+                      }}
+                    />
+                  )}
                 </Grid.Col>
               </Grid>
               <Divider my="md" />
@@ -5233,6 +5378,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setNotifyCustomerSearch(v);
                         form.setFieldValue("notify1_customer_name", v);
                         setNotifyCustomerAddressOptions([]);
+                        setNotifyCustomerAddressCustom(false);
+                        setNotifyCustomerAddressSearch("");
                         form.setFieldValue("notify1_customer_address", "");
                         form.setFieldValue("notify1_customer_email", "");
                       }}
@@ -5281,6 +5428,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           form.setFieldValue("notify1_customer_address", "");
                           form.setFieldValue("notify1_customer_email", "");
                           setNotifyCustomerAddressOptions([]);
+                          setNotifyCustomerAddressCustom(false);
+                          setNotifyCustomerAddressSearch("");
+                          setNotifyCustomerSearch("");
                           return;
                         }
                         const original =
@@ -5288,43 +5438,26 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const name = String(
                           (original as any).customer_name || "",
                         );
-                        const customerEmail = String(
-                          (original as any).customer_email || "",
+                        const addressOptions = mapShipmentPartyAddressOptions(
+                          original as Record<string, unknown>,
+                          toTitleCase,
                         );
-                        const addressesDataRaw = (original as any)
-                          .addresses_data;
-                        const addressesData = Array.isArray(addressesDataRaw)
-                          ? (addressesDataRaw as Array<{
-                              address: string;
-                              email?: string;
-                              address_type?: string;
-                            }>)
-                          : [];
-                        const addressOptions = addressesData
-                          .map((a) => ({
-                            value: a.address || "",
-                            label: a.address || "",
-                          }))
-                          .filter((a) => a.value);
+                        const primaryAddr = addressOptions[0];
                         setNotifyCustomerAddressOptions(addressOptions);
-                        const primary = addressesData.find(
-                          (a) =>
-                            String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY",
-                        );
-                        const firstAddr = addressesData[0];
+                        setNotifyCustomerAddressCustom(false);
                         form.setFieldValue(
                           "notify1_customer_name",
                           toTitleCase(name),
                         );
                         form.setFieldValue(
                           "notify1_customer_email",
-                          primary?.email ?? firstAddr?.email ?? customerEmail,
+                          primaryAddr?.email || "",
                         );
                         form.setFieldValue(
                           "notify1_customer_address",
-                          primary?.address ?? firstAddr?.address ?? "",
+                          primaryAddr?.value || "",
                         );
+                        setNotifyCustomerAddressSearch(primaryAddr?.value || "");
                         setNotifyCustomerSearch(name);
                         setNotifyCustomerSelectedId(value);
                       }}
@@ -5341,7 +5474,25 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {notifyCustomerAddressOptions.length > 0 ? (
+                  {shouldUseCustomShipmentPartyAddress(
+                    notifyCustomerAddressCustom,
+                    form.values.notify1_customer_address || "",
+                    notifyCustomerAddressOptions,
+                  ) ? (
+                    <FormTextInput
+                      label="Notify Customer 1 Address"
+                      placeholder="Enter notify address"
+                      value={form.values.notify1_customer_address}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        form.setFieldValue("notify1_customer_address", v);
+                        if (!v.trim()) {
+                          setNotifyCustomerAddressCustom(false);
+                          setNotifyCustomerAddressSearch("");
+                        }
+                      }}
+                    />
+                  ) : (
                     <Dropdown
                       label="Notify Customer 1 Address"
                       placeholder="Select notify address"
@@ -5349,24 +5500,39 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       clearable
                       data={notifyCustomerAddressOptions}
                       value={form.values.notify1_customer_address || ""}
-                      onChange={(value) =>
+                      searchValue={notifyCustomerAddressSearch}
+                      onSearchChange={(value) => {
+                        setNotifyCustomerAddressSearch(value);
+                        if (
+                          value.trim() &&
+                          !shipmentPartyAddressMatchesSearch(
+                            notifyCustomerAddressOptions,
+                            value,
+                          )
+                        ) {
+                          setNotifyCustomerAddressCustom(true);
+                          form.setFieldValue(
+                            "notify1_customer_address",
+                            toTitleCase(value),
+                          );
+                          form.setFieldValue("notify1_customer_email", "");
+                        }
+                      }}
+                      onChange={(value) => {
+                        const selected = notifyCustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
                         form.setFieldValue(
                           "notify1_customer_address",
                           value ? toTitleCase(value) : "",
-                        )
-                      }
-                    />
-                  ) : (
-                    <FormTextInput
-                      label="Notify Customer 1 Address"
-                      placeholder="Enter notify address"
-                      value={form.values.notify1_customer_address}
-                      onChange={(e) =>
+                        );
                         form.setFieldValue(
-                          "notify1_customer_address",
-                          toTitleCase(e.currentTarget.value),
-                        )
-                      }
+                          "notify1_customer_email",
+                          selected?.email || "",
+                        );
+                        setNotifyCustomerAddressSearch(value || "");
+                        setNotifyCustomerAddressCustom(false);
+                      }}
                     />
                   )}
                 </Grid.Col>
@@ -5395,6 +5561,8 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setNotify2CustomerSearch(v);
                         form.setFieldValue("notify2_customer_name", v);
                         setNotify2CustomerAddressOptions([]);
+                        setNotify2CustomerAddressCustom(false);
+                        setNotify2CustomerAddressSearch("");
                         form.setFieldValue("notify2_customer_address", "");
                         form.setFieldValue("notify2_customer_email", "");
                       }}
@@ -5443,6 +5611,9 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           form.setFieldValue("notify2_customer_address", "");
                           form.setFieldValue("notify2_customer_email", "");
                           setNotify2CustomerAddressOptions([]);
+                          setNotify2CustomerAddressCustom(false);
+                          setNotify2CustomerAddressSearch("");
+                          setNotify2CustomerSearch("");
                           return;
                         }
                         const original =
@@ -5450,43 +5621,26 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         const name = String(
                           (original as any).customer_name || "",
                         );
-                        const customerEmail = String(
-                          (original as any).customer_email || "",
+                        const addressOptions = mapShipmentPartyAddressOptions(
+                          original as Record<string, unknown>,
+                          toTitleCase,
                         );
-                        const addressesDataRaw = (original as any)
-                          .addresses_data;
-                        const addressesData = Array.isArray(addressesDataRaw)
-                          ? (addressesDataRaw as Array<{
-                              address: string;
-                              email?: string;
-                              address_type?: string;
-                            }>)
-                          : [];
-                        const addressOptions = addressesData
-                          .map((a) => ({
-                            value: a.address || "",
-                            label: a.address || "",
-                          }))
-                          .filter((a) => a.value);
+                        const primaryAddr = addressOptions[0];
                         setNotify2CustomerAddressOptions(addressOptions);
-                        const primary = addressesData.find(
-                          (a) =>
-                            String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY",
-                        );
-                        const firstAddr = addressesData[0];
+                        setNotify2CustomerAddressCustom(false);
                         form.setFieldValue(
                           "notify2_customer_name",
                           toTitleCase(name),
                         );
                         form.setFieldValue(
                           "notify2_customer_email",
-                          primary?.email ?? firstAddr?.email ?? customerEmail,
+                          primaryAddr?.email || "",
                         );
                         form.setFieldValue(
                           "notify2_customer_address",
-                          primary?.address ?? firstAddr?.address ?? "",
+                          primaryAddr?.value || "",
                         );
+                        setNotify2CustomerAddressSearch(primaryAddr?.value || "");
                         setNotify2CustomerSearch(name);
                         setNotify2CustomerSelectedId(value);
                       }}
@@ -5503,7 +5657,25 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {notify2CustomerAddressOptions.length > 0 ? (
+                  {shouldUseCustomShipmentPartyAddress(
+                    notify2CustomerAddressCustom,
+                    form.values.notify2_customer_address || "",
+                    notify2CustomerAddressOptions,
+                  ) ? (
+                    <FormTextInput
+                      label="Notify Customer 2 Address"
+                      placeholder="Enter notify address"
+                      value={form.values.notify2_customer_address}
+                      onChange={(e) => {
+                        const v = toTitleCase(e.currentTarget.value);
+                        form.setFieldValue("notify2_customer_address", v);
+                        if (!v.trim()) {
+                          setNotify2CustomerAddressCustom(false);
+                          setNotify2CustomerAddressSearch("");
+                        }
+                      }}
+                    />
+                  ) : (
                     <Dropdown
                       label="Notify Customer 2 Address"
                       placeholder="Select notify address"
@@ -5511,24 +5683,39 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       clearable
                       data={notify2CustomerAddressOptions}
                       value={form.values.notify2_customer_address || ""}
-                      onChange={(value) =>
+                      searchValue={notify2CustomerAddressSearch}
+                      onSearchChange={(value) => {
+                        setNotify2CustomerAddressSearch(value);
+                        if (
+                          value.trim() &&
+                          !shipmentPartyAddressMatchesSearch(
+                            notify2CustomerAddressOptions,
+                            value,
+                          )
+                        ) {
+                          setNotify2CustomerAddressCustom(true);
+                          form.setFieldValue(
+                            "notify2_customer_address",
+                            toTitleCase(value),
+                          );
+                          form.setFieldValue("notify2_customer_email", "");
+                        }
+                      }}
+                      onChange={(value) => {
+                        const selected = notify2CustomerAddressOptions.find(
+                          (item) => item.value === value,
+                        );
                         form.setFieldValue(
                           "notify2_customer_address",
                           value ? toTitleCase(value) : "",
-                        )
-                      }
-                    />
-                  ) : (
-                    <FormTextInput
-                      label="Notify Customer 2 Address"
-                      placeholder="Enter notify address"
-                      value={form.values.notify2_customer_address}
-                      onChange={(e) =>
+                        );
                         form.setFieldValue(
-                          "notify2_customer_address",
-                          toTitleCase(e.currentTarget.value),
-                        )
-                      }
+                          "notify2_customer_email",
+                          selected?.email || "",
+                        );
+                        setNotify2CustomerAddressSearch(value || "");
+                        setNotify2CustomerAddressCustom(false);
+                      }}
                     />
                   )}
                 </Grid.Col>

@@ -56,6 +56,12 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  mapShipmentPartyAddressOptions,
+  mapShipmentPartySearchResults,
+  shipmentPartyAddressMatchesSearch,
+  shouldUseCustomShipmentPartyAddress,
+} from "../../../utils/shipmentParty";
 import { applyShipmentTermsSelection } from "../../../utils/shipmentTermsFreight";
 import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
 import {
@@ -422,6 +428,16 @@ function HouseCreate() {
   const notify2CustomerDataRef = useRef<
     Record<string, Record<string, unknown>>
   >({});
+  const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
+  const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
+  const [notifyCustomerAddressSearch, setNotifyCustomerAddressSearch] =
+    useState("");
+  const [notifyCustomerAddressCustom, setNotifyCustomerAddressCustom] =
+    useState(false);
+  const [notify2CustomerAddressSearch, setNotify2CustomerAddressSearch] =
+    useState("");
+  const [notify2CustomerAddressCustom, setNotify2CustomerAddressCustom] =
+    useState(false);
 
   // State for cargo details
   const [cargoDetails, setCargoDetails] = useState<CargoDetail[]>([
@@ -1399,15 +1415,7 @@ function HouseCreate() {
           return;
         }
 
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return {
-            value: id,
-            label: String(item.customer_name || ""),
-          };
-        });
+        const { options: opts, map } = mapShipmentPartySearchResults(arr);
 
         consigneeDataRef.current = map;
         setConsigneeOptions(opts);
@@ -1460,15 +1468,7 @@ function HouseCreate() {
           return;
         }
 
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return {
-            value: id,
-            label: String(item.customer_name || ""),
-          };
-        });
+        const { options: opts, map } = mapShipmentPartySearchResults(arr);
 
         notifyCustomerDataRef.current = map;
         setNotifyCustomerOptions(opts);
@@ -1522,15 +1522,7 @@ function HouseCreate() {
           return;
         }
 
-        const map: Record<string, Record<string, unknown>> = {};
-        const opts = arr.map((item) => {
-          const id = String(item.id ?? "");
-          map[id] = item;
-          return {
-            value: id,
-            label: String(item.customer_name || ""),
-          };
-        });
+        const { options: opts, map } = mapShipmentPartySearchResults(arr);
 
         notify2CustomerDataRef.current = map;
         setNotify2CustomerOptions(opts);
@@ -3378,6 +3370,8 @@ function HouseCreate() {
                         form.setFieldValue("consignee_address", "");
                         form.setFieldValue("consignee_email", "");
                         setConsigneeAddressOptions([]);
+                        setConsigneeAddressCustom(false);
+                        setConsigneeAddressSearch("");
                       }
                     }}
                     error={form.errors.consignee_name as string}
@@ -3404,6 +3398,8 @@ function HouseCreate() {
                         form.setFieldValue("consignee_address", "");
                         form.setFieldValue("consignee_email", "");
                         setConsigneeAddressOptions([]);
+                        setConsigneeAddressCustom(false);
+                        setConsigneeAddressSearch("");
                         setConsigneeSearch("");
                         return;
                       }
@@ -3412,42 +3408,27 @@ function HouseCreate() {
                         (original as Record<string, unknown>).customer_name ||
                           "",
                       );
-                      const email = getPartyEmail(
+                      const addressOptions = mapShipmentPartyAddressOptions(
                         original as Record<string, unknown>,
+                        toTitleCase,
                       );
-
-                      // Populate address options for Dropdown (keep existing UX)
-                      const addressesData = getPartyAddresses(
-                        original as Record<string, unknown>,
-                      );
-                      const addressOptions = addressesData
-                        .filter((a) => a.address)
-                        .map((a) => {
-                          const addr = toTitleCase(String(a.address || ""));
-                          return {
-                            value: addr,
-                            label: addr,
-                            email: String(email || a.email || ""),
-                          };
-                        });
+                      const primaryAddr = addressOptions[0];
                       setConsigneeAddressOptions(addressOptions);
+                      setConsigneeAddressCustom(false);
 
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
-
-                      // Reset address value so it always replaces on re-select
                       form.setFieldValue("consignee_address", "");
-                      if (primaryAddr?.address) {
-                        form.setFieldValue(
-                          "consignee_address",
-                          toTitleCase(String(primaryAddr.address)),
-                        );
+                      if (primaryAddr?.value) {
+                        form.setFieldValue("consignee_address", primaryAddr.value);
+                        setConsigneeAddressSearch(primaryAddr.value);
+                      } else {
+                        setConsigneeAddressSearch("");
                       }
 
                       form.setFieldValue("consignee_code", value);
                       form.setFieldValue("consignee_name", toTitleCase(name));
                       form.setFieldValue(
                         "consignee_email",
-                        String(email || primaryAddr?.email || ""),
+                        primaryAddr?.email || "",
                       );
                       setConsigneeSearch(name);
                     }}
@@ -3483,7 +3464,26 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {consigneeAddressOptions.length > 0 ? (
+                {shouldUseCustomShipmentPartyAddress(
+                  consigneeAddressCustom,
+                  form.values.consignee_address || "",
+                  consigneeAddressOptions,
+                ) ? (
+                  <FormTextInput
+                    label="Consignee Address"
+                    placeholder="Enter consignee address"
+                    value={form.values.consignee_address || ""}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.target.value);
+                      form.setFieldValue("consignee_address", formattedValue);
+                      if (!formattedValue.trim()) {
+                        setConsigneeAddressCustom(false);
+                        setConsigneeAddressSearch("");
+                      }
+                    }}
+                    error={form.errors.consignee_address}
+                  />
+                ) : (
                   <Dropdown
                     key={`consignee-address-${form.values.consignee_code || "none"}`}
                     label="Consignee Address"
@@ -3491,6 +3491,21 @@ function HouseCreate() {
                     searchable
                     data={consigneeAddressOptions}
                     value={form.values.consignee_address || ""}
+                    searchValue={consigneeAddressSearch}
+                    onSearchChange={(value) => {
+                      setConsigneeAddressSearch(value);
+                      if (
+                        value.trim() &&
+                        !shipmentPartyAddressMatchesSearch(
+                          consigneeAddressOptions,
+                          value,
+                        )
+                      ) {
+                        setConsigneeAddressCustom(true);
+                        form.setFieldValue("consignee_address", value);
+                        form.setFieldValue("consignee_email", "");
+                      }
+                    }}
                     onChange={(value) => {
                       form.setFieldValue("consignee_address", value || "");
                       if (value) {
@@ -3502,17 +3517,8 @@ function HouseCreate() {
                           selected?.email || "",
                         );
                       }
-                    }}
-                    error={form.errors.consignee_address}
-                  />
-                ) : (
-                  <FormTextInput
-                    label="Consignee Address"
-                    placeholder="Enter consignee address"
-                    value={form.values.consignee_address || ""}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      form.setFieldValue("consignee_address", formattedValue);
+                      setConsigneeAddressSearch(value || "");
+                      setConsigneeAddressCustom(false);
                     }}
                     error={form.errors.consignee_address}
                   />
@@ -3537,6 +3543,8 @@ function HouseCreate() {
                       setNotifyCustomerSearch(v);
                       form.setFieldValue("notify1_customer_name", v);
                       setNotifyCustomerAddressOptions([]);
+                      setNotifyCustomerAddressCustom(false);
+                      setNotifyCustomerAddressSearch("");
                       form.setFieldValue("notify1_customer_address", "");
                       form.setFieldValue("notify1_customer_email", "");
                     }}
@@ -3563,6 +3571,8 @@ function HouseCreate() {
                         form.setFieldValue("notify1_customer_address", "");
                         form.setFieldValue("notify1_customer_email", "");
                         setNotifyCustomerAddressOptions([]);
+                        setNotifyCustomerAddressCustom(false);
+                        setNotifyCustomerAddressSearch("");
                         setNotifyCustomerSearch("");
                         return;
                       }
@@ -3572,25 +3582,13 @@ function HouseCreate() {
                         (original as Record<string, unknown>).customer_name ||
                           "",
                       );
-                      const email = getPartyEmail(
+                      const addressOptions = mapShipmentPartyAddressOptions(
                         original as Record<string, unknown>,
+                        toTitleCase,
                       );
-                      const addressesData = getPartyAddresses(
-                        original as Record<string, unknown>,
-                      );
-                      const addressOptions = addressesData
-                        .filter((a) => a.address)
-                        .map((a) => {
-                          const addr = toTitleCase(String(a.address || ""));
-                          return {
-                            value: addr,
-                            label: addr,
-                            email: String(email || a.email || ""),
-                          };
-                        });
+                      const primaryAddr = addressOptions[0];
                       setNotifyCustomerAddressOptions(addressOptions);
-
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      setNotifyCustomerAddressCustom(false);
 
                       form.setFieldValue(
                         "notify1_customer_name",
@@ -3598,14 +3596,17 @@ function HouseCreate() {
                       );
                       form.setFieldValue(
                         "notify1_customer_email",
-                        String(email || primaryAddr?.email || ""),
+                        primaryAddr?.email || "",
                       );
                       form.setFieldValue("notify1_customer_address", "");
-                      if (primaryAddr?.address) {
+                      if (primaryAddr?.value) {
                         form.setFieldValue(
                           "notify1_customer_address",
-                          toTitleCase(String(primaryAddr.address)),
+                          primaryAddr.value,
                         );
+                        setNotifyCustomerAddressSearch(primaryAddr.value);
+                      } else {
+                        setNotifyCustomerAddressSearch("");
                       }
                       setNotifyCustomerSearch(name);
                       setNotifyCustomerSelectedId(value);
@@ -3642,7 +3643,30 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {notifyCustomerAddressOptions.length > 0 ? (
+                {shouldUseCustomShipmentPartyAddress(
+                  notifyCustomerAddressCustom,
+                  form.values.notify1_customer_address || "",
+                  notifyCustomerAddressOptions,
+                ) ? (
+                  <FormTextInput
+                    label="Notify Customer 1 Address"
+                    placeholder="Enter Notify Customer 1 Address"
+                    minRows={2}
+                    value={form.values.notify1_customer_address}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue(
+                        "notify1_customer_address",
+                        formattedValue,
+                      );
+                      if (!formattedValue.trim()) {
+                        setNotifyCustomerAddressCustom(false);
+                        setNotifyCustomerAddressSearch("");
+                      }
+                    }}
+                    error={form.errors.notify1_customer_address}
+                  />
+                ) : (
                   <Dropdown
                     key={`notify1-address-${notifyCustomerSelectedId || "none"}`}
                     label="Notify Customer 1 Address"
@@ -3650,6 +3674,21 @@ function HouseCreate() {
                     searchable
                     data={notifyCustomerAddressOptions}
                     value={form.values.notify1_customer_address || ""}
+                    searchValue={notifyCustomerAddressSearch}
+                    onSearchChange={(value) => {
+                      setNotifyCustomerAddressSearch(value);
+                      if (
+                        value.trim() &&
+                        !shipmentPartyAddressMatchesSearch(
+                          notifyCustomerAddressOptions,
+                          value,
+                        )
+                      ) {
+                        setNotifyCustomerAddressCustom(true);
+                        form.setFieldValue("notify1_customer_address", value);
+                        form.setFieldValue("notify1_customer_email", "");
+                      }
+                    }}
                     onChange={(value) => {
                       form.setFieldValue(
                         "notify1_customer_address",
@@ -3664,21 +3703,8 @@ function HouseCreate() {
                           selected?.email || "",
                         );
                       }
-                    }}
-                    error={form.errors.notify1_customer_address}
-                  />
-                ) : (
-                  <FormTextInput
-                    label="Notify Customer 1 Address"
-                    placeholder="Enter Notify Customer 1 Address"
-                    minRows={2}
-                    value={form.values.notify1_customer_address}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue(
-                        "notify1_customer_address",
-                        formattedValue,
-                      );
+                      setNotifyCustomerAddressSearch(value || "");
+                      setNotifyCustomerAddressCustom(false);
                     }}
                     error={form.errors.notify1_customer_address}
                   />
@@ -3703,6 +3729,8 @@ function HouseCreate() {
                       setNotify2CustomerSearch(v);
                       form.setFieldValue("notify2_customer_name", v);
                       setNotify2CustomerAddressOptions([]);
+                      setNotify2CustomerAddressCustom(false);
+                      setNotify2CustomerAddressSearch("");
                       form.setFieldValue("notify2_customer_address", "");
                       form.setFieldValue("notify2_customer_email", "");
                     }}
@@ -3729,6 +3757,8 @@ function HouseCreate() {
                         form.setFieldValue("notify2_customer_address", "");
                         form.setFieldValue("notify2_customer_email", "");
                         setNotify2CustomerAddressOptions([]);
+                        setNotify2CustomerAddressCustom(false);
+                        setNotify2CustomerAddressSearch("");
                         setNotify2CustomerSearch("");
                         return;
                       }
@@ -3738,25 +3768,13 @@ function HouseCreate() {
                         (original as Record<string, unknown>).customer_name ||
                           "",
                       );
-                      const email = getPartyEmail(
+                      const addressOptions = mapShipmentPartyAddressOptions(
                         original as Record<string, unknown>,
+                        toTitleCase,
                       );
-                      const addressesData = getPartyAddresses(
-                        original as Record<string, unknown>,
-                      );
-                      const addressOptions = addressesData
-                        .filter((a) => a.address)
-                        .map((a) => {
-                          const addr = toTitleCase(String(a.address || ""));
-                          return {
-                            value: addr,
-                            label: addr,
-                            email: String(email || a.email || ""),
-                          };
-                        });
+                      const primaryAddr = addressOptions[0];
                       setNotify2CustomerAddressOptions(addressOptions);
-
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                      setNotify2CustomerAddressCustom(false);
 
                       form.setFieldValue(
                         "notify2_customer_name",
@@ -3764,14 +3782,17 @@ function HouseCreate() {
                       );
                       form.setFieldValue(
                         "notify2_customer_email",
-                        String(email || primaryAddr?.email || ""),
+                        primaryAddr?.email || "",
                       );
                       form.setFieldValue("notify2_customer_address", "");
-                      if (primaryAddr?.address) {
+                      if (primaryAddr?.value) {
                         form.setFieldValue(
                           "notify2_customer_address",
-                          toTitleCase(String(primaryAddr.address)),
+                          primaryAddr.value,
                         );
+                        setNotify2CustomerAddressSearch(primaryAddr.value);
+                      } else {
+                        setNotify2CustomerAddressSearch("");
                       }
                       setNotify2CustomerSearch(name);
                       setNotify2CustomerSelectedId(value);
@@ -3808,7 +3829,30 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {notify2CustomerAddressOptions.length > 0 ? (
+                {shouldUseCustomShipmentPartyAddress(
+                  notify2CustomerAddressCustom,
+                  form.values.notify2_customer_address || "",
+                  notify2CustomerAddressOptions,
+                ) ? (
+                  <FormTextInput
+                    label="Notify Customer 2 Address"
+                    placeholder="Enter Notify Customer 2 Address"
+                    minRows={2}
+                    value={form.values.notify2_customer_address}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue(
+                        "notify2_customer_address",
+                        formattedValue,
+                      );
+                      if (!formattedValue.trim()) {
+                        setNotify2CustomerAddressCustom(false);
+                        setNotify2CustomerAddressSearch("");
+                      }
+                    }}
+                    error={form.errors.notify2_customer_address}
+                  />
+                ) : (
                   <Dropdown
                     key={`notify2-address-${notify2CustomerSelectedId || "none"}`}
                     label="Notify Customer 2 Address"
@@ -3816,6 +3860,21 @@ function HouseCreate() {
                     searchable
                     data={notify2CustomerAddressOptions}
                     value={form.values.notify2_customer_address || ""}
+                    searchValue={notify2CustomerAddressSearch}
+                    onSearchChange={(value) => {
+                      setNotify2CustomerAddressSearch(value);
+                      if (
+                        value.trim() &&
+                        !shipmentPartyAddressMatchesSearch(
+                          notify2CustomerAddressOptions,
+                          value,
+                        )
+                      ) {
+                        setNotify2CustomerAddressCustom(true);
+                        form.setFieldValue("notify2_customer_address", value);
+                        form.setFieldValue("notify2_customer_email", "");
+                      }
+                    }}
                     onChange={(value) => {
                       form.setFieldValue(
                         "notify2_customer_address",
@@ -3830,21 +3889,8 @@ function HouseCreate() {
                           selected?.email || "",
                         );
                       }
-                    }}
-                    error={form.errors.notify2_customer_address}
-                  />
-                ) : (
-                  <FormTextInput
-                    label="Notify Customer 2 Address"
-                    placeholder="Enter Notify Customer 2 Address"
-                    minRows={2}
-                    value={form.values.notify2_customer_address}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue(
-                        "notify2_customer_address",
-                        formattedValue,
-                      );
+                      setNotify2CustomerAddressSearch(value || "");
+                      setNotify2CustomerAddressCustom(false);
                     }}
                     error={form.errors.notify2_customer_address}
                   />

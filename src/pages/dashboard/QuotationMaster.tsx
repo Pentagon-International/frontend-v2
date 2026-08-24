@@ -626,6 +626,20 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       performRestore();
       useListFilterStore.getState().setShouldRestore(currentListKey, false);
       hasRestoredFromStore.current = true;
+    } else if (location.state?.refreshData) {
+      // Create/edit return always sends refreshData. Initial mount skips load
+      // when that flag is set, so fetch here when store restore is not armed
+      // (enquiry / RFQ / call-entry / dashboard create flows).
+      hasRestoredFromStore.current = true;
+      isMountedRef.current = true;
+      if (isApprovalMode) {
+        setIsInitialLoading(true);
+        void refetchFilteredQuotations().finally(() =>
+          setIsInitialLoading(false),
+        );
+      } else {
+        void loadAllQuotations();
+      }
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
