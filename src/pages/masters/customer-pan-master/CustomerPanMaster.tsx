@@ -34,6 +34,8 @@ import useAuthStore from "../../../store/authStore";
 import {
   buildAddressLine,
   searchGstinByPan,
+  allAttestrAddressesEmpty,
+  hasUsableAttestrAddress,
   type AttestrGstinRecord,
 } from "../../../service/attestrGstin.service";
 import {
@@ -46,6 +48,11 @@ import {
   type SupportingDocument,
 } from "../../../utils/customerVerificationFormData";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
+import {
+  buildPanManualCreateFallbackState,
+  indiaManualCreatePath,
+  panManualCreateFallbackMessage,
+} from "../../../utils/panManualCreateFallback";
 
 const TERM_CODE_OPTIONS = [
   { label: "Credit", value: "CREDIT" },
@@ -341,10 +348,6 @@ export default function CustomerPanMaster({
     partyCategory === "agent"
       ? "/master/create-agent"
       : "/master/create-customer";
-  const panCreatePath =
-    partyCategory === "agent"
-      ? "/master/create-agent-pan"
-      : "/master/create-customer-pan";
 
   useEffect(() => {
     if (!isIndiaUser) {
@@ -416,6 +419,22 @@ export default function CustomerPanMaster({
   const assignedTo = useMemo(
     () => resolveLoggedInAssignTo(salespersons, user),
     [salespersons, user],
+  );
+
+  const goToManualCreate = useCallback(
+    (records: AttestrGstinRecord[]) => {
+      ToastNotification({
+        type: "error",
+        message: panManualCreateFallbackMessage(entityLabelLower),
+      });
+      navigate(indiaManualCreatePath(forApprovalPath), {
+        state: buildPanManualCreateFallbackState({
+          pan: panNumber.trim().toUpperCase(),
+          records,
+        }),
+      });
+    },
+    [entityLabelLower, forApprovalPath, navigate, panNumber],
   );
 
   const customerTypeOptions = useMemo(
@@ -520,17 +539,16 @@ export default function CustomerPanMaster({
         return;
       }
 
+      if (allAttestrAddressesEmpty(list)) {
+        goToManualCreate(list);
+        return;
+      }
+
       setRecords(list);
       setSearchMessage(response.message ?? "");
     } catch (error) {
       console.error("Attestr GSTIN search error:", error);
-      ToastNotification({
-        type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to search GST registrations for this PAN",
-      });
+      goToManualCreate([]);
     } finally {
       setIsSearching(false);
     }
@@ -544,6 +562,11 @@ export default function CustomerPanMaster({
         message:
           "Please select at least one GST registration to create a customer",
       });
+      return;
+    }
+
+    if (selected.some((record) => !hasUsableAttestrAddress(record))) {
+      goToManualCreate(selected);
       return;
     }
 
@@ -591,6 +614,13 @@ export default function CustomerPanMaster({
         panNumber.trim().toUpperCase(),
         additionalDetails,
       );
+      if (
+        payload.addresses_data.some((addr) => !String(addr.address ?? "").trim())
+      ) {
+        closeDetailsModal();
+        goToManualCreate(selected);
+        return;
+      }
       const response = (await submitCustomerVerification(
         payload,
         supportingDocuments,
@@ -620,14 +650,29 @@ export default function CustomerPanMaster({
       setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
       setAdditionalDetails({ ...EMPTY_ADDITIONAL_DETAILS });
       setDetailsErrors({});
-      navigate(panCreatePath, { replace: true });
+      navigate(
+        partyCategory === "agent"
+          ? "/master/agent-approval-status"
+          : "/master/customer-approval-status",
+        { replace: true },
+      );
     } catch (error) {
+      const apiMessage = formatCustomerCreateError(
+        extractApiErrorMessage(error),
+        entityLabelLower,
+      );
+      const isBlankAddressError = /blank|address/i.test(apiMessage);
+      if (
+        isBlankAddressError &&
+        selected.some((record) => !hasUsableAttestrAddress(record))
+      ) {
+        closeDetailsModal();
+        goToManualCreate(selected);
+        return;
+      }
       ToastNotification({
         type: "error",
-        message: formatCustomerCreateError(
-          extractApiErrorMessage(error),
-          entityLabelLower,
-        ),
+        message: apiMessage,
       });
     } finally {
       setIsCreating(false);

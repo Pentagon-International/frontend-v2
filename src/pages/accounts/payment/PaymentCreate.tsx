@@ -210,6 +210,7 @@ type InvoiceCombinedItem = {
   id?: number;
   doc_id?: number | string;
   document_no?: string;
+  inv_crn_no?: string | null;
   document_date?: string;
   due_date?: string;
   total?: number | string;
@@ -3365,7 +3366,7 @@ export default function PaymentCreate({
               setIsOpeningSupplierInvoiceFromModal(false);
             }}
             title="Select Document"
-            size="lg"
+            size="xl"
             styles={{
               title: { fontWeight: 600, color: "#105476" },
               body: { position: "relative" },
@@ -3408,6 +3409,7 @@ export default function PaymentCreate({
                     <Table.Tr>
                       <Table.Th style={{ width: 40 }}></Table.Th>
                       <Table.Th>Document Number</Table.Th>
+                      <Table.Th>Inv/Crn No</Table.Th>
                       <Table.Th>Document Doc Type</Table.Th>
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
@@ -3450,6 +3452,9 @@ export default function PaymentCreate({
                               {inv.document_no ?? "—"}
                             </Text>
                           )}
+                        </Table.Td>
+                        <Table.Td>
+                          {(inv.inv_crn_no ?? "").toString().trim() || "—"}
                         </Table.Td>
                         <Table.Td>
                           {String(

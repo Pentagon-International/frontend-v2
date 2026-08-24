@@ -3493,27 +3493,29 @@ function AirImportJobCreate() {
           </Group>
         )}
         {isReadOnly && (
-          <ClosedJobMasterLedgerMenu
-            jobId={jobData?.job_id}
-            serviceName="Air Import"
-            returnTo={location.pathname}
-            returnToState={location.state}
-          />
-        )}
-        {isReadOnly && mode === "edit" && (
-          <Button
-            color="#105476"
-            variant={canCreateJob ? "filled" : "outline"}
-            onClick={handleSubmit}
-            loading={isSubmitting}
-            disabled={!canCreateJob}
-            leftSection={<IconPlus size={14} />}
-            style={{
-              cursor: canCreateJob ? "pointer" : "not-allowed",
-            }}
-          >
-            Update
-          </Button>
+          <Group gap="xs">
+            {mode === "edit" && (
+              <Button
+                color="#105476"
+                variant={canCreateJob ? "filled" : "outline"}
+                onClick={handleSubmit}
+                loading={isSubmitting}
+                disabled={!canCreateJob}
+                leftSection={<IconPlus size={14} />}
+                style={{
+                  cursor: canCreateJob ? "pointer" : "not-allowed",
+                }}
+              >
+                Update
+              </Button>
+            )}
+            <ClosedJobMasterLedgerMenu
+              jobId={jobData?.job_id}
+              serviceName="Air Import"
+              returnTo={location.pathname}
+              returnToState={location.state}
+            />
+          </Group>
         )}
       </Group>
 

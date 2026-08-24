@@ -65,6 +65,10 @@ import {
   isIndianUserFromProfile,
   isVietnameseBranch,
 } from "../../../utils/userNumberFormat";
+import {
+  isFromPanFallback,
+  isIndiaManualCreateAllowed,
+} from "../../../utils/panManualCreateFallback";
 
 function parseYesNoBoolean(value: unknown): boolean {
   if (value === true) return true;
@@ -1919,6 +1923,10 @@ function CustomerCreate() {
     location.pathname === "/master/create-customer" ||
     isVendorVerificationRoute ||
     isAgentVerificationRoute;
+  const allowIndiaManualCreate = isIndiaManualCreateAllowed(
+    location.state,
+    location.search,
+  );
   const customerData = location.state?.customerData as
     CustomerDetailRecord | undefined;
   const isVendorMasterRoute =
@@ -2445,10 +2453,12 @@ function CustomerCreate() {
   useEffect(() => {
     // India: customer/vendor create-for-approval goes through PAN.
     // Agent uses the same approval form as overseas (no PAN flow).
+    // PAN lookup can return empty addresses; those users stay on this manual form.
     if (
       isVerificationCreateRoute &&
       isIndiaUser &&
-      !isAgentVerificationRoute
+      !isAgentVerificationRoute &&
+      !allowIndiaManualCreate
     ) {
       navigate(
         isVendorVerificationRoute
@@ -2462,6 +2472,7 @@ function CustomerCreate() {
     isVendorVerificationRoute,
     isAgentVerificationRoute,
     isIndiaUser,
+    allowIndiaManualCreate,
     navigate,
   ]);
 
@@ -2551,8 +2562,11 @@ function CustomerCreate() {
         });
       }
 
-      // Set active step to 2 (Address step) since user was on that step
-      setActive(1);
+      // Relationship mapping returns on the address step. PAN fallback starts
+      // at customer details so term/type/credit can still be filled.
+      if (!isFromPanFallback(location.state)) {
+        setActive(1);
+      }
       setIsFormInitialized(true);
       setAddressStateRestored(false); // Reset address state restoration flag when new data arrives
     }
@@ -3113,7 +3127,13 @@ function CustomerCreate() {
                 ? "Agent verification submitted successfully."
                 : "Customer verification submitted successfully."),
         });
-        navigate("/master");
+        navigate(
+          isVendorVerificationRoute
+            ? "/master/vendor-approval-status"
+            : isAgentVerificationRoute
+              ? "/master/agent-approval-status"
+              : "/master/customer-approval-status",
+        );
         return;
       }
 
@@ -3527,7 +3547,7 @@ function CustomerCreate() {
               <Text size="xl" fw={600} c="#105476">
                 {isCreateMode
                   ? isVerificationCreateRoute
-                    ? "Customer for Approval"
+                    ? `${partyEntityLabel} for Approval`
                     : isVendorMasterRoute
                       ? "Create Vendor"
                       : "Create Customer"

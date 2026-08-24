@@ -38,6 +38,8 @@ import useAuthStore from "../../../store/authStore";
 import {
   buildAddressLine,
   searchGstinByPan,
+  allAttestrAddressesEmpty,
+  hasUsableAttestrAddress,
   type AttestrGstinRecord,
 } from "../../../service/attestrGstin.service";
 import {
@@ -50,6 +52,11 @@ import {
   type SupportingDocument,
 } from "../../../utils/customerVerificationFormData";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
+import {
+  buildPanManualCreateFallbackState,
+  indiaManualCreatePath,
+  panManualCreateFallbackMessage,
+} from "../../../utils/panManualCreateFallback";
 
 const TERM_CODE_OPTIONS = [
   { label: "Credit", value: "CREDIT" },
@@ -503,6 +510,7 @@ export default function VendorPanMaster() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
+  const forApprovalPath = "/master/create-vendor";
 
   useEffect(() => {
     if (!isIndiaUser) {
@@ -609,6 +617,22 @@ export default function VendorPanMaster() {
   const assignedTo = useMemo(
     () => resolveLoggedInAssignTo(salespersons, user),
     [salespersons, user],
+  );
+
+  const goToManualCreate = useCallback(
+    (records: AttestrGstinRecord[]) => {
+      ToastNotification({
+        type: "error",
+        message: panManualCreateFallbackMessage("vendor"),
+      });
+      navigate(indiaManualCreatePath(forApprovalPath), {
+        state: buildPanManualCreateFallbackState({
+          pan: panNumber.trim().toUpperCase(),
+          records,
+        }),
+      });
+    },
+    [forApprovalPath, navigate, panNumber],
   );
 
   const customerTypeOptions = useMemo(
@@ -775,17 +799,16 @@ export default function VendorPanMaster() {
         return;
       }
 
+      if (allAttestrAddressesEmpty(list)) {
+        goToManualCreate(list);
+        return;
+      }
+
       setRecords(list);
       setSearchMessage(response.message ?? "");
     } catch (error) {
       console.error("Attestr GSTIN search error:", error);
-      ToastNotification({
-        type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to search GST registrations for this PAN",
-      });
+      goToManualCreate([]);
     } finally {
       setIsSearching(false);
     }
@@ -799,6 +822,11 @@ export default function VendorPanMaster() {
         message:
           "Please select at least one GST registration to create a vendor",
       });
+      return;
+    }
+
+    if (selected.some((record) => !hasUsableAttestrAddress(record))) {
+      goToManualCreate(selected);
       return;
     }
 
@@ -854,6 +882,13 @@ export default function VendorPanMaster() {
         tdsSections,
         bankDetails,
       );
+      if (
+        payload.addresses_data.some((addr) => !String(addr.address ?? "").trim())
+      ) {
+        closeDetailsModal();
+        goToManualCreate(selected);
+        return;
+      }
       const response = (await submitCustomerVerification(
         payload,
         supportingDocuments,
@@ -885,11 +920,21 @@ export default function VendorPanMaster() {
       setTdsSections([emptyTdsSectionRow()]);
       setBankDetails([emptyBankDetailRow()]);
       setDetailsErrors({});
-      navigate("/master/create-vendor-pan", { replace: true });
+      navigate("/master/vendor-approval-status", { replace: true });
     } catch (error) {
+      const apiMessage = formatVendorCreateError(extractApiErrorMessage(error));
+      const isBlankAddressError = /blank|address/i.test(apiMessage);
+      if (
+        isBlankAddressError &&
+        selected.some((record) => !hasUsableAttestrAddress(record))
+      ) {
+        closeDetailsModal();
+        goToManualCreate(selected);
+        return;
+      }
       ToastNotification({
         type: "error",
-        message: formatVendorCreateError(extractApiErrorMessage(error)),
+        message: apiMessage,
       });
     } finally {
       setIsCreating(false);
