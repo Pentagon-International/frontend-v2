@@ -2,6 +2,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Grid,
   Group,
   Text,
@@ -301,6 +302,7 @@ const calcVatTotalFromCharges = (
     charge_id?: number | null;
   }>,
   billingCurrency?: string | null,
+  invertNet = false,
 ): number => {
   let cr = 0;
   let dr = 0;
@@ -312,8 +314,10 @@ const calcVatTotalFromCharges = (
     if (resolveChargeDrCr(charge) === "Dr") dr += amount;
     else cr += amount;
   }
-  return clampVatAmount(cr - dr, billingCurrency) ?? 0;
+  const net = invertNet ? dr - cr : cr - dr;
+  return clampVatAmount(net, billingCurrency) ?? 0;
 };
+
 const fetchCurrencyMaster = async () => {
   try {
     const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
@@ -845,10 +849,14 @@ function resolveChargeLocalAmount(charge: DrCrChargeLike): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Net totals: sum(Cr) − sum(Dr) for currency/header/local amounts. */
+/** Net totals: invoice = Cr − Dr; credit note / reversal = Dr − Cr (positive amounts). */
 function calcChargeTotalsByDrCr(
   charges: DrCrChargeLike[],
-  options?: { includeTaxRows?: boolean; billingCurrency?: string | null },
+  options?: {
+    includeTaxRows?: boolean;
+    billingCurrency?: string | null;
+    invertNet?: boolean;
+  },
 ): {
   crAmountTotal: number;
   drAmountTotal: number;
@@ -887,16 +895,23 @@ function calcChargeTotalsByDrCr(
     }
   }
 
+  const invertNet = options?.invertNet === true;
   const crAmountTotal = clampCurrencyAmount(crAmount) ?? 0;
   const drAmountTotal = clampCurrencyAmount(drAmount) ?? 0;
   const crHeaderTotal = clampHeaderAmount(crHeader, billingCurrency) ?? 0;
   const drHeaderTotal = clampHeaderAmount(drHeader, billingCurrency) ?? 0;
   const crLocalTotal = clampLocalAmount(crLocal) ?? 0;
   const drLocalTotal = clampLocalAmount(drLocal) ?? 0;
-  const amount_total = clampCurrencyAmount(crAmount - drAmount) ?? 0;
+  const amount_total =
+    clampCurrencyAmount(invertNet ? drAmount - crAmount : crAmount - drAmount) ??
+    0;
   const header_total =
-    clampHeaderAmount(crHeader - drHeader, billingCurrency) ?? 0;
-  const local_total = clampLocalAmount(crLocal - drLocal) ?? 0;
+    clampHeaderAmount(
+      invertNet ? drHeader - crHeader : crHeader - drHeader,
+      billingCurrency,
+    ) ?? 0;
+  const local_total =
+    clampLocalAmount(invertNet ? drLocal - crLocal : crLocal - drLocal) ?? 0;
 
   return {
     crAmountTotal,
@@ -912,7 +927,7 @@ function calcChargeTotalsByDrCr(
   };
 }
 
-/** Net GST totals: sum(Cr GST) − sum(Dr GST) from local amount × rate. */
+/** Net GST totals: invoice = Cr − Dr; credit note = Dr − Cr. */
 function calcGstTotalsByDrCr(
   charges: Array<{
     dr_cr?: string | null;
@@ -924,6 +939,7 @@ function calcGstTotalsByDrCr(
     number,
     { igst: number | null; cgst: number | null; sgst: number | null } | null
   >,
+  invertNet = false,
 ): { igst_total: number; cgst_total: number; sgst_total: number } {
   let crIgst = 0;
   let drIgst = 0;
@@ -981,9 +997,9 @@ function calcGstTotalsByDrCr(
   });
 
   return {
-    igst_total: clampAmount(crIgst - drIgst) ?? 0,
-    cgst_total: clampAmount(crCgst - drCgst) ?? 0,
-    sgst_total: clampAmount(crSgst - drSgst) ?? 0,
+    igst_total: clampAmount(invertNet ? drIgst - crIgst : crIgst - drIgst) ?? 0,
+    cgst_total: clampAmount(invertNet ? drCgst - crCgst : crCgst - drCgst) ?? 0,
+    sgst_total: clampAmount(invertNet ? drSgst - crSgst : crSgst - drSgst) ?? 0,
   };
 }
 
@@ -1081,6 +1097,63 @@ function resolvePartyStateIdFromHousing(
   )
     return null;
   return Number(raw);
+}
+
+function isAgentTypeToken(value: unknown): boolean {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "agent") return true;
+  return normalized.split(/[,/|]/).some((part) => part.trim() === "agent");
+}
+
+/** True when a customer-master search row includes the Agent party type. */
+function customerRecordIsAgent(
+  record?: Record<string, unknown> | null,
+): boolean {
+  if (!record) return false;
+  if (record.is_agent === true) return true;
+
+  const nestedTypeLists: unknown[] = [record.customer_types, record.types];
+  if (Array.isArray(record.customer_type)) {
+    nestedTypeLists.push(record.customer_type);
+  }
+  for (const raw of nestedTypeLists) {
+    if (!Array.isArray(raw)) continue;
+    for (const item of raw) {
+      if (isAgentTypeToken(item)) return true;
+      if (item && typeof item === "object") {
+        const rec = item as Record<string, unknown>;
+        if (
+          isAgentTypeToken(rec.customer_type_name) ||
+          isAgentTypeToken(rec.customer_type_code) ||
+          isAgentTypeToken(rec.name) ||
+          isAgentTypeToken(rec.code)
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  if (record.customer_type && typeof record.customer_type === "object") {
+    const rec = record.customer_type as Record<string, unknown>;
+    if (
+      isAgentTypeToken(rec.customer_type_name) ||
+      isAgentTypeToken(rec.customer_type_code) ||
+      isAgentTypeToken(rec.name) ||
+      isAgentTypeToken(rec.code)
+    ) {
+      return true;
+    }
+  }
+
+  return (
+    isAgentTypeToken(record.customer_type_name) ||
+    isAgentTypeToken(record.customer_type_code) ||
+    isAgentTypeToken(record.customer_type)
+  );
 }
 
 function isUnitedStatesCountry(
@@ -1362,9 +1435,22 @@ function InvoiceCreate({
   const isGstInvoiceRef = useRef(false);
   const isVatInvoiceRef = useRef(false);
   const isUsInvoiceRef = useRef(false);
+  const creditNoteAgentHydratedRef = useRef(false);
+  /** Credit note: Agent checkbox after Bill To is user-selected (not house shipper/consignee prefill). */
+  const [creditNoteShowAgentCheckbox, setCreditNoteShowAgentCheckbox] =
+    useState(false);
+  const [creditNoteIsAgentChecked, setCreditNoteIsAgentChecked] =
+    useState(true);
+  const [creditNoteBillToUserTouched, setCreditNoteBillToUserTouched] =
+    useState(false);
 
   // Agent invoice: hide SAC, IGST/CGST/SGST. VAT still applies except US.
+  // Credit note: after the user re-selects an agent party, follow the Agent checkbox.
   const isAgentInvoice = useMemo(() => {
+    if (isCreditNoteFlow) {
+      if (creditNoteShowAgentCheckbox) return creditNoteIsAgentChecked;
+      if (creditNoteBillToUserTouched) return false;
+    }
     if ((location.state as { is_agent?: boolean } | null)?.is_agent === true)
       return true;
     const fromApi = (invoiceDataFromApi as { is_agent?: boolean } | null)
@@ -1375,6 +1461,10 @@ function InvoiceCreate({
     )?.is_agent;
     return fromState === true;
   }, [
+    isCreditNoteFlow,
+    creditNoteShowAgentCheckbox,
+    creditNoteIsAgentChecked,
+    creditNoteBillToUserTouched,
     location.state?.is_agent,
     location.state?.invoiceData,
     invoiceDataFromApi,
@@ -1400,6 +1490,44 @@ function InvoiceCreate({
   useEffect(() => {
     isAgentInvoiceRef.current = isAgentInvoice;
   }, [isAgentInvoice]);
+
+  useEffect(() => {
+    creditNoteAgentHydratedRef.current = false;
+    setCreditNoteShowAgentCheckbox(false);
+    setCreditNoteIsAgentChecked(true);
+    setCreditNoteBillToUserTouched(false);
+  }, [location.key]);
+
+  useEffect(() => {
+    if (
+      !isCreditNoteFlow ||
+      !isEditOrViewMode ||
+      creditNoteAgentHydratedRef.current
+    )
+      return;
+    if (
+      invoiceId &&
+      invoiceDataFromApi?.id != null &&
+      String(invoiceDataFromApi.id) !== String(invoiceId)
+    ) {
+      return;
+    }
+    const fromApi =
+      (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+    const fromState =
+      (location.state?.invoiceData as { is_agent?: boolean } | undefined)
+        ?.is_agent === true;
+    if (!fromApi && !fromState) return;
+    creditNoteAgentHydratedRef.current = true;
+    setCreditNoteShowAgentCheckbox(true);
+    setCreditNoteIsAgentChecked(true);
+  }, [
+    isCreditNoteFlow,
+    isEditOrViewMode,
+    invoiceId,
+    invoiceDataFromApi,
+    location.state?.invoiceData,
+  ]);
 
   // When opened from job level: show "Job id" instead of "Shipment No"
   // When opened from house level: show "Shipment No" (including house-level agent invoice)
@@ -3434,6 +3562,11 @@ function InvoiceCreate({
     const isCleared =
       value == null || (typeof value === "string" && value.trim() === "");
     if (isCleared) {
+      if (isCreditNoteFlow) {
+        setCreditNoteBillToUserTouched(true);
+        setCreditNoteShowAgentCheckbox(false);
+        setCreditNoteIsAgentChecked(true);
+      }
       setAddressOptions([]);
       billToAddressesRef.current = [];
       form.setFieldValue("address", "");
@@ -3444,6 +3577,13 @@ function InvoiceCreate({
         form.setFieldValue("gstn", "");
       }
       return;
+    }
+
+    if (isCreditNoteFlow) {
+      setCreditNoteBillToUserTouched(true);
+      const isAgentParty = customerRecordIsAgent(originalData);
+      setCreditNoteShowAgentCheckbox(isAgentParty);
+      setCreditNoteIsAgentChecked(true);
     }
 
     // Party selected/changed → apply due date from credit_day once SEZ responds
@@ -3692,16 +3832,14 @@ function InvoiceCreate({
         return;
       }
 
-      // Net totals are Cr − Dr for currency/header/local amounts.
+      // Invoice: Cr − Dr. Credit note: Dr − Cr so amounts stay positive (receipt reversal).
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         values.charges.filter((c) => c.is_tax_row !== true),
-        { billingCurrency: values.currency },
+        {
+          billingCurrency: values.currency,
+          invertNet: isCreditNoteFlow,
+        },
       );
-
-      const isAgentSave =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
 
       const isVatSave = isVatInvoiceUser;
 
@@ -3793,7 +3931,7 @@ function InvoiceCreate({
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
-              Dr_Cr: charge.dr_cr ?? "Cr",
+              Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
               tax_rate: taxRate,
               tax_amount: taxAmount,
             };
@@ -3836,7 +3974,7 @@ function InvoiceCreate({
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
-            Dr_Cr: charge.dr_cr ?? "Cr",
+            Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
             igst_rate: igstRate,
             cgst_rate: cgstRate,
             sgst_rate: sgstRate,
@@ -3847,10 +3985,7 @@ function InvoiceCreate({
         });
 
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
-      const isAgent =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
+      const isAgent = isAgentInvoice;
       const job = (
         location.state as { job?: { job_id?: number; id?: number } } | null
       )?.job;
@@ -4020,10 +4155,7 @@ function InvoiceCreate({
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
-      const isAgentPost =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
+      const isAgentPost = isAgentInvoice;
       const isVatPost = isVatInvoiceUser;
       const isUsPost = isUsInvoiceUser;
       const stateValid = stateId != null && stateId > 0;
@@ -4182,7 +4314,7 @@ function InvoiceCreate({
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
-              Dr_Cr: charge.dr_cr ?? "Cr",
+              Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
               tax_rate: taxRate,
               tax_amount: taxAmount,
             };
@@ -4225,7 +4357,7 @@ function InvoiceCreate({
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
-            Dr_Cr: charge.dr_cr ?? "Cr",
+            Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
             igst_rate: igstRate,
             cgst_rate: cgstRate,
             sgst_rate: sgstRate,
@@ -4256,7 +4388,7 @@ function InvoiceCreate({
                 amount: currencyAmount,
                 amount_in_local: amountInLocal,
                 amount_in_header: amountInHeader,
-                Dr_Cr: "Cr",
+                Dr_Cr: chargeDefaultDrCr,
               };
             })
         : isAgentPost || isUsPost || hasSez || isVatPost
@@ -4301,8 +4433,8 @@ function InvoiceCreate({
                   igst: null,
                   cgst: null,
                   sgst: null,
-                  // Tax rows always Cr on invoice create/post; charge Dr_Cr stays user-selected
-                  Dr_Cr: "Cr",
+                  // Invoice tax rows are Cr; credit note tax rows follow chargeDefaultDrCr (Dr).
+                  Dr_Cr: chargeDefaultDrCr,
                 };
               });
 
@@ -4314,7 +4446,11 @@ function InvoiceCreate({
       // Recompute net totals from final charges payload (base charges + appended tax rows)
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         allChargesPayload,
-        { includeTaxRows: true, billingCurrency: values.currency },
+        {
+          includeTaxRows: true,
+          billingCurrency: values.currency,
+          invertNet: isCreditNoteFlow,
+        },
       );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
@@ -4659,15 +4795,22 @@ function InvoiceCreate({
     () =>
       calcChargeTotalsByDrCr(
         form.values.charges.filter((c) => c.is_tax_row !== true),
-        { billingCurrency: form.values.currency },
+        {
+          billingCurrency: form.values.currency,
+          invertNet: isCreditNoteFlow,
+        },
       ),
-    [form.values.charges, form.values.currency],
+    [form.values.charges, form.values.currency, isCreditNoteFlow],
   );
 
   const vatSectionTotal = useMemo(
     () =>
-      calcVatTotalFromCharges(form.values.charges, form.values.currency),
-    [form.values.charges, form.values.currency],
+      calcVatTotalFromCharges(
+        form.values.charges,
+        form.values.currency,
+        isCreditNoteFlow,
+      ),
+    [form.values.charges, form.values.currency, isCreditNoteFlow],
   );
 
   const vatTotalWholeNumbersOnly = useMemo(
@@ -4676,8 +4819,13 @@ function InvoiceCreate({
   );
 
   const gstSectionTotals = useMemo(
-    () => calcGstTotalsByDrCr(form.values.charges, gstRatesByChargeIndex),
-    [form.values.charges, gstRatesByChargeIndex],
+    () =>
+      calcGstTotalsByDrCr(
+        form.values.charges,
+        gstRatesByChargeIndex,
+        isCreditNoteFlow,
+      ),
+    [form.values.charges, gstRatesByChargeIndex, isCreditNoteFlow],
   );
 
   // Distribute Mantine grid spans (12 cols); VAT rate/amount match no-of-unit width
@@ -4866,8 +5014,8 @@ function InvoiceCreate({
         >
           <Grid>
             {/* Row 1: 4 fields - Bill To (span 4 = 2 fields), State, GSTN, Shipment No */}
-            {/* Bill To - spans 2 fields (span=4) */}
-            <Grid.Col span={4}>
+            {/* Bill To - spans 2 fields (span=4); shrinks when credit-note Agent checkbox is shown */}
+            <Grid.Col span={creditNoteShowAgentCheckbox ? 3 : 4}>
               <SearchableSelect
                 key={`invoice-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
@@ -4913,6 +5061,35 @@ function InvoiceCreate({
                 }
               />
             </Grid.Col>
+            {creditNoteShowAgentCheckbox && (
+              <Grid.Col
+                span={1}
+                style={{ display: "flex", alignItems: "flex-end" }}
+              >
+                <Checkbox
+                  label="Agent"
+                  color="#105476"
+                  checked={creditNoteIsAgentChecked}
+                  onChange={(event) =>
+                    setCreditNoteIsAgentChecked(event.currentTarget.checked)
+                  }
+                  disabled={isReadOnly}
+                  styles={{
+                    root: {
+                      height: 36,
+                      display: "flex",
+                      alignItems: "center",
+                    },
+                    body: { alignItems: "center" },
+                    label: {
+                      fontSize: 13,
+                      fontFamily: "Inter",
+                      paddingLeft: 8,
+                    },
+                  }}
+                />
+              </Grid.Col>
+            )}
 
             {isGstInvoiceUser && (
               <>

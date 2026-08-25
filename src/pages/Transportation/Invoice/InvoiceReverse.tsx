@@ -602,6 +602,19 @@ function parseNullableNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function unsignedFinite(n: number | null): number | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  return Math.abs(n);
+}
+
+function flipChargeDrCr(value: string | null | undefined): "Dr" | "Cr" {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase() === "dr"
+    ? "Cr"
+    : "Dr";
+}
+
 function isUnitedStatesCountry(
   countryCode?: string | null,
   countryName?: string | null,
@@ -790,6 +803,7 @@ function applyReversableDataToReverseForm(
     setBillToDisplayName: (v: string | null) => void;
     emptyDaybook: boolean;
     preserveChargeIds?: boolean;
+    invertChargeDrCr?: boolean;
   },
 ) {
   opts.setIsAgentInvoice(data.is_agent === true);
@@ -874,21 +888,27 @@ function applyReversableDataToReverseForm(
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
               currency: c.currency_code ?? "",
               roe: Number.isFinite(roe) ? roe : null,
-              amount_per_unit: Number.isFinite(amountPerUnit)
-                ? amountPerUnit
-                : null,
-              amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount)
-                ? headerAmount
-                : null,
-              amount_in_local: Number.isFinite(amountInLocal)
-                ? amountInLocal
-                : null,
+              amount_per_unit: unsignedFinite(
+                Number.isFinite(amountPerUnit) ? amountPerUnit : null,
+              ),
+              amount: unsignedFinite(Number.isFinite(amount) ? amount : null),
+              header_amount: unsignedFinite(
+                Number.isFinite(headerAmount) ? headerAmount : null,
+              ),
+              amount_in_local: unsignedFinite(
+                Number.isFinite(amountInLocal) ? amountInLocal : null,
+              ),
               tax_code: c.tax_code ?? "",
-              dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+              dr_cr: opts.invertChargeDrCr
+                ? flipChargeDrCr(c.Dr_Cr)
+                : c.Dr_Cr === "Dr"
+                  ? "Dr"
+                  : "Cr",
               is_tax_row: isTaxRow,
               tax_rate: isTaxRow ? null : parseNullableNumber(c.tax_rate),
-              tax_amount: isTaxRow ? null : parseNullableNumber(c.tax_amount),
+              tax_amount: isTaxRow
+                ? null
+                : unsignedFinite(parseNullableNumber(c.tax_amount)),
             };
           })
         : [],
@@ -1718,6 +1738,7 @@ function InvoiceReverse() {
           setBillToDisplayName,
           emptyDaybook: true,
           preserveChargeIds: false,
+          invertChargeDrCr: true,
         });
         setHasSez(Boolean(data.has_sez));
       })
@@ -1963,14 +1984,16 @@ function InvoiceReverse() {
             no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
             currency: c.currency_code ?? "",
             roe: Number.isFinite(roe) ? roe : null,
-            amount_per_unit: Number.isFinite(amountPerUnit)
-              ? amountPerUnit
-              : null,
-            amount: Number.isFinite(amount) ? amount : null,
-            header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
-            amount_in_local: Number.isFinite(amountInLocal)
-              ? amountInLocal
-              : null,
+            amount_per_unit: unsignedFinite(
+              Number.isFinite(amountPerUnit) ? amountPerUnit : null,
+            ),
+            amount: unsignedFinite(Number.isFinite(amount) ? amount : null),
+            header_amount: unsignedFinite(
+              Number.isFinite(headerAmount) ? headerAmount : null,
+            ),
+            amount_in_local: unsignedFinite(
+              Number.isFinite(amountInLocal) ? amountInLocal : null,
+            ),
             tax_code: c.tax_code ?? "",
             dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
             is_tax_row: isTaxRow,
@@ -3233,7 +3256,7 @@ function InvoiceReverse() {
                             { value: "Cr", label: "Cr" },
                             { value: "Dr", label: "Dr" },
                           ]}
-                          value={charge.dr_cr ?? "Cr"}
+                          value={charge.dr_cr ?? "Dr"}
                           onChange={(value) =>
                             form.setFieldValue(
                               `charges.${index}.dr_cr`,
@@ -3520,7 +3543,7 @@ function InvoiceReverse() {
                                     header_amount: null,
                                     amount_in_local: null,
                                     tax_code: "",
-                                    dr_cr: "Cr",
+                                    dr_cr: "Dr",
                                   });
                                 }}
                               >
