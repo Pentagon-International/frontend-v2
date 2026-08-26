@@ -78,14 +78,13 @@ const fetchStateMaster = async () => {
   }
 };
 
-// Daybook for reverse invoice: CRN document_type (invoice page uses INV)
-const fetchDaybookCRN = async () => {
+const fetchDaybookByDocumentType = async (documentType: "INV" | "CRN") => {
   try {
-    const payload = { filters: { document_type: "CRN" } };
+    const payload = { filters: { document_type: documentType } };
     const response = await postAPICall(URL.daybook, payload, API_HEADER);
     return (response as { data?: unknown[] })?.data ?? [];
   } catch (error) {
-    console.error("Error fetching daybook (CRN):", error);
+    console.error(`Error fetching daybook (${documentType}):`, error);
     return [];
   }
 };
@@ -223,6 +222,41 @@ type DrCrChargeLike = {
   charge_name?: string | null;
 };
 
+/** Invoice reversal nets Dr − Cr. Credit-note reversal nets Cr − Dr (invoice). */
+type TotalsNetDirection = "crMinusDr" | "drMinusCr";
+
+function netDrCrAmount(
+  cr: number,
+  dr: number,
+  netDirection: TotalsNetDirection = "drMinusCr",
+): number {
+  return netDirection === "crMinusDr" ? cr - dr : dr - cr;
+}
+
+function invertDrCr(value: string | null | undefined): "Dr" | "Cr" {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase() === "dr"
+    ? "Cr"
+    : "Dr";
+}
+
+function isCreditNoteSourceDocument(
+  data: { document_type?: unknown } | null | undefined,
+  navState: unknown,
+): boolean {
+  const rec =
+    navState && typeof navState === "object"
+      ? (navState as Record<string, unknown>)
+      : {};
+  const docType = String(
+    data?.document_type ?? rec.document_type ?? rec.source_document_type ?? "",
+  )
+    .toUpperCase()
+    .trim();
+  return docType === "CRN";
+}
+
 function resolveChargeDrCr(
   charge: Pick<DrCrChargeLike, "dr_cr" | "Dr_Cr">,
 ): "Cr" | "Dr" {
@@ -271,10 +305,10 @@ function isReverseTaxChargeRow(charge: {
   );
 }
 
-/** Net totals for reverse: sum(Dr) − sum(Cr) for currency/header/local amounts. */
+/** Net totals for reverse: invoice reversal is Dr − Cr; credit-note reversal is Cr − Dr. */
 function calcChargeTotalsByDrCr(
   charges: DrCrChargeLike[],
-  options?: { includeTaxRows?: boolean },
+  options?: { includeTaxRows?: boolean; netDirection?: TotalsNetDirection },
 ): {
   crAmountTotal: number;
   drAmountTotal: number;
@@ -288,6 +322,7 @@ function calcChargeTotalsByDrCr(
   total: number;
 } {
   const includeTaxRows = options?.includeTaxRows ?? false;
+  const netDirection = options?.netDirection ?? "drMinusCr";
   let crAmount = 0;
   let drAmount = 0;
   let crHeader = 0;
@@ -318,9 +353,12 @@ function calcChargeTotalsByDrCr(
   const drHeaderTotal = clampAmount(drHeader) ?? 0;
   const crLocalTotal = clampAmount(crLocal) ?? 0;
   const drLocalTotal = clampAmount(drLocal) ?? 0;
-  const amount_total = clampAmount(drAmount - crAmount) ?? 0;
-  const header_total = clampAmount(drHeader - crHeader) ?? 0;
-  const local_total = clampAmount(drLocal - crLocal) ?? 0;
+  const amount_total =
+    clampAmount(netDrCrAmount(crAmount, drAmount, netDirection)) ?? 0;
+  const header_total =
+    clampAmount(netDrCrAmount(crHeader, drHeader, netDirection)) ?? 0;
+  const local_total =
+    clampAmount(netDrCrAmount(crLocal, drLocal, netDirection)) ?? 0;
 
   return {
     crAmountTotal,
@@ -336,7 +374,7 @@ function calcChargeTotalsByDrCr(
   };
 }
 
-/** Net GST totals for reverse: sum(Dr GST) − sum(Cr GST) from local amount × rate. */
+/** Net GST totals: invoice reversal is Dr − Cr; credit-note reversal is Cr − Dr. */
 function calcGstTotalsByDrCr(
   charges: Array<{
     dr_cr?: string | null;
@@ -350,6 +388,7 @@ function calcGstTotalsByDrCr(
     number,
     { igst: number | null; cgst: number | null; sgst: number | null } | null
   >,
+  netDirection: TotalsNetDirection = "drMinusCr",
 ): { igst_total: number; cgst_total: number; sgst_total: number } {
   let crIgst = 0;
   let drIgst = 0;
@@ -407,9 +446,9 @@ function calcGstTotalsByDrCr(
   });
 
   return {
-    igst_total: clampAmount(drIgst - crIgst) ?? 0,
-    cgst_total: clampAmount(drCgst - crCgst) ?? 0,
-    sgst_total: clampAmount(drSgst - crSgst) ?? 0,
+    igst_total: clampAmount(netDrCrAmount(crIgst, drIgst, netDirection)) ?? 0,
+    cgst_total: clampAmount(netDrCrAmount(crCgst, drCgst, netDirection)) ?? 0,
+    sgst_total: clampAmount(netDrCrAmount(crSgst, drSgst, netDirection)) ?? 0,
   };
 }
 
@@ -487,7 +526,7 @@ const resolveVatTaxRate = (
 
 /** Live VAT total from charges only (no tax-tab / breakup). Prefer rate ×
  * amount on each row, else stored tax_amount, else VAT tax-row amounts.
- * Reverse nets Dr − Cr. */
+ * Invoice reversal nets Dr − Cr. Credit-note reversal nets Cr − Dr. */
 const calcVatTotalFromCharges = (
   charges: Array<{
     dr_cr?: string | null;
@@ -501,6 +540,7 @@ const calcVatTotalFromCharges = (
     charge_code?: string | null;
     charge_name?: string | null;
   }>,
+  netDirection: TotalsNetDirection = "drMinusCr",
 ): number => {
   let cr = 0;
   let dr = 0;
@@ -526,7 +566,7 @@ const calcVatTotalFromCharges = (
     if (resolveChargeDrCr(charge) === "Dr") dr += amount;
     else cr += amount;
   }
-  if (usedLineTax) return clampAmount(dr - cr) ?? 0;
+  if (usedLineTax) return clampAmount(netDrCrAmount(cr, dr, netDirection)) ?? 0;
 
   for (const charge of charges) {
     if (!isReverseTaxChargeRow(charge)) continue;
@@ -550,10 +590,10 @@ const calcVatTotalFromCharges = (
     if (resolveChargeDrCr(charge) === "Dr") dr += amount;
     else cr += amount;
   }
-  return clampAmount(dr - cr) ?? 0;
+  return clampAmount(netDrCrAmount(cr, dr, netDirection)) ?? 0;
 };
 
-/** GST totals from IGST/CGST/SGST charge rows already on the invoice (Dr − Cr). */
+/** GST totals from IGST/CGST/SGST charge rows already on the document. */
 function calcGstTotalsFromTaxChargeRows(
   charges: Array<{
     dr_cr?: string | null;
@@ -566,6 +606,7 @@ function calcGstTotalsFromTaxChargeRows(
     charge_code?: string | null;
     charge_name?: string | null;
   }>,
+  netDirection: TotalsNetDirection = "drMinusCr",
 ): { igst_total: number; cgst_total: number; sgst_total: number } {
   let igst = 0;
   let cgst = 0;
@@ -580,7 +621,15 @@ function calcGstTotalsFromTaxChargeRows(
     const key = code || name;
     if (key !== "IGST" && key !== "CGST" && key !== "SGST") continue;
     const amount = resolveChargeLocalAmount(charge);
-    const signed = resolveChargeDrCr(charge) === "Dr" ? amount : -amount;
+    const isDr = resolveChargeDrCr(charge) === "Dr";
+    const signed =
+      netDirection === "crMinusDr"
+        ? isDr
+          ? -amount
+          : amount
+        : isDr
+          ? amount
+          : -amount;
     if (key === "IGST") igst += signed;
     else if (key === "CGST") cgst += signed;
     else sgst += signed;
@@ -753,6 +802,7 @@ type ReversableDataResponse = {
   total?: string | number;
   header_total?: string | number;
   Dr_Cr?: string;
+  document_type?: string;
   is_agent?: boolean;
   has_sez?: boolean;
   charges?: Array<{
@@ -786,6 +836,7 @@ function applyReversableDataToReverseForm(
     setBillToDisplayName: (v: string | null) => void;
     emptyDaybook: boolean;
     preserveChargeIds?: boolean;
+    invertChargeDrCr?: boolean;
   },
 ) {
   opts.setIsAgentInvoice(data.is_agent === true);
@@ -858,6 +909,7 @@ function applyReversableDataToReverseForm(
               charge_code: c.charge_code,
               charge_name: c.charge_name,
             });
+            const sourceDrCr = c.Dr_Cr === "Dr" ? "Dr" : "Cr";
             return {
               ...(opts.preserveChargeIds && c.id != null && c.id > 0
                 ? { id: c.id }
@@ -881,7 +933,9 @@ function applyReversableDataToReverseForm(
                 ? amountInLocal
                 : null,
               tax_code: c.tax_code ?? "",
-              dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+              dr_cr: opts.invertChargeDrCr
+                ? invertDrCr(sourceDrCr)
+                : sourceDrCr,
               is_tax_row: isTaxRow,
               tax_rate: isTaxRow ? null : parseNullableNumber(c.tax_rate),
               tax_amount: isTaxRow ? null : parseNullableNumber(c.tax_amount),
@@ -921,6 +975,7 @@ function buildReverseChargePayload(
     unitData: Array<{ id?: number; unit_code?: string; code?: string }>;
     isVat: boolean;
     isGst: boolean;
+    defaultDrCr?: "Dr" | "Cr";
   },
 ): Record<string, unknown> {
   const chargeCurrencyItem = opts.currencyData.find(
@@ -950,7 +1005,7 @@ function buildReverseChargePayload(
     amount: clampAmount(charge.amount ?? 0) ?? 0,
     amount_in_local: clampAmount(charge.amount_in_local ?? 0) ?? 0,
     amount_in_header: headerAmount,
-    Dr_Cr: charge.dr_cr ?? "Dr",
+    Dr_Cr: charge.dr_cr ?? opts.defaultDrCr ?? "Dr",
     ...(opts.isGst ? { tax_code: charge.tax_code ?? "" } : {}),
     ...(isTaxRow ? { is_tax_row: true } : {}),
   };
@@ -1012,6 +1067,24 @@ function InvoiceReverse() {
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [isCreditNoteReversal, setIsCreditNoteReversal] = useState(() => {
+    const st = location.state as {
+      reverse_invoice_id?: number;
+      document_type?: unknown;
+      financeReverseRecord?: { id?: number };
+    } | null;
+    const editingExisting =
+      (st?.reverse_invoice_id != null && Number(st.reverse_invoice_id) > 0) ||
+      (st?.financeReverseRecord?.id != null &&
+        Number(st.financeReverseRecord.id) > 0);
+    if (editingExisting) return false;
+    return isCreditNoteSourceDocument(null, st);
+  });
+  const totalsNetDirection: TotalsNetDirection = isCreditNoteReversal
+    ? "crMinusDr"
+    : "drMinusCr";
+  const headerDrCr: "Dr" | "Cr" = isCreditNoteReversal ? "Dr" : "Cr";
+  const chargeDefaultDrCr: "Dr" | "Cr" = isCreditNoteReversal ? "Cr" : "Dr";
   const [chargesTabActive, setChargesTabActive] = useState<string>("charges");
   const [gstBreakup, setGstBreakup] = useState<InvoiceTaxBreakup | null>(null);
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
@@ -1153,8 +1226,12 @@ function InvoiceReverse() {
 
   const isReadOnly = invoiceIsPosted;
   const reversalPageTitle = saveResponse?.id
-    ? "Edit Invoice Reversal"
-    : "Create Invoice Reversal";
+    ? isCreditNoteReversal
+      ? "Edit Credit Note Reversal"
+      : "Edit Invoice Reversal"
+    : isCreditNoteReversal
+      ? "Create Credit Note Reversal"
+      : "Create Invoice Reversal";
 
   const reversalAuditSource = useMemo(
     () =>
@@ -1260,9 +1337,12 @@ function InvoiceReverse() {
     queryFn: fetchStateMaster,
     staleTime: Infinity,
   });
+  const daybookDocumentType: "INV" | "CRN" = isCreditNoteReversal
+    ? "INV"
+    : "CRN";
   const { data: daybookData = [] } = useQuery({
-    queryKey: ["daybook", "CRN"],
-    queryFn: fetchDaybookCRN,
+    queryKey: ["daybook", daybookDocumentType],
+    queryFn: () => fetchDaybookByDocumentType(daybookDocumentType),
     staleTime: Infinity,
   });
   const { data: unitData = [] } = useQuery({
@@ -1612,6 +1692,8 @@ function InvoiceReverse() {
     type NavState = {
       reverse_invoice_id?: number;
       document_no?: string;
+      document_type?: unknown;
+      source_document_type?: unknown;
       financeReverseRecord?: ReversableDataResponse;
       reverse_document_no?: string;
       invoice_document_no?: string;
@@ -1643,17 +1725,19 @@ function InvoiceReverse() {
             });
             return;
           }
-          applyReversableDataToReverseForm(
-            data as ReversableDataResponse,
-            form,
-            {
-              setIsAgentInvoice,
-              setBillToDisplayName,
-              emptyDaybook: false,
-              preserveChargeIds: true,
-            },
+          const loaded = data as ReversableDataResponse;
+          // Existing reverse: header Dr means this was a credit-note reversal.
+          setIsCreditNoteReversal(
+            String(loaded.Dr_Cr ?? "").toLowerCase() === "dr",
           );
-          setHasSez(Boolean((data as ReversableDataResponse).has_sez));
+          applyReversableDataToReverseForm(loaded, form, {
+            setIsAgentInvoice,
+            setBillToDisplayName,
+            emptyDaybook: false,
+            preserveChargeIds: true,
+            invertChargeDrCr: false,
+          });
+          setHasSez(Boolean(loaded.has_sez));
           setReversalRecordData(data as Record<string, unknown>);
           setDocumentNo(
             String(
@@ -1708,11 +1792,14 @@ function InvoiceReverse() {
         if (cancelled) return;
         const data = ((res as { data?: ReversableDataResponse })?.data ??
           res) as ReversableDataResponse;
+        const isCnSource = isCreditNoteSourceDocument(data, st);
+        setIsCreditNoteReversal(isCnSource);
         applyReversableDataToReverseForm(data, form, {
           setIsAgentInvoice,
           setBillToDisplayName,
           emptyDaybook: true,
           preserveChargeIds: false,
+          invertChargeDrCr: isCnSource,
         });
         setHasSez(Boolean(data.has_sez));
       })
@@ -1825,11 +1912,12 @@ function InvoiceReverse() {
           unitData: unitDataArr,
           isVat: isVatPost,
           isGst: isGstInvoiceUser,
+          defaultDrCr: chargeDefaultDrCr,
         }),
       );
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         chargesPayload as DrCrChargeLike[],
-        { includeTaxRows: true },
+        { includeTaxRows: true, netDirection: totalsNetDirection },
       );
       const addressLabelForPayload =
         addressOptions.find((opt) => opt.value === values.address)?.label ??
@@ -1863,7 +1951,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Cr",
+        Dr_Cr: headerDrCr,
         has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
         taxes: [],
@@ -2145,7 +2233,7 @@ function InvoiceReverse() {
       }
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         values.charges,
-        { includeTaxRows: true },
+        { includeTaxRows: true, netDirection: totalsNetDirection },
       );
       /** Payload dates: same YYYY-MM-DD as invoice create.
        * Reverse has no tax tab — send user + tax charge rows as-is. */
@@ -2167,6 +2255,7 @@ function InvoiceReverse() {
           unitData: unitDataArr,
           isVat: isVatSave,
           isGst: isGstInvoiceUser,
+          defaultDrCr: chargeDefaultDrCr,
         }),
       );
       const payload = {
@@ -2200,7 +2289,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Cr",
+        Dr_Cr: headerDrCr,
         has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
       };
@@ -2324,17 +2413,21 @@ function InvoiceReverse() {
     () =>
       calcChargeTotalsByDrCr(
         form.values.charges.filter((c) => !isReverseTaxChargeRow(c)),
+        { netDirection: totalsNetDirection },
       ),
-    [form.values.charges],
+    [form.values.charges, totalsNetDirection],
   );
 
   const vatSectionTotal = useMemo(
-    () => calcVatTotalFromCharges(form.values.charges),
-    [form.values.charges],
+    () => calcVatTotalFromCharges(form.values.charges, totalsNetDirection),
+    [form.values.charges, totalsNetDirection],
   );
 
   const gstSectionTotals = useMemo(() => {
-    const fromRows = calcGstTotalsFromTaxChargeRows(form.values.charges);
+    const fromRows = calcGstTotalsFromTaxChargeRows(
+      form.values.charges,
+      totalsNetDirection,
+    );
     const hasTaxRows = form.values.charges.some((c) => {
       const code = String(c.charge_code ?? "")
         .trim()
@@ -2346,8 +2439,12 @@ function InvoiceReverse() {
       return key === "IGST" || key === "CGST" || key === "SGST";
     });
     if (hasTaxRows) return fromRows;
-    return calcGstTotalsByDrCr(form.values.charges, gstRatesByChargeIndex);
-  }, [form.values.charges, gstRatesByChargeIndex]);
+    return calcGstTotalsByDrCr(
+      form.values.charges,
+      gstRatesByChargeIndex,
+      totalsNetDirection,
+    );
+  }, [form.values.charges, gstRatesByChargeIndex, totalsNetDirection]);
 
   if (loading) {
     return (
@@ -3196,7 +3293,7 @@ function InvoiceReverse() {
                             { value: "Cr", label: "Cr" },
                             { value: "Dr", label: "Dr" },
                           ]}
-                          value={charge.dr_cr ?? "Cr"}
+                          value={charge.dr_cr ?? chargeDefaultDrCr}
                           onChange={(value) =>
                             form.setFieldValue(
                               `charges.${index}.dr_cr`,

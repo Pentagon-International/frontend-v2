@@ -4854,6 +4854,13 @@ function InlandImportJobCreate() {
                                                 state: {
                                                   document_no:
                                                     row.document_no ?? "",
+                                                  document_type: String(
+                                                    (
+                                                      row as {
+                                                        document_type?: unknown;
+                                                      }
+                                                    ).document_type ?? "",
+                                                  ),
                                                   ...(location.state?.job && {
                                                     job: location.state.job,
                                                   }),

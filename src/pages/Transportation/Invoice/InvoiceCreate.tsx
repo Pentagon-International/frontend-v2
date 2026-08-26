@@ -283,7 +283,7 @@ function computeChargeVatAmount(
   return calcTaxAmountFromRate(taxBase, rate, billingCurrency);
 }
 
-/** Live VAT total from each charge's own rate × local/header amount (Cr − Dr). */
+/** Live VAT total from each charge's own rate × local/header amount. */
 const calcVatTotalFromCharges = (
   charges: Array<{
     dr_cr?: string | null;
@@ -297,6 +297,7 @@ const calcVatTotalFromCharges = (
     charge_id?: number | null;
   }>,
   billingCurrency?: string | null,
+  netDirection: TotalsNetDirection = "crMinusDr",
 ): number => {
   let cr = 0;
   let dr = 0;
@@ -308,7 +309,9 @@ const calcVatTotalFromCharges = (
     if (resolveChargeDrCr(charge) === "Dr") dr += amount;
     else cr += amount;
   }
-  return clampVatAmount(cr - dr, billingCurrency) ?? 0;
+  return (
+    clampVatAmount(netDrCrAmount(cr, dr, netDirection), billingCurrency) ?? 0
+  );
 };
 const fetchCurrencyMaster = async () => {
   try {
@@ -816,13 +819,50 @@ type DrCrChargeLike = {
   amount_in_header?: number | null;
   amount_in_local?: number | null;
   is_tax_row?: boolean;
+  charge_code?: string | null;
+  charge_name?: string | null;
 };
+
+/** Invoice nets Cr − Dr. Credit note (and invoice reversal) nets Dr − Cr. */
+type TotalsNetDirection = "crMinusDr" | "drMinusCr";
+
+function netDrCrAmount(
+  cr: number,
+  dr: number,
+  netDirection: TotalsNetDirection = "crMinusDr",
+): number {
+  return netDirection === "drMinusCr" ? dr - cr : cr - dr;
+}
 
 function resolveChargeDrCr(
   charge: Pick<DrCrChargeLike, "dr_cr" | "Dr_Cr">,
 ): "Cr" | "Dr" {
   const raw = charge.dr_cr ?? charge.Dr_Cr ?? "Cr";
   return String(raw).trim().toLowerCase() === "dr" ? "Dr" : "Cr";
+}
+
+function isInvoiceTaxChargeRow(charge: {
+  is_tax_row?: boolean;
+  charge_code?: string | null;
+  charge_name?: string | null;
+}): boolean {
+  if (charge.is_tax_row === true) return true;
+  const code = String(charge.charge_code ?? "")
+    .trim()
+    .toUpperCase();
+  const name = String(charge.charge_name ?? "")
+    .trim()
+    .toUpperCase();
+  return (
+    code === "IGST" ||
+    code === "CGST" ||
+    code === "SGST" ||
+    code === "VAT" ||
+    name === "IGST" ||
+    name === "CGST" ||
+    name === "SGST" ||
+    name === "VAT"
+  );
 }
 
 function resolveChargeHeaderAmount(charge: DrCrChargeLike): number {
@@ -841,10 +881,14 @@ function resolveChargeLocalAmount(charge: DrCrChargeLike): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Net totals: sum(Cr) − sum(Dr) for currency/header/local amounts. */
+/** Net totals: invoice is Cr − Dr; credit note is Dr − Cr (invoice reversal). */
 function calcChargeTotalsByDrCr(
   charges: DrCrChargeLike[],
-  options?: { includeTaxRows?: boolean; billingCurrency?: string | null },
+  options?: {
+    includeTaxRows?: boolean;
+    billingCurrency?: string | null;
+    netDirection?: TotalsNetDirection;
+  },
 ): {
   crAmountTotal: number;
   drAmountTotal: number;
@@ -859,6 +903,7 @@ function calcChargeTotalsByDrCr(
 } {
   const includeTaxRows = options?.includeTaxRows ?? false;
   const billingCurrency = options?.billingCurrency;
+  const netDirection = options?.netDirection ?? "crMinusDr";
   let crAmount = 0;
   let drAmount = 0;
   let crHeader = 0;
@@ -889,10 +934,15 @@ function calcChargeTotalsByDrCr(
   const drHeaderTotal = clampHeaderAmount(drHeader, billingCurrency) ?? 0;
   const crLocalTotal = clampLocalAmount(crLocal) ?? 0;
   const drLocalTotal = clampLocalAmount(drLocal) ?? 0;
-  const amount_total = clampCurrencyAmount(crAmount - drAmount) ?? 0;
+  const amount_total =
+    clampCurrencyAmount(netDrCrAmount(crAmount, drAmount, netDirection)) ?? 0;
   const header_total =
-    clampHeaderAmount(crHeader - drHeader, billingCurrency) ?? 0;
-  const local_total = clampLocalAmount(crLocal - drLocal) ?? 0;
+    clampHeaderAmount(
+      netDrCrAmount(crHeader, drHeader, netDirection),
+      billingCurrency,
+    ) ?? 0;
+  const local_total =
+    clampLocalAmount(netDrCrAmount(crLocal, drLocal, netDirection)) ?? 0;
 
   return {
     crAmountTotal,
@@ -908,7 +958,7 @@ function calcChargeTotalsByDrCr(
   };
 }
 
-/** Net GST totals: sum(Cr GST) − sum(Dr GST) from local amount × rate. */
+/** Net GST totals: invoice is Cr − Dr; credit note is Dr − Cr. */
 function calcGstTotalsByDrCr(
   charges: Array<{
     dr_cr?: string | null;
@@ -920,6 +970,7 @@ function calcGstTotalsByDrCr(
     number,
     { igst: number | null; cgst: number | null; sgst: number | null } | null
   >,
+  netDirection: TotalsNetDirection = "crMinusDr",
 ): { igst_total: number; cgst_total: number; sgst_total: number } {
   let crIgst = 0;
   let drIgst = 0;
@@ -977,9 +1028,54 @@ function calcGstTotalsByDrCr(
   });
 
   return {
-    igst_total: clampAmount(crIgst - drIgst) ?? 0,
-    cgst_total: clampAmount(crCgst - drCgst) ?? 0,
-    sgst_total: clampAmount(crSgst - drSgst) ?? 0,
+    igst_total: clampAmount(netDrCrAmount(crIgst, drIgst, netDirection)) ?? 0,
+    cgst_total: clampAmount(netDrCrAmount(crCgst, drCgst, netDirection)) ?? 0,
+    sgst_total: clampAmount(netDrCrAmount(crSgst, drSgst, netDirection)) ?? 0,
+  };
+}
+
+/** GST totals from IGST/CGST/SGST charge rows already on the document. */
+function calcGstTotalsFromTaxChargeRows(
+  charges: Array<{
+    dr_cr?: string | null;
+    Dr_Cr?: string | null;
+    amount_in_local?: number | null;
+    is_tax_row?: boolean;
+    charge_code?: string | null;
+    charge_name?: string | null;
+  }>,
+  netDirection: TotalsNetDirection = "crMinusDr",
+): { igst_total: number; cgst_total: number; sgst_total: number } {
+  let igst = 0;
+  let cgst = 0;
+  let sgst = 0;
+  for (const charge of charges) {
+    const code = String(charge.charge_code ?? "")
+      .trim()
+      .toUpperCase();
+    const name = String(charge.charge_name ?? "")
+      .trim()
+      .toUpperCase();
+    const key = code || name;
+    if (key !== "IGST" && key !== "CGST" && key !== "SGST") continue;
+    const amount = resolveChargeLocalAmount(charge);
+    const isDr = resolveChargeDrCr(charge) === "Dr";
+    const signed =
+      netDirection === "drMinusCr"
+        ? isDr
+          ? amount
+          : -amount
+        : isDr
+          ? -amount
+          : amount;
+    if (key === "IGST") igst += signed;
+    else if (key === "CGST") cgst += signed;
+    else sgst += signed;
+  }
+  return {
+    igst_total: clampAmount(igst) ?? 0,
+    cgst_total: clampAmount(cgst) ?? 0,
+    sgst_total: clampAmount(sgst) ?? 0,
   };
 }
 
@@ -2056,6 +2152,26 @@ function InvoiceCreate({
       } | null
     )?.invoiceData?.reverse_invoice_id,
   );
+
+  // Credit note uses invoice-reversal totals (Dr − Cr). Credit-note reversal
+  // (header Dr after inversion) uses invoice totals (Cr − Dr).
+  const sourceHeaderDrCr = String(
+    (invoiceDataFromApi as Record<string, unknown> | null)?.Dr_Cr ??
+      (invoiceDataFromApi as Record<string, unknown> | null)?.dr_cr ??
+      invoiceDataFromState?.Dr_Cr ??
+      invoiceDataFromState?.dr_cr ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+  const isCreditNoteReversalDocument =
+    isReverseInvoiceNavigation && sourceHeaderDrCr === "dr";
+  const totalsNetDirection: TotalsNetDirection =
+    isCreditNoteFlow && !isCreditNoteReversalDocument
+      ? "drMinusCr"
+      : "crMinusDr";
+  const taxRowDrCr: "Dr" | "Cr" =
+    isCreditNoteFlow && !isCreditNoteReversalDocument ? "Dr" : "Cr";
 
   const skipInvoiceDetailFetch = Boolean(
     (location.state as { skipInvoiceDetailFetch?: boolean } | null)
@@ -3687,10 +3803,10 @@ function InvoiceCreate({
         return;
       }
 
-      // Net totals are Cr − Dr for currency/header/local amounts.
+      // Invoice: Cr − Dr. Credit note: Dr − Cr (same as invoice reversal).
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         values.charges.filter((c) => c.is_tax_row !== true),
-        { billingCurrency: values.currency },
+        { billingCurrency: values.currency, netDirection: totalsNetDirection },
       );
 
       const isAgentSave =
@@ -3788,7 +3904,7 @@ function InvoiceCreate({
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
-              Dr_Cr: charge.dr_cr ?? "Cr",
+              Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
               tax_rate: taxRate,
               tax_amount: taxAmount,
             };
@@ -3831,7 +3947,7 @@ function InvoiceCreate({
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
-            Dr_Cr: charge.dr_cr ?? "Cr",
+            Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
             igst_rate: igstRate,
             cgst_rate: cgstRate,
             sgst_rate: sgstRate,
@@ -4177,7 +4293,7 @@ function InvoiceCreate({
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
-              Dr_Cr: charge.dr_cr ?? "Cr",
+              Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
               tax_rate: taxRate,
               tax_amount: taxAmount,
             };
@@ -4220,7 +4336,7 @@ function InvoiceCreate({
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
-            Dr_Cr: charge.dr_cr ?? "Cr",
+            Dr_Cr: charge.dr_cr ?? chargeDefaultDrCr,
             igst_rate: igstRate,
             cgst_rate: cgstRate,
             sgst_rate: sgstRate,
@@ -4251,7 +4367,7 @@ function InvoiceCreate({
                 amount: currencyAmount,
                 amount_in_local: amountInLocal,
                 amount_in_header: amountInHeader,
-                Dr_Cr: "Cr",
+                Dr_Cr: taxRowDrCr,
               };
             })
         : isAgentPost || isUsPost || hasSez || isVatPost
@@ -4296,8 +4412,8 @@ function InvoiceCreate({
                   igst: null,
                   cgst: null,
                   sgst: null,
-                  // Tax rows always Cr on invoice create/post; charge Dr_Cr stays user-selected
-                  Dr_Cr: "Cr",
+                  // Invoice tax rows Cr; credit note tax rows Dr (invoice-reversal parity)
+                  Dr_Cr: taxRowDrCr,
                 };
               });
 
@@ -4309,7 +4425,11 @@ function InvoiceCreate({
       // Recompute net totals from final charges payload (base charges + appended tax rows)
       const { total, header_total, local_total } = calcChargeTotalsByDrCr(
         allChargesPayload,
-        { includeTaxRows: true, billingCurrency: values.currency },
+        {
+          includeTaxRows: true,
+          billingCurrency: values.currency,
+          netDirection: totalsNetDirection,
+        },
       );
       const jobForPost = (
         location.state as { job?: { job_id?: number; id?: number } } | null
@@ -4464,7 +4584,12 @@ function InvoiceCreate({
               ? amountInLocal
               : null,
             tax_code: c.tax_code ?? (c.tax_id != null ? String(c.tax_id) : ""),
-            dr_cr: (c as { Dr_Cr?: string }).Dr_Cr === "Dr" ? "Dr" : "Cr",
+            dr_cr:
+              (c as { Dr_Cr?: string }).Dr_Cr === "Dr"
+                ? "Dr"
+                : (c as { Dr_Cr?: string }).Dr_Cr === "Cr"
+                  ? "Cr"
+                  : chargeDefaultDrCr,
             is_tax_row: isTaxRow,
             igst_rate: (() => {
               const raw = (c as any).igst_rate;
@@ -4654,15 +4779,22 @@ function InvoiceCreate({
     () =>
       calcChargeTotalsByDrCr(
         form.values.charges.filter((c) => c.is_tax_row !== true),
-        { billingCurrency: form.values.currency },
+        {
+          billingCurrency: form.values.currency,
+          netDirection: totalsNetDirection,
+        },
       ),
-    [form.values.charges, form.values.currency],
+    [form.values.charges, form.values.currency, totalsNetDirection],
   );
 
   const vatSectionTotal = useMemo(
     () =>
-      calcVatTotalFromCharges(form.values.charges, form.values.currency),
-    [form.values.charges, form.values.currency],
+      calcVatTotalFromCharges(
+        form.values.charges,
+        form.values.currency,
+        totalsNetDirection,
+      ),
+    [form.values.charges, form.values.currency, totalsNetDirection],
   );
 
   const vatTotalWholeNumbersOnly = useMemo(
@@ -4670,10 +4802,32 @@ function InvoiceCreate({
     [form.values.currency],
   );
 
-  const gstSectionTotals = useMemo(
-    () => calcGstTotalsByDrCr(form.values.charges, gstRatesByChargeIndex),
-    [form.values.charges, gstRatesByChargeIndex],
-  );
+  const gstSectionTotals = useMemo(() => {
+    if (totalsNetDirection === "drMinusCr") {
+      const hasTaxRows = form.values.charges.some((c) => {
+        if (!isInvoiceTaxChargeRow(c)) return false;
+        const code = String(c.charge_code ?? "")
+          .trim()
+          .toUpperCase();
+        const name = String(c.charge_name ?? "")
+          .trim()
+          .toUpperCase();
+        const key = code || name;
+        return key === "IGST" || key === "CGST" || key === "SGST";
+      });
+      if (hasTaxRows) {
+        return calcGstTotalsFromTaxChargeRows(
+          form.values.charges,
+          totalsNetDirection,
+        );
+      }
+    }
+    return calcGstTotalsByDrCr(
+      form.values.charges,
+      gstRatesByChargeIndex,
+      totalsNetDirection,
+    );
+  }, [form.values.charges, gstRatesByChargeIndex, totalsNetDirection]);
 
   // Distribute Mantine grid spans (12 cols); VAT rate/amount match no-of-unit width
   const chargeGridCols = useMemo(() => {

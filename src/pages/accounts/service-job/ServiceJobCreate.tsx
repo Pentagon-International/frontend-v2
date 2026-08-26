@@ -1534,6 +1534,13 @@ function ServiceJobAccountsSection({
                                     navigate("/service-job/invoice/reverse", {
                                       state: {
                                         document_no: row.document_no ?? "",
+                                        document_type: String(
+                                          (
+                                            row as {
+                                              document_type?: unknown;
+                                            }
+                                          ).document_type ?? "",
+                                        ),
                                         returnTo: editPath,
                                         returnToState: { job: jobData },
                                         ...(jobData && { job: jobData }),
