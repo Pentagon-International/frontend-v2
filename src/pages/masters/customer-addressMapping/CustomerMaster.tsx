@@ -52,6 +52,7 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import useAuthStore from "../../../store/authStore";
 import type { CustomerDocumentListItem } from "../../../utils/customerDocuments";
 
 type AddressData = {
@@ -280,8 +281,9 @@ type CustomerDataResponse = {
 
 function CustomerMaster() {
   const isAdmin = useIsAdminUser();
-  // Create New is admin-only on customer / vendor / agent masters
-  const showCreateButton = isAdmin;
+  const pulseId = useAuthStore((state) => state.user?.pulse_id);
+  // Create New is admin-only, plus P2CCI users
+  const showCreateButton = isAdmin || pulseId === "P2CCI";
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();

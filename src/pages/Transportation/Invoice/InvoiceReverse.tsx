@@ -40,6 +40,10 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
+import {
+  findUnitOptionValueByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
 import { fetchReverseInvoiceById } from "../../../utils/fetchReverseInvoiceById";
 import {
   parseInvoiceMutationResponse,
@@ -647,6 +651,19 @@ function parseNullableNumber(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function unsignedFinite(n: number | null): number | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  return Math.abs(n);
+}
+
+function flipChargeDrCr(value: string | null | undefined): "Dr" | "Cr" {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase() === "dr"
+    ? "Cr"
+    : "Dr";
+}
+
 function isUnitedStatesCountry(
   countryCode?: string | null,
   countryName?: string | null,
@@ -922,23 +939,25 @@ function applyReversableDataToReverseForm(
               no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
               currency: c.currency_code ?? "",
               roe: Number.isFinite(roe) ? roe : null,
-              amount_per_unit: Number.isFinite(amountPerUnit)
-                ? amountPerUnit
-                : null,
-              amount: Number.isFinite(amount) ? amount : null,
-              header_amount: Number.isFinite(headerAmount)
-                ? headerAmount
-                : null,
-              amount_in_local: Number.isFinite(amountInLocal)
-                ? amountInLocal
-                : null,
+              amount_per_unit: unsignedFinite(
+                Number.isFinite(amountPerUnit) ? amountPerUnit : null,
+              ),
+              amount: unsignedFinite(Number.isFinite(amount) ? amount : null),
+              header_amount: unsignedFinite(
+                Number.isFinite(headerAmount) ? headerAmount : null,
+              ),
+              amount_in_local: unsignedFinite(
+                Number.isFinite(amountInLocal) ? amountInLocal : null,
+              ),
               tax_code: c.tax_code ?? "",
               dr_cr: opts.invertChargeDrCr
                 ? invertDrCr(sourceDrCr)
                 : sourceDrCr,
               is_tax_row: isTaxRow,
               tax_rate: isTaxRow ? null : parseNullableNumber(c.tax_rate),
-              tax_amount: isTaxRow ? null : parseNullableNumber(c.tax_amount),
+              tax_amount: isTaxRow
+                ? null
+                : unsignedFinite(parseNullableNumber(c.tax_amount)),
             };
           })
         : [],
@@ -1394,6 +1413,7 @@ function InvoiceReverse() {
     return data.map((item) => ({
       value: String(item.unit_code || item.code || item.id || ""),
       label: item.unit_name || item.name || "",
+      unit_code: String(item.unit_code || item.code || ""),
     }));
   }, [unitData]);
 
@@ -2046,14 +2066,16 @@ function InvoiceReverse() {
             no_of_unit: Number.isFinite(noOfUnit) ? noOfUnit : null,
             currency: c.currency_code ?? "",
             roe: Number.isFinite(roe) ? roe : null,
-            amount_per_unit: Number.isFinite(amountPerUnit)
-              ? amountPerUnit
-              : null,
-            amount: Number.isFinite(amount) ? amount : null,
-            header_amount: Number.isFinite(headerAmount) ? headerAmount : null,
-            amount_in_local: Number.isFinite(amountInLocal)
-              ? amountInLocal
-              : null,
+            amount_per_unit: unsignedFinite(
+              Number.isFinite(amountPerUnit) ? amountPerUnit : null,
+            ),
+            amount: unsignedFinite(Number.isFinite(amount) ? amount : null),
+            header_amount: unsignedFinite(
+              Number.isFinite(headerAmount) ? headerAmount : null,
+            ),
+            amount_in_local: unsignedFinite(
+              Number.isFinite(amountInLocal) ? amountInLocal : null,
+            ),
             tax_code: c.tax_code ?? "",
             dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
             is_tax_row: isTaxRow,
@@ -2993,7 +3015,8 @@ function InvoiceReverse() {
                               : null
                           }
                           displayValue={charge.charge_name || undefined}
-                          onChange={(value, selectedData) => {
+                          returnOriginalData
+                          onChange={(value, selectedData, originalData) => {
                             const chargeId = value ? Number(value) : null;
                             const chargeName = selectedData?.label ?? "";
                             form.setFieldValue(
@@ -3014,6 +3037,37 @@ function InvoiceReverse() {
                               }
                               setChargeErrors(newErrors);
                             }
+
+                            if (value) {
+                              const navState = location.state as {
+                                serviceType?: string;
+                                job?: { service?: string };
+                              } | null;
+                              const defaultUnitCode =
+                                resolveAutoUnitForNewCharge({
+                                  calculationType: (
+                                    originalData as {
+                                      calculation_type?: string;
+                                    } | null
+                                  )?.calculation_type,
+                                  service:
+                                    navState?.serviceType ||
+                                    navState?.job?.service,
+                                  currentUnit: charge.unit_code,
+                                });
+                              if (defaultUnitCode) {
+                                const unitValue =
+                                  findUnitOptionValueByCode(
+                                    defaultUnitCode,
+                                    unitOptions,
+                                  ) ?? defaultUnitCode;
+                                form.setFieldValue(
+                                  `charges.${index}.unit_code`,
+                                  unitValue,
+                                );
+                              }
+                            }
+
                             if (
                               chargeId != null &&
                               jobServiceId != null &&
@@ -3580,7 +3634,7 @@ function InvoiceReverse() {
                                     header_amount: null,
                                     amount_in_local: null,
                                     tax_code: "",
-                                    dr_cr: "Cr",
+                                    dr_cr: "Dr",
                                   });
                                 }}
                               >

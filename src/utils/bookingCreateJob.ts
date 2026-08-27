@@ -18,6 +18,7 @@ import {
   isVietnamBranchFromUser,
   roundMoneyToDecimals,
 } from "./nonDecimalMoneyAmount";
+import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 
 export type BookingCreateJobMode =
   | "air-export"
@@ -409,7 +410,8 @@ function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
       unit_id,
       ...(unit_code ? { unit_code } : {}),
       no_of_unit:
-        toNumberOrNull(row.no_of_units) ?? toNumberOrNull(row.no_of_unit),
+        parseNoOfUnitForPayload(row.no_of_units) ??
+        parseNoOfUnitForPayload(row.no_of_unit),
       currency_id:
         row.currency_id != null
           ? Number(row.currency_id)

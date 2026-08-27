@@ -3,23 +3,31 @@ import {
   Box,
   Button,
   Checkbox,
+  Divider,
   Group,
   Input,
   Loader,
   PasswordInput,
-  Space,
   Stack,
   Text,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconCheck, IconCheckbox } from "@tabler/icons-react";
+import { IconCheck } from "@tabler/icons-react";
 import { AxiosError } from "axios";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ToastNotification from "../../../components/ToastNotification";
 
+import { InteractionStatus } from "@azure/msal-browser";
 import { yupResolver } from "mantine-form-yup-resolver";
 import * as yup from "yup";
+import {
+  ensureMsalReady,
+  getMsalInteractionStatus,
+  isMicrosoftAuthConfigured,
+  startMicrosoftLoginRedirect,
+  subscribeMsalInteractionStatus,
+} from "../../../auth/msal";
 import { login, LoginFormData } from "../../../service/auth.services";
 import useAuthStore from "../../../store/authStore";
 import { normalizeLoginBranches } from "../../../utils/branchOdexCredentials";
@@ -92,16 +100,115 @@ const schema = yup.object().shape({
     .required("Password is required"),
 });
 
+function MicrosoftLogo() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+      <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+    </svg>
+  );
+}
+
 function LoginForm() {
   const pulseIdRef = useRef<HTMLInputElement>(null);
+  const microsoftClickLock = useRef(false);
   const [isChecked, setIsChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isMicrosoftLoading, setIsMicrosoftLoading] = useState(false);
+  const [msalStatus, setMsalStatus] = useState<InteractionStatus>(
+    getMsalInteractionStatus
+  );
+  const navigate = useNavigate();
+  const microsoftEnabled = isMicrosoftAuthConfigured();
+
+  const applyLoginResponse = (response: unknown) => {
+    const data =
+      (response as { data?: LoginResponse }).data ||
+      (response as LoginResponse);
+
+    useAuthStore.getState().login({
+      refresh: data.refresh,
+      access: data.access,
+      pulse_id: data.pulse_id,
+      full_name: data.full_name,
+      user_identifier: data.user_identifier,
+      user_id: data.user_id,
+      username: data.username,
+      is_staff: data.is_staff,
+      is_manager: data.is_manager,
+      company: data.company,
+      country: data.country,
+      branches: normalizeLoginBranches(data.branches),
+      screen_permissions: data.screen_permissions,
+    });
+
+    ToastNotification({
+      type: "success",
+      message: "Logged in successfully",
+    });
+
+    setTimeout(() => {
+      navigate("/");
+    }, 100);
+  };
+
+  const completeAzureBackendLogin = async (idToken: string) => {
+    const response = await login({
+      login_type: "azure",
+      id_token: idToken,
+    });
+    applyLoginResponse(response);
+  };
 
   useEffect(() => {
     pulseIdRef.current?.focus();
   }, []);
 
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState();
+  // Finish pending MSAL redirect on load, then POST id_token to backend
+  useEffect(() => {
+    if (!microsoftEnabled) return;
+
+    const unsubscribe = subscribeMsalInteractionStatus(setMsalStatus);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const hasAuthHash =
+          window.location.hash.includes("code=") ||
+          window.location.hash.includes("error=");
+        if (hasAuthHash) {
+          setIsMicrosoftLoading(true);
+        }
+
+        const redirectResult = await ensureMsalReady();
+        if (cancelled || !redirectResult?.idToken) {
+          if (!cancelled) setIsMicrosoftLoading(false);
+          return;
+        }
+
+        setIsMicrosoftLoading(true);
+        await completeAzureBackendLogin(redirectResult.idToken);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        console.error("MSAL redirect handling error:", e);
+        ToastNotification({
+          type: "error",
+          message:
+            (e as Error)?.message || "Failed to complete Microsoft login",
+        });
+        setIsMicrosoftLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only MSAL bootstrap
+  }, [microsoftEnabled]);
+
   const loginForm = useForm({
     mode: "uncontrolled",
     initialValues: {
@@ -113,7 +220,6 @@ function LoginForm() {
   });
 
   const handleSignInSubmit = async (event: SigninFormValues) => {
-    console.log("Form submitted with:", event);
     try {
       const loginData: LoginFormData = {
         pulse_id: event.pulse_id,
@@ -122,56 +228,65 @@ function LoginForm() {
       };
       setIsLoading(true);
 
-      const response: unknown = await login(loginData);
-      const data =
-        (response as { data?: LoginResponse }).data ||
-        (response as LoginResponse); // Handle both axios response and direct data
-      console.log("Token data----", data);
-
-      // Set authentication state
-      useAuthStore.getState().login({
-        refresh: data.refresh,
-        access: data.access,
-        pulse_id: data.pulse_id,
-        full_name: data.full_name,
-        user_identifier: data.user_identifier,
-        user_id: data.user_id,
-        username: data.username,
-        is_staff: data.is_staff,
-        is_manager: data.is_manager,
-        company: data.company,
-        country: data.country,
-        branches: normalizeLoginBranches(data.branches),
-        screen_permissions: data.screen_permissions,
-      });
-
-      // Verify the state was set
-      const currentState = useAuthStore.getState();
-      console.log("Current auth state after login:", {
-        user: currentState.user,
-        accessToken: currentState.accessToken,
-        refreshToken: currentState.refreshToken,
-      });
-      setIsLoading(false);
-      ToastNotification({
-        type: "success",
-        message: "Logged in successfully",
-      });
-
-      // Add a small delay to ensure state is properly set
-      setTimeout(() => {
-        navigate("/");
-      }, 100);
-    } catch (e: any) {
+      const response = await login(loginData);
+      applyLoginResponse(response);
+    } catch (e: unknown) {
       console.error("Login error:", e);
-      setIsLoading(false);
       ToastNotification({
         type: "error",
         message: (e as Error)?.message || "Error occurred",
       });
       loginForm.reset();
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  const handleMicrosoftLogin = async () => {
+    if (!microsoftEnabled) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Microsoft login is not configured. Set VITE_AZURE_CLIENT_ID and VITE_AZURE_TENANT_ID.",
+      });
+      return;
+    }
+
+    // Block double-click / overlapping MSAL interactions
+    if (
+      microsoftClickLock.current ||
+      isMicrosoftLoading ||
+      getMsalInteractionStatus() !== InteractionStatus.None
+    ) {
+      return;
+    }
+
+    microsoftClickLock.current = true;
+    setIsMicrosoftLoading(true);
+
+    try {
+      // Same-tab redirect only (no popup) — return handled by ensureMsalReady above
+      await startMicrosoftLoginRedirect();
+    } catch (e: unknown) {
+      console.error("Microsoft login error:", e);
+      const errorCode = (e as { errorCode?: string })?.errorCode;
+      const message =
+        errorCode === "user_cancelled"
+          ? "Microsoft login was cancelled"
+          : errorCode === "interaction_in_progress"
+            ? "Microsoft login already in progress. Clear site data for localhost:5173, then try one click."
+            : (e as Error)?.message || "Microsoft login failed";
+      ToastNotification({
+        type: "error",
+        message,
+      });
+      microsoftClickLock.current = false;
+      setIsMicrosoftLoading(false);
+    }
+  };
+
+  const msalBusy = msalStatus !== InteractionStatus.None;
+  const anyLoading = isLoading || isMicrosoftLoading || msalBusy;
 
   return (
     <>
@@ -239,16 +354,18 @@ function LoginForm() {
           <Box
             style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
           >
-            <Checkbox 
-              checked={isChecked} 
-              color={"#105476"} 
+            <Checkbox
+              checked={isChecked}
+              color={"#105476"}
               styles={{
                 root: { cursor: "pointer" },
                 label: { cursor: "pointer" },
                 input: { cursor: "pointer" },
-              }} 
-              onChange={() => {setIsChecked(!isChecked)}} 
-              label="Remember Me" 
+              }}
+              onChange={() => {
+                setIsChecked(!isChecked);
+              }}
+              label="Remember Me"
             />
           </Box>
 
@@ -287,6 +404,7 @@ function LoginForm() {
           mt="20px"
           color="#105476"
           size="md"
+          disabled={anyLoading}
           style={{
             display: "flex",
             alignItems: "base",
@@ -301,6 +419,35 @@ function LoginForm() {
           )}
         </Button>
       </form>
+
+      <Divider my="md" label="OR" labelPosition="center" />
+
+      <Button
+        type="button"
+        radius="md"
+        fullWidth
+        size="md"
+        variant="default"
+        disabled={anyLoading}
+        leftSection={
+          isMicrosoftLoading ? (
+            <Loader size={18} color="#105476" />
+          ) : (
+            <MicrosoftLogo />
+          )
+        }
+        onClick={handleMicrosoftLogin}
+        styles={{
+          root: {
+            border: "1px solid #d0d5dd",
+            backgroundColor: "#fff",
+            color: "#333",
+            fontWeight: 500,
+          },
+        }}
+      >
+        {isMicrosoftLoading ? "Signing in with Microsoft..." : "Sign in with Microsoft"}
+      </Button>
     </>
   );
 }

@@ -2,6 +2,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Grid,
   Group,
   Text,
@@ -57,6 +58,10 @@ import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { parseNoOfUnitForPayload } from "../../../utils/houseCargoChargeableWeight";
+import {
+  findJobUnitOptionByCode,
+  resolveAutoUnitForNewCharge,
+} from "../../../utils/chargeCalculationTypeUnit";
 import {
   formatExchangeSellRate,
   ROE_DECIMAL_PLACES,
@@ -313,6 +318,7 @@ const calcVatTotalFromCharges = (
     clampVatAmount(netDrCrAmount(cr, dr, netDirection), billingCurrency) ?? 0
   );
 };
+
 const fetchCurrencyMaster = async () => {
   try {
     const response = await getAPICall(`${URL.currencyMaster}`, API_HEADER);
@@ -928,6 +934,7 @@ function calcChargeTotalsByDrCr(
     }
   }
 
+  const invertNet = options?.invertNet === true;
   const crAmountTotal = clampCurrencyAmount(crAmount) ?? 0;
   const drAmountTotal = clampCurrencyAmount(drAmount) ?? 0;
   const crHeaderTotal = clampHeaderAmount(crHeader, billingCurrency) ?? 0;
@@ -1173,6 +1180,63 @@ function resolvePartyStateIdFromHousing(
   )
     return null;
   return Number(raw);
+}
+
+function isAgentTypeToken(value: unknown): boolean {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "agent") return true;
+  return normalized.split(/[,/|]/).some((part) => part.trim() === "agent");
+}
+
+/** True when a customer-master search row includes the Agent party type. */
+function customerRecordIsAgent(
+  record?: Record<string, unknown> | null,
+): boolean {
+  if (!record) return false;
+  if (record.is_agent === true) return true;
+
+  const nestedTypeLists: unknown[] = [record.customer_types, record.types];
+  if (Array.isArray(record.customer_type)) {
+    nestedTypeLists.push(record.customer_type);
+  }
+  for (const raw of nestedTypeLists) {
+    if (!Array.isArray(raw)) continue;
+    for (const item of raw) {
+      if (isAgentTypeToken(item)) return true;
+      if (item && typeof item === "object") {
+        const rec = item as Record<string, unknown>;
+        if (
+          isAgentTypeToken(rec.customer_type_name) ||
+          isAgentTypeToken(rec.customer_type_code) ||
+          isAgentTypeToken(rec.name) ||
+          isAgentTypeToken(rec.code)
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  if (record.customer_type && typeof record.customer_type === "object") {
+    const rec = record.customer_type as Record<string, unknown>;
+    if (
+      isAgentTypeToken(rec.customer_type_name) ||
+      isAgentTypeToken(rec.customer_type_code) ||
+      isAgentTypeToken(rec.name) ||
+      isAgentTypeToken(rec.code)
+    ) {
+      return true;
+    }
+  }
+
+  return (
+    isAgentTypeToken(record.customer_type_name) ||
+    isAgentTypeToken(record.customer_type_code) ||
+    isAgentTypeToken(record.customer_type)
+  );
 }
 
 function isUnitedStatesCountry(
@@ -1454,9 +1518,22 @@ function InvoiceCreate({
   const isGstInvoiceRef = useRef(false);
   const isVatInvoiceRef = useRef(false);
   const isUsInvoiceRef = useRef(false);
+  const creditNoteAgentHydratedRef = useRef(false);
+  /** Credit note: Agent checkbox after Bill To is user-selected (not house shipper/consignee prefill). */
+  const [creditNoteShowAgentCheckbox, setCreditNoteShowAgentCheckbox] =
+    useState(false);
+  const [creditNoteIsAgentChecked, setCreditNoteIsAgentChecked] =
+    useState(true);
+  const [creditNoteBillToUserTouched, setCreditNoteBillToUserTouched] =
+    useState(false);
 
   // Agent invoice: hide SAC, IGST/CGST/SGST. VAT still applies except US.
+  // Credit note: after the user re-selects an agent party, follow the Agent checkbox.
   const isAgentInvoice = useMemo(() => {
+    if (isCreditNoteFlow) {
+      if (creditNoteShowAgentCheckbox) return creditNoteIsAgentChecked;
+      if (creditNoteBillToUserTouched) return false;
+    }
     if ((location.state as { is_agent?: boolean } | null)?.is_agent === true)
       return true;
     const fromApi = (invoiceDataFromApi as { is_agent?: boolean } | null)
@@ -1467,6 +1544,10 @@ function InvoiceCreate({
     )?.is_agent;
     return fromState === true;
   }, [
+    isCreditNoteFlow,
+    creditNoteShowAgentCheckbox,
+    creditNoteIsAgentChecked,
+    creditNoteBillToUserTouched,
     location.state?.is_agent,
     location.state?.invoiceData,
     invoiceDataFromApi,
@@ -1492,6 +1573,44 @@ function InvoiceCreate({
   useEffect(() => {
     isAgentInvoiceRef.current = isAgentInvoice;
   }, [isAgentInvoice]);
+
+  useEffect(() => {
+    creditNoteAgentHydratedRef.current = false;
+    setCreditNoteShowAgentCheckbox(false);
+    setCreditNoteIsAgentChecked(true);
+    setCreditNoteBillToUserTouched(false);
+  }, [location.key]);
+
+  useEffect(() => {
+    if (
+      !isCreditNoteFlow ||
+      !isEditOrViewMode ||
+      creditNoteAgentHydratedRef.current
+    )
+      return;
+    if (
+      invoiceId &&
+      invoiceDataFromApi?.id != null &&
+      String(invoiceDataFromApi.id) !== String(invoiceId)
+    ) {
+      return;
+    }
+    const fromApi =
+      (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent === true;
+    const fromState =
+      (location.state?.invoiceData as { is_agent?: boolean } | undefined)
+        ?.is_agent === true;
+    if (!fromApi && !fromState) return;
+    creditNoteAgentHydratedRef.current = true;
+    setCreditNoteShowAgentCheckbox(true);
+    setCreditNoteIsAgentChecked(true);
+  }, [
+    isCreditNoteFlow,
+    isEditOrViewMode,
+    invoiceId,
+    invoiceDataFromApi,
+    location.state?.invoiceData,
+  ]);
 
   // When opened from job level: show "Job id" instead of "Shipment No"
   // When opened from house level: show "Shipment No" (including house-level agent invoice)
@@ -2117,6 +2236,7 @@ function InvoiceCreate({
       return {
         value: id || unitCode,
         label: item.unit_name || item.name || unitCode || "",
+        unit_code: String(unitCode || ""),
       };
     });
   }, [unitData]);
@@ -3545,6 +3665,11 @@ function InvoiceCreate({
     const isCleared =
       value == null || (typeof value === "string" && value.trim() === "");
     if (isCleared) {
+      if (isCreditNoteFlow) {
+        setCreditNoteBillToUserTouched(true);
+        setCreditNoteShowAgentCheckbox(false);
+        setCreditNoteIsAgentChecked(true);
+      }
       setAddressOptions([]);
       billToAddressesRef.current = [];
       form.setFieldValue("address", "");
@@ -3555,6 +3680,13 @@ function InvoiceCreate({
         form.setFieldValue("gstn", "");
       }
       return;
+    }
+
+    if (isCreditNoteFlow) {
+      setCreditNoteBillToUserTouched(true);
+      const isAgentParty = customerRecordIsAgent(originalData);
+      setCreditNoteShowAgentCheckbox(isAgentParty);
+      setCreditNoteIsAgentChecked(true);
     }
 
     // Party selected/changed → apply due date from credit_day once SEZ responds
@@ -3809,11 +3941,6 @@ function InvoiceCreate({
         { billingCurrency: values.currency, netDirection: totalsNetDirection },
       );
 
-      const isAgentSave =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
-
       const isVatSave = isVatInvoiceUser;
 
       // VAT (China/Kenya): tax_rate + tax_amount. India GST: igst/cgst/sgst.
@@ -3958,10 +4085,7 @@ function InvoiceCreate({
         });
 
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
-      const isAgent =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
+      const isAgent = isAgentInvoice;
       const job = (
         location.state as { job?: { job_id?: number; id?: number } } | null
       )?.job;
@@ -4131,10 +4255,7 @@ function InvoiceCreate({
       );
       const currencyId =
         currencyItem?.id != null ? Number(currencyItem.id) : null;
-      const isAgentPost =
-        (location.state as { is_agent?: boolean } | null)?.is_agent === true ||
-        (invoiceDataFromApi as { is_agent?: boolean } | null)?.is_agent ===
-          true;
+      const isAgentPost = isAgentInvoice;
       const isVatPost = isVatInvoiceUser;
       const isUsPost = isUsInvoiceUser;
       const stateValid = stateId != null && stateId > 0;
@@ -5015,8 +5136,8 @@ function InvoiceCreate({
         >
           <Grid>
             {/* Row 1: 4 fields - Bill To (span 4 = 2 fields), State, GSTN, Shipment No */}
-            {/* Bill To - spans 2 fields (span=4) */}
-            <Grid.Col span={4}>
+            {/* Bill To - spans 2 fields (span=4); shrinks when credit-note Agent checkbox is shown */}
+            <Grid.Col span={creditNoteShowAgentCheckbox ? 3 : 4}>
               <SearchableSelect
                 key={`invoice-bill-to-${form.values.bill_to}:${billToDisplayName ?? "_"}`}
                 label="Bill To"
@@ -5062,6 +5183,35 @@ function InvoiceCreate({
                 }
               />
             </Grid.Col>
+            {creditNoteShowAgentCheckbox && (
+              <Grid.Col
+                span={1}
+                style={{ display: "flex", alignItems: "flex-end" }}
+              >
+                <Checkbox
+                  label="Agent"
+                  color="#105476"
+                  checked={creditNoteIsAgentChecked}
+                  onChange={(event) =>
+                    setCreditNoteIsAgentChecked(event.currentTarget.checked)
+                  }
+                  disabled={isReadOnly}
+                  styles={{
+                    root: {
+                      height: 36,
+                      display: "flex",
+                      alignItems: "center",
+                    },
+                    body: { alignItems: "center" },
+                    label: {
+                      fontSize: 13,
+                      fontFamily: "Inter",
+                      paddingLeft: 8,
+                    },
+                  }}
+                />
+              </Grid.Col>
+            )}
 
             {isGstInvoiceUser && (
               <>
@@ -5683,7 +5833,8 @@ function InvoiceCreate({
                             : null
                         }
                         displayValue={charge.charge_name || undefined}
-                        onChange={(value, selectedData) => {
+                        returnOriginalData
+                        onChange={(value, selectedData, originalData) => {
                           const chargeId = value ? Number(value) : null;
                           const chargeName = selectedData?.label ?? "";
                           form.setFieldValue(
@@ -5711,6 +5862,37 @@ function InvoiceCreate({
                             }
                             setChargeErrors(newErrors);
                           }
+
+                          if (value) {
+                            const defaultUnitCode = resolveAutoUnitForNewCharge({
+                              calculationType: (
+                                originalData as {
+                                  calculation_type?: string;
+                                } | null
+                              )?.calculation_type,
+                              service: location.state?.serviceType,
+                              currentUnitId: charge.unit_id,
+                              currentUnitCode: charge.unit_code,
+                            });
+                            if (defaultUnitCode) {
+                              const unitOpt = findJobUnitOptionByCode(
+                                defaultUnitCode,
+                                unitOptions,
+                              );
+                              if (unitOpt) {
+                                form.setFieldValue(
+                                  `charges.${index}.unit_id`,
+                                  unitOpt.value,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.unit_code`,
+                                  unitOpt.unit_code ||
+                                    String(unitOpt.label || unitOpt.value),
+                                );
+                              }
+                            }
+                          }
+
                           if (
                             chargeId != null &&
                             jobServiceId != null &&
