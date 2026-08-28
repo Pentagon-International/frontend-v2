@@ -107,11 +107,13 @@ import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextArea from "../../../components/FormTextArea";
 import SingleDateInput from "../../../components/SingleDateInput";
 import RequiredLabel from "../../../components/RequiredLabel";
+import BookingPackageTypeDropdown from "../../../components/BookingPackageTypeDropdown";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useBookingPageDocuments } from "../../../hooks/useBookingPageDocuments";
 import { parseJobDocumentsFromApi } from "../../../utils/jobDocuments";
 import { commonSearchAPI } from "../../../service/searchApi";
 import AirBookingCarrierSelect from "../components/AirBookingCarrierSelect";
+import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 
 interface ExportShipmentStepperProps {
   onStepChange?: (step: number) => void;
@@ -149,6 +151,7 @@ interface CargoDetail {
   id?: number | string;
   // Common fields
   no_of_packages?: number;
+  package_type?: string;
   gross_weight?: number;
   volume_weight?: number;
   chargeable_weight?: number;
@@ -398,6 +401,7 @@ const validationSchema = yup.object({
         then: (schema) => schema.required("No of packages required"),
         otherwise: (schema) => schema.nullable(),
       }),
+      package_type: yup.string().nullable(),
       gross_weight: yup.number().when("$service", {
         is: (val: string) => val === "AIR",
         then: (schema) => schema.required("Gross weight required"),
@@ -1214,6 +1218,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               no_of_packages: cargo.no_of_packages
                 ? Number(cargo.no_of_packages)
                 : undefined,
+              package_type: pickPackageTypeCodeFromCargo(cargo),
               gross_weight: cargo.gross_weight
                 ? parseFloat(String(cargo.gross_weight))
                 : undefined,
@@ -1240,6 +1245,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         : [
             {
               no_of_packages: undefined,
+              package_type: "",
               gross_weight: undefined,
               volume_weight: undefined,
               chargeable_weight: undefined,
@@ -1408,6 +1414,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       cargo_details: [
         {
           no_of_packages: undefined,
+          package_type: "",
           gross_weight: undefined,
           volume_weight: undefined,
           chargeable_weight: undefined,
@@ -2927,6 +2934,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
+            package_type_code:
+              pickPackageTypeCodeFromCargo(
+                cargo as unknown as Record<string, unknown>,
+              ) || null,
             gross_weight: roundToDecimals(cargo.gross_weight, 3) || null,
             volume_weight: roundToDecimals(cargo.volume_weight, 3) || null,
             chargeable_weight:
@@ -5588,7 +5599,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {/* AIR Service Cargo Details - Single Fields */}
                   {form.values.service === "AIR" && (
                     <Grid gutter={"sm"}>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
+                        <BookingPackageTypeDropdown
+                          value={form.values.cargo_details[0]?.package_type}
+                          onChange={(value) =>
+                            form.setFieldValue(
+                              "cargo_details.0.package_type",
+                              value,
+                            )
+                          }
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="No of Packages"
                           placeholder="Enter number of packages"
@@ -5599,7 +5621,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
@@ -5611,7 +5633,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="Volume Weight (kg)"
                           placeholder="Enter volume weight"
@@ -5622,7 +5644,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="Chargeable Weight (kg)"
                           // placeholder="Auto-calculated"
@@ -5640,7 +5662,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   {/* LCL Service Cargo Details - Single Fields */}
                   {form.values.service === "LCL" && (
                     <Grid gutter={"sm"}>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
+                        <BookingPackageTypeDropdown
+                          value={form.values.cargo_details[0]?.package_type}
+                          onChange={(value) =>
+                            form.setFieldValue(
+                              "cargo_details.0.package_type",
+                              value,
+                            )
+                          }
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="No of Packages"
                           placeholder="Enter number of packages"
@@ -5650,7 +5683,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="Gross Weight (kg)"
                           placeholder="Enter gross weight"
@@ -5661,7 +5694,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           )}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="Volume (cbm)"
                           placeholder="Enter volume"
@@ -5670,7 +5703,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           {...form.getInputProps("cargo_details.0.volume")}
                         />
                       </Grid.Col>
-                      <Grid.Col span={3}>
+                      <Grid.Col span={2.4}>
                         <FormNumberInput
                           label="Chargeable Volume (cbm)"
                           // placeholder="Auto-calculated"
@@ -5691,7 +5724,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       {form.values.cargo_details.map((_, cargoIndex) => (
                         <Box key={cargoIndex}>
                           <Grid gutter={"sm"}>
-                            <Grid.Col span={3}>
+                            <Grid.Col span={2.4}>
                               <Dropdown
                                 label="Container Type"
                                 placeholder="Select container type"
@@ -5704,7 +5737,21 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                 )}
                               />
                             </Grid.Col>
-                            <Grid.Col span={3}>
+                            <Grid.Col span={2.4}>
+                              <BookingPackageTypeDropdown
+                                value={
+                                  form.values.cargo_details[cargoIndex]
+                                    ?.package_type
+                                }
+                                onChange={(value) =>
+                                  form.setFieldValue(
+                                    `cargo_details.${cargoIndex}.package_type`,
+                                    value,
+                                  )
+                                }
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={2.4}>
                               <FormNumberInput
                                 label="No of Containers"
                                 placeholder="Enter number of containers"
@@ -5715,7 +5762,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                 )}
                               />
                             </Grid.Col>
-                            <Grid.Col span={3}>
+                            <Grid.Col span={2.4}>
                               <FormNumberInput
                                 label="Gross Weight (kg)"
                                 placeholder="Enter gross weight"
@@ -5728,7 +5775,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             </Grid.Col>
                             {/* Add/Remove buttons */}
                             <Grid.Col
-                              span={3}
+                              span={2.4}
                               style={{
                                 //   display: "flex",
                                 gap: "8px",
@@ -5745,6 +5792,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   onClick={() => {
                                     form.insertListItem("cargo_details", {
                                       no_of_packages: undefined,
+                                      package_type: "",
                                       gross_weight: undefined,
                                       volume_weight: undefined,
                                       chargeable_weight: undefined,

@@ -8,7 +8,7 @@ import {
   mapPackageTypeOptions,
 } from "../utils/packageTypeOptions";
 
-/** Fetches package types for job House Cargo dropdowns (code value / code-name label). */
+/** Fetches package types for job House and booking cargo dropdowns (code value / code-name label). */
 export function usePackageTypeOptions() {
   const { data: rawRecords = [] } = useQuery({
     queryKey: ["package-type-master-options"],

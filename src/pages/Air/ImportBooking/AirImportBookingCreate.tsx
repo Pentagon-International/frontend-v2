@@ -16,6 +16,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { ToastNotification } from "../../../components";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX } from "../../../utils/editPageAuditInfo";
+import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 
 function AirImportBookingCreate() {
   const navigate = useNavigate();
@@ -144,6 +145,7 @@ function AirImportBookingCreate() {
         Array.isArray(serviceDetails.fcl_details)
           ? serviceDetails.fcl_details.map((fcl: Record<string, unknown>) => ({
               no_of_packages: undefined,
+              package_type: pickPackageTypeCodeFromCargo(fcl),
               gross_weight: fcl.gross_weight
                 ? Number(fcl.gross_weight)
                 : undefined,
@@ -161,6 +163,9 @@ function AirImportBookingCreate() {
           : [
               {
                 no_of_packages: serviceDetails.no_of_packages || undefined,
+                package_type: pickPackageTypeCodeFromCargo(
+                  serviceDetails as Record<string, unknown>,
+                ),
                 gross_weight: serviceDetails.gross_weight || undefined,
                 volume_weight: serviceDetails.volume_weight || undefined,
                 chargeable_weight:
