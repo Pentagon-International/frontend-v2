@@ -71,6 +71,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
+import { createChaJobFromBooking } from "../../../utils/bookingCreateChaJob";
 import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 
 const LIST_KEY = "AIR_IMPORT_BOOKING_MASTER";
@@ -388,6 +389,9 @@ function AirImportBookingMaster() {
   const [createJobBookingId, setCreateJobBookingId] = useState<number | null>(
     null,
   );
+  const [createChaJobBookingId, setCreateChaJobBookingId] = useState<
+    number | null
+  >(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isDuplicatingBooking, setIsDuplicatingBooking] = useState(false);
   const [duplicateCustomerCode, setDuplicateCustomerCode] = useState<
@@ -1100,6 +1104,21 @@ function AirImportBookingMaster() {
     });
   };
 
+  const handleCreateChaJob = async (booking: ImportShipmentData) => {
+    await createChaJobFromBooking(booking as unknown as Record<string, unknown>, {
+      navigate,
+      mode: "air-import",
+      onStart: () => setCreateChaJobBookingId(booking.id),
+      onEnd: () => setCreateChaJobBookingId(null),
+      invalidateList: () => {
+        queryClient.invalidateQueries({
+          queryKey: ["air-import-booking/filter/"],
+        });
+        void refetchImportShipments();
+      },
+    });
+  };
+
   const renderRowActions = useCallback(
     (row: ImportShipmentData) => {
       const statusUpper = (row.status ?? "").toUpperCase();
@@ -1107,7 +1126,7 @@ function AirImportBookingMaster() {
       const canCancel = statusUpper !== "GENERATED" && !isCancel;
       const isBooked = statusUpper === "BOOKED";
       return (
-        <Menu shadow="md" width={140}>
+        <Menu shadow="md" width={168}>
           <Menu.Target>
             <ActionIcon variant="subtle" color="gray">
               <IconDotsVertical size={16} />
@@ -1141,13 +1160,32 @@ function AirImportBookingMaster() {
               Duplicate
             </Menu.Item>
             {isBooked && (
-              <Menu.Item
-                leftSection={<IconPlus size={14} />}
-                disabled={createJobBookingId === row.id}
-                onClick={() => void handleCreateJob(row)}
-              >
-                {createJobBookingId === row.id ? "Creating job…" : "Create Job"}
-              </Menu.Item>
+              <>
+                <Menu.Item
+                  leftSection={<IconPlus size={14} />}
+                  disabled={
+                    createJobBookingId === row.id ||
+                    createChaJobBookingId === row.id
+                  }
+                  onClick={() => void handleCreateJob(row)}
+                >
+                  {createJobBookingId === row.id
+                    ? "Creating job…"
+                    : "Create Job"}
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconPlus size={14} />}
+                  disabled={
+                    createJobBookingId === row.id ||
+                    createChaJobBookingId === row.id
+                  }
+                  onClick={() => void handleCreateChaJob(row)}
+                >
+                  {createChaJobBookingId === row.id
+                    ? "Creating CHA job…"
+                    : "Create CHA Job"}
+                </Menu.Item>
+              </>
             )}
             {canCancel && (
               <Tooltip
@@ -1174,7 +1212,9 @@ function AirImportBookingMaster() {
       navigate,
       persistListState,
       createJobBookingId,
+      createChaJobBookingId,
       handleCreateJob,
+      handleCreateChaJob,
       isDuplicatingBooking,
       openDuplicateForRow,
     ],
@@ -1955,7 +1995,11 @@ function AirImportBookingMaster() {
           />
         </Drawer>
         <BookingCreateJobLoader
-          active={createJobBookingId != null || isDuplicatingBooking}
+          active={
+            createJobBookingId != null ||
+            createChaJobBookingId != null ||
+            isDuplicatingBooking
+          }
           message={
             isDuplicatingBooking
               ? "Preparing duplicate booking…"

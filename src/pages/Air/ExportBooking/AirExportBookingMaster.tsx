@@ -79,6 +79,7 @@ import {
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
+import { createChaJobFromBooking } from "../../../utils/bookingCreateChaJob";
 import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -1067,6 +1068,9 @@ function AirExportBookingMaster() {
   const [createJobBookingId, setCreateJobBookingId] = useState<number | null>(
     null,
   );
+  const [createChaJobBookingId, setCreateChaJobBookingId] = useState<
+    number | null
+  >(null);
   const [isDuplicatingBooking, setIsDuplicatingBooking] = useState(false);
   const [duplicateCustomerCode, setDuplicateCustomerCode] = useState<
     string | null
@@ -1689,6 +1693,21 @@ function AirExportBookingMaster() {
     });
   };
 
+  const handleCreateChaJob = async (booking: ExportShipmentData) => {
+    await createChaJobFromBooking(booking as unknown as Record<string, unknown>, {
+      navigate,
+      mode: "air-export",
+      onStart: () => setCreateChaJobBookingId(booking.id),
+      onEnd: () => setCreateChaJobBookingId(null),
+      invalidateList: () => {
+        queryClient.invalidateQueries({
+          queryKey: ["air-export-booking/filter/"],
+        });
+        void refetchExportShipments();
+      },
+    });
+  };
+
   // ---- Row action menu ----
   const RowMenu = ({ row }: { row: ExportShipmentData }) => {
     const statusUpper = (row.status ?? "").toUpperCase();
@@ -1746,13 +1765,32 @@ function AirExportBookingMaster() {
             Generate AWB
           </Menu.Item> */}
           {isBooked && (
-            <Menu.Item
-              leftSection={<IconBriefcase size={14} />}
-              disabled={createJobBookingId === row.id}
-              onClick={() => void handleCreateJob(row)}
-            >
-              {createJobBookingId === row.id ? "Creating job…" : "Create Job"}
-            </Menu.Item>
+            <>
+              <Menu.Item
+                leftSection={<IconBriefcase size={14} />}
+                disabled={
+                  createJobBookingId === row.id ||
+                  createChaJobBookingId === row.id
+                }
+                onClick={() => void handleCreateJob(row)}
+              >
+                {createJobBookingId === row.id
+                  ? "Creating job…"
+                  : "Create Job"}
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<IconBriefcase size={14} />}
+                disabled={
+                  createJobBookingId === row.id ||
+                  createChaJobBookingId === row.id
+                }
+                onClick={() => void handleCreateChaJob(row)}
+              >
+                {createChaJobBookingId === row.id
+                  ? "Creating CHA job…"
+                  : "Create CHA Job"}
+              </Menu.Item>
+            </>
           )}
           <Menu.Divider />
           <Menu.Item
@@ -3219,7 +3257,11 @@ function AirExportBookingMaster() {
         </Drawer>
 
         <BookingCreateJobLoader
-          active={createJobBookingId != null || isDuplicatingBooking}
+          active={
+            createJobBookingId != null ||
+            createChaJobBookingId != null ||
+            isDuplicatingBooking
+          }
           message={
             isDuplicatingBooking
               ? "Preparing duplicate booking…"

@@ -9,6 +9,7 @@ export const sectionIconColors: Record<string, string> = {
   Air: "#38BDF8",
   Ocean: "#38BDF8",
   Inland: "#38BDF8",
+  CHA: "#38BDF8",
 
   Accounts: "#60A5FA",
   Masters: "#60A5FA",
@@ -39,6 +40,7 @@ export const sectionIconBackground: Record<string, string> = {
   Air: "rgba(56, 189, 248, 0.12)",
   Ocean: "rgba(56, 189, 248, 0.12)",
   Inland: "rgba(56, 189, 248, 0.12)",
+  CHA: "rgba(56, 189, 248, 0.12)",
 
   Accounts: "rgba(96, 165, 250, 0.12)",
   Masters: "rgba(96, 165, 250, 0.12)",

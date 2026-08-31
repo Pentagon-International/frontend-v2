@@ -580,7 +580,7 @@ function mapBookingDocumentsForHousingPayload(
   return { document_ids };
 }
 
-async function resolveBookingRecordForJobCreate(
+export async function resolveBookingRecordForJobCreate(
   booking: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   if (parseJobDocumentsFromApi(booking).document_ids.length > 0) {
