@@ -177,8 +177,11 @@ import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
 import {
   pickChaServiceFormFields,
   readChaServiceFormFields,
+  readChaMasterAgentFields,
   type ChaServiceFormFields,
 } from "../chaJob/chaJobMasterSnapshot";
+import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
+import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -741,6 +744,13 @@ function ImportJobCreate() {
   const isReadOnly = isViewOnly || isClosedJob;
   const documentsReadOnly = isViewOnly;
 
+  useChaJobEditHydration(
+    mode,
+    jobData,
+    jobModuleBasePath,
+    setIsFetchingJobById,
+  );
+
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
     // In create mode the job is not saved yet; confirm before leaving.
@@ -1006,6 +1016,7 @@ function ImportJobCreate() {
 
         mblDetailsForm.setValues({
           ...readChaServiceFormFields(mblData as ChaServiceFormFields),
+          ...readChaMasterAgentFields(mblData as Record<string, unknown>),
           service: mblData.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblData as { pp_cc?: unknown }).pp_cc ??
@@ -1023,8 +1034,12 @@ function ImportJobCreate() {
             mblData.agent_code ||
             mblData.origin_agent_code ||
             mblData.origin_agent ||
+            (mblData as { agent?: string }).agent ||
             "",
-          agent_name: mblData.agent_name || mblData.origin_agent_name || "",
+          agent_name:
+            mblData.agent_name ||
+            mblData.origin_agent_name ||
+            "",
           agent_address: originAgentAddress,
           origin_code: mblData.origin_code || "",
           origin_name: mblData.origin_name || "",
@@ -1169,6 +1184,7 @@ function ImportJobCreate() {
                 : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
+              ...readChaHouseBlFromApi(house),
               house_date: house.house_date
                 ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
                 : null,
@@ -1996,6 +2012,7 @@ function ImportJobCreate() {
         const mblDetails = location.state.mblDetails;
         mblDetailsForm.setValues({
           ...readChaServiceFormFields(mblDetails),
+          ...readChaMasterAgentFields(mblDetails as Record<string, unknown>),
           service: mblDetails.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblDetails as { pp_cc?: unknown })?.pp_cc ??

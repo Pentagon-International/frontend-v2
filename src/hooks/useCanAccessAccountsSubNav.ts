@@ -87,6 +87,8 @@ function isVietnamOnlyAccountsUser(
 export function canAccessAccountsSubNav(
   user: ReturnType<typeof useAuthStore.getState>["user"],
 ): boolean {
+  if (user?.is_staff) return true;
+
   if (isVietnamOnlyAccountsUser(user)) {
     return isVietnamBranchFromUser(user);
   }

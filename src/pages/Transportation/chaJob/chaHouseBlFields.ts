@@ -50,3 +50,11 @@ export function pickChaHouseBlPayloadFields(
   if (!blNo && !blDate) return {};
   return { bl_no: blNo || null, bl_date: blDate };
 }
+
+/** Map BL fields from API housing row into local housing state. */
+export function readChaHouseBlFromApi(house: Record<string, unknown>) {
+  return readChaHouseBlInitial({
+    bl_no: house.bl_no as string | null | undefined,
+    bl_date: house.bl_date as string | Date | null | undefined,
+  });
+}

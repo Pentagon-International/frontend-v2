@@ -1,6 +1,8 @@
 import dayjs from "dayjs";
 import { formatLocalDateTime } from "../../../utils/localDateTime";
 import type { ChaJobConfig } from "./chaJobConfig";
+import { pickChaHouseBlPayloadFields } from "./chaHouseBlFields";
+import { pickChaMasterTransportPayload } from "./chaJobMasterSnapshot";
 
 function isAirTransport(mode: string): boolean {
   const m = (mode || "").trim().toUpperCase();
@@ -62,8 +64,9 @@ function mapHousingForChaServiceJob(
     carrier_agent_email: house.carrier_agent_email ?? "",
     carrier_agent_address: house.carrier_agent_address ?? "",
     hbl_number: houseNo,
-    ...(house.bl_no != null && { bl_no: house.bl_no }),
-    ...(house.bl_date != null && { bl_date: house.bl_date }),
+    ...pickChaHouseBlPayloadFields(
+      house as { bl_no?: string | null; bl_date?: string | Date | null },
+    ),
     ...(house.shipment_terms_code != null &&
       String(house.shipment_terms_code).trim() !== "" && {
         shipment_terms_code: house.shipment_terms_code,
@@ -118,6 +121,7 @@ export function buildChaServiceJobPayload(input: {
   return {
     is_service_job: true,
     service_id: serviceId ? Number(serviceId) : null,
+    ...pickChaMasterTransportPayload(agentPayload, transportMode),
     pp_cc: agentPayload.pp_cc ?? "Collect",
     origin_code: agentPayload.origin_code ?? null,
     destination_code: agentPayload.destination_code ?? null,

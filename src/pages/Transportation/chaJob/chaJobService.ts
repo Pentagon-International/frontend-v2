@@ -76,3 +76,17 @@ export function buildChaListFilters(config: {
     service_type: config.serviceType,
   };
 }
+
+/** Fetch a single job-create record by id (full detail for edit). */
+export async function fetchJobCreateById(
+  id: number,
+): Promise<Record<string, unknown> | null> {
+  const jobListRes = await getAPICall(`${URL.jobCreate}${id}/`, API_HEADER);
+  const body = (jobListRes as { data?: unknown })?.data ?? jobListRes;
+  const list = Array.isArray((body as { data?: unknown[] })?.data)
+    ? (body as { data: unknown[] }).data
+    : Array.isArray(body)
+      ? (body as unknown[])
+      : [];
+  return list.length > 0 ? (list[0] as Record<string, unknown>) : null;
+}

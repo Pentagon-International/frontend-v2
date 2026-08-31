@@ -158,7 +158,10 @@ import {
 import {
   pickChaServiceFormFields,
   readChaServiceFormFields,
+  readChaMasterAgentFields,
 } from "../chaJob/chaJobMasterSnapshot";
+import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
+import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
 
 // Type definitions
@@ -584,6 +587,13 @@ function AirImportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+
+  useChaJobEditHydration(
+    mode,
+    jobData,
+    jobModuleBasePath,
+    setIsFetchingJobById,
+  );
   const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
@@ -977,6 +987,8 @@ function AirImportJobCreate() {
 
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
+          ...readChaServiceFormFields(jobData as Record<string, unknown>),
+          ...readChaMasterAgentFields(jobData as Record<string, unknown>),
           service: jobData.service || "AIR",
           pp_cc: resolveJobFreightPpCc(
             jobData.pp_cc,
@@ -984,7 +996,11 @@ function AirImportJobCreate() {
           ),
           note: String((jobData as { note?: unknown }).note ?? ""),
           // Use origin_agent_name from API response, fallback to origin_agent for backward compatibility
-          origin_agent: jobData.agent_code || jobData.origin_agent || "",
+          origin_agent:
+            jobData.agent_code ||
+            jobData.origin_agent ||
+            (jobData as { agent?: string }).agent ||
+            "",
           origin_agent_name:
             jobData.agent_name || jobData.origin_agent_name || "",
           origin_code: jobData.origin_code || "",
@@ -1250,6 +1266,7 @@ function AirImportJobCreate() {
                         house.hawb_number || house.hawb_no || house.hbl_number,
                       )
                     : "",
+                ...readChaHouseBlFromApi(house as Record<string, unknown>),
                 routed: house.routed
                   ? String(house.routed).toLowerCase() === "self"
                     ? "self"
