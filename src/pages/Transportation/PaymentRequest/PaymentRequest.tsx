@@ -49,6 +49,12 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
+import {
+  getDefaultBranchCountryCode,
+  getDefaultBranchCurrencyCode,
+  isIndianOutstandingBranch,
+  isIndianUserCountry,
+} from "../../../utils/userNumberFormat";
 import dayjs from "dayjs";
 import {
   bindMoneyWholeNumberMode,
@@ -58,6 +64,11 @@ import {
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
+import {
+  getApiFailureMessage,
+  getServerErrorMessage,
+  unwrapApiStatusBody,
+} from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 
@@ -532,6 +543,24 @@ function PaymentRequest() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
+  const isIndiaUser = useMemo(() => {
+    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+    const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+    if (branchCountryCode || branchCurrencyCode) {
+      return isIndianOutstandingBranch(branchCountryCode, branchCurrencyCode);
+    }
+    return (
+      isIndianUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("india")
+    );
+  }, [
+    user?.branches,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
+
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(requestId && (isViewMode || isEditMode));
@@ -630,6 +659,43 @@ function PaymentRequest() {
       staleTime: Infinity,
     });
 
+  const { data: sacCodes = [] } = useQuery({
+    queryKey: ["gstSacMasterFilter", "payment-request"],
+    queryFn: async () => {
+      try {
+        const res = await postAPICall(URL.gstSacMasterFilter, {}, API_HEADER);
+        const maybeAxios = res as { data?: unknown };
+        const payloadUnknown: unknown = maybeAxios?.data ?? res;
+        const isObj = (v: unknown): v is Record<string, unknown> =>
+          typeof v === "object" && v !== null && !Array.isArray(v);
+
+        let rows: unknown[] = [];
+        if (Array.isArray(payloadUnknown)) {
+          rows = payloadUnknown;
+        } else if (isObj(payloadUnknown) && Array.isArray(payloadUnknown.data)) {
+          rows = payloadUnknown.data as unknown[];
+        } else if (
+          isObj(payloadUnknown) &&
+          isObj(payloadUnknown.data) &&
+          Array.isArray((payloadUnknown.data as Record<string, unknown>).data)
+        ) {
+          rows = (payloadUnknown.data as Record<string, unknown>)
+            .data as unknown[];
+        }
+
+        const list = rows as Array<{ sac_code?: unknown }>;
+        return list
+          .map((r) => String(r?.sac_code ?? "").trim())
+          .filter(Boolean);
+      } catch (e) {
+        console.error("Error fetching SAC master:", e);
+        return [] as string[];
+      }
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
   const stateOptions = useMemo(() => {
     const data = stateData as { id?: number; state_name?: string; name?: string }[];
     if (!Array.isArray(data)) return [];
@@ -655,6 +721,15 @@ function PaymentRequest() {
       })
       .filter((o) => o.value);
   }, [tdsSectionData]);
+
+  const sacCodeOptions = useMemo(() => {
+    const uniq = new Set<string>();
+    (Array.isArray(sacCodes) ? sacCodes : []).forEach((c) => {
+      const v = String(c ?? "").trim();
+      if (v) uniq.add(v);
+    });
+    return Array.from(uniq);
+  }, [sacCodes]);
 
   // Fetch payment request data when opening edit/view URL (/edit/:id or /view/:id)
   const { data: requestFetchRes, isFetching: requestFetchLoading } = useQuery({
@@ -772,6 +847,15 @@ function PaymentRequest() {
       paid_to: (v) => (!v?.trim() ? "Paid To is required" : null),
     },
   });
+
+  const sacCodeOptionsForForm = useMemo(() => {
+    const uniq = new Set<string>(sacCodeOptions);
+    (form.values.charges ?? []).forEach((c) => {
+      const v = String(c.tax_code ?? "").trim();
+      if (v) uniq.add(v);
+    });
+    return Array.from(uniq);
+  }, [sacCodeOptions, form.values.charges]);
 
   const isApprovedStatus =
     (saveResponse?.status ?? form.values.approved ?? "")
@@ -1192,6 +1276,276 @@ function PaymentRequest() {
           (error as { message?: string })?.message ??
           "Failed to calculate GST",
         type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCalculateTds = async () => {
+    let paymentRequestId =
+      saveResponse?.id != null && saveResponse.id > 0
+        ? Number(saveResponse.id)
+        : requestId
+          ? Number(requestId)
+          : null;
+
+    if (!paymentRequestId) {
+      const hasCharge = form.values.charges.some(
+        (c) => c.amount != null && c.amount !== 0,
+      );
+      if (!hasCharge) {
+        ToastNotification({
+          type: "error",
+          message: "Please enter at least one charge before calculating TDS.",
+        });
+        return;
+      }
+    }
+
+    if (!paymentRequestId) {
+      const validation = form.validate();
+      if (validation.hasErrors) return;
+      setIsSubmitting(true);
+      try {
+        const values = form.values;
+        const formatDate = (d: Date | null) => {
+          if (!d) return null;
+          const day = String(d.getDate()).padStart(2, "0");
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const year = d.getFullYear();
+          return `${year}-${month}-${day}`;
+        };
+
+        const currencyList = currencyData as Array<{
+          id?: number;
+          currency_code?: string;
+          code?: string;
+        }>;
+        const mainCurrencyId = currencyList?.find(
+          (item) =>
+            (item.currency_code ?? item.code ?? "")
+              .toString()
+              .trim()
+              .toUpperCase() ===
+            (values.currency ?? "").toString().trim().toUpperCase(),
+        )?.id;
+
+        const stateIdNum = values.state_code_1
+          ? Number(values.state_code_1)
+          : undefined;
+
+        const payload: Record<string, unknown> = {
+          job_reference: values.job_reference_1 ?? "",
+          crj_number: values.payment_crj_did ?? "",
+          approved_by: values.approved_by_1 ?? "",
+          approved_date: formatDate(values.approved_date),
+          customer_gst_no: values.customer_gst_no ?? "",
+          location_gst_no: values.location_gst_no ?? "",
+          date: formatDate(values.date),
+          payment_type: values.payment_type ?? "",
+          vouchar_type: values.voucher_type ?? "",
+          CINV: values.cinv ?? false,
+          proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+          proforma_inv_date: formatDate(values.proforma_invoice_date),
+          actual_inv_no: values.actual_invoice_no ?? "",
+          actual_inv_date: formatDate(values.actual_invoice_date),
+          account_id:
+            values.account_id && Number.isFinite(Number(values.account_id))
+              ? Number(values.account_id)
+              : undefined,
+          ...(values.account_code ? { account_code: values.account_code } : {}),
+          amount: values.amount != null ? Number(values.amount) : null,
+          crj_date: formatDate(values.crj_date),
+          paid_to_type: values.paid_to_type ?? "",
+          paid_to: values.paid_to ?? "",
+          not_over: values.not_over ?? "",
+          tds_section_code: values.tds_section_code ?? "",
+          account_note: values.accountant_note ?? "",
+          note: values.note ?? "",
+          rejected_note: values.rejected_note || null,
+          on_hold_note: values.on_hold_note || null,
+          ...(values.approved ? { status: values.approved } : {}),
+          charges_data: values.charges.map((c) => ({
+            ...(c.id != null ? { id: c.id } : {}),
+            charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+            job_id: (c.job_no ?? "") || (c.job_id ?? ""),
+            currency_id: c.currency_id ? Number(c.currency_id) : undefined,
+            unit_id: c.unit_id ? Number(c.unit_id) : undefined,
+            roe: c.roe != null ? Number(c.roe) : undefined,
+            no_of_unit:
+              c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
+            amount_per_unit:
+              c.amount_per_unit != null
+                ? Number(c.amount_per_unit)
+                : undefined,
+            amount: c.amount != null ? Number(c.amount) : undefined,
+            local_amount:
+              c.amount_in_local != null
+                ? Number(c.amount_in_local)
+                : undefined,
+            sac_code: c.tax_code ?? "",
+          })),
+        };
+        if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+          payload.currency_id = mainCurrencyId;
+        }
+        if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+          payload.state_id = stateIdNum;
+        }
+
+        const rawResponse = await apiCallProtected.post(
+          (URL as any).paymentRequest,
+          buildPaymentRequestFormData(
+            payload as Record<string, unknown>,
+            supportingDocuments,
+          ),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
+        );
+
+        const saveData: PaymentRequestFromApi =
+          (rawResponse as { data?: { data?: PaymentRequestFromApi } })?.data
+            ?.data ??
+          (rawResponse as { data?: PaymentRequestFromApi })?.data ??
+          (rawResponse as PaymentRequestFromApi);
+        paymentRequestId =
+          saveData?.id != null ? Number(saveData.id) : undefined;
+        if (!paymentRequestId || Number.isNaN(paymentRequestId)) {
+          throw new Error("Payment request id not found in response.");
+        }
+        setSaveResponse({
+          id: paymentRequestId,
+          request_no: saveData.request_no ?? "",
+          status: saveData.status,
+        });
+      } catch (error: unknown) {
+        ToastNotification({
+          message:
+            (error as { message?: string })?.message ??
+            "Failed to save payment request",
+          type: "error",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    if (!paymentRequestId || Number.isNaN(paymentRequestId)) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const res = await postAPICall(
+        URL.tdsCalculation,
+        { payment_request_id: paymentRequestId },
+        API_HEADER,
+      );
+
+      const data = unwrapApiStatusBody(res) as Record<string, unknown>;
+      const failureMessage = getApiFailureMessage(
+        res,
+        "TDS calculation failed.",
+      );
+      if (failureMessage) {
+        ToastNotification({
+          type: "error",
+          message: failureMessage,
+        });
+        return;
+      }
+
+      const rows =
+        (data.data as Array<Record<string, unknown>> | undefined) ?? [];
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        ToastNotification({
+          type: "error",
+          message: "No TDS rows returned from calculation.",
+        });
+        return;
+      }
+
+      const currencyList = currencyData as Array<{
+        id?: number;
+        currency_code?: string;
+        code?: string;
+      }>;
+      const existing = form.values.charges;
+      const tdsCharges: ChargeItem[] = rows
+        .map((item): ChargeItem | null => {
+          const amountRaw = item.amount;
+          if (amountRaw === undefined || amountRaw === null || String(amountRaw).trim() === "") {
+            return null;
+          }
+          const amount = Number(amountRaw);
+          if (!Number.isFinite(amount)) return null;
+          const roeRaw = item.roe;
+          const roeValue =
+            roeRaw !== undefined &&
+            roeRaw !== null &&
+            String(roeRaw).trim() !== ""
+              ? Number(roeRaw)
+              : 1;
+          const currencyId =
+            item.currency_id !== undefined && item.currency_id !== null
+              ? String(item.currency_id)
+              : "";
+          const currencyCode =
+            String(item.currency_code ?? "").trim() ||
+            (currencyList?.find(
+              (c) => String(c.id ?? "") === currencyId,
+            )?.currency_code ??
+              currencyList?.find((c) => String(c.id ?? "") === currencyId)
+                ?.code ??
+              "");
+          const drCr = String(
+            (item.Dr_cr as unknown) ??
+              (item.Dr_Cr as unknown) ??
+              (item.dr_cr as unknown) ??
+              (item.cr_dr as unknown) ??
+              "",
+          );
+          return {
+            ...emptyCharge(),
+            charge_id:
+              item.charge_id !== undefined && item.charge_id !== null
+                ? Number(item.charge_id)
+                : null,
+            charge_name: String(item.charge_name ?? item.account_name ?? ""),
+            job_no: String(item.job_id ?? item.job_no ?? ""),
+            cn_r: drCr,
+            currency: String(currencyCode),
+            currency_id: currencyId,
+            roe: Number.isFinite(roeValue) ? roeValue : 1,
+            amount,
+            amount_in_local: amount * (Number.isFinite(roeValue) ? roeValue : 1),
+          };
+        })
+        .filter((x): x is ChargeItem => x !== null);
+
+      const deduped = tdsCharges.filter((nr) => {
+        return !existing.some(
+          (er) =>
+            String(er.charge_name ?? "") === String(nr.charge_name ?? "") &&
+            Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
+            String(er.cn_r ?? "") === String(nr.cn_r ?? "") &&
+            String(er.currency_id ?? "") === String(nr.currency_id ?? ""),
+        );
+      });
+
+      if (deduped.length) {
+        form.setFieldValue("charges", [...existing, ...deduped]);
+      }
+    } catch (error: unknown) {
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(error, "TDS calculation failed."),
       });
     } finally {
       setIsSubmitting(false);
@@ -2519,12 +2873,15 @@ function PaymentRequest() {
               >
                 Calculate GST
               </Button>
-              {form.values.tds_section_code?.trim() ? (
+              {isIndiaUser &&
+              String(form.values.tds_section_code ?? "").trim() !== "" ? (
               <Button
                 type="button"
                 variant="light"
                 color="#105476"
                 size="sm"
+                onClick={handleCalculateTds}
+                loading={isSubmitting}
                 disabled={isReadOnly}
               >
                 Calculate TDS
@@ -3037,16 +3394,20 @@ function PaymentRequest() {
 
                 {/* SAC Code */}
                 <Grid.Col span={1}>
-                  <TextInput
+                  <Dropdown
+                    searchable
+                    clearable
                     placeholder="SAC Code"
-                    value={charge.tax_code}
-                    readOnly={isReadOnly}
-                    rightSection={
-                      sacCodeLoadingByIndex[index] &&
-                      (!charge.tax_code || charge.tax_code.trim() === "") ? (
-                        <Loader size="xs" color="#105476" />
-                      ) : null
+                    data={sacCodeOptionsForForm}
+                    value={String(charge.tax_code ?? "").trim() || null}
+                    onChange={(val) =>
+                      form.setFieldValue(
+                        `charges.${index}.tax_code`,
+                        String(val ?? "").trim(),
+                      )
                     }
+                    disabled={isReadOnly}
+                    dropdownZIndex={1000}
                     styles={{
                       input: {
                         fontSize: "13px",

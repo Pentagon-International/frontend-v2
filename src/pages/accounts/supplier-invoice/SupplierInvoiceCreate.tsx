@@ -78,7 +78,11 @@ import {
 import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
-import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
+import {
+  getApiFailureMessage,
+  getServerErrorMessage,
+  unwrapApiStatusBody,
+} from "../../../utils/apiErrorMessage";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -1971,7 +1975,7 @@ export default function SupplierInvoiceCreate({
 
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
     const mappedCharges: ChargeRow[] = charges.map((c: Record<string, any>) => ({
-      // For GST rows from Payment Request, CRN should be Revenue.
+      // For GST rows from Payment Request, CRN should be Neutral.
       // Other charges should continue as Cost.
       // Charge names are compared in uppercase to handle casing differences.
       CRN: [
@@ -1979,7 +1983,7 @@ export default function SupplierInvoiceCreate({
         "CENTRAL GOODS AND SERVICE TAX",
         "INTEGRATED GOODS AND SERVICE TAX",
       ].includes(String(c.charge_name ?? "").trim().toUpperCase())
-        ? "Revenue"
+        ? "Neutral"
         : "Cost",
       // Do not map Account/Subledger from Payment Request.
       account_code: "",
@@ -3839,18 +3843,13 @@ export default function SupplierInvoiceCreate({
                     </Button>
                     )}
                     {isIndiaUser &&
-                      String(form.values.tds_section_code ?? "").trim() !== "" &&
-                      !isReversal && (
+                      String(form.values.tds_section_code ?? "").trim() !== "" && (
                       <Button
                         type="button"
                         size="sm"
                         variant="light"
                         color="#105476"
-                        disabled={
-                          isReadOnly ||
-                          reversalFormDisabled ||
-                          !isVendorSelected
-                        }
+                        disabled={isReadOnly || !isVendorSelected}
                         onClick={async () => {
                         if (!saveResponse?.id) {
                           const hasCharge = form.values.charges_data.some(
@@ -3871,7 +3870,11 @@ export default function SupplierInvoiceCreate({
                           const v = form.validate();
                           if (v.hasErrors) return;
                           setCalcLoading(true);
-                          setCalcLoadingText("Creating supplier invoice first");
+                          setCalcLoadingText(
+                            isReversal
+                              ? "Creating reverse supplier invoice first"
+                              : "Creating supplier invoice first",
+                          );
                           supplierInvoiceId = await handleSubmit(form.values);
                           if (!supplierInvoiceId) {
                             setCalcLoading(false);
@@ -3884,11 +3887,27 @@ export default function SupplierInvoiceCreate({
                           setCalcLoadingText("Calculating TDS...");
                           const res = await postAPICall(
                             URL.tdsCalculation,
-                            { supplier_invoice_id: supplierInvoiceId },
+                            isReversal
+                              ? { reverse_supplier_invoice_id: supplierInvoiceId }
+                              : { supplier_invoice_id: supplierInvoiceId },
                             API_HEADER,
                           );
 
-                          const data = res as Record<string, unknown>;
+                          const data = unwrapApiStatusBody(res) as Record<
+                            string,
+                            unknown
+                          >;
+                          const failureMessage = getApiFailureMessage(
+                            res,
+                            "TDS calculation failed.",
+                          );
+                          if (failureMessage) {
+                            ToastNotification({
+                              type: "error",
+                              message: failureMessage,
+                            });
+                            return;
+                          }
                           const rows =
                             (data.data as Array<Record<string, unknown>> | undefined) ??
                             [];
@@ -3956,6 +3975,14 @@ export default function SupplierInvoiceCreate({
                               ...deduped,
                             ]);
                           }
+                        } catch (e: unknown) {
+                          ToastNotification({
+                            type: "error",
+                            message: getServerErrorMessage(
+                              e,
+                              "TDS calculation failed.",
+                            ),
+                          });
                         } finally {
                           setCalcLoading(false);
                         }

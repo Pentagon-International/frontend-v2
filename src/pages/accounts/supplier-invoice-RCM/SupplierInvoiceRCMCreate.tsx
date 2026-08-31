@@ -44,6 +44,11 @@ import {
   import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
   import { isIndianUserCountry } from "../../../utils/userNumberFormat";
   import {
+    getApiFailureMessage,
+    getServerErrorMessage,
+    unwrapApiStatusBody,
+  } from "../../../utils/apiErrorMessage";
+  import {
     findJobCreateDropdownRow,
     mapJobCreateDropdownOptions,
   } from "../../../utils/jobCreateDropdown";
@@ -1221,7 +1226,7 @@ import {
   
       const charges = Array.isArray(prData.charges) ? prData.charges : [];
       const mappedCharges: ChargeRow[] = charges.map((c: Record<string, any>) => ({
-        // For GST rows from Payment Request, CRN should be Revenue.
+        // For GST rows from Payment Request, CRN should be Neutral.
         // Other charges should continue as Cost.
         // Charge names are compared in uppercase to handle casing differences.
         CRN: [
@@ -1229,7 +1234,7 @@ import {
           "CENTRAL GOODS AND SERVICE TAX",
           "INTEGRATED GOODS AND SERVICE TAX",
         ].includes(String(c.charge_name ?? "").trim().toUpperCase())
-          ? "Revenue"
+          ? "Neutral"
           : "Cost",
         // Do not map Account/Subledger from Payment Request.
         account_code: "",
@@ -2663,7 +2668,21 @@ import {
                               API_HEADER,
                             );
   
-                            const data = res as Record<string, unknown>;
+                            const data = unwrapApiStatusBody(res) as Record<
+                              string,
+                              unknown
+                            >;
+                            const failureMessage = getApiFailureMessage(
+                              res,
+                              "TDS calculation failed.",
+                            );
+                            if (failureMessage) {
+                              ToastNotification({
+                                type: "error",
+                                message: failureMessage,
+                              });
+                              return;
+                            }
                             const rows =
                               (data.data as Array<Record<string, unknown>> | undefined) ??
                               [];
@@ -2729,6 +2748,14 @@ import {
                                 ...deduped,
                               ]);
                             }
+                          } catch (e: unknown) {
+                            ToastNotification({
+                              type: "error",
+                              message: getServerErrorMessage(
+                                e,
+                                "TDS calculation failed.",
+                              ),
+                            });
                           } finally {
                             setCalcLoading(false);
                           }
