@@ -42,6 +42,11 @@ import {
   ToastNotification,
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
+import {
+  findJobCreateDropdownRow,
+  jobCreateDropdownDisplayFormat,
+  mapJobCreateDropdownOptions,
+} from "../../../utils/jobCreateDropdown";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
@@ -1341,8 +1346,11 @@ export default function SupplierInvoiceCreate({
   const getServiceIdByShipmentId = useCallback(
     (shipmentId: string | null | undefined): number | null => {
       if (!shipmentId || !Array.isArray(jobList)) return null;
-      const item = jobList.find((j) => j.shipment_id === shipmentId);
-      return item?.service_id != null ? item.service_id : null;
+      const item = findJobCreateDropdownRow(
+        jobList as Array<Record<string, unknown>>,
+        shipmentId,
+      );
+      return item?.service_id != null ? Number(item.service_id) : null;
     },
     [jobList],
   );
@@ -1376,9 +1384,7 @@ export default function SupplierInvoiceCreate({
         const arr = Array.isArray(results)
           ? (results as Array<Record<string, unknown>>)
           : [];
-        const match = arr.find(
-          (x) => String(x?.shipment_id ?? "").trim() === shipmentNo,
-        );
+        const match = findJobCreateDropdownRow(arr, shipmentNo);
         const serviceIdRaw =
           (match as { service_id?: unknown; serviceId?: unknown; job?: { service_id?: unknown } } | undefined)
             ?.service_id ??
@@ -1515,10 +1521,7 @@ export default function SupplierInvoiceCreate({
         const arr = Array.isArray(rows)
           ? (rows as Array<Record<string, unknown>>)
           : [];
-        const opts = arr
-          .map((x) => String(x?.shipment_id ?? "").trim())
-          .filter(Boolean)
-          .map((v) => ({ value: v, label: v }));
+        const opts = mapJobCreateDropdownOptions(arr);
         // Always include job_id so estimates rows remain selectable.
         if (
           prefillJobId &&
@@ -4070,11 +4073,8 @@ export default function SupplierInvoiceCreate({
                           displayValue={row.shipment_no || undefined}
                           dropdownZIndex={1100}
                           minSearchLength={1}
-                          searchFields={["shipment_id"]}
-                          displayFormat={(item: Record<string, unknown>) => {
-                            const shipmentId = String(item.shipment_id ?? "").trim();
-                            return { value: shipmentId, label: shipmentId };
-                          }}
+                          searchFields={["shipment_id", "job_id", "type"]}
+                          displayFormat={jobCreateDropdownDisplayFormat}
                           disabled={isReadOnly || reversalFormDisabled}
                           onChange={(v) => {
                             const shipmentNo = String(v ?? "").trim();

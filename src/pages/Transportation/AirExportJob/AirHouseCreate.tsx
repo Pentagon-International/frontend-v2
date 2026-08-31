@@ -161,10 +161,18 @@ import {
   resolveHousingDetailsPrimaryKey,
   type AirExportAirPdfDocument,
 } from "../../../utils/airWayBillPdf";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import {
+  formatChaHouseBlPayload,
+  readChaHouseBlInitial,
+} from "../chaJob/chaHouseBlFields";
+import { ChaHouseBlFormFields } from "../chaJob/ChaHouseBlFormFields";
 
 // Type definitions
 type HAWBDetailsForm = {
   hawb_number: string;
+  bl_no: string;
+  bl_date: Date | null;
   shipment_terms_code: string;
   shipment_terms_name: string;
   pp_cc: string;
@@ -378,6 +386,11 @@ function HouseCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isChaMode, basePath: jobModuleBasePath } = useJobModulePaths({
+    basePath: "/air/export-job",
+    listKey: "AIR_EXPORT_JOB_MASTER",
+    invoiceServiceType: "AIR",
+  });
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -604,6 +617,9 @@ function HouseCreate() {
   const form = useForm<HAWBDetailsForm>({
     initialValues: {
       hawb_number: editData?.hawb_number || editData?.hbl_number || "",
+      ...readChaHouseBlInitial(
+        editData as { bl_no?: string; bl_date?: string | Date } | undefined,
+      ),
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
       pp_cc: resolveHouseFreightPpCc(
@@ -969,6 +985,9 @@ function HouseCreate() {
       form.setValues({
         hawb_number:
           editData.hawb_number || editData.hbl_number || editData.hawb_no || "",
+        ...readChaHouseBlInitial(
+          editData as { bl_no?: string; bl_date?: string | Date },
+        ),
         shipment_terms_code: editData.shipment_terms_code || "",
         shipment_terms_name: editData.shipment_terms_name || "",
         pp_cc: resolveHouseFreightPpCc(
@@ -2244,6 +2263,7 @@ function HouseCreate() {
     return {
       ...(housingPk > 0 ? { id: housingPk } : {}),
       hawb_number: v.hawb_number,
+      ...formatChaHouseBlPayload(v),
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
       pp_cc: v.pp_cc || "Collect",
@@ -2321,10 +2341,10 @@ function HouseCreate() {
   ) => {
     const isInEditMode = location.state?.job && location.state.job.id;
     const navigatePath = isViewOnly
-      ? "/air/export-job/view"
+      ? `${jobModuleBasePath}/view`
       : isInEditMode
-        ? "/air/export-job/edit"
-        : "/air/export-job/create";
+        ? `${jobModuleBasePath}/edit`
+        : `${jobModuleBasePath}/create`;
 
     navigate(navigatePath, {
       state: {
@@ -2398,6 +2418,7 @@ function HouseCreate() {
         booking_id: (editData as { booking_id?: number | null }).booking_id,
       }),
       hawb_number: currentFormValues.hawb_number,
+      ...formatChaHouseBlPayload(currentFormValues),
       shipment_terms_code: currentFormValues.shipment_terms_code,
       shipment_terms_name: currentFormValues.shipment_terms_name,
       pp_cc: currentFormValues.pp_cc || "Collect",
@@ -3355,6 +3376,8 @@ function HouseCreate() {
                   error={form.errors.ref_no}
                 />
               </Grid.Col>
+
+              <ChaHouseBlFormFields isChaMode={isChaMode} form={form} />
 
               <Grid.Col span={3}>
                 <FormTextArea

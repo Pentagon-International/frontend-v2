@@ -174,11 +174,19 @@ import RequiredLabel from "../../../components/RequiredLabel";
 import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
 import FormTextArea from "../../../components/FormTextArea";
 import FormNumberInput from "../../../components/FormNumberInput";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import {
+  formatChaHouseBlPayload,
+  readChaHouseBlInitial,
+} from "../chaJob/chaHouseBlFields";
+import { ChaHouseBlFormFields } from "../chaJob/ChaHouseBlFormFields";
 
 // Type definitions
 type HouseDetailsForm = {
   hbl_number: string;
   house_date: Date | null;
+  bl_no: string;
+  bl_date: Date | null;
   shipment_terms_code: string;
   shipment_terms_name: string;
   pp_cc: string;
@@ -411,6 +419,11 @@ function HouseCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isChaMode, basePath: jobModuleBasePath } = useJobModulePaths({
+    basePath: "/SeaExport/import-job",
+    listKey: "OCEAN_IMPORT_JOB_MASTER",
+    invoiceServiceType: ["FCL", "LCL"],
+  });
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -951,6 +964,9 @@ function HouseCreate() {
             String((editData as { house_date?: string | Date }).house_date),
           )
         : null,
+      ...readChaHouseBlInitial(
+        editData as { bl_no?: string; bl_date?: string | Date } | undefined,
+      ),
       shipment_terms_code: editData?.shipment_terms_code || "",
       shipment_terms_name: editData?.shipment_terms_name || "",
       pp_cc: normalizeFreightPpCc(
@@ -2514,6 +2530,7 @@ function HouseCreate() {
       house_date: form.values.house_date
         ? dayjs(form.values.house_date).format("YYYY-MM-DD")
         : null,
+      ...formatChaHouseBlPayload(form.values),
       shipment_terms_code: form.values.shipment_terms_code,
       shipment_terms_name: form.values.shipment_terms_name,
       pp_cc: form.values.pp_cc || "Collect",
@@ -2635,10 +2652,10 @@ function HouseCreate() {
   ) => {
     const isInEditMode = location.state?.job && location.state.job.id;
     const navigatePath = isViewOnly
-      ? "/SeaExport/import-job/view"
+      ? `${jobModuleBasePath}/view`
       : isInEditMode
-        ? "/SeaExport/import-job/edit"
-        : "/SeaExport/import-job/create";
+        ? `${jobModuleBasePath}/edit`
+        : `${jobModuleBasePath}/create`;
 
     navigate(navigatePath, {
       state: {
@@ -2692,6 +2709,7 @@ function HouseCreate() {
       house_date: v.house_date
         ? dayjs(v.house_date).format("YYYY-MM-DD")
         : null,
+      ...formatChaHouseBlPayload(v),
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
       pp_cc: v.pp_cc || "Collect",
@@ -4373,6 +4391,8 @@ function HouseCreate() {
                   error={form.errors.ref_no}
                 />
               </Grid.Col>
+
+              <ChaHouseBlFormFields isChaMode={isChaMode} form={form} />
 
               <Grid.Col span={4}>
                 <SingleDateInput

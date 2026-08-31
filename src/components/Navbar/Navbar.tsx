@@ -70,6 +70,12 @@ import {
   ODEX_JOBS_PATH,
   VENDOR_INVOICE_PATH,
 } from "../../pages/Workflow/jobcreation/workflowUrls";
+import {
+  CHA_AIR_EXPORT_CONFIG,
+  CHA_AIR_IMPORT_CONFIG,
+  CHA_OCEAN_EXPORT_CONFIG,
+  CHA_OCEAN_IMPORT_CONFIG,
+} from "../../pages/Transportation/chaJob/chaJobConfig";
 import PentLogoFull from "../../assets/images/pentagon-prime.svg";
 import PentLogo from "../../assets/images/logo.svg";
 import { SimpleNavLink } from "./SimpleNavLink";
@@ -80,6 +86,7 @@ import { SectionTitle } from "./SectionTitle";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
+import { useCanAccessAccountsSubNav } from "../../hooks/useCanAccessAccountsSubNav";
 import { useCanAccessCheckerPage } from "../../hooks/useCanPostDocuments";
 
 const Navbar = ({
@@ -102,12 +109,14 @@ const Navbar = ({
     Boolean(user?.is_staff) ||
     Boolean(user?.screen_permissions?.finance_dashboard);
   const showCheckerPage = useCanAccessCheckerPage();
+  const showAccountsSubNav = useCanAccessAccountsSubNav();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
   const [, setIsCustomerServiceOpen] = useState(false);
   const [isSeaExportOpen, setIsSeaExportOpen] = useState(false);
   const [isAirOpen, setIsAirOpen] = useState(false);
   const [isInlandOpen, setIsInlandOpen] = useState(false);
+  const [isChaOpen, setIsChaOpen] = useState(false);
   const [isAccountsOpen, setIsAccountsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isFinanceDashboardOpen, setIsFinanceDashboardOpen] = useState(false);
@@ -142,7 +151,12 @@ const Navbar = ({
       location.pathname.startsWith("/bank-reconciliation") ||
       location.pathname.startsWith("/checker")
     ) {
-      setIsAccountsOpen(true);
+      if (showAccountsSubNav) {
+        setIsAccountsOpen(true);
+      }
+    }
+    if (!showAccountsSubNav) {
+      setIsAccountsOpen(false);
     }
     if (
       location.pathname.startsWith("/job-profit-verification") ||
@@ -157,7 +171,10 @@ const Navbar = ({
     if (location.pathname.startsWith("/finance-dashboard")) {
       setIsFinanceDashboardOpen(true);
     }
-  }, [location.pathname]);
+    if (location.pathname.startsWith("/cha/")) {
+      setIsChaOpen(true);
+    }
+  }, [location.pathname, showAccountsSubNav]);
 
   const handleLogoClick = () => {
     // Navigate to dashboard with reset flag if not already at base level
@@ -698,6 +715,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -712,6 +730,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -726,6 +745,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -740,6 +760,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -754,6 +775,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -768,6 +790,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -782,6 +805,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -796,6 +820,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                 </CollapsibleNav>
@@ -819,6 +844,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -833,6 +859,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -847,6 +874,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -861,6 +889,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -875,6 +904,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                 </CollapsibleNav>
@@ -898,6 +928,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -912,6 +943,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -926,6 +958,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -940,6 +973,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -954,6 +988,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -968,6 +1003,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -982,6 +1018,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -996,6 +1033,7 @@ const Navbar = ({
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
+                      setIsChaOpen,
                     }}
                   />
                   <SubNavLink
@@ -1007,6 +1045,80 @@ const Navbar = ({
                       setIsSalesOpen,
                       setIsTariffOpen,
                       setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                      setIsChaOpen,
+                    }}
+                  />
+                </CollapsibleNav>
+              </Box>
+              <Box>
+                <CollapsibleNav
+                  label="CHA"
+                  openedLocal={isChaOpen}
+                  setOpenedLocal={setIsChaOpen}
+                  icon={IconBriefcase as any}
+                >
+                  <SubNavLink
+                    parent="Transportation"
+                    label={CHA_AIR_IMPORT_CONFIG.navLabel}
+                    subNavKey={CHA_AIR_IMPORT_CONFIG.activeSubNavKey}
+                    icon={IconPlaneArrival}
+                    path={CHA_AIR_IMPORT_CONFIG.basePath}
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsChaOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label={CHA_AIR_EXPORT_CONFIG.navLabel}
+                    subNavKey={CHA_AIR_EXPORT_CONFIG.activeSubNavKey}
+                    icon={IconPlaneDeparture}
+                    path={CHA_AIR_EXPORT_CONFIG.basePath}
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsChaOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label={CHA_OCEAN_IMPORT_CONFIG.navLabel}
+                    subNavKey={CHA_OCEAN_IMPORT_CONFIG.activeSubNavKey}
+                    icon={IconFerryFilled}
+                    path={CHA_OCEAN_IMPORT_CONFIG.basePath}
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsChaOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label={CHA_OCEAN_EXPORT_CONFIG.navLabel}
+                    subNavKey={CHA_OCEAN_EXPORT_CONFIG.activeSubNavKey}
+                    icon={IconFerry}
+                    path={CHA_OCEAN_EXPORT_CONFIG.basePath}
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsChaOpen,
                       setIsAirOpen,
                       setIsInlandOpen,
                       setIsSeaExportOpen,
@@ -1030,8 +1142,9 @@ const Navbar = ({
                   openedLocal={isAccountsOpen}
                   setOpenedLocal={setIsAccountsOpen}
                   icon={IconReceipt2}
+                  expandable={showAccountsSubNav}
                 >
-                    {showCheckerPage && (
+                    {showAccountsSubNav && showCheckerPage && (
                       <SubNavLink
                         parent="Accounts"
                         label="Checker"
@@ -1046,6 +1159,8 @@ const Navbar = ({
                         }}
                       />
                     )}
+                    {showAccountsSubNav && (
+                    <>
                     <SubNavLink
                       parent="Accounts"
                       label="Receipt"
@@ -1319,6 +1434,8 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
+                    </>
+                    )}
                 </CollapsibleNav>
               </Box>
               <SimpleNavLink

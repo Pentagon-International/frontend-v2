@@ -37,6 +37,10 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
 import { commonSearchAPI } from "../../../service/searchApi";
+import {
+  findJobCreateDropdownRow,
+  jobCreateDropdownDisplayFormat,
+} from "../../../utils/jobCreateDropdown";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import {
@@ -350,9 +354,7 @@ export function DebitCreditNoteCreateBase({
       const rows = Array.isArray(results)
         ? (results as Array<Record<string, unknown>>)
         : [];
-      const match = rows.find(
-        (r) => String(r?.shipment_id ?? "").trim() === shipmentNo,
-      );
+      const match = findJobCreateDropdownRow(rows, shipmentNo);
       const serviceIdRaw =
         (
           match as
@@ -1707,13 +1709,8 @@ export function DebitCreditNoteCreateBase({
                       displayValue={String(l.shipment_no ?? "").trim() || null}
                       dropdownZIndex={1000}
                       minSearchLength={1}
-                      searchFields={["shipment_id"]}
-                      displayFormat={(item: Record<string, unknown>) => {
-                        const shipmentId = String(
-                          item.shipment_id ?? "",
-                        ).trim();
-                        return { value: shipmentId, label: shipmentId };
-                      }}
+                      searchFields={["shipment_id", "job_id", "type"]}
+                      displayFormat={jobCreateDropdownDisplayFormat}
                       returnOriginalData
                       onChange={(val, _selected, original) => {
                         const shipmentNo = String(val ?? "").trim();

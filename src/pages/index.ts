@@ -150,6 +150,20 @@ import AirImportBookingMaster from "./Air/ImportBooking/AirImportBookingMaster";
 import AirImportBookingCreate from "./Air/ImportBooking/AirImportBookingCreate";
 import AirImportToExportBooking from "./Air/ImportToExportBooking";
 
+// Transportation - CHA Jobs
+import ChaAirImportJobMaster from "./Transportation/ChaAirImportJob";
+import ChaAirImportJobCreate from "./Transportation/ChaAirImportJob/ChaAirImportJobCreate";
+import ChaAirImportHouseCreate from "./Transportation/ChaAirImportJob/ChaAirImportHouseCreate";
+import ChaAirExportJobMaster from "./Transportation/ChaAirExportJob";
+import ChaAirExportJobCreate from "./Transportation/ChaAirExportJob/ChaAirExportJobCreate";
+import ChaAirExportHouseCreate from "./Transportation/ChaAirExportJob/ChaAirExportHouseCreate";
+import ChaOceanImportJobMaster from "./Transportation/ChaOceanImportJob";
+import ChaOceanImportJobCreate from "./Transportation/ChaOceanImportJob/ChaOceanImportJobCreate";
+import ChaOceanImportHouseCreate from "./Transportation/ChaOceanImportJob/ChaOceanImportHouseCreate";
+import ChaOceanExportJobMaster from "./Transportation/ChaOceanExportJob";
+import ChaOceanExportJobCreate from "./Transportation/ChaOceanExportJob/ChaOceanExportJobCreate";
+import ChaOceanExportHouseCreate from "./Transportation/ChaOceanExportJob/ChaOceanExportHouseCreate";
+
 // Ocean Module - Customer Service
 import FCLExportGenerationMaster from "./Ocean/ExportGeneration/FCL/FCLExportGenerationMaster";
 import FCLExportGenerationCreate from "./Ocean/ExportGeneration/FCL/FCLExportGenerationCreate";
@@ -386,6 +400,18 @@ export {
   AirImportBookingMaster,
   AirImportBookingCreate,
   AirImportToExportBooking,
+  ChaAirImportJobMaster,
+  ChaAirImportJobCreate,
+  ChaAirImportHouseCreate,
+  ChaAirExportJobMaster,
+  ChaAirExportJobCreate,
+  ChaAirExportHouseCreate,
+  ChaOceanImportJobMaster,
+  ChaOceanImportJobCreate,
+  ChaOceanImportHouseCreate,
+  ChaOceanExportJobMaster,
+  ChaOceanExportJobCreate,
+  ChaOceanExportHouseCreate,
   // Ocean Module - Customer Service
   FCLExportGenerationMaster,
   FCLExportGenerationCreate,

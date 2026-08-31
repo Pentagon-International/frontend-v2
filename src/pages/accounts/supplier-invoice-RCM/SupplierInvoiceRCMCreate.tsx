@@ -44,6 +44,10 @@ import {
   import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
   import { isIndianUserCountry } from "../../../utils/userNumberFormat";
   import {
+    findJobCreateDropdownRow,
+    mapJobCreateDropdownOptions,
+  } from "../../../utils/jobCreateDropdown";
+  import {
     bindMoneyWholeNumberMode,
     clampCurrencyMoneyAmountBound,
     clampMoneyAmountBound,
@@ -894,24 +898,26 @@ import {
     });
   
     const jobList = jobCreateData as {
+      type?: string;
+      job_id?: string;
       shipment_id?: string;
       service_id?: number;
     }[];
     const shipmentOptions = useMemo(() => {
       if (!Array.isArray(jobList)) return [];
-      return jobList
-        .filter((item) => item.shipment_id != null && item.shipment_id !== "")
-        .map((item) => ({
-          value: String(item.shipment_id),
-          label: String(item.shipment_id),
-        }));
+      return mapJobCreateDropdownOptions(
+        jobList as Array<Record<string, unknown>>,
+      );
     }, [jobList]);
-  
+
     const getServiceIdByShipmentId = useCallback(
       (shipmentId: string | null | undefined): number | null => {
         if (!shipmentId || !Array.isArray(jobList)) return null;
-        const item = jobList.find((j) => j.shipment_id === shipmentId);
-        return item?.service_id != null ? item.service_id : null;
+        const item = findJobCreateDropdownRow(
+          jobList as Array<Record<string, unknown>>,
+          shipmentId,
+        );
+        return item?.service_id != null ? Number(item.service_id) : null;
       },
       [jobList],
     );
