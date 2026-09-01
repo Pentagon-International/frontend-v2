@@ -54,6 +54,7 @@ import {
   ERPListScreen,
   ERPListStatPill,
   SingleDateInput,
+  ToastNotification,
   erpListFilterFieldCellStyle,
   erpListFilterUnifiedMantineStyles,
   erpListGeistMantineTheme,
@@ -75,20 +76,26 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type PaymentRequestCharge = {
-  id: number;
-  payment_request: number;
+  id?: number;
+  payment_request?: number;
   job_id?: string;
-  charge_id: number;
+  job_no?: string;
+  charge_id?: number | null;
   charge_code?: string;
   charge_name?: string;
+  account_code?: string;
+  account_name?: string;
+  subledger_code?: string;
+  narration?: string;
+  cn_r?: string;
   currency_code?: string;
   currency_id?: number;
-  roe?: string;
+  roe?: string | number;
   unit_code?: string;
   no_of_unit?: number;
-  amount_per_unit?: string;
-  amount?: string;
-  local_amount?: string;
+  amount_per_unit?: string | number;
+  amount?: string | number;
+  local_amount?: string | number;
   sac_code?: string;
 };
 
@@ -1083,13 +1090,28 @@ function PaymentRequestApproval() {
               {row.original.status?.trim().toLowerCase() === "approved" && (
                 <Box px={10} py={5}>
                   <UnstyledButton
-                    onClick={() => {
-                      setStoreFilters(LIST_KEY, buildFilterPayload);
-                      setStoreSearch(LIST_KEY, search);
-                      setShouldRestore(LIST_KEY, true);
-                      navigate("/supplier-invoice/create", {
-                        state: { paymentRequestData: row.original },
-                      });
+                    onClick={async () => {
+                      try {
+                        const raw = await apiCallProtected.get(
+                          `${URL.paymentRequest}${row.original.id}/`,
+                        );
+                        const prData =
+                          (raw as { data?: { data?: PaymentRequestRecord } })
+                            ?.data?.data ??
+                          (raw as { data?: PaymentRequestRecord })?.data ??
+                          row.original;
+                        setStoreFilters(LIST_KEY, buildFilterPayload);
+                        setStoreSearch(LIST_KEY, search);
+                        setShouldRestore(LIST_KEY, true);
+                        navigate("/supplier-invoice/create", {
+                          state: { paymentRequestData: prData },
+                        });
+                      } catch {
+                        ToastNotification({
+                          type: "error",
+                          message: "Failed to load payment request details.",
+                        });
+                      }
                     }}
                   >
                     <Group gap="sm">

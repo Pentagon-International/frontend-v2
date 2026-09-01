@@ -77,7 +77,10 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
-import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
+import {
+  mergeEditPageAuditSources,
+  appendEditPageAuditPatch,
+} from "../../../utils/editPageAuditInfo";
 import {
   getApiFailureMessage,
   getServerErrorMessage,
@@ -305,7 +308,9 @@ function clampLocalAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
-function toLocalAmount(value: number | string | null | undefined): number | null {
+function toLocalAmount(
+  value: number | string | null | undefined,
+): number | null {
   const rounded = roundLocalMoneyToDecimals(value);
   return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
@@ -417,11 +422,7 @@ const fetchCheckSezStatus = async (payload: {
     if (payload.document_date) {
       body.document_date = payload.document_date;
     }
-    const response = await postAPICall(
-      URL.checkSezStatus,
-      body,
-      API_HEADER,
-    );
+    const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
     const root = response as {
       sez?: unknown;
       credit_day?: unknown;
@@ -434,8 +435,7 @@ const fetchCheckSezStatus = async (payload: {
         sez_valid_date?: unknown;
       };
     };
-    const data =
-      root?.data && typeof root.data === "object" ? root.data : root;
+    const data = root?.data && typeof root.data === "object" ? root.data : root;
     const creditRaw = data?.credit_day ?? root?.credit_day;
     const creditDayNum =
       creditRaw == null || creditRaw === "" ? null : Number(creditRaw);
@@ -481,9 +481,74 @@ function dueDateFromDocumentAndCredit(
 }
 
 function normalizeDrCr(value: unknown): "Dr" | "Cr" {
-  const raw = String(value ?? "").trim().toUpperCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
   if (raw === "CR" || raw === "CREDIT") return "Cr";
+  if (raw === "DR" || raw === "DEBIT") return "Dr";
   return "Dr";
+}
+
+const GST_CHARGE_NAMES = [
+  "STATE GOODS AND SERVICE TAX",
+  "CENTRAL GOODS AND SERVICE TAX",
+  "INTEGRATED GOODS AND SERVICE TAX",
+];
+
+function resolveDaybookLabelFromPaidToType(paidToType: unknown): string {
+  const type = String(paidToType ?? "")
+    .trim()
+    .toLowerCase();
+  if (type === "agent") return "OVERSEAS CRJ";
+  return "LOCAL CRJ";
+}
+
+function mapPaymentRequestChargeToSupplierRow(
+  c: Record<string, unknown>,
+): ChargeRow {
+  const chargeName = String(c.charge_name ?? "").trim();
+  const chargeNameUpper = chargeName.toUpperCase();
+  const accountCode = String(c.account_code ?? "").trim();
+  const accountName = String(c.account_name ?? "").trim();
+  const isGstRow = GST_CHARGE_NAMES.includes(chargeNameUpper);
+  const isTdsRow =
+    (c.charge_id == null || c.charge_id === "") && accountCode !== "";
+
+  return {
+    CRN: isGstRow ? "Neutral" : isTdsRow ? "" : "Cost",
+    account_code: accountCode,
+    account_name: accountName || chargeName,
+    subledger_code: String(c.subledger_code ?? ""),
+    narration: String(c.narration ?? ""),
+    shipment_no: String(c.job_no ?? c.job_id ?? ""),
+    charge_id:
+      c.charge_id != null && c.charge_id !== ""
+        ? Number(c.charge_id)
+        : null,
+    charge_name: chargeName || accountName,
+    currency_id: c.currency_id != null ? Number(c.currency_id) : null,
+    roe:
+      parseRoeForPayload(
+        c.roe as string | number | null | undefined,
+      ) ?? null,
+    amount:
+      c.amount != null && c.amount !== ""
+        ? parseFloat(String(c.amount)) || null
+        : null,
+    amount_in_local:
+      c.local_amount != null && c.local_amount !== ""
+        ? parseFloat(String(c.local_amount)) || null
+        : null,
+    tax_code: String(c.sac_code ?? ""),
+    igst_rate: parseOptionalNumber(
+      c.igst_rate as string | number | null | undefined,
+    ),
+    igst: toLocalAmount(c.igst as string | number | null | undefined),
+    Dr_Cr:
+      String(c.cn_r ?? c.Dr_cr ?? c.Dr_Cr ?? "").trim() !== ""
+        ? normalizeDrCr(c.cn_r ?? c.Dr_cr ?? c.Dr_Cr)
+        : "Cr",
+  };
 }
 
 function parseDateOnly(s: string | null | undefined): Date | null {
@@ -598,7 +663,10 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     narration: c.narration ?? "",
     shipment_no: String(c.shipment_no ?? "").trim(),
     charge_id: c.charge_id ?? null,
-    charge_name: (c as { charge_name?: unknown }).charge_name != null ? String((c as { charge_name?: unknown }).charge_name) : "",
+    charge_name:
+      (c as { charge_name?: unknown }).charge_name != null
+        ? String((c as { charge_name?: unknown }).charge_name)
+        : "",
     currency_id: c.currency_id ?? null,
     roe:
       typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null),
@@ -613,8 +681,7 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     Dr_Cr: (() => {
       const v = (c.Dr_Cr ?? "").toString().toUpperCase();
       return (v === "CR" || v === "DR" ? (v === "CR" ? "Cr" : "Dr") : "Dr") as
-        | "Dr"
-        | "Cr";
+        "Dr" | "Cr";
     })(),
   }));
 }
@@ -698,10 +765,10 @@ export default function SupplierInvoiceCreate({
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
-  const isReversalCreate =
-    isReversal && pathname.includes("/reversal/create");
+  const isReversalCreate = isReversal && pathname.includes("/reversal/create");
   const prefillFromJob = (location.state as any)
-    ?.prefillSupplierInvoiceFromJob as SupplierInvoicePrefillFromJob | null | undefined;
+    ?.prefillSupplierInvoiceFromJob as
+    SupplierInvoicePrefillFromJob | null | undefined;
   const financeReturnTo =
     (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
   const supplierInvoiceResolvedBackPath =
@@ -751,8 +818,7 @@ export default function SupplierInvoiceCreate({
     }
 
     // Reversal create: load source invoice for form fields (not attachments). Edit/view: load record.
-    const shouldFetch =
-      isReversalCreate || isViewMode || isEditMode;
+    const shouldFetch = isReversalCreate || isViewMode || isEditMode;
     if (!shouldFetch) {
       setInvoiceFromRouteFetch(null);
       return;
@@ -897,12 +963,13 @@ export default function SupplierInvoiceCreate({
     const countryCode = (user?.country?.country_code ?? "").toUpperCase();
     const countryName = (user?.country?.country_name ?? "").toUpperCase();
     return countryCode === "CN" || countryName === "CHINA";
-  }, [user?.branches, user?.country?.country_code, user?.country?.country_name]);
+  }, [
+    user?.branches,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
 
-  const isVietnamBranch = useMemo(
-    () => isVietnamBranchFromUser(user),
-    [user],
-  );
+  const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -1070,10 +1137,9 @@ export default function SupplierInvoiceCreate({
           narration: "",
           shipment_no: "",
           charge_id: null,
-          currency_id:
-            defaultBranchCurrencyId
-              ? Number(defaultBranchCurrencyId)
-              : null,
+          currency_id: defaultBranchCurrencyId
+            ? Number(defaultBranchCurrencyId)
+            : null,
           roe: defaultBranchCurrencyId ? 1 : null,
           amount: null,
           amount_in_local: null,
@@ -1176,7 +1242,10 @@ export default function SupplierInvoiceCreate({
         let rows: unknown[] = [];
         if (Array.isArray(payloadUnknown)) {
           rows = payloadUnknown;
-        } else if (isObj(payloadUnknown) && Array.isArray(payloadUnknown.data)) {
+        } else if (
+          isObj(payloadUnknown) &&
+          Array.isArray(payloadUnknown.data)
+        ) {
           rows = payloadUnknown.data as unknown[];
         } else if (
           isObj(payloadUnknown) &&
@@ -1280,8 +1349,7 @@ export default function SupplierInvoiceCreate({
       .map((item) => {
         const code = String(item.tds_section_code ?? "").trim();
         const name = String(item.tds_section_name ?? "").trim();
-        const label =
-          name && code ? `${name} - ${code}` : name || code;
+        const label = name && code ? `${name} - ${code}` : name || code;
         return { value: code, label };
       })
       .filter((o) => o.value);
@@ -1301,7 +1369,9 @@ export default function SupplierInvoiceCreate({
       ?.label ?? "";
   const selectedDaybookLabelUpper = selectedDaybookLabel.toUpperCase();
   const isOverseasCrjDaybook = selectedDaybookLabelUpper.includes("OVERSEAS");
-  const vendorApiEndpoint = isOverseasCrjDaybook ? URL.agent : URL.supplierByType;
+  const vendorApiEndpoint = isOverseasCrjDaybook
+    ? URL.agent
+    : URL.supplierByType;
 
   const resolveIsAgentForPayload = (): boolean => {
     if (!isReversal) {
@@ -1313,8 +1383,7 @@ export default function SupplierInvoiceCreate({
     return false;
   };
 
-  const isAgentVendorFlow =
-    isOverseasCrjDaybook || resolveIsAgentForPayload();
+  const isAgentVendorFlow = isOverseasCrjDaybook || resolveIsAgentForPayload();
   isAgentVendorFlowRef.current = isAgentVendorFlow;
 
   useEffect(() => {
@@ -1341,8 +1410,9 @@ export default function SupplierInvoiceCreate({
     const raw =
       (location.state as { job?: { service_id?: number } } | null)?.job
         ?.service_id ??
-      ((prefillFromJob as unknown as { service_id?: number } | null)
-        ?.service_id ?? null);
+      (prefillFromJob as unknown as { service_id?: number } | null)
+        ?.service_id ??
+      null;
     const parsed = raw != null ? Number(raw) : null;
     return parsed != null && Number.isFinite(parsed) ? parsed : null;
   }, [location.state, prefillFromJob]);
@@ -1390,10 +1460,18 @@ export default function SupplierInvoiceCreate({
           : [];
         const match = findJobCreateDropdownRow(arr, shipmentNo);
         const serviceIdRaw =
-          (match as { service_id?: unknown; serviceId?: unknown; job?: { service_id?: unknown } } | undefined)
-            ?.service_id ??
+          (
+            match as
+              | {
+                  service_id?: unknown;
+                  serviceId?: unknown;
+                  job?: { service_id?: unknown };
+                }
+              | undefined
+          )?.service_id ??
           (match as { serviceId?: unknown } | undefined)?.serviceId ??
-          (match as { job?: { service_id?: unknown } } | undefined)?.job?.service_id ??
+          (match as { job?: { service_id?: unknown } } | undefined)?.job
+            ?.service_id ??
           null;
         const serviceId = serviceIdRaw != null ? Number(serviceIdRaw) : null;
 
@@ -1514,9 +1592,7 @@ export default function SupplierInvoiceCreate({
 
     // Accounts → Service Job: shipment no is the job id itself.
     if (isServiceJobPrefillFlow) {
-      setPrefillShipmentOptions([
-        { value: prefillJobId, label: prefillJobId },
-      ]);
+      setPrefillShipmentOptions([{ value: prefillJobId, label: prefillJobId }]);
       return;
     }
 
@@ -1527,19 +1603,14 @@ export default function SupplierInvoiceCreate({
           : [];
         const opts = mapJobCreateDropdownOptions(arr);
         // Always include job_id so estimates rows remain selectable.
-        if (
-          prefillJobId &&
-          !opts.some((o) => o.value === prefillJobId)
-        ) {
+        if (prefillJobId && !opts.some((o) => o.value === prefillJobId)) {
           opts.unshift({ value: prefillJobId, label: prefillJobId });
         }
         setPrefillShipmentOptions(opts);
       })
       .catch(() =>
         setPrefillShipmentOptions(
-          prefillJobId
-            ? [{ value: prefillJobId, label: prefillJobId }]
-            : [],
+          prefillJobId ? [{ value: prefillJobId, label: prefillJobId }] : [],
         ),
       );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1591,8 +1662,7 @@ export default function SupplierInvoiceCreate({
     const charges = form.values.charges_data;
     const next = charges.map((c) => {
       const resolvedId =
-        c.currency_id ??
-        (effectiveCurrency ? Number(effectiveCurrency) : null);
+        c.currency_id ?? (effectiveCurrency ? Number(effectiveCurrency) : null);
       const currencyIdStr =
         resolvedId != null ? String(resolvedId) : effectiveCurrency;
       const code =
@@ -1609,7 +1679,8 @@ export default function SupplierInvoiceCreate({
     if (
       next.some(
         (c, i) =>
-          c.currency_id !== charges[i]?.currency_id || c.roe !== charges[i]?.roe,
+          c.currency_id !== charges[i]?.currency_id ||
+          c.roe !== charges[i]?.roe,
       )
     ) {
       form.setFieldValue("charges_data", next);
@@ -1653,10 +1724,7 @@ export default function SupplierInvoiceCreate({
       const vat = isIndiaUser
         ? (c.igst ?? null)
         : calcChargeVatAmount(local, c.igst_rate);
-      if (
-        local !== (c.amount_in_local ?? null) ||
-        vat !== (c.igst ?? null)
-      ) {
+      if (local !== (c.amount_in_local ?? null) || vat !== (c.igst ?? null)) {
         changed = true;
       }
       return { ...c, amount_in_local: local, igst: vat };
@@ -1778,12 +1846,18 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("difference_amount", diff);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesNetKey, form.values.Inv_crn_amount, shouldSkipAmountAutoCalc, isIndiaUser]);
+  }, [
+    chargesNetKey,
+    form.values.Inv_crn_amount,
+    shouldSkipAmountAutoCalc,
+    isIndiaUser,
+  ]);
 
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
     const runForViewEdit = isViewMode || isEditMode;
-    const runForReversalCreate = isReversalCreate && invoiceFromState?.id != null;
+    const runForReversalCreate =
+      isReversalCreate && invoiceFromState?.id != null;
     if (!runForViewEdit && !runForReversalCreate) return;
     if (!invoiceFromState || invoiceFromState.id == null) return;
     const data = invoiceFromState as Record<string, unknown>;
@@ -1811,23 +1885,22 @@ export default function SupplierInvoiceCreate({
       }));
     }
     // Reversal create: daybook empty so user selects; date and due_date auto-set to today
-    const daybookId =
-      runForReversalCreate
-        ? ""
-        : data.day_book_id != null
-          ? String(data.day_book_id)
-          : "";
+    const daybookId = runForReversalCreate
+      ? ""
+      : data.day_book_id != null
+        ? String(data.day_book_id)
+        : "";
 
     // Reversal create: Credit Journal Voucher date and Agent INV/CRN Detail due_date auto-set to today
     // List API date formats may vary (DD-MM-YYYY vs YYYY-MM-DD); use parseDateOnly first.
     const dateValue = runForReversalCreate
       ? new Date()
-      : parseDateOnly((data.date as string) ?? undefined) ??
-        normalizeDate((data.date as string) ?? null);
+      : (parseDateOnly((data.date as string) ?? undefined) ??
+        normalizeDate((data.date as string) ?? null));
     const dueDateValue = runForReversalCreate
       ? new Date()
-      : parseDateOnly((data.due_date as string) ?? undefined) ??
-        normalizeDate((data.due_date as string) ?? null);
+      : (parseDateOnly((data.due_date as string) ?? undefined) ??
+        normalizeDate((data.due_date as string) ?? null));
 
     // Reversal create: do not set saveResponse so daybook and date stay editable; saveResponse set after POST
     if (!runForReversalCreate) {
@@ -1870,7 +1943,8 @@ export default function SupplierInvoiceCreate({
       fapiao_no: (data.fapiao_no ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
-      type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as "INV" | "CRN",
+      type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as
+        "INV" | "CRN",
       Inv_Crn_note:
         parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
@@ -1947,24 +2021,28 @@ export default function SupplierInvoiceCreate({
     location.key,
   ]);
 
-  // Auto-select "LOCAL CRJ" daybook when coming from Payment Request → Create Supplier Invoice
+  // Auto-select daybook when coming from Payment Request → Create Supplier Invoice
   useEffect(() => {
-    const prData = (location.state as any)?.paymentRequestData;
+    const prData = (location.state as { paymentRequestData?: Record<string, unknown> })
+      ?.paymentRequestData;
     if (!prData || isViewMode || isEditMode || isReversal) return;
     if (!daybookOptions.length) return;
-    if (form.values.day_book_id) return; // already set — don't overwrite
-    const localCrj = daybookOptions.find((o) =>
-      o.label.trim().toUpperCase() === "LOCAL CRJ",
+    if (form.values.day_book_id) return;
+
+    const targetLabel = resolveDaybookLabelFromPaidToType(prData.paid_to_type);
+    const daybook = daybookOptions.find(
+      (o) => o.label.trim().toUpperCase() === targetLabel,
     );
-    if (localCrj) {
-      form.setFieldValue("day_book_id", localCrj.value);
+    if (daybook) {
+      form.setFieldValue("day_book_id", daybook.value);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daybookOptions]);
 
   // Pre-fill from Payment Request when navigating from PaymentRequestApproval (Create Supplier Invoice)
   useEffect(() => {
-    const prData = (location.state as any)?.paymentRequestData as Record<string, any> | null | undefined;
+    const prData = (location.state as any)?.paymentRequestData as
+      Record<string, any> | null | undefined;
     if (!prData || isViewMode || isEditMode || isReversal) return;
 
     const prDate = parseDateOnly(String(prData.date ?? "")) ?? null;
@@ -1974,48 +2052,23 @@ export default function SupplierInvoiceCreate({
         : null;
 
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
-    const mappedCharges: ChargeRow[] = charges.map((c: Record<string, any>) => ({
-      // For GST rows from Payment Request, CRN should be Neutral.
-      // Other charges should continue as Cost.
-      // Charge names are compared in uppercase to handle casing differences.
-      CRN: [
-        "STATE GOODS AND SERVICE TAX",
-        "CENTRAL GOODS AND SERVICE TAX",
-        "INTEGRATED GOODS AND SERVICE TAX",
-      ].includes(String(c.charge_name ?? "").trim().toUpperCase())
-        ? "Neutral"
-        : "Cost",
-      // Do not map Account/Subledger from Payment Request.
-      account_code: "",
-      account_name: "",
-      subledger_code: "",
-      narration: "",
-      shipment_no: String(c.job_no ?? c.job_id ?? ""),
-      charge_id: c.charge_id != null ? Number(c.charge_id) : null,
-      charge_name: String(c.charge_name ?? ""),
-      currency_id: c.currency_id != null ? Number(c.currency_id) : null,
-      roe: parseRoeForPayload(c.roe) ?? null,
-      amount: c.amount != null && c.amount !== "" ? parseFloat(String(c.amount)) || null : null,
-      amount_in_local: c.local_amount != null && c.local_amount !== "" ? parseFloat(String(c.local_amount)) || null : null,
-      tax_code: String(c.sac_code ?? ""),
-      igst_rate: parseOptionalNumber(c.igst_rate),
-      igst: toLocalAmount(c.igst),
-      Dr_Cr: "Cr" as const,
-    }));
+    const mappedCharges: ChargeRow[] = charges.map((c) =>
+      mapPaymentRequestChargeToSupplierRow(c as Record<string, unknown>),
+    );
 
     // Header fields
     const actualInvNo = String(
       prData.actual_inv_no ?? prData.actual_invoice_no ?? "",
     ).trim();
-    form.setFieldValue(
-      "Inv_Crn_no",
-      actualInvNo,
-    );
+    form.setFieldValue("Inv_Crn_no", actualInvNo);
     form.setFieldValue("creditor_agent", String(prData.paid_to ?? ""));
     form.setFieldValue("agent_code", String(prData.paid_to ?? ""));
     form.setFieldValue("customer_gst_no", String(prData.customer_gst_no ?? ""));
     form.setFieldValue("location_gst_no", String(prData.location_gst_no ?? ""));
-    form.setFieldValue("tds_section_code", String(prData.tds_section_code ?? ""));
+    form.setFieldValue(
+      "tds_section_code",
+      String(prData.tds_section_code ?? ""),
+    );
 
     // State
     if (prData.state_id != null) {
@@ -2070,15 +2123,17 @@ export default function SupplierInvoiceCreate({
         : [];
 
       const normalizeSupplierKey = (v: string) =>
-        v
-          .toUpperCase()
-          .replace(/[^A-Z0-9]/g, ""); // remove spaces, dots, etc.
+        v.toUpperCase().replace(/[^A-Z0-9]/g, ""); // remove spaces, dots, etc.
 
       const codeKey = normalizeSupplierKey(supplierCode);
       const nameKey = normalizeSupplierKey(supplierName);
       const filtered = rows.filter((c) => {
-        const rowCode = normalizeSupplierKey(String(c.supplier_code ?? "").trim());
-        const rowName = normalizeSupplierKey(String(c.supplier_name ?? "").trim());
+        const rowCode = normalizeSupplierKey(
+          String(c.supplier_code ?? "").trim(),
+        );
+        const rowName = normalizeSupplierKey(
+          String(c.supplier_name ?? "").trim(),
+        );
         if (codeKey && rowCode && rowCode === codeKey) return true;
         if (nameKey && rowName && rowName === nameKey) return true;
         return false;
@@ -2135,7 +2190,14 @@ export default function SupplierInvoiceCreate({
         form.setFieldValue("charges_data", mappedCharges);
       }
     },
-    [prefillFromJob, isViewMode, isEditMode, isReversal, form, getDrCrDefaultsByType],
+    [
+      prefillFromJob,
+      isViewMode,
+      isEditMode,
+      isReversal,
+      form,
+      getDrCrDefaultsByType,
+    ],
   );
 
   useEffect(() => {
@@ -2207,15 +2269,13 @@ export default function SupplierInvoiceCreate({
       igst_amount: formatAmountToTwoDecimals(values.igst_amount ?? 0),
       Inv_crn_amount: formatLocalAmount(values.Inv_crn_amount ?? 0),
       approved_amount: formatLocalAmount(values.approved_amount ?? 0),
-      difference_amount: formatLocalAmount(
-        values.difference_amount ?? 0,
-      ),
+      difference_amount: formatLocalAmount(values.difference_amount ?? 0),
       due_date: values.due_date
         ? formatDDMMYYYY(new Date(values.due_date))
         : "",
       status:
         statusOverride ??
-        (isCreate && isReversal ? "UNPOSTED" : values.status ?? "UNPOSTED"),
+        (isCreate && isReversal ? "UNPOSTED" : (values.status ?? "UNPOSTED")),
       Dr_Cr: values.Dr_Cr,
       charges_data: chargesPayload,
       ...buildSupplierInvoiceDocumentIdsPayload(values, isCreate),
@@ -2283,7 +2343,8 @@ export default function SupplierInvoiceCreate({
   const buildSupplierInvoiceFormData = (
     payload: Record<string, unknown>,
     formKey: "supplier_invoice" | "reverse_supplier_invoice",
-    supportingDocuments: SupportingDocument[] = form.values.supporting_documents,
+    supportingDocuments: SupportingDocument[] = form.values
+      .supporting_documents,
   ): FormData => {
     const fd = new FormData();
     fd.append(formKey, JSON.stringify(payload));
@@ -2307,15 +2368,24 @@ export default function SupplierInvoiceCreate({
       charges?: ApiCharge[];
     },
   ) => {
-    const charges =
-      Array.isArray(data.charges_data) ? data.charges_data : (Array.isArray(data.charges) ? data.charges : []);
+    const charges = Array.isArray(data.charges_data)
+      ? data.charges_data
+      : Array.isArray(data.charges)
+        ? data.charges
+        : [];
     const mappedCharges = mapApiChargesToRows(charges as ApiCharge[]);
     form.setValues({
       cbp_number: (data.cbp_number ?? "") as string,
       cost_center: (data.cost_center ?? "") as string,
       day_book_id: data.day_book_id != null ? String(data.day_book_id) : "",
-      date: parseDateOnly(data.date as string) ?? normalizeDate(data.date as string) ?? form.values.date,
-      due_date: parseDateOnly(data.due_date as string) ?? normalizeDate(data.due_date as string) ?? form.values.due_date,
+      date:
+        parseDateOnly(data.date as string) ??
+        normalizeDate(data.date as string) ??
+        form.values.date,
+      due_date:
+        parseDateOnly(data.due_date as string) ??
+        normalizeDate(data.due_date as string) ??
+        form.values.due_date,
       creditor_agent: (data.creditor_agent ?? "") as string,
       agent_code: (data.agent_code ?? "") as string,
       state_id: data.state_id != null ? String(data.state_id) : "",
@@ -2403,7 +2473,14 @@ export default function SupplierInvoiceCreate({
         values.currency_id,
       );
       if (headerRoeToastError) {
-        form.setFieldError("roe", validateRoeField(headerCurrencyCode, values.roe, values.currency_id) ?? headerRoeToastError);
+        form.setFieldError(
+          "roe",
+          validateRoeField(
+            headerCurrencyCode,
+            values.roe,
+            values.currency_id,
+          ) ?? headerRoeToastError,
+        );
         ToastNotification({ type: "error", message: headerRoeToastError });
         return null;
       }
@@ -2411,8 +2488,9 @@ export default function SupplierInvoiceCreate({
       for (let i = 0; i < (values.charges_data ?? []).length; i++) {
         const charge = values.charges_data[i];
         const chargeCode =
-          currencyOptions.find((o) => o.value === String(charge.currency_id ?? ""))
-            ?.label ?? "";
+          currencyOptions.find(
+            (o) => o.value === String(charge.currency_id ?? ""),
+          )?.label ?? "";
         const chargeRoeToastError = validateRoeToast(
           chargeCode,
           charge.roe,
@@ -2421,7 +2499,11 @@ export default function SupplierInvoiceCreate({
         if (chargeRoeToastError) {
           form.setFieldError(
             `charges_data.${i}.roe`,
-            validateRoeField(chargeCode, charge.roe, charge.currency_id != null ? String(charge.currency_id) : null) ?? chargeRoeToastError,
+            validateRoeField(
+              chargeCode,
+              charge.roe,
+              charge.currency_id != null ? String(charge.currency_id) : null,
+            ) ?? chargeRoeToastError,
           );
           ToastNotification({ type: "error", message: chargeRoeToastError });
           return null;
@@ -2429,7 +2511,8 @@ export default function SupplierInvoiceCreate({
       }
 
       const payload = buildPayload(values);
-      (payload as Record<string, unknown>).is_agent = resolveIsAgentForPayload();
+      (payload as Record<string, unknown>).is_agent =
+        resolveIsAgentForPayload();
       const isEdit = saveResponse?.id != null;
       // Reversal create: include source invoice's crj_number (required by API)
       if (isReversal && !isEdit && invoiceFromState) {
@@ -2438,7 +2521,9 @@ export default function SupplierInvoiceCreate({
         if (sourceCrj != null && sourceCrj !== "")
           (payload as Record<string, unknown>).crj_number = String(sourceCrj);
       }
-      const reversalUrl = isReversal ? URL.reverseSupplierInvoice : URL.supplierInvoice;
+      const reversalUrl = isReversal
+        ? URL.reverseSupplierInvoice
+        : URL.supplierInvoice;
       // For multipart, we call apiCallProtected directly (no helper appending payload.id/).
       const reversalEditUrl =
         isReversal && saveResponse?.id != null
@@ -2616,7 +2701,8 @@ export default function SupplierInvoiceCreate({
       }
 
       const payload = buildPayload(form.values, "POSTED");
-      (payload as Record<string, unknown>).is_agent = resolveIsAgentForPayload();
+      (payload as Record<string, unknown>).is_agent =
+        resolveIsAgentForPayload();
       const postUrl = isReversal
         ? URL.reverseSupplierInvoice
         : URL.supplierInvoice;
@@ -2675,7 +2761,10 @@ export default function SupplierInvoiceCreate({
     } catch (error: unknown) {
       console.error("Error posting supplier invoice:", error);
       ToastNotification({
-        message: getServerErrorMessage(error, "Failed to post supplier invoice"),
+        message: getServerErrorMessage(
+          error,
+          "Failed to post supplier invoice",
+        ),
         type: "error",
       });
     } finally {
@@ -2761,9 +2850,7 @@ export default function SupplierInvoiceCreate({
     !isReadOnly || canAttachDocumentsAfterPost;
   const fapiaoFieldDisabled = canEditChinaFapiaoAfterPost
     ? false
-    : isReadOnly ||
-      reversalFormDisabled ||
-      !isVendorSelected;
+    : isReadOnly || reversalFormDisabled || !isVendorSelected;
   const effectiveInputStyles = isReadOnly
     ? readOnlyFieldStyles
     : isReversal
@@ -2973,18 +3060,19 @@ export default function SupplierInvoiceCreate({
             <Text size="xl" fw={600} c="#105476">
               {pathname.includes("/reversal/create") && saveResponse?.id == null
                 ? "Create Supplier Invoice Reverse"
-                : pathname.includes("/reversal/create") && saveResponse?.id != null
+                : pathname.includes("/reversal/create") &&
+                    saveResponse?.id != null
                   ? "Edit Supplier Invoice Reverse"
                   : pathname.includes("/reversal/edit")
                     ? "Edit Supplier Invoice Reverse"
                     : pathname.includes("/reversal/view")
-                    ? "View Supplier Invoice Reverse"
-                    : titleOverride ??
+                      ? "View Supplier Invoice Reverse"
+                      : (titleOverride ??
                         (isEditMode
                           ? "Edit Supplier Invoice"
                           : isViewMode
                             ? "View Supplier Invoice"
-                            : "Create Supplier Invoice")}
+                            : "Create Supplier Invoice"))}
             </Text>
           </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
@@ -3208,7 +3296,9 @@ export default function SupplierInvoiceCreate({
             <Grid.Col span={cjvColSpans.vendor}>
               <SearchableSelect
                 label="Vendor/Supplier"
-                disabled={isReadOnly || reversalFormDisabled || !isDaybookSelected}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isDaybookSelected
+                }
                 placeholder="Type supplier name"
                 apiEndpoint={vendorApiEndpoint}
                 searchFields={["customer_name", "customer_code"]}
@@ -3235,7 +3325,8 @@ export default function SupplierInvoiceCreate({
                   const primary =
                     addresses.find(
                       (a) =>
-                        String(a.address_type ?? "").toUpperCase() === "PRIMARY",
+                        String(a.address_type ?? "").toUpperCase() ===
+                        "PRIMARY",
                     ) ?? addresses[0];
 
                   const isCleared =
@@ -3261,7 +3352,10 @@ export default function SupplierInvoiceCreate({
 
                   // If navigated from Air Import Job → Create Supplier Invoice:
                   // Populate charges only after vendor selection, filtered by matching supplier_code.
-                  applyPrefillChargesForSupplier(value, selectedData?.label ?? null);
+                  applyPrefillChargesForSupplier(
+                    value,
+                    selectedData?.label ?? null,
+                  );
                 }}
                 dropdownZIndex={1000}
                 styles={effectiveInputStyles}
@@ -3322,7 +3416,9 @@ export default function SupplierInvoiceCreate({
                     form.setFieldValue("customer_gst_no", e.target.value)
                   }
                   styles={effectiveInputStyles}
-                  disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                  disabled={
+                    isReadOnly || reversalFormDisabled || !isVendorSelected
+                  }
                 />
               </Grid.Col>
             )}
@@ -3334,7 +3430,9 @@ export default function SupplierInvoiceCreate({
                 onChange={(e) => form.setFieldValue("note", e.target.value)}
                 rows={2}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
               />
             </Grid.Col>
             <Grid.Col span={cjvColSpans.narration}>
@@ -3347,11 +3445,15 @@ export default function SupplierInvoiceCreate({
                 }
                 rows={2}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
               />
             </Grid.Col>
             {isChinaUser && (
-              <Grid.Col span={"fapiao" in cjvColSpans ? cjvColSpans.fapiao : 1.5}>
+              <Grid.Col
+                span={"fapiao" in cjvColSpans ? cjvColSpans.fapiao : 1.5}
+              >
                 <TextInput
                   label="Fapiao No"
                   placeholder="Fapiao No"
@@ -3397,7 +3499,9 @@ export default function SupplierInvoiceCreate({
                     );
                   });
                 }}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
@@ -3412,7 +3516,9 @@ export default function SupplierInvoiceCreate({
                 }
                 error={form.errors.Inv_Crn_no}
                 styles={effectiveInputStyles}
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
               />
             </Grid.Col>
             <Grid.Col span={agentColSpans.invCrnDate}>
@@ -3430,7 +3536,9 @@ export default function SupplierInvoiceCreate({
                     ? String(form.errors.Inv_Crn_note)
                     : undefined
                 }
-                disabled={isReadOnly || reversalFormDisabled || !isVendorSelected}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
               />
             </Grid.Col>
             <Grid.Col span={agentColSpans.currency}>
@@ -3493,9 +3601,7 @@ export default function SupplierInvoiceCreate({
                   min={0}
                   decimalScale={ROE_DECIMAL_PLACES}
                   hideControls
-                  error={
-                    form.errors.roe ? String(form.errors.roe) : undefined
-                  }
+                  error={form.errors.roe ? String(form.errors.roe) : undefined}
                   disabled={
                     isReadOnly ||
                     reversalFormDisabled ||
@@ -3675,16 +3781,14 @@ export default function SupplierInvoiceCreate({
                   Charges
                 </Text>
                 <Group gap="xs">
-                    {isIndiaUser && (
+                  {isIndiaUser && (
                     <Button
                       type="button"
                       size="sm"
                       variant="light"
                       color="#105476"
                       disabled={
-                        isReadOnly ||
-                        reversalFormDisabled ||
-                        !isVendorSelected
+                        isReadOnly || reversalFormDisabled || !isVendorSelected
                       }
                       onClick={async () => {
                         if (!saveResponse?.id) {
@@ -3694,7 +3798,8 @@ export default function SupplierInvoiceCreate({
                           if (!hasCharge) {
                             ToastNotification({
                               type: "error",
-                              message: "Please enter at least one charge before calculating GST.",
+                              message:
+                                "Please enter at least one charge before calculating GST.",
                             });
                             return;
                           }
@@ -3724,21 +3829,24 @@ export default function SupplierInvoiceCreate({
 
                           const data = res as Record<string, unknown>;
                           const chargesFromApi =
-                            (data.charges as Array<Record<string, unknown>> | undefined) ??
+                            (data.charges as
+                              Array<Record<string, unknown>> | undefined) ??
                             ((data.data as Record<string, unknown> | undefined)
-                              ?.charges as Array<Record<string, unknown>> | undefined) ??
+                              ?.charges as
+                              Array<Record<string, unknown>> | undefined) ??
                             [];
                           const sacWiseTotals =
                             (data.sac_wise_totals as
-                              | Array<Record<string, unknown>>
-                              | undefined) ??
+                              Array<Record<string, unknown>> | undefined) ??
                             ((data.data as Record<string, unknown> | undefined)
                               ?.sac_wise_totals as
-                              | Array<Record<string, unknown>>
-                              | undefined) ??
+                              Array<Record<string, unknown>> | undefined) ??
                             [];
 
-                          if (Array.isArray(chargesFromApi) && chargesFromApi.length) {
+                          if (
+                            Array.isArray(chargesFromApi) &&
+                            chargesFromApi.length
+                          ) {
                             const next = form.values.charges_data.map((c) => {
                               const match = chargesFromApi.find(
                                 (x) =>
@@ -3753,7 +3861,10 @@ export default function SupplierInvoiceCreate({
                             form.setFieldValue("charges_data", next);
                           }
 
-                          if (Array.isArray(sacWiseTotals) && sacWiseTotals.length) {
+                          if (
+                            Array.isArray(sacWiseTotals) &&
+                            sacWiseTotals.length
+                          ) {
                             const existing = form.values.charges_data;
                             const newRows: ChargeRow[] = sacWiseTotals
                               .map((t): ChargeRow | null => {
@@ -3773,7 +3884,9 @@ export default function SupplierInvoiceCreate({
                                 const row: ChargeRow = {
                                   account_code: String(t.account_code ?? ""),
                                   account_name: String(t.account_name ?? ""),
-                                  subledger_code: String(t.subledger_code ?? ""),
+                                  subledger_code: String(
+                                    t.subledger_code ?? "",
+                                  ),
                                   // GST breakup rows should always be Neutral
                                   CRN: "Neutral",
                                   narration: String(t.narration ?? ""),
@@ -3781,9 +3894,12 @@ export default function SupplierInvoiceCreate({
                                   charge_id: chargeId,
                                   charge_name: String(t.charge_name ?? ""),
                                   currency_id:
-                                    currencyId != null ? Number(currencyId) : null,
-                                    roe: parseRoeForPayload(roe),
-                                  amount: amount != null ? Number(amount) : null,
+                                    currencyId != null
+                                      ? Number(currencyId)
+                                      : null,
+                                  roe: parseRoeForPayload(roe),
+                                  amount:
+                                    amount != null ? Number(amount) : null,
                                   amount_in_local:
                                     amount != null
                                       ? clampLocalAmount(Number(amount))
@@ -3801,12 +3917,14 @@ export default function SupplierInvoiceCreate({
                             const deduped = newRows.filter((nr) => {
                               return !existing.some(
                                 (er) =>
-                                  Number(er.charge_id) === Number(nr.charge_id) &&
+                                  Number(er.charge_id) ===
+                                    Number(nr.charge_id) &&
                                   String(er.account_code ?? "") ===
                                     String(nr.account_code ?? "") &&
                                   String(er.subledger_code ?? "") ===
                                     String(nr.subledger_code ?? "") &&
-                                  Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
+                                  Number(er.amount ?? 0) ===
+                                    Number(nr.amount ?? 0) &&
                                   er.Dr_Cr === nr.Dr_Cr,
                               );
                             });
@@ -3820,12 +3938,24 @@ export default function SupplierInvoiceCreate({
                           }
 
                           // Optional: set header totals if API returns them
-                          const cgst = parseNum((data.cgst_total as unknown) ?? (data.cgst_amount as unknown));
-                          const sgst = parseNum((data.sgst_total as unknown) ?? (data.sgst_amount as unknown));
-                          const igst = parseNum((data.igst_total as unknown) ?? (data.igst_amount as unknown));
-                          if (cgst != null) form.setFieldValue("cgst_amount", cgst);
-                          if (sgst != null) form.setFieldValue("sgst_amount", sgst);
-                          if (igst != null) form.setFieldValue("igst_amount", igst);
+                          const cgst = parseNum(
+                            (data.cgst_total as unknown) ??
+                              (data.cgst_amount as unknown),
+                          );
+                          const sgst = parseNum(
+                            (data.sgst_total as unknown) ??
+                              (data.sgst_amount as unknown),
+                          );
+                          const igst = parseNum(
+                            (data.igst_total as unknown) ??
+                              (data.igst_amount as unknown),
+                          );
+                          if (cgst != null)
+                            form.setFieldValue("cgst_amount", cgst);
+                          if (sgst != null)
+                            form.setFieldValue("sgst_amount", sgst);
+                          if (igst != null)
+                            form.setFieldValue("igst_amount", igst);
                         } catch (e: unknown) {
                           ToastNotification({
                             type: "error",
@@ -3841,9 +3971,10 @@ export default function SupplierInvoiceCreate({
                     >
                       Calculate GST
                     </Button>
-                    )}
-                    {isIndiaUser &&
-                      String(form.values.tds_section_code ?? "").trim() !== "" && (
+                  )}
+                  {isIndiaUser &&
+                    String(form.values.tds_section_code ?? "").trim() !==
+                      "" && (
                       <Button
                         type="button"
                         size="sm"
@@ -3851,147 +3982,179 @@ export default function SupplierInvoiceCreate({
                         color="#105476"
                         disabled={isReadOnly || !isVendorSelected}
                         onClick={async () => {
-                        if (!saveResponse?.id) {
-                          const hasCharge = form.values.charges_data.some(
-                            (c) => c.amount != null && c.amount !== 0,
-                          );
-                          if (!hasCharge) {
-                            ToastNotification({
-                              type: "error",
-                              message: "Please enter at least one charge before calculating TDS.",
-                            });
-                            return;
-                          }
-                        }
-
-                        // If invoice not yet saved, save first
-                        let supplierInvoiceId = saveResponse?.id ?? null;
-                        if (!supplierInvoiceId) {
-                          const v = form.validate();
-                          if (v.hasErrors) return;
-                          setCalcLoading(true);
-                          setCalcLoadingText(
-                            isReversal
-                              ? "Creating reverse supplier invoice first"
-                              : "Creating supplier invoice first",
-                          );
-                          supplierInvoiceId = await handleSubmit(form.values);
-                          if (!supplierInvoiceId) {
-                            setCalcLoading(false);
-                            return;
-                          }
-                        }
-
-                        try {
-                          setCalcLoading(true);
-                          setCalcLoadingText("Calculating TDS...");
-                          const res = await postAPICall(
-                            URL.tdsCalculation,
-                            isReversal
-                              ? { reverse_supplier_invoice_id: supplierInvoiceId }
-                              : { supplier_invoice_id: supplierInvoiceId },
-                            API_HEADER,
-                          );
-
-                          const data = unwrapApiStatusBody(res) as Record<
-                            string,
-                            unknown
-                          >;
-                          const failureMessage = getApiFailureMessage(
-                            res,
-                            "TDS calculation failed.",
-                          );
-                          if (failureMessage) {
-                            ToastNotification({
-                              type: "error",
-                              message: failureMessage,
-                            });
-                            return;
-                          }
-                          const rows =
-                            (data.data as Array<Record<string, unknown>> | undefined) ??
-                            [];
-
-                          if (!Array.isArray(rows) || rows.length === 0) {
-                            ToastNotification({
-                              type: "error",
-                              message: "No TDS rows returned from calculation.",
-                            });
-                            return;
-                          }
-
-                          const existing = form.values.charges_data;
-                          const tdsChargeRows: ChargeRow[] = rows
-                            .map((r): ChargeRow | null => {
-                              const amount = parseNum(r.amount);
-                              const currencyId = parseNum(r.currency_id);
-                              const roe = parseNum(r.roe);
-                              if (amount == null) return null;
-                              return {
-                                account_code: String(r.account_code ?? ""),
-                                account_name: String(r.account_name ?? ""),
-                                subledger_code: String(r.subledger_code ?? ""),
-                                // Do not set CRN from TDS response
-                                CRN: "",
-                                narration: String(r.narration ?? ""),
-                                shipment_no: "",
-                                charge_id: null,
-                                charge_name: "",
-                                currency_id:
-                                  currencyId != null ? Number(currencyId) : null,
-                                    roe: parseRoeForPayload(roe),
-                                amount: Number(amount),
-                                amount_in_local: clampLocalAmount(Number(amount)),
-                                tax_code: "",
-                                igst_rate: null,
-                                igst: null,
-                                Dr_Cr: normalizeDrCr(
-                                  (r.Dr_cr as unknown) ??
-                                    (r.Dr_Cr as unknown) ??
-                                    (r.dr_cr as unknown) ??
-                                    (r.cr_dr as unknown),
-                                ),
-                              };
-                            })
-                            .filter((x): x is ChargeRow => x !== null);
-
-                          const deduped = tdsChargeRows.filter((nr) => {
-                            return !existing.some(
-                              (er) =>
-                                String(er.account_code ?? "") ===
-                                  String(nr.account_code ?? "") &&
-                                String(er.subledger_code ?? "") ===
-                                  String(nr.subledger_code ?? "") &&
-                                Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
-                                er.Dr_Cr === nr.Dr_Cr &&
-                                String(er.charge_name ?? "") ===
-                                  String(nr.charge_name ?? ""),
+                          if (!saveResponse?.id) {
+                            const hasCharge = form.values.charges_data.some(
+                              (c) => c.amount != null && c.amount !== 0,
                             );
-                          });
-
-                          if (deduped.length) {
-                            form.setFieldValue("charges_data", [
-                              ...existing,
-                              ...deduped,
-                            ]);
+                            if (!hasCharge) {
+                              ToastNotification({
+                                type: "error",
+                                message:
+                                  "Please enter at least one charge before calculating TDS.",
+                              });
+                              return;
+                            }
                           }
-                        } catch (e: unknown) {
-                          ToastNotification({
-                            type: "error",
-                            message: getServerErrorMessage(
-                              e,
+
+                          // If invoice not yet saved, save first
+                          let supplierInvoiceId = saveResponse?.id ?? null;
+                          if (!supplierInvoiceId) {
+                            const v = form.validate();
+                            if (v.hasErrors) return;
+                            setCalcLoading(true);
+                            setCalcLoadingText(
+                              isReversal
+                                ? "Creating reverse supplier invoice first"
+                                : "Creating supplier invoice first",
+                            );
+                            supplierInvoiceId = await handleSubmit(form.values);
+                            if (!supplierInvoiceId) {
+                              setCalcLoading(false);
+                              return;
+                            }
+                          }
+
+                          try {
+                            setCalcLoading(true);
+                            setCalcLoadingText("Calculating TDS...");
+                            const res = await postAPICall(
+                              URL.tdsCalculation,
+                              isReversal
+                                ? {
+                                    reverse_supplier_invoice_id:
+                                      supplierInvoiceId,
+                                  }
+                                : { supplier_invoice_id: supplierInvoiceId },
+                              API_HEADER,
+                            );
+
+                            const data = unwrapApiStatusBody(res) as Record<
+                              string,
+                              unknown
+                            >;
+                            const failureMessage = getApiFailureMessage(
+                              res,
                               "TDS calculation failed.",
-                            ),
-                          });
-                        } finally {
-                          setCalcLoading(false);
-                        }
+                            );
+                            if (failureMessage) {
+                              ToastNotification({
+                                type: "error",
+                                message: failureMessage,
+                              });
+                              return;
+                            }
+                            const rows =
+                              (data.data as
+                                Array<Record<string, unknown>> | undefined) ??
+                              [];
+
+                            if (!Array.isArray(rows) || rows.length === 0) {
+                              ToastNotification({
+                                type: "error",
+                                message:
+                                  "No TDS rows returned from calculation.",
+                              });
+                              return;
+                            }
+
+                            const existing = form.values.charges_data;
+                            const tdsChargeRows: ChargeRow[] = rows
+                              .map((r): ChargeRow | null => {
+                                const amount = parseNum(r.amount);
+                                const currencyId = parseNum(r.currency_id);
+                                const roe = parseNum(r.roe);
+                                if (amount == null) return null;
+                                const accountName = String(
+                                  r.account_name ?? "",
+                                );
+                                return {
+                                  account_code: String(r.account_code ?? ""),
+                                  account_name: accountName,
+                                  subledger_code: String(
+                                    r.subledger_code ?? "",
+                                  ),
+                                  // Do not set CRN from TDS response
+                                  CRN: "",
+                                  narration: String(r.narration ?? ""),
+                                  shipment_no: "",
+                                  charge_id: null,
+                                  charge_name: String(
+                                    r.charge_name ?? accountName,
+                                  ),
+                                  currency_id:
+                                    currencyId != null
+                                      ? Number(currencyId)
+                                      : null,
+                                  roe: parseRoeForPayload(roe),
+                                  amount: Number(amount),
+                                  amount_in_local: clampLocalAmount(
+                                    Number(amount),
+                                  ),
+                                  tax_code: "",
+                                  igst_rate: null,
+                                  igst: null,
+                                  Dr_Cr: normalizeDrCr(
+                                    (r.Dr_cr as unknown) ??
+                                      (r.Dr_Cr as unknown) ??
+                                      (r.dr_cr as unknown) ??
+                                      (r.cr_dr as unknown),
+                                  ),
+                                };
+                              })
+                              .filter((x): x is ChargeRow => x !== null);
+
+                            const deduped = tdsChargeRows.filter((nr) => {
+                              return !existing.some(
+                                (er) =>
+                                  String(er.account_code ?? "") ===
+                                    String(nr.account_code ?? "") &&
+                                  String(er.subledger_code ?? "") ===
+                                    String(nr.subledger_code ?? "") &&
+                                  Number(er.amount ?? 0) ===
+                                    Number(nr.amount ?? 0) &&
+                                  er.Dr_Cr === nr.Dr_Cr &&
+                                  String(
+                                    er.charge_name ?? er.account_name ?? "",
+                                  ) ===
+                                    String(
+                                      nr.charge_name ?? nr.account_name ?? "",
+                                    ),
+                              );
+                            });
+
+                            const mergedCharges =
+                              deduped.length > 0
+                                ? [...existing, ...deduped]
+                                : existing;
+                            if (deduped.length > 0) {
+                              form.setFieldValue("charges_data", mergedCharges);
+                              await handleSubmit({
+                                ...form.values,
+                                charges_data: mergedCharges,
+                              });
+                            } else {
+                              ToastNotification({
+                                type: "success",
+                                message: "TDS calculated successfully",
+                              });
+                            }
+                          } catch (e: unknown) {
+                            ToastNotification({
+                              type: "error",
+                              message: getServerErrorMessage(
+                                e,
+                                "TDS calculation failed.",
+                              ),
+                            });
+                          } finally {
+                            setCalcLoading(false);
+                          }
                         }}
                       >
                         Calculate TDS
                       </Button>
                     )}
-                  </Group>
+                </Group>
               </Group>
 
               <Box mb="sm" mt="sm">
@@ -4008,55 +4171,100 @@ export default function SupplierInvoiceCreate({
                     color: "#105476",
                   }}
                 >
-                  <Grid.Col span={chargeColSpans.shipment} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.shipment}
+                    style={{ fontSize: "13px" }}
+                  >
                     Shipment No
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.charge} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.charge}
+                    style={{ fontSize: "13px" }}
+                  >
                     Charge
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.crn} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.crn}
+                    style={{ fontSize: "13px" }}
+                  >
                     CRN
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.account} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.account}
+                    style={{ fontSize: "13px" }}
+                  >
                     Account
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.subledger} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.subledger}
+                    style={{ fontSize: "13px" }}
+                  >
                     Subledger
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.narration} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.narration}
+                    style={{ fontSize: "13px" }}
+                  >
                     Narration
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.currency} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.currency}
+                    style={{ fontSize: "13px" }}
+                  >
                     Currency
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.roe} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.roe}
+                    style={{ fontSize: "13px" }}
+                  >
                     ROE
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.amount} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.amount}
+                    style={{ fontSize: "13px" }}
+                  >
                     Amount
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.localAmount} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.localAmount}
+                    style={{ fontSize: "13px" }}
+                  >
                     Local Amount
                   </Grid.Col>
                   {isIndiaUser && (
-                    <Grid.Col span={chargeColSpans.sac} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.sac}
+                      style={{ fontSize: "13px" }}
+                    >
                       SAC Code
                     </Grid.Col>
                   )}
                   {!isIndiaUser && (
-                    <Grid.Col span={chargeColSpans.vatRate} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.vatRate}
+                      style={{ fontSize: "13px" }}
+                    >
                       VAT Rate
                     </Grid.Col>
                   )}
                   {!isIndiaUser && (
-                    <Grid.Col span={chargeColSpans.vatAmount} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.vatAmount}
+                      style={{ fontSize: "13px" }}
+                    >
                       VAT Amount
                     </Grid.Col>
                   )}
-                  <Grid.Col span={chargeColSpans.drCr} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.drCr}
+                    style={{ fontSize: "13px" }}
+                  >
                     Dr/Cr
                   </Grid.Col>
-                  <Grid.Col span={chargeColSpans.actions} style={{ fontSize: "13px" }}>
+                  <Grid.Col
+                    span={chargeColSpans.actions}
+                    style={{ fontSize: "13px" }}
+                  >
                     Actions
                   </Grid.Col>
                 </Grid>
@@ -4080,7 +4288,11 @@ export default function SupplierInvoiceCreate({
                               `charges_data.${index}.shipment_no`,
                               shipmentNo,
                             );
-                            fetchSacForChargeRow(index, row.charge_id, shipmentNo);
+                            fetchSacForChargeRow(
+                              index,
+                              row.charge_id,
+                              shipmentNo,
+                            );
                           }}
                           searchable
                           disabled={isReadOnly || reversalFormDisabled}
@@ -4109,7 +4321,11 @@ export default function SupplierInvoiceCreate({
                               `charges_data.${index}.shipment_no`,
                               shipmentNo,
                             );
-                            fetchSacForChargeRow(index, row.charge_id, shipmentNo);
+                            fetchSacForChargeRow(
+                              index,
+                              row.charge_id,
+                              shipmentNo,
+                            );
                           }}
                           styles={{
                             input: {
@@ -4143,7 +4359,9 @@ export default function SupplierInvoiceCreate({
                         returnOriginalData
                         error={
                           form.errors[`charges_data.${index}.charge_id`]
-                            ? String(form.errors[`charges_data.${index}.charge_id`])
+                            ? String(
+                                form.errors[`charges_data.${index}.charge_id`],
+                              )
                             : undefined
                         }
                         onChange={(v, selectedData, originalData) => {
@@ -4176,7 +4394,9 @@ export default function SupplierInvoiceCreate({
                             );
                           }
                         }}
-                        disabled={isChargeLoading || isReadOnly || reversalFormDisabled}
+                        disabled={
+                          isChargeLoading || isReadOnly || reversalFormDisabled
+                        }
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -4216,7 +4436,12 @@ export default function SupplierInvoiceCreate({
                         }
                         dropdownZIndex={1100}
                         minSearchLength={1}
-                        searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
+                        searchFields={[
+                          "gl_name",
+                          "gl_account_code",
+                          "account_name",
+                          "id",
+                        ]}
                         displayFormat={(item: Record<string, unknown>) => {
                           const id = String(item.id ?? "").trim();
                           const glName = String(item.gl_name ?? "").trim();
@@ -4224,7 +4449,9 @@ export default function SupplierInvoiceCreate({
                           const name = String(item.account_name ?? "").trim();
                           return {
                             value: id,
-                            label: [name, gl, glName].filter(Boolean).join(" - "),
+                            label: [name, gl, glName]
+                              .filter(Boolean)
+                              .join(" - "),
                           };
                         }}
                         displayValue={
@@ -4287,8 +4514,8 @@ export default function SupplierInvoiceCreate({
                                   .account_name ?? "",
                               ).trim(),
                               String(
-                                (originalData as Record<string, unknown>).gl_name ??
-                                  "",
+                                (originalData as Record<string, unknown>)
+                                  .gl_name ?? "",
                               ).trim(),
                             ]
                               .filter(Boolean)
@@ -4396,7 +4623,11 @@ export default function SupplierInvoiceCreate({
                         }}
                         searchable
                         clearable
-                        disabled={isCurrencyLoading || isReadOnly || reversalFormDisabled}
+                        disabled={
+                          isCurrencyLoading ||
+                          isReadOnly ||
+                          reversalFormDisabled
+                        }
                         styles={{
                           input: {
                             fontSize: "13px",
@@ -4414,7 +4645,8 @@ export default function SupplierInvoiceCreate({
                           onChange={(v) => {
                             const chargeCode =
                               currencyOptions.find(
-                                (o) => o.value === String(row.currency_id ?? ""),
+                                (o) =>
+                                  o.value === String(row.currency_id ?? ""),
                               )?.label ?? "";
                             onRoeValueChange(
                               chargeCode,
@@ -4445,7 +4677,8 @@ export default function SupplierInvoiceCreate({
                             reversalFormDisabled ||
                             isLocalCurrency(
                               currencyOptions.find(
-                                (o) => o.value === String(row.currency_id ?? ""),
+                                (o) =>
+                                  o.value === String(row.currency_id ?? ""),
                               )?.label ?? "",
                               row.currency_id != null
                                 ? String(row.currency_id)
@@ -4463,8 +4696,7 @@ export default function SupplierInvoiceCreate({
                         <FieldErrorBelow
                           error={
                             form.errors[`charges_data.${index}.roe`] as
-                              | string
-                              | undefined
+                              string | undefined
                           }
                         />
                       </Box>
@@ -4636,35 +4868,33 @@ export default function SupplierInvoiceCreate({
 
           {/* Supporting Documents Modal */}
           <Modal
-              opened={documentsModalOpened}
-              onClose={closeDocumentsModal}
-              title={
-                canManageSupportingDocuments
-                  ? "Attach Supporting Documents"
-                  : "Supporting Documents"
-              }
-              size="xl"
-              centered
-              style={{ fontFamily: "Inter" }}
-              styles={{ title: { fontWeight: 600, color: "#105476" } }}
-            >
-              <Stack gap="xs">
-                {form.values.supporting_documents.map((doc, index) => {
-                  // Posted: existing docs are view-only; only brand-new rows are editable
-                  const isExistingDoc = doc.document_id != null;
-                  const canEditDocRow =
-                    !isReadOnly ||
-                    (canAttachDocumentsAfterPost && !isExistingDoc);
+            opened={documentsModalOpened}
+            onClose={closeDocumentsModal}
+            title={
+              canManageSupportingDocuments
+                ? "Attach Supporting Documents"
+                : "Supporting Documents"
+            }
+            size="xl"
+            centered
+            style={{ fontFamily: "Inter" }}
+            styles={{ title: { fontWeight: 600, color: "#105476" } }}
+          >
+            <Stack gap="xs">
+              {form.values.supporting_documents.map((doc, index) => {
+                // Posted: existing docs are view-only; only brand-new rows are editable
+                const isExistingDoc = doc.document_id != null;
+                const canEditDocRow =
+                  !isReadOnly ||
+                  (canAttachDocumentsAfterPost && !isExistingDoc);
 
-                  return (
+                return (
                   <Grid
                     key={index}
                     columns={12}
                     gutter="sm"
                     align="flex-end"
-                    pb={
-                      form.errors[`charges_data.${index}.roe`] ? 18 : 0
-                    }
+                    pb={form.errors[`charges_data.${index}.roe`] ? 18 : 0}
                   >
                     <Grid.Col span={5.5}>
                       <TextInput
@@ -4706,7 +4936,8 @@ export default function SupplierInvoiceCreate({
                             }
                             if (file.size > MAX_FILE_SIZE) {
                               const newErrors = { ...fileErrors };
-                              newErrors[index] = `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                              newErrors[index] =
+                                `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                               setFileErrors(newErrors);
                               ToastNotification({
                                 type: "error",
@@ -4841,38 +5072,39 @@ export default function SupplierInvoiceCreate({
                                 </>
                               )}
                             </Group>
-                            {canEditDocRow && (doc.file || doc.document_url) && (
-                              <Button
-                                variant="subtle"
-                                color="red"
-                                size="xs"
-                                p={4}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (fileErrors[index]) {
-                                    const newErrors = { ...fileErrors };
-                                    delete newErrors[index];
-                                    setFileErrors(newErrors);
-                                  }
-                                  const updatedDocs = [
-                                    ...form.values.supporting_documents,
-                                  ];
-                                  updatedDocs[index] = {
-                                    ...updatedDocs[index],
-                                    file: null,
-                                    document_url: undefined,
-                                    document_id: undefined,
-                                  };
-                                  form.setFieldValue(
-                                    "supporting_documents",
-                                    updatedDocs,
-                                  );
-                                }}
-                                style={{ pointerEvents: "auto" }}
-                              >
-                                <IconX size={14} />
-                              </Button>
-                            )}
+                            {canEditDocRow &&
+                              (doc.file || doc.document_url) && (
+                                <Button
+                                  variant="subtle"
+                                  color="red"
+                                  size="xs"
+                                  p={4}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (fileErrors[index]) {
+                                      const newErrors = { ...fileErrors };
+                                      delete newErrors[index];
+                                      setFileErrors(newErrors);
+                                    }
+                                    const updatedDocs = [
+                                      ...form.values.supporting_documents,
+                                    ];
+                                    updatedDocs[index] = {
+                                      ...updatedDocs[index],
+                                      file: null,
+                                      document_url: undefined,
+                                      document_id: undefined,
+                                    };
+                                    form.setFieldValue(
+                                      "supporting_documents",
+                                      updatedDocs,
+                                    );
+                                  }}
+                                  style={{ pointerEvents: "auto" }}
+                                >
+                                  <IconX size={14} />
+                                </Button>
+                              )}
                           </Group>
                         </Dropzone>
                         {fileErrors[index] && (
@@ -4893,9 +5125,7 @@ export default function SupplierInvoiceCreate({
                               delete newErrors[index];
                               setFileErrors(newErrors);
                             }
-                            if (
-                              form.values.supporting_documents.length === 1
-                            ) {
+                            if (form.values.supporting_documents.length === 1) {
                               form.setFieldValue("supporting_documents", [
                                 { name: "", file: null },
                               ]);
@@ -4944,33 +5174,33 @@ export default function SupplierInvoiceCreate({
                         )}
                     </Grid.Col>
                   </Grid>
-                  );
-                })}
+                );
+              })}
 
-                {canManageSupportingDocuments &&
-                  form.values.supporting_documents.length === 0 && (
-                    <Button
-                      variant="light"
-                      color="#105476"
-                      leftSection={<IconPlus size={16} />}
-                      onClick={() => {
-                        form.setFieldValue("supporting_documents", [
-                          { name: "", file: null },
-                        ]);
-                      }}
-                      fullWidth
-                    >
-                      Add Document
-                    </Button>
-                  )}
-
-                <Group justify="flex-end" mt="md">
-                  <Button variant="outline" onClick={closeDocumentsModal}>
-                    Close
+              {canManageSupportingDocuments &&
+                form.values.supporting_documents.length === 0 && (
+                  <Button
+                    variant="light"
+                    color="#105476"
+                    leftSection={<IconPlus size={16} />}
+                    onClick={() => {
+                      form.setFieldValue("supporting_documents", [
+                        { name: "", file: null },
+                      ]);
+                    }}
+                    fullWidth
+                  >
+                    Add Document
                   </Button>
-                </Group>
-              </Stack>
-            </Modal>
+                )}
+
+              <Group justify="flex-end" mt="md">
+                <Button variant="outline" onClick={closeDocumentsModal}>
+                  Close
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
 
           <Group justify="flex-end" mt="lg" gap="sm">
             <Button
@@ -4996,7 +5226,8 @@ export default function SupplierInvoiceCreate({
                 const newErrors: { [key: number]: string } = {};
                 form.values.supporting_documents.forEach((doc, idx) => {
                   if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                    newErrors[idx] = `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                    newErrors[idx] =
+                      `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                   }
                 });
                 setFileErrors(newErrors);
@@ -5025,16 +5256,18 @@ export default function SupplierInvoiceCreate({
                       ? "Create Supplier Invoice Reverse"
                       : "Save Supplier Invoice"}
                 </Button>
-                {saveResponse?.id != null && canPostDocuments && statusUpper === "UNPOSTED" && (
-                  <Button
-                    type="button"
-                    color="black"
-                    loading={isSubmitting}
-                    onClick={handlePost}
-                  >
-                    Post
-                  </Button>
-                )}
+                {saveResponse?.id != null &&
+                  canPostDocuments &&
+                  statusUpper === "UNPOSTED" && (
+                    <Button
+                      type="button"
+                      color="black"
+                      loading={isSubmitting}
+                      onClick={handlePost}
+                    >
+                      Post
+                    </Button>
+                  )}
               </>
             )}
             {canUpdatePostedInvoice && (

@@ -47,6 +47,11 @@ import {
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
+import { commonSearchAPI } from "../../../service/searchApi";
+import {
+  jobCreateDropdownDisplayFormat,
+  mapJobCreateDropdownOptions,
+} from "../../../utils/jobCreateDropdown";
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import {
@@ -151,15 +156,33 @@ const fetchTdsSectionMaster = async () => {
 
 // Fetch effective SAC (tax code) for charge + service
 const fetchGetEffectiveSac = async (
-  items: { charge_id: number; service_id:  number }[],
-): Promise<Array<{ charge_id: number; service_id: number; sac_code?: string | null; error?: string }>> => {
+  items: { charge_id: number; service_id: number }[],
+): Promise<
+  Array<{
+    charge_id: number;
+    service_id: number;
+    sac_code?: string | null;
+    error?: string;
+  }>
+> => {
   try {
     const response = await postAPICall(
       (URL as any).gstChargeMappingGetEffectiveSac,
       { items },
       API_HEADER,
     );
-    return (response as { data?: Array<{ charge_id: number; service_id: number; sac_code?: string | null; error?: string }> })?.data ?? [];
+    return (
+      (
+        response as {
+          data?: Array<{
+            charge_id: number;
+            service_id: number;
+            sac_code?: string | null;
+            error?: string;
+          }>;
+        }
+      )?.data ?? []
+    );
   } catch {
     return [];
   }
@@ -171,6 +194,11 @@ type ChargeItem = {
   id?: number | null;
   charge_id: number | null;
   charge_name: string;
+  account_id?: number | null;
+  account_code?: string;
+  account_name?: string;
+  subledger_code?: string;
+  narration?: string;
   segment: string;
   job_no: string;
   job_id?: string;
@@ -276,6 +304,11 @@ type PaymentRequestFromApi = {
     id?: number;
     charge_id?: number;
     charge_name?: string;
+    account_id?: number;
+    account_code?: string;
+    account_name?: string;
+    subledger_code?: string;
+    narration?: string;
     segment?: string;
     job_no?: string;
     job_id?: string;
@@ -338,9 +371,7 @@ const mapApiDocumentsToSupportingDocuments = (
         : d?.id != null
           ? Number(d.id)
           : undefined,
-    document_url: ( d?.document_url ?? "")
-      .toString()
-      .trim() || undefined,
+    document_url: (d?.document_url ?? "").toString().trim() || undefined,
     original_document_name:
       (d?.original_document_name ?? d?.document_name ?? d?.name ?? "")
         .toString()
@@ -358,7 +389,10 @@ const buildPaymentRequestFormData = (
   let docIndex = 0;
   supportingDocuments.forEach((doc) => {
     if (doc.file) {
-      formData.append(`document_names[${docIndex}]`, (doc.name ?? "").toString());
+      formData.append(
+        `document_names[${docIndex}]`,
+        (doc.name ?? "").toString(),
+      );
       formData.append(`document[${docIndex}]`, doc.file);
       if (doc.document_id != null) {
         formData.append(`document_id[${docIndex}]`, String(doc.document_id));
@@ -470,6 +504,11 @@ function resolveVoucherTypeFromSourceState(state: unknown): string {
 const emptyCharge = (): ChargeItem => ({
   charge_id: null,
   charge_name: "",
+  account_id: null,
+  account_code: "",
+  account_name: "",
+  subledger_code: "",
+  narration: "",
   segment: "",
   job_no: "",
   sub_job: "",
@@ -487,34 +526,111 @@ const emptyCharge = (): ChargeItem => ({
   tax: "",
 });
 
-function mapChargesFromState(state: unknown): { charges: ChargeItem[]; job_reference_1: string } | null {
+function formatPaymentRequestDate(d: Date | null): string | null {
+  if (!d) return null;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${year}-${month}-${day}`;
+}
+
+function mapPaymentRequestChargeToPayload(
+  c: ChargeItem,
+): Record<string, unknown> {
+  return {
+    ...(c.id != null ? { id: c.id } : {}),
+    charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+    ...(c.account_id != null ? { account_id: Number(c.account_id) } : {}),
+    account_code: c.account_code || undefined,
+    account_name: c.account_name || c.charge_name || undefined,
+    subledger_code: c.subledger_code || undefined,
+    narration: c.narration || undefined,
+    cn_r: c.cn_r || undefined,
+    Dr_cr: c.cn_r || undefined,
+    job_id: (c.job_no ?? "") || (c.job_id ?? ""),
+    currency_id: c.currency_id ? Number(c.currency_id) : undefined,
+    unit_id: c.unit_id ? Number(c.unit_id) : undefined,
+    roe: c.roe != null ? Number(c.roe) : undefined,
+    no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
+    amount_per_unit:
+      c.amount_per_unit != null ? Number(c.amount_per_unit) : undefined,
+    amount: c.amount != null ? Number(c.amount) : undefined,
+    local_amount:
+      c.amount_in_local != null ? Number(c.amount_in_local) : undefined,
+    sac_code: c.tax_code ?? "",
+  };
+}
+
+function mapApiChargeToChargeItem(
+  c: NonNullable<PaymentRequestFromApi["charges"]>[number],
+): ChargeItem {
+  return {
+    id: c.id != null ? Number(c.id) : null,
+    charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+    charge_name: c.charge_name ?? c.account_name ?? "",
+    account_id: c.account_id != null ? Number(c.account_id) : null,
+    account_code: c.account_code ?? "",
+    account_name: c.account_name ?? c.charge_name ?? "",
+    subledger_code: c.subledger_code ?? "",
+    narration: c.narration ?? "",
+    segment: c.segment ?? "",
+    job_no: (c.job_no ?? "") || (c.job_id ?? ""),
+    sub_job: c.sub_job ?? "",
+    cn_r: c.cn_r ?? "",
+    currency: c.currency_code ?? "",
+    currency_id: c.currency_id != null ? String(c.currency_id) : "",
+    roe: c.roe != null ? Number(c.roe) : null,
+    unit_code: c.unit_code ?? "",
+    unit_id: c.unit_id != null ? String(c.unit_id) : "",
+    no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : null,
+    amount_per_unit:
+      c.amount_per_unit != null ? Number(c.amount_per_unit) : null,
+    amount: c.amount != null ? Number(c.amount) : null,
+    amount_in_local: c.local_amount != null ? Number(c.local_amount) : null,
+    tax_code: c.sac_code ?? "",
+    tax: c.tax === true || c.tax === "true" ? "true" : "false",
+  };
+}
+
+function mapChargesFromState(
+  state: unknown,
+): { charges: ChargeItem[]; job_reference_1: string } | null {
   const s = state as {
     chargesFromEstimates?: Array<Record<string, unknown>>;
     job_reference_1?: string;
   } | null;
   if (!s?.chargesFromEstimates?.length) return null;
-  const charges: ChargeItem[] = s.chargesFromEstimates.map((c: Record<string, unknown>) => ({
-    ...emptyCharge(),
-    charge_id: c.charge_id != null ? Number(c.charge_id) : null,
-    charge_name: String(c.charge_name ?? ""),
-    segment: String(c.segment ?? ""),
-    job_no: String(c.job_no ?? "") || String(c.job_id ?? ""),
-    sub_job: String(c.sub_job ?? ""),
-    cn_r: String(c.cn_r ?? ""),
-    currency: String(c.currency ?? ""),
-    currency_id: c.currency_id != null ? String(c.currency_id) : "",
-    roe: c.roe != null && c.roe !== "" ? Number(c.roe) : null,
-    unit_code: String(c.unit_code ?? ""),
-    unit_id: c.unit_id != null ? String(c.unit_id) : "",
-    no_of_unit: c.no_of_unit != null && c.no_of_unit !== "" ? Number(c.no_of_unit) : null,
-    amount_per_unit:
-      c.amount_per_unit != null && c.amount_per_unit !== "" ? Number(c.amount_per_unit) : null,
-    amount: c.amount != null && c.amount !== "" ? Number(c.amount) : null,
-    amount_in_local:
-      c.amount_in_local != null && c.amount_in_local !== "" ? Number(c.amount_in_local) : null,
-    tax_code: String(c.tax_code ?? ""),
-    tax: String(c.tax ?? ""),
-  }));
+  const charges: ChargeItem[] = s.chargesFromEstimates.map(
+    (c: Record<string, unknown>) => ({
+      ...emptyCharge(),
+      charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+      charge_name: String(c.charge_name ?? ""),
+      segment: String(c.segment ?? ""),
+      job_no: String(c.job_no ?? "") || String(c.job_id ?? ""),
+      sub_job: String(c.sub_job ?? ""),
+      cn_r: String(c.cn_r ?? ""),
+      currency: String(c.currency ?? ""),
+      currency_id: c.currency_id != null ? String(c.currency_id) : "",
+      roe: c.roe != null && c.roe !== "" ? Number(c.roe) : null,
+      unit_code: String(c.unit_code ?? ""),
+      unit_id: c.unit_id != null ? String(c.unit_id) : "",
+      no_of_unit:
+        c.no_of_unit != null && c.no_of_unit !== ""
+          ? Number(c.no_of_unit)
+          : null,
+      amount_per_unit:
+        c.amount_per_unit != null && c.amount_per_unit !== ""
+          ? Number(c.amount_per_unit)
+          : null,
+      amount: c.amount != null && c.amount !== "" ? Number(c.amount) : null,
+      amount_in_local:
+        c.amount_in_local != null && c.amount_in_local !== ""
+          ? Number(c.amount_in_local)
+          : null,
+      tax_code: String(c.tax_code ?? ""),
+      tax: String(c.tax ?? ""),
+    }),
+  );
   return {
     charges,
     job_reference_1: s.job_reference_1 ?? "",
@@ -568,19 +684,24 @@ function PaymentRequest() {
 
   // service_id for get-effective-sac API (available when navigating from a job page)
   const jobServiceId =
-    (location.state as { job?: { service_id?: number } } | null)?.job?.service_id ?? 0;
+    (location.state as { job?: { service_id?: number } } | null)?.job
+      ?.service_id ?? 0;
 
   const shouldApproveRef = useRef(false);
   const shouldRejectRef = useRef(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<Record<number, boolean>>({});
+  const [sacCodeLoadingByIndex, setSacCodeLoadingByIndex] = useState<
+    Record<number, boolean>
+  >({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
-  const [documentsModalOpened, { open: openDocumentsModal, close: closeDocumentsModal }] =
-    useDisclosure(false);
+  const [
+    documentsModalOpened,
+    { open: openDocumentsModal, close: closeDocumentsModal },
+  ] = useDisclosure(false);
   const [supportingDocuments, setSupportingDocuments] = useState<
     SupportingDocumentItem[]
   >([]);
@@ -605,11 +726,13 @@ function PaymentRequest() {
   const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
-  const isUpdate = (saveResponse?.id != null && saveResponse.id > 0) || Boolean(requestId);
+  const isUpdate =
+    (saveResponse?.id != null && saveResponse.id > 0) || Boolean(requestId);
 
   const defaultBranch = user?.branches?.find(
     (b: { is_default?: boolean }) => b.is_default === true,
-  ) as { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  ) as
+    { currency?: { currency_id?: number; currency_code?: string } } | undefined;
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
   const defaultBranchCurrencyId =
     defaultBranch?.currency?.currency_id != null
@@ -672,7 +795,10 @@ function PaymentRequest() {
         let rows: unknown[] = [];
         if (Array.isArray(payloadUnknown)) {
           rows = payloadUnknown;
-        } else if (isObj(payloadUnknown) && Array.isArray(payloadUnknown.data)) {
+        } else if (
+          isObj(payloadUnknown) &&
+          Array.isArray(payloadUnknown.data)
+        ) {
           rows = payloadUnknown.data as unknown[];
         } else if (
           isObj(payloadUnknown) &&
@@ -697,7 +823,11 @@ function PaymentRequest() {
   });
 
   const stateOptions = useMemo(() => {
-    const data = stateData as { id?: number; state_name?: string; name?: string }[];
+    const data = stateData as {
+      id?: number;
+      state_name?: string;
+      name?: string;
+    }[];
     if (!Array.isArray(data)) return [];
     return data.map((item) => ({
       value: String(item.id ?? ""),
@@ -715,8 +845,7 @@ function PaymentRequest() {
       .map((item) => {
         const code = String(item.tds_section_code ?? "").trim();
         const name = String(item.tds_section_name ?? "").trim();
-        const label =
-          name && code ? `${name} - ${code}` : name || code;
+        const label = name && code ? `${name} - ${code}` : name || code;
         return { value: code, label };
       })
       .filter((o) => o.value);
@@ -857,11 +986,56 @@ function PaymentRequest() {
     return Array.from(uniq);
   }, [sacCodeOptions, form.values.charges]);
 
+  const prefillJobId = useMemo(() => {
+    const fromForm = String(form.values.job_reference_1 ?? "").trim();
+    if (fromForm) return fromForm;
+    const stateJob = (
+      location.state as { job?: { job_id?: unknown; id?: unknown } } | null
+    )?.job;
+    return String(stateJob?.job_id ?? stateJob?.id ?? "").trim();
+  }, [form.values.job_reference_1, location.state]);
+
+  const isJobChargesPrefillFlow =
+    !isEditOrViewMode && prefillFromState != null && prefillJobId !== "";
+
+  const [prefillJobOptions, setPrefillJobOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+
+  useEffect(() => {
+    if (!isJobChargesPrefillFlow || !prefillJobId) {
+      setPrefillJobOptions([]);
+      return;
+    }
+
+    commonSearchAPI({ endpoint: URL.filterJobCreate, query: prefillJobId })
+      .then((rows) => {
+        const arr = Array.isArray(rows)
+          ? (rows as Array<Record<string, unknown>>)
+          : [];
+        const opts = mapJobCreateDropdownOptions(arr);
+        if (prefillJobId && !opts.some((o) => o.value === prefillJobId)) {
+          opts.unshift({ value: prefillJobId, label: prefillJobId });
+        }
+        setPrefillJobOptions(opts);
+      })
+      .catch(() =>
+        setPrefillJobOptions(
+          prefillJobId ? [{ value: prefillJobId, label: prefillJobId }] : [],
+        ),
+      );
+  }, [isJobChargesPrefillFlow, prefillJobId]);
+
   const isApprovedStatus =
     (saveResponse?.status ?? form.values.approved ?? "")
       .toString()
       .trim()
       .toUpperCase() === "APPROVED";
+
+  const isPaidToSelected =
+    !!String(form.values.paid_to ?? "").trim() ||
+    !!String(form.values.account_id ?? "").trim() ||
+    !!String(accountNameDisplay ?? "").trim();
 
   useEffect(() => {
     // In create flow, if voucher type is empty, auto-fill from source screen.
@@ -892,12 +1066,17 @@ function PaymentRequest() {
         sourceServiceType.trim().toUpperCase() === "AIR") ||
       (Array.isArray(sourceServiceType) &&
         sourceServiceType.some(
-          (x) => String(x ?? "").trim().toUpperCase() === "AIR",
+          (x) =>
+            String(x ?? "")
+              .trim()
+              .toUpperCase() === "AIR",
         ));
     const isExportJobSource =
       Array.isArray(sourceServiceType) &&
       sourceServiceType.some((x) => {
-        const v = String(x ?? "").trim().toUpperCase();
+        const v = String(x ?? "")
+          .trim()
+          .toUpperCase();
         return v === "FCL" || v === "LCL";
       });
     if (isAirSource || isExportJobSource) return;
@@ -914,13 +1093,12 @@ function PaymentRequest() {
 
     if (!supplierDetails) return;
 
-    const supplierName =
-      (supplierDetails.supplier_name ??
-        supplierDetails.supplierName ??
-        supplierDetails.name ??
-        supplierDetails.customer_name ??
-        supplierDetails.account_name ??
-        "") as string;
+    const supplierName = (supplierDetails.supplier_name ??
+      supplierDetails.supplierName ??
+      supplierDetails.name ??
+      supplierDetails.customer_name ??
+      supplierDetails.account_name ??
+      "") as string;
 
     const supplierId =
       supplierDetails.supplier_id ??
@@ -945,7 +1123,10 @@ function PaymentRequest() {
 
     form.setFieldValue("paid_to_type", "supplier");
     form.setFieldValue("account_id", nextAccountId);
-    form.setFieldValue("account_code", supplierCode != null ? String(supplierCode) : "");
+    form.setFieldValue(
+      "account_code",
+      supplierCode != null ? String(supplierCode) : "",
+    );
     setAccountNameDisplay(supplierName);
     // Keep the "Paid To" text input in sync with the selected supplier.
     form.setFieldValue("paid_to", supplierName);
@@ -970,12 +1151,14 @@ function PaymentRequest() {
       const candidateStr = String(stateCandidate).trim();
       const numericMatch = candidateStr.match(/^\d+$/);
       const matchedState = numericMatch
-        ? stateOptions.find((s) => String(s.value).trim() === candidateStr) ?? null
-        : stateOptions.find(
+        ? (stateOptions.find((s) => String(s.value).trim() === candidateStr) ??
+          null)
+        : (stateOptions.find(
             (s) =>
-              String(s.label ?? "").trim().toLowerCase() ===
-              candidateStr.toLowerCase(),
-          ) ?? null;
+              String(s.label ?? "")
+                .trim()
+                .toLowerCase() === candidateStr.toLowerCase(),
+          ) ?? null);
 
       form.setFieldValue(
         "state_code_1",
@@ -985,10 +1168,9 @@ function PaymentRequest() {
     };
 
     // Auto-fill state from PRIMARY address if already provided in supplier object.
-    const addresses =
-      (supplierDetails.addresses_data ??
-        supplierDetails.addresses ??
-        []) as Array<any>;
+    const addresses = (supplierDetails.addresses_data ??
+      supplierDetails.addresses ??
+      []) as Array<any>;
 
     if (Array.isArray(addresses) && addresses.length > 0) {
       applyStateFromAddresses(addresses);
@@ -998,15 +1180,14 @@ function PaymentRequest() {
     // Otherwise, fetch supplier details by supplier code/id, then apply PRIMARY address state.
     if (form.values.state_code_1?.trim()) return;
 
-    const supplierEndpoint = resolveAccountNameEndpointByPaidToType(
-      "supplier",
-    );
+    const supplierEndpoint = resolveAccountNameEndpointByPaidToType("supplier");
 
     if (!supplierEndpoint) return;
 
     (async () => {
       try {
-        const query = supplierCode != null ? String(supplierCode) : nextAccountId;
+        const query =
+          supplierCode != null ? String(supplierCode) : nextAccountId;
         const response = await getAPICall(
           `${supplierEndpoint}?search=${encodeURIComponent(String(query))}`,
           API_HEADER,
@@ -1122,11 +1303,16 @@ function PaymentRequest() {
       }>;
       const mainCurrencyId = currencyList?.find(
         (item) =>
-          (item.currency_code ?? item.code ?? "").toString().trim().toUpperCase() ===
+          (item.currency_code ?? item.code ?? "")
+            .toString()
+            .trim()
+            .toUpperCase() ===
           (values.currency ?? "").toString().trim().toUpperCase(),
       )?.id;
 
-      const stateIdNum = values.state_code_1 ? Number(values.state_code_1) : undefined;
+      const stateIdNum = values.state_code_1
+        ? Number(values.state_code_1)
+        : undefined;
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
@@ -1160,19 +1346,7 @@ function PaymentRequest() {
         rejected_note: values.rejected_note || null,
         on_hold_note: values.on_hold_note || null,
         ...(values.approved ? { status: values.approved } : {}),
-        charges_data: values.charges.map((c) => ({
-          ...(c.id != null ? { id: c.id } : {}),
-          charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
-          job_id: (c.job_no ?? "") || (c.job_id ?? ""),
-          currency_id: c.currency_id ? Number(c.currency_id) : undefined,
-          unit_id: c.unit_id ? Number(c.unit_id) : undefined,
-          roe: c.roe != null ? Number(c.roe) : undefined,
-          no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
-          amount_per_unit: c.amount_per_unit != null ? Number(c.amount_per_unit) : undefined,
-          amount: c.amount != null ? Number(c.amount) : undefined,
-          local_amount: c.amount_in_local != null ? Number(c.amount_in_local) : undefined,
-          sac_code: c.tax_code ?? "",
-        })),
+        charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
       };
       if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
         payload.currency_id = mainCurrencyId;
@@ -1186,7 +1360,10 @@ function PaymentRequest() {
         const updateId = saveResponse?.id ?? Number(requestId);
         rawResponse = await apiCallProtected.put(
           `${(URL as any).paymentRequest}${updateId}/`,
-          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          buildPaymentRequestFormData(
+            payload as Record<string, unknown>,
+            supportingDocuments,
+          ),
           {
             headers: {
               ...FORM_DATA_HEADERS,
@@ -1197,7 +1374,10 @@ function PaymentRequest() {
       } else {
         rawResponse = await apiCallProtected.post(
           (URL as any).paymentRequest,
-          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          buildPaymentRequestFormData(
+            payload as Record<string, unknown>,
+            supportingDocuments,
+          ),
           {
             headers: {
               ...FORM_DATA_HEADERS,
@@ -1260,7 +1440,8 @@ function PaymentRequest() {
             currency_id: currencyId,
             roe: roeValue,
             amount: totalAmount,
-            amount_in_local: totalAmount != null ? totalAmount * roeValue : null,
+            amount_in_local:
+              totalAmount != null ? totalAmount * roeValue : null,
           };
         });
         form.setFieldValue("charges", [...form.values.charges, ...gstCharges]);
@@ -1273,8 +1454,7 @@ function PaymentRequest() {
     } catch (error: unknown) {
       ToastNotification({
         message:
-          (error as { message?: string })?.message ??
-          "Failed to calculate GST",
+          (error as { message?: string })?.message ?? "Failed to calculate GST",
         type: "error",
       });
     } finally {
@@ -1366,26 +1546,7 @@ function PaymentRequest() {
           rejected_note: values.rejected_note || null,
           on_hold_note: values.on_hold_note || null,
           ...(values.approved ? { status: values.approved } : {}),
-          charges_data: values.charges.map((c) => ({
-            ...(c.id != null ? { id: c.id } : {}),
-            charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
-            job_id: (c.job_no ?? "") || (c.job_id ?? ""),
-            currency_id: c.currency_id ? Number(c.currency_id) : undefined,
-            unit_id: c.unit_id ? Number(c.unit_id) : undefined,
-            roe: c.roe != null ? Number(c.roe) : undefined,
-            no_of_unit:
-              c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
-            amount_per_unit:
-              c.amount_per_unit != null
-                ? Number(c.amount_per_unit)
-                : undefined,
-            amount: c.amount != null ? Number(c.amount) : undefined,
-            local_amount:
-              c.amount_in_local != null
-                ? Number(c.amount_in_local)
-                : undefined,
-            sac_code: c.tax_code ?? "",
-          })),
+          charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
         };
         if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
           payload.currency_id = mainCurrencyId;
@@ -1480,7 +1641,11 @@ function PaymentRequest() {
       const tdsCharges: ChargeItem[] = rows
         .map((item): ChargeItem | null => {
           const amountRaw = item.amount;
-          if (amountRaw === undefined || amountRaw === null || String(amountRaw).trim() === "") {
+          if (
+            amountRaw === undefined ||
+            amountRaw === null ||
+            String(amountRaw).trim() === ""
+          ) {
             return null;
           }
           const amount = Number(amountRaw);
@@ -1498,9 +1663,8 @@ function PaymentRequest() {
               : "";
           const currencyCode =
             String(item.currency_code ?? "").trim() ||
-            (currencyList?.find(
-              (c) => String(c.id ?? "") === currencyId,
-            )?.currency_code ??
+            (currencyList?.find((c) => String(c.id ?? "") === currencyId)
+              ?.currency_code ??
               currencyList?.find((c) => String(c.id ?? "") === currencyId)
                 ?.code ??
               "");
@@ -1518,13 +1682,22 @@ function PaymentRequest() {
                 ? Number(item.charge_id)
                 : null,
             charge_name: String(item.charge_name ?? item.account_name ?? ""),
+            account_id:
+              item.account_id !== undefined && item.account_id !== null
+                ? Number(item.account_id)
+                : null,
+            account_code: String(item.account_code ?? ""),
+            account_name: String(item.account_name ?? item.charge_name ?? ""),
+            subledger_code: String(item.subledger_code ?? ""),
+            narration: String(item.narration ?? ""),
             job_no: String(item.job_id ?? item.job_no ?? ""),
             cn_r: drCr,
             currency: String(currencyCode),
             currency_id: currencyId,
             roe: Number.isFinite(roeValue) ? roeValue : 1,
             amount,
-            amount_in_local: amount * (Number.isFinite(roeValue) ? roeValue : 1),
+            amount_in_local:
+              amount * (Number.isFinite(roeValue) ? roeValue : 1),
           };
         })
         .filter((x): x is ChargeItem => x !== null);
@@ -1532,16 +1705,118 @@ function PaymentRequest() {
       const deduped = tdsCharges.filter((nr) => {
         return !existing.some(
           (er) =>
-            String(er.charge_name ?? "") === String(nr.charge_name ?? "") &&
+            String(er.account_code ?? "") === String(nr.account_code ?? "") &&
+            String(er.subledger_code ?? "") ===
+              String(nr.subledger_code ?? "") &&
+            String(er.charge_name ?? er.account_name ?? "") ===
+              String(nr.charge_name ?? nr.account_name ?? "") &&
             Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
             String(er.cn_r ?? "") === String(nr.cn_r ?? "") &&
             String(er.currency_id ?? "") === String(nr.currency_id ?? ""),
         );
       });
 
-      if (deduped.length) {
-        form.setFieldValue("charges", [...existing, ...deduped]);
+      const mergedCharges =
+        deduped.length > 0 ? [...existing, ...deduped] : existing;
+      if (deduped.length > 0) {
+        form.setFieldValue("charges", mergedCharges);
       }
+
+      const values = form.values;
+      const mainCurrencyId = currencyList?.find(
+        (item) =>
+          (item.currency_code ?? item.code ?? "")
+            .toString()
+            .trim()
+            .toUpperCase() ===
+          (values.currency ?? "").toString().trim().toUpperCase(),
+      )?.id;
+      const stateIdNum = values.state_code_1
+        ? Number(values.state_code_1)
+        : undefined;
+
+      const updatePayload: Record<string, unknown> = {
+        id: paymentRequestId,
+        job_reference: values.job_reference_1 ?? "",
+        crj_number: values.payment_crj_did ?? "",
+        approved_by: values.approved_by_1 ?? "",
+        approved_date: formatPaymentRequestDate(values.approved_date),
+        customer_gst_no: values.customer_gst_no ?? "",
+        location_gst_no: values.location_gst_no ?? "",
+        date: formatPaymentRequestDate(values.date),
+        payment_type: values.payment_type ?? "",
+        vouchar_type: values.voucher_type ?? "",
+        CINV: values.cinv ?? false,
+        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        proforma_inv_date: formatPaymentRequestDate(
+          values.proforma_invoice_date,
+        ),
+        actual_inv_no: values.actual_invoice_no ?? "",
+        actual_inv_date: formatPaymentRequestDate(values.actual_invoice_date),
+        account_id:
+          values.account_id && Number.isFinite(Number(values.account_id))
+            ? Number(values.account_id)
+            : undefined,
+        ...(values.account_code ? { account_code: values.account_code } : {}),
+        amount: values.amount != null ? Number(values.amount) : null,
+        crj_date: formatPaymentRequestDate(values.crj_date),
+        paid_to_type: values.paid_to_type ?? "",
+        paid_to: values.paid_to ?? "",
+        not_over: values.not_over ?? "",
+        tds_section_code: values.tds_section_code ?? "",
+        account_note: values.accountant_note ?? "",
+        note: values.note ?? "",
+        rejected_note: values.rejected_note || null,
+        on_hold_note: values.on_hold_note || null,
+        ...(values.approved ? { status: values.approved } : {}),
+        charges_data: mergedCharges.map(mapPaymentRequestChargeToPayload),
+      };
+      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+        updatePayload.currency_id = mainCurrencyId;
+      }
+      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+        updatePayload.state_id = stateIdNum;
+      }
+
+      const rawPut = (await apiCallProtected.put(
+        `${(URL as any).paymentRequest}${paymentRequestId}/`,
+        buildPaymentRequestFormData(
+          updatePayload as Record<string, unknown>,
+          supportingDocuments,
+        ),
+        {
+          headers: {
+            ...FORM_DATA_HEADERS,
+            ...API_HEADER.headers,
+          },
+        },
+      )) as {
+        data?: {
+          data?: PaymentRequestFromApi;
+          charges?: PaymentRequestFromApi["charges"];
+        };
+        charges?: PaymentRequestFromApi["charges"];
+      };
+
+      const savedData: PaymentRequestFromApi =
+        rawPut?.data?.data ??
+        (rawPut as { data?: PaymentRequestFromApi })?.data ??
+        (rawPut as PaymentRequestFromApi);
+      const resCharges = savedData?.charges;
+      if (resCharges && Array.isArray(resCharges)) {
+        form.setFieldValue(
+          "charges",
+          mergedCharges.map((c, i) => ({
+            ...c,
+            id: resCharges[i]?.id != null ? Number(resCharges[i].id) : c.id,
+          })),
+        );
+      }
+
+      ToastNotification({
+        message: "TDS calculated successfully",
+        type: "success",
+      });
     } catch (error: unknown) {
       ToastNotification({
         type: "error",
@@ -1568,14 +1843,23 @@ function PaymentRequest() {
       };
 
       // Resolve billing currency code → numeric id
-      const currencyList = currencyData as Array<{ id?: number; currency_code?: string; code?: string }>;
+      const currencyList = currencyData as Array<{
+        id?: number;
+        currency_code?: string;
+        code?: string;
+      }>;
       const mainCurrencyId = currencyList?.find(
         (item) =>
-          (item.currency_code ?? item.code ?? "").toString().trim().toUpperCase() ===
+          (item.currency_code ?? item.code ?? "")
+            .toString()
+            .trim()
+            .toUpperCase() ===
           (values.currency ?? "").toString().trim().toUpperCase(),
       )?.id;
 
-      const stateIdNum = values.state_code_1 ? Number(values.state_code_1) : undefined;
+      const stateIdNum = values.state_code_1
+        ? Number(values.state_code_1)
+        : undefined;
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
@@ -1609,28 +1893,14 @@ function PaymentRequest() {
         rejected_note: values.rejected_note || null,
         on_hold_note: values.on_hold_note || null,
         // status: isApproveAction ? "Approved" : (values.approved || ""),
-        charges_data: values.charges.map((c) => ({
-          ...(c.id != null ? { id: c.id } : {}),
-          charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
-          job_id: (c.job_no ?? "") || (c.job_id ?? ""),
-          currency_id: c.currency_id ? Number(c.currency_id) : undefined,
-          unit_id: c.unit_id ? Number(c.unit_id) : undefined,
-          roe: c.roe != null ? Number(c.roe) : undefined,
-          no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
-          amount_per_unit: c.amount_per_unit != null ? Number(c.amount_per_unit) : undefined,
-          amount: c.amount != null ? Number(c.amount) : undefined,
-          local_amount: c.amount_in_local != null ? Number(c.amount_in_local) : undefined,
-          sac_code: c.tax_code ?? "",
-        })),
+        charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
       };
 
       if (isApproveAction) {
         payload.status = "Approved";
-      }
-      else if (isRejectAction) {
+      } else if (isRejectAction) {
         payload.status = "Rejected";
-      }
-      else if(values.approved) {
+      } else if (values.approved) {
         payload.status = values.approved;
       }
       if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
@@ -1645,7 +1915,10 @@ function PaymentRequest() {
         const updateId = saveResponse?.id ?? Number(requestId);
         const rawPut = (await apiCallProtected.put(
           `${(URL as any).paymentRequest}${updateId}/`,
-          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          buildPaymentRequestFormData(
+            payload as Record<string, unknown>,
+            supportingDocuments,
+          ),
           {
             headers: {
               ...FORM_DATA_HEADERS,
@@ -1681,10 +1954,7 @@ function PaymentRequest() {
               "charges",
               values.charges.map((c, i) => ({
                 ...c,
-                id:
-                  resCharges[i]?.id != null
-                    ? Number(resCharges[i].id)
-                    : c.id,
+                id: resCharges[i]?.id != null ? Number(resCharges[i].id) : c.id,
               })),
             );
           }
@@ -1700,7 +1970,10 @@ function PaymentRequest() {
         // POST — create new record, then switch to edit mode in-place
         const rawResponse = (await apiCallProtected.post(
           (URL as any).paymentRequest,
-          buildPaymentRequestFormData(payload as Record<string, unknown>, supportingDocuments),
+          buildPaymentRequestFormData(
+            payload as Record<string, unknown>,
+            supportingDocuments,
+          ),
           {
             headers: {
               ...FORM_DATA_HEADERS,
@@ -1720,7 +1993,8 @@ function PaymentRequest() {
               status: d.status,
             });
             setAccountNameDisplay(
-              ((d as any).account_name ?? d.account_code ?? "").toString() || null,
+              ((d as any).account_name ?? d.account_code ?? "").toString() ||
+                null,
             );
             setSupportingDocuments(
               mapApiDocumentsToSupportingDocuments(
@@ -1770,34 +2044,7 @@ function PaymentRequest() {
               location_gst_no: d.location_gst_no ?? "",
               charges:
                 d.charges && d.charges.length > 0
-                  ? d.charges.map((c) => ({
-                      id: c.id != null ? Number(c.id) : null,
-                      charge_id:
-                        c.charge_id != null ? Number(c.charge_id) : null,
-                      charge_name: c.charge_name ?? "",
-                      segment: c.segment ?? "",
-                      job_no: (c.job_no ?? "") || (c.job_id ?? ""),
-                      sub_job: c.sub_job ?? "",
-                      cn_r: c.cn_r ?? "",
-                      currency: c.currency_code ?? "",
-                      currency_id:
-                        c.currency_id != null ? String(c.currency_id) : "",
-                      roe: c.roe != null ? Number(c.roe) : null,
-                      unit_code: c.unit_code ?? "",
-                      unit_id: c.unit_id != null ? String(c.unit_id) : "",
-                      no_of_unit:
-                        c.no_of_unit != null ? Number(c.no_of_unit) : null,
-                      amount_per_unit:
-                        c.amount_per_unit != null
-                          ? Number(c.amount_per_unit)
-                          : null,
-                      amount: c.amount != null ? Number(c.amount) : null,
-                      amount_in_local:
-                        c.local_amount != null ? Number(c.local_amount) : null,
-                      tax_code: c.sac_code ?? "",
-                      tax:
-                        c.tax === true || c.tax === "true" ? "true" : "false",
-                    }))
+                  ? d.charges.map(mapApiChargeToChargeItem)
                   : values.charges,
             });
           }
@@ -1881,31 +2128,7 @@ function PaymentRequest() {
       location_gst_no: d.location_gst_no ?? "",
       charges:
         d.charges && d.charges.length > 0
-          ? d.charges.map((c) => ({
-              id: c.id != null ? Number(c.id) : null,
-              charge_id: c.charge_id != null ? Number(c.charge_id) : null,
-              charge_name: c.charge_name ?? "",
-              segment: c.segment ?? "",
-              job_no: (c.job_no ?? "") || (c.job_id ?? ""),
-              sub_job: c.sub_job ?? "",
-              cn_r: c.cn_r ?? "",
-              currency: c.currency_code ?? "",
-              currency_id: c.currency_id != null ? String(c.currency_id) : "",
-              roe: c.roe != null ? Number(c.roe) : null,
-              unit_code: c.unit_code ?? "",
-              unit_id: c.unit_id != null ? String(c.unit_id) : "",
-              no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : null,
-              amount_per_unit:
-                c.amount_per_unit != null ? Number(c.amount_per_unit) : null,
-              amount: c.amount != null ? Number(c.amount) : null,
-              amount_in_local:
-                c.local_amount != null ? Number(c.local_amount) : null,
-              tax_code: c.sac_code ?? "",
-              tax:
-                c.tax === true || c.tax === "true"
-                  ? "true"
-                  : "false",
-            }))
+          ? d.charges.map(mapApiChargeToChargeItem)
           : [emptyCharge()],
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2301,11 +2524,7 @@ function PaymentRequest() {
             }}
           >
             {/* Header bar */}
-            <Box
-              px="md"
-              py="xs"
-              style={{ backgroundColor: "#105476" }}
-            >
+            <Box px="md" py="xs" style={{ backgroundColor: "#105476" }}>
               <Group justify="space-between" align="center" wrap="nowrap">
                 <Text
                   size="xs"
@@ -2368,7 +2587,9 @@ function PaymentRequest() {
                         label: "Approved Date",
                         value: form.values.approved_date
                           ? (() => {
-                              const d = normalizeDate(form.values.approved_date);
+                              const d = normalizeDate(
+                                form.values.approved_date,
+                              );
                               return d ? dayjs(d).format(dateFormat) : "—";
                             })()
                           : "—",
@@ -2386,50 +2607,52 @@ function PaymentRequest() {
                       //   value: form.values.location_gst_no,
                       // },
                     ] as { label: string; value: string }[]
-                  ).filter(
-                    ({ value }) =>
-                      value != null &&
-                      String(value).trim() !== "" &&
-                      String(value) !== "—",
-                  ).map(({ label, value }) => (
-                    <Grid.Col key={label} span={4}>
-                      <Box
-                        p="sm"
-                        style={{
-                          display: "flex",
-                          flexDirection: "row",
-                          backgroundColor: "white",
-                          borderRadius: 6,
-                          border: "1px solid #e3f2fc",
-                          gap: "10px",
-                        }}
-                      >
-                        <Text
-                          size="xs"
-                          c="dimmed"
-                          fw={500}
-                          mb={4}
+                  )
+                    .filter(
+                      ({ value }) =>
+                        value != null &&
+                        String(value).trim() !== "" &&
+                        String(value) !== "—",
+                    )
+                    .map(({ label, value }) => (
+                      <Grid.Col key={label} span={4}>
+                        <Box
+                          p="sm"
                           style={{
-                            fontFamily: "Inter",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            fontSize: "11px",
+                            display: "flex",
+                            flexDirection: "row",
+                            backgroundColor: "white",
+                            borderRadius: 6,
+                            border: "1px solid #e3f2fc",
+                            gap: "10px",
                           }}
                         >
-                          {label}
-                          {" : "}
-                        </Text>
-                        <Text
-                          size="sm"
-                          fw={value && value !== "—" ? 600 : 400}
-                          c={value && value !== "—" ? "#105476" : "dimmed"}
-                          style={{ fontFamily: "Inter" }}
-                        >
-                          {value || "—"}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                  ))}
+                          <Text
+                            size="xs"
+                            c="dimmed"
+                            fw={500}
+                            mb={4}
+                            style={{
+                              fontFamily: "Inter",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {label}
+                            {" : "}
+                          </Text>
+                          <Text
+                            size="sm"
+                            fw={value && value !== "—" ? 600 : 400}
+                            c={value && value !== "—" ? "#105476" : "dimmed"}
+                            style={{ fontFamily: "Inter" }}
+                          >
+                            {value || "—"}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
+                    ))}
                 </Grid>
               </Box>
             )}
@@ -2528,7 +2751,9 @@ function PaymentRequest() {
                 label="Actual Invoice Date"
                 placeholder="Select date"
                 value={normalizeDate(form.values.actual_invoice_date)}
-                onChange={(date) => form.setFieldValue("actual_invoice_date", date)}
+                onChange={(date) =>
+                  form.setFieldValue("actual_invoice_date", date)
+                }
                 readOnly={isReadOnly}
               />
             </Grid.Col>
@@ -2545,8 +2770,6 @@ function PaymentRequest() {
                 styles={inputStyles}
               />
             </Grid.Col> */}
-
-
 
             {/* ── Row 3 (2+2+2+2+4): Account Code | Subledger Code | Currency | Amount | CRJ Date ── */}
             <Grid.Col span={2}>
@@ -2612,37 +2835,50 @@ function PaymentRequest() {
 
                   // Auto-fill State from PRIMARY address inside `addresses_data`.
                   const addresses = (originalData as any)?.addresses_data as
-                    | Array<{ state_id?: number; state?: unknown; address_type?: string }>
+                    | Array<{
+                        state_id?: number;
+                        state?: unknown;
+                        address_type?: string;
+                      }>
                     | undefined;
                   const primaryAddress =
                     Array.isArray(addresses) && addresses.length > 0
-                      ? addresses.find(
+                      ? (addresses.find(
                           (a) =>
                             String(a?.address_type ?? "")
                               .trim()
                               .toUpperCase() === "PRIMARY",
-                        ) ?? addresses[0]
+                        ) ?? addresses[0])
                       : undefined;
 
                   const stateCandidate =
-                    (primaryAddress as any)?.state_id ?? (primaryAddress as any)?.state;
+                    (primaryAddress as any)?.state_id ??
+                    (primaryAddress as any)?.state;
 
-                  if (stateCandidate != null && String(stateCandidate).trim() !== "") {
+                  if (
+                    stateCandidate != null &&
+                    String(stateCandidate).trim() !== ""
+                  ) {
                     // If it's a numeric state_id, use it directly; otherwise try label match.
                     const candidateStr = String(stateCandidate).trim();
                     const numericMatch = candidateStr.match(/^\d+$/);
                     const matchedState = numericMatch
-                      ? stateOptions.find((s) => String(s.value).trim() === candidateStr) ?? null
-                      : stateOptions.find(
+                      ? (stateOptions.find(
+                          (s) => String(s.value).trim() === candidateStr,
+                        ) ?? null)
+                      : (stateOptions.find(
                           (s) =>
-                            String(s.label ?? "").trim().toLowerCase() ===
-                              candidateStr.toLowerCase(),
-                        ) ?? null;
+                            String(s.label ?? "")
+                              .trim()
+                              .toLowerCase() === candidateStr.toLowerCase(),
+                        ) ?? null);
 
                     form.setFieldValue(
                       "state_code_1",
                       matchedState?.value ??
-                        (numericMatch ? candidateStr : String(stateCandidate).trim()),
+                        (numericMatch
+                          ? candidateStr
+                          : String(stateCandidate).trim()),
                     );
                   }
                 }}
@@ -2706,7 +2942,9 @@ function PaymentRequest() {
                   if (form.errors.paid_to) form.clearFieldError("paid_to");
                 }}
                 readOnly={isReadOnly}
-                error={form.errors.paid_to ? String(form.errors.paid_to) : undefined}
+                error={
+                  form.errors.paid_to ? String(form.errors.paid_to) : undefined
+                }
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2728,12 +2966,7 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-
-
             {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
-
-
-            
 
             <Grid.Col span={2}>
               <Dropdown
@@ -2782,23 +3015,27 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
-              <Dropdown
-                label="TDS Section Code"
-                placeholder={
-                  isTdsSectionLoading ? "Loading..." : "Select TDS section"
-                }
-                data={tdsSectionOptions}
-                value={form.values.tds_section_code || null}
-                onChange={(v) =>
-                  form.setFieldValue("tds_section_code", v ?? "")
-                }
-                searchable
-                clearable
-                disabled={isTdsSectionLoading || isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
+            {isIndiaUser ? (
+              <Grid.Col span={2}>
+                <Dropdown
+                  label="TDS Section Code"
+                  placeholder={
+                    isTdsSectionLoading ? "Loading..." : "Select TDS section"
+                  }
+                  data={tdsSectionOptions}
+                  value={form.values.tds_section_code || null}
+                  onChange={(v) =>
+                    form.setFieldValue("tds_section_code", v ?? "")
+                  }
+                  searchable
+                  clearable
+                  disabled={
+                    isTdsSectionLoading || isReadOnly || !isPaidToSelected
+                  }
+                  styles={inputStyles}
+                />
+              </Grid.Col>
+            ) : null}
 
             {/* ── Row 6 (3+3+3+3): Notes ── */}
             <Grid.Col span={2}>
@@ -2861,20 +3098,20 @@ function PaymentRequest() {
             ) : null}
           </Grid>
 
-            <Group justify="flex-end" mt="md" mb="sm">
-              <Button
-                type="button"
-                variant="light"
-                color="#105476"
-                size="sm"
-                onClick={handleCalculateGst}
-                loading={isSubmitting}
-                disabled={isReadOnly}
-              >
-                Calculate GST
-              </Button>
-              {isIndiaUser &&
-              String(form.values.tds_section_code ?? "").trim() !== "" ? (
+          <Group justify="flex-end" mt="md" mb="sm">
+            <Button
+              type="button"
+              variant="light"
+              color="#105476"
+              size="sm"
+              onClick={handleCalculateGst}
+              loading={isSubmitting}
+              disabled={isReadOnly}
+            >
+              Calculate GST
+            </Button>
+            {isIndiaUser &&
+            String(form.values.tds_section_code ?? "").trim() !== "" ? (
               <Button
                 type="button"
                 variant="light"
@@ -2882,112 +3119,118 @@ function PaymentRequest() {
                 size="sm"
                 onClick={handleCalculateTds}
                 loading={isSubmitting}
-                disabled={isReadOnly}
+                disabled={isReadOnly || !isPaidToSelected}
               >
                 Calculate TDS
               </Button>
-                        ) : null}
-            </Group>
+            ) : null}
+          </Group>
 
           {/* ── Charges Section ── */}
           <Box mt="md">
             <Box>
-            {/* Charges header row (sticky) */}
-            <Grid
-              w="100%"
-              py="sm"
-              mb="sm"
-              gutter="xs"
-              style={{
-                flexWrap: "nowrap",
-                position: "sticky",
-                top: 45,
-                zIndex: 100,
-                backgroundColor: "white",
-                fontWeight: 600,
-                color: "#105476",
-              }}
-            >
-              <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
-                SNo
-              </Grid.Col>
-              {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+              {/* Charges header row (sticky) */}
+              <Grid
+                w="100%"
+                py="sm"
+                mb="sm"
+                gutter="xs"
+                style={{
+                  flexWrap: "nowrap",
+                  position: "sticky",
+                  top: 45,
+                  zIndex: 100,
+                  backgroundColor: "white",
+                  fontWeight: 600,
+                  color: "#105476",
+                }}
+              >
+                <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
+                  SNo
+                </Grid.Col>
+                {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
-              <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
-                Job Id
-              </Grid.Col>
-              {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
+                <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
+                  Job Id
+                </Grid.Col>
+                {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 Subjob
               </Grid.Col>
               <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 C/N/R
               </Grid.Col> */}
-              <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
-                Charge
-              </Grid.Col>
-              <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                Currency
-              </Grid.Col>
-              <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
-                ROE
-              </Grid.Col>
-              <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                Unit
-              </Grid.Col>
-              <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
-                No of Unit
-              </Grid.Col>
-              <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-                Amt/Unit
-              </Grid.Col>
-              <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-                Amount
-              </Grid.Col>
-              <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-                Local Amt
-              </Grid.Col>
-              <Grid.Col span={1} style={{ fontSize: "13px" }}>
-                SAC Code
-              </Grid.Col>
-              {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
+                  Charge
+                </Grid.Col>
+                <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
+                  Account Name
+                </Grid.Col>
+                <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                  Subledger
+                </Grid.Col>
+                <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                  Currency
+                </Grid.Col>
+                <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                  ROE
+                </Grid.Col>
+                <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                  Unit
+                </Grid.Col>
+                <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                  No of Unit
+                </Grid.Col>
+                <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                  Amt/Unit
+                </Grid.Col>
+                <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                  Amount
+                </Grid.Col>
+                <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                  Local Amt
+                </Grid.Col>
+                <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                  SAC Code
+                </Grid.Col>
+                {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
               </Grid.Col> */}
-              {!isReadOnly && (
-                <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
-                  Actions
-                </Grid.Col>
-              )}
-            </Grid>
+                {!isReadOnly && (
+                  <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    Actions
+                  </Grid.Col>
+                )}
+              </Grid>
 
-            {/* Charge rows */}
-            {form.values.charges.map((charge, index) => (
-              <Grid
-                key={index}
-                w="100%"
-                gutter="xs"
-                mt={index !== 0 ? "sm" : "xs"}
-                style={{ flexWrap: "nowrap" }}
-              >
-                {/* SNo */}
-                <Grid.Col span={0.4}>
-                  <TextInput
-                    value={String(index + 1)}
-                    readOnly
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                        backgroundColor: "var(--mantine-color-gray-0)",
-                        textAlign: "center",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+              {/* Charge rows */}
+              {form.values.charges.map((charge, index) => (
+                <Grid
+                  key={index}
+                  w="100%"
+                  gutter="xs"
+                  mt={index !== 0 ? "sm" : "xs"}
+                  style={{ flexWrap: "nowrap" }}
+                >
+                  {/* SNo */}
+                  <Grid.Col span={0.4}>
+                    <TextInput
+                      value={String(index + 1)}
+                      readOnly
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                          backgroundColor: "var(--mantine-color-gray-0)",
+                          textAlign: "center",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* Seg */}
-                {/* <Grid.Col span={0.5}>
+                  {/* Seg */}
+                  {/* <Grid.Col span={0.5}>
                   <TextInput
                     placeholder="Seg"
                     value={charge.segment}
@@ -3008,30 +3251,59 @@ function PaymentRequest() {
                   />
                 </Grid.Col> */}
 
-                {/* Job No */}
-                <Grid.Col span={0.98}>
-                  <TextInput
-                    placeholder="Job Id"
-                    value={charge.job_no}
-                    onChange={(e) =>
-                      form.setFieldValue(
-                        `charges.${index}.job_no`,
-                        e.target.value,
-                      )
-                    }
-                    readOnly={isReadOnly}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                  {/* Job No */}
+                  <Grid.Col span={0.98}>
+                    {isJobChargesPrefillFlow ? (
+                      <Dropdown
+                        placeholder="Select job id"
+                        data={prefillJobOptions}
+                        value={charge.job_no || null}
+                        onChange={(value) =>
+                          form.setFieldValue(
+                            `charges.${index}.job_no`,
+                            value ?? "",
+                          )
+                        }
+                        searchable
+                        readOnly={isReadOnly}
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    ) : (
+                      <SearchableSelect
+                        placeholder="Search by job id"
+                        apiEndpoint={URL.filterJobCreate}
+                        value={charge.job_no || null}
+                        displayValue={charge.job_no || undefined}
+                        minSearchLength={1}
+                        searchFields={["shipment_id", "job_id", "type"]}
+                        displayFormat={jobCreateDropdownDisplayFormat}
+                        readOnly={isReadOnly}
+                        dropdownZIndex={1100}
+                        onChange={(value) =>
+                          form.setFieldValue(
+                            `charges.${index}.job_no`,
+                            String(value ?? "").trim(),
+                          )
+                        }
+                        styles={{
+                          input: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            height: "36px",
+                          },
+                        }}
+                      />
+                    )}
+                  </Grid.Col>
 
-                {/* Subjob */}
-                {/* <Grid.Col span={0.6}>
+                  {/* Subjob */}
+                  {/* <Grid.Col span={0.6}>
                   <TextInput
                     placeholder="Subjob"
                     value={charge.sub_job}
@@ -3052,8 +3324,8 @@ function PaymentRequest() {
                   />
                 </Grid.Col> */}
 
-                {/* C/N/R */}
-                {/* <Grid.Col span={0.6}>
+                  {/* C/N/R */}
+                  {/* <Grid.Col span={0.6}>
                   <Dropdown
                     placeholder="C/N/R"
                     data={CN_R_OPTIONS}
@@ -3075,351 +3347,494 @@ function PaymentRequest() {
                   />
                 </Grid.Col> */}
 
-                {/* Charge */}
-                <Grid.Col span={1.5}>
-                  <SearchableSelect
-                    placeholder="Type charge name"
-                    apiEndpoint={(URL as any).chargeMaster}
-                    searchFields={["charge_name", "charge_code"]}
-                    displayFormat={(item: Record<string, unknown>) => ({
-                      value: String(item.id ?? ""),
-                      label: String(item.charge_name ?? ""),
-                    })}
-                    value={
-                      charge.charge_id != null
-                        ? String(charge.charge_id)
-                        : null
-                    }
-                    displayValue={charge.charge_name || undefined}
-                    onChange={(value, selectedData) => {
-                      const chargeId = value ? Number(value) : null;
-                      const chargeName = selectedData?.label ?? "";
-                      form.setFieldValue(
-                        `charges.${index}.charge_id`,
-                        chargeId,
-                      );
-                      form.setFieldValue(
-                        `charges.${index}.charge_name`,
-                        chargeName,
-                      );
-                      form.setFieldValue(
-                        `charges.${index}.tax_code`,
-                        "",
-                      );
-                      if (chargeErrors[index]?.charge_name) {
-                        const newErrors = { ...chargeErrors };
-                        if (newErrors[index]) {
-                          delete newErrors[index].charge_name;
-                          if (Object.keys(newErrors[index]).length === 0) {
-                            delete newErrors[index];
-                          }
-                        }
-                        setChargeErrors(newErrors);
+                  {/* Charge */}
+                  <Grid.Col span={1.2}>
+                    <SearchableSelect
+                      placeholder="Type charge name"
+                      apiEndpoint={(URL as any).chargeMaster}
+                      searchFields={["charge_name", "charge_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.id ?? ""),
+                        label: String(item.charge_name ?? ""),
+                      })}
+                      value={
+                        charge.charge_id != null
+                          ? String(charge.charge_id)
+                          : null
                       }
-                      // Auto-fetch SAC code whenever a charge is selected/changed
-                      if (chargeId != null) {
-                        setSacCodeLoadingByIndex((prev) => ({ ...prev, [index]: true }));
-                        fetchGetEffectiveSac([{ charge_id: chargeId, service_id: jobServiceId ?? 0 }])
-                          .then((data) => {
-                            const item = data[0];
-                            if (item?.sac_code != null && item.sac_code !== "") {
-                              form.setFieldValue(`charges.${index}.tax_code`, item.sac_code);
+                      displayValue={charge.charge_name || undefined}
+                      onChange={(value, selectedData) => {
+                        const chargeId = value ? Number(value) : null;
+                        const chargeName = selectedData?.label ?? "";
+                        form.setFieldValue(
+                          `charges.${index}.charge_id`,
+                          chargeId,
+                        );
+                        form.setFieldValue(
+                          `charges.${index}.charge_name`,
+                          chargeName,
+                        );
+                        form.setFieldValue(`charges.${index}.tax_code`, "");
+                        if (chargeErrors[index]?.charge_name) {
+                          const newErrors = { ...chargeErrors };
+                          if (newErrors[index]) {
+                            delete newErrors[index].charge_name;
+                            if (Object.keys(newErrors[index]).length === 0) {
+                              delete newErrors[index];
                             }
-                          })
-                          .finally(() => {
-                            setSacCodeLoadingByIndex((prev) => ({ ...prev, [index]: false }));
-                          });
-                      }
-                    }}
-                    withAsterisk
-                    readOnly={isReadOnly}
-                    error={chargeErrors[index]?.charge_name}
-                    minSearchLength={2}
-                    dropdownZIndex={1000}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                          }
+                          setChargeErrors(newErrors);
+                        }
+                        // Auto-fetch SAC code whenever a charge is selected/changed
+                        if (chargeId != null) {
+                          setSacCodeLoadingByIndex((prev) => ({
+                            ...prev,
+                            [index]: true,
+                          }));
+                          fetchGetEffectiveSac([
+                            {
+                              charge_id: chargeId,
+                              service_id: jobServiceId ?? 0,
+                            },
+                          ])
+                            .then((data) => {
+                              const item = data[0];
+                              if (
+                                item?.sac_code != null &&
+                                item.sac_code !== ""
+                              ) {
+                                form.setFieldValue(
+                                  `charges.${index}.tax_code`,
+                                  item.sac_code,
+                                );
+                              }
+                            })
+                            .finally(() => {
+                              setSacCodeLoadingByIndex((prev) => ({
+                                ...prev,
+                                [index]: false,
+                              }));
+                            });
+                        }
+                      }}
+                      withAsterisk
+                      readOnly={isReadOnly}
+                      error={chargeErrors[index]?.charge_name}
+                      minSearchLength={2}
+                      dropdownZIndex={1000}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* Currency */}
-                <Grid.Col span={1}>
-                  <Dropdown
-                    placeholder="Curr."
-                    searchable
-                    data={currencyOptions}
-                    value={charge.currency_id || charge.currency || null}
-                    readOnly={isReadOnly}
-                    onChange={(value) => {
-                      const v = value ?? "";
-                      form.setFieldValue(`charges.${index}.currency_id`, v);
-                      const opt = currencyOptions.find((o) => o.value === v);
-                      const code = opt ? (opt.label ?? opt.value) : v;
-                      form.setFieldValue(`charges.${index}.currency`, code);
-                      const newRoe = code ? getRoeValue(code) : null;
-                      if (newRoe !== null) {
-                        form.setFieldValue(`charges.${index}.roe`, newRoe);
+                  {/* Account Name */}
+                  <Grid.Col span={1.1}>
+                    <SearchableSelect
+                      placeholder="Search by account name"
+                      apiEndpoint={URL.chartOfAccounts}
+                      value={
+                        charge.account_id != null
+                          ? String(charge.account_id)
+                          : null
                       }
-                      const currentCharge = form.values.charges[index];
-                      const amt = currentCharge.amount;
-                      if (
-                        amt != null &&
-                        amt > 0 &&
-                        newRoe != null &&
-                        newRoe > 0
-                      ) {
-                        const local = clampAmount(amt * newRoe);
-                        if (local != null)
+                      dropdownZIndex={1100}
+                      minSearchLength={1}
+                      searchFields={[
+                        "gl_name",
+                        "gl_account_code",
+                        "account_name",
+                        "id",
+                      ]}
+                      displayFormat={(item: Record<string, unknown>) => {
+                        const id = String(item.id ?? "").trim();
+                        const glName = String(item.gl_name ?? "").trim();
+                        const gl = String(item.gl_account_code ?? "").trim();
+                        const name = String(item.account_name ?? "").trim();
+                        return {
+                          value: id,
+                          label: [name, gl, glName].filter(Boolean).join(" - "),
+                        };
+                      }}
+                      displayValue={
+                        charge.account_name
+                          ? `${charge.account_name}${
+                              charge.account_code
+                                ? ` - ${charge.account_code}`
+                                : ""
+                            }`
+                          : charge.account_code || undefined
+                      }
+                      returnOriginalData
+                      onChange={(value, _selectedData, originalData) => {
+                        if (!value || !originalData) {
+                          form.setFieldValue(
+                            `charges.${index}.account_id`,
+                            null,
+                          );
+                          form.setFieldValue(
+                            `charges.${index}.account_code`,
+                            "",
+                          );
+                          form.setFieldValue(
+                            `charges.${index}.subledger_code`,
+                            "",
+                          );
+                          form.setFieldValue(
+                            `charges.${index}.account_name`,
+                            "",
+                          );
+                          return;
+                        }
+                        form.setFieldValue(
+                          `charges.${index}.account_id`,
+                          Number.isFinite(Number(value))
+                            ? Number(value)
+                            : null,
+                        );
+                        form.setFieldValue(
+                          `charges.${index}.account_code`,
+                          originalData.gl_account_code !== undefined &&
+                            originalData.gl_account_code !== null
+                            ? String(originalData.gl_account_code)
+                            : "",
+                        );
+                        form.setFieldValue(
+                          `charges.${index}.subledger_code`,
+                          originalData.sl_code !== undefined &&
+                            originalData.sl_code !== null
+                            ? String(originalData.sl_code)
+                            : "",
+                        );
+                        form.setFieldValue(
+                          `charges.${index}.account_name`,
+                          [
+                            String(
+                              (originalData as Record<string, unknown>)
+                                .gl_account_code ?? "",
+                            ).trim(),
+                            String(
+                              (originalData as Record<string, unknown>)
+                                .account_name ?? "",
+                            ).trim(),
+                            String(
+                              (originalData as Record<string, unknown>)
+                                .gl_name ?? "",
+                            ).trim(),
+                          ]
+                            .filter(Boolean)
+                            .join(" - "),
+                        );
+                      }}
+                      disabled={
+                        isReadOnly ||
+                        (String(charge.job_no ?? "").trim() !== "" &&
+                          charge.charge_id != null)
+                      }
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  {/* Subledger */}
+                  <Grid.Col span={0.75}>
+                    <TextInput
+                      placeholder="Subledger"
+                      value={charge.subledger_code ?? ""}
+                      readOnly
+                      disabled={
+                        isReadOnly ||
+                        (String(charge.job_no ?? "").trim() !== "" &&
+                          charge.charge_id != null)
+                      }
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  {/* Currency */}
+                  <Grid.Col span={0.9}>
+                    <Dropdown
+                      placeholder="Curr."
+                      searchable
+                      data={currencyOptions}
+                      value={charge.currency_id || charge.currency || null}
+                      readOnly={isReadOnly}
+                      onChange={(value) => {
+                        const v = value ?? "";
+                        form.setFieldValue(`charges.${index}.currency_id`, v);
+                        const opt = currencyOptions.find((o) => o.value === v);
+                        const code = opt ? (opt.label ?? opt.value) : v;
+                        form.setFieldValue(`charges.${index}.currency`, code);
+                        const newRoe = code ? getRoeValue(code) : null;
+                        if (newRoe !== null) {
+                          form.setFieldValue(`charges.${index}.roe`, newRoe);
+                        }
+                        const currentCharge = form.values.charges[index];
+                        const amt = currentCharge.amount;
+                        if (
+                          amt != null &&
+                          amt > 0 &&
+                          newRoe != null &&
+                          newRoe > 0
+                        ) {
+                          const local = clampAmount(amt * newRoe);
+                          if (local != null)
+                            form.setFieldValue(
+                              `charges.${index}.amount_in_local`,
+                              local,
+                            );
+                        }
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  {/* ROE */}
+                  <Grid.Col span={0.5}>
+                    <NumberInput
+                      placeholder="ROE"
+                      min={0}
+                      hideControls
+                      readOnly={isReadOnly}
+                      value={charge.roe || undefined}
+                      onChange={(value) => {
+                        const roe = value as number | null;
+                        form.setFieldValue(`charges.${index}.roe`, roe);
+                        const currentCharge = form.values.charges[index];
+                        const amt = currentCharge.amount;
+                        if (amt != null && amt > 0 && roe != null && roe > 0) {
+                          const local = clampAmount(amt * roe);
                           form.setFieldValue(
                             `charges.${index}.amount_in_local`,
                             local,
                           );
-                      }
-                    }}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                        }
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* ROE */}
-                <Grid.Col span={0.5}>
-                  <NumberInput
-                    placeholder="ROE"
-                    min={0}
-                    hideControls
-                    readOnly={isReadOnly}
-                    value={charge.roe || undefined}
-                    onChange={(value) => {
-                      const roe = value as number | null;
-                      form.setFieldValue(`charges.${index}.roe`, roe);
-                      const currentCharge = form.values.charges[index];
-                      const amt = currentCharge.amount;
-                      if (
-                        amt != null &&
-                        amt > 0 &&
-                        roe != null &&
-                        roe > 0
-                      ) {
-                        const local = clampAmount(amt * roe);
+                  {/* Unit */}
+                  <Grid.Col span={0.9}>
+                    <Dropdown
+                      placeholder="Unit"
+                      searchable
+                      data={unitOptions}
+                      value={charge.unit_id || charge.unit_code || null}
+                      readOnly={isReadOnly}
+                      onChange={(value) => {
+                        const v = value ?? "";
+                        form.setFieldValue(`charges.${index}.unit_id`, v);
+                        const opt = unitOptions.find((o) => o.value === v);
                         form.setFieldValue(
-                          `charges.${index}.amount_in_local`,
-                          local,
+                          `charges.${index}.unit_code`,
+                          opt ? String(opt.label || opt.value) : v,
                         );
-                      }
-                    }}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* Unit */}
-                <Grid.Col span={1}>
-                  <Dropdown
-                    placeholder="Unit"
-                    searchable
-                    data={unitOptions}
-                    value={charge.unit_id || charge.unit_code || null}
-                    readOnly={isReadOnly}
-                    onChange={(value) => {
-                      const v = value ?? "";
-                      form.setFieldValue(`charges.${index}.unit_id`, v);
-                      const opt = unitOptions.find((o) => o.value === v);
-                      form.setFieldValue(
-                        `charges.${index}.unit_code`,
-                        opt ? String(opt.label || opt.value) : v,
-                      );
-                    }}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* No of Unit */}
-                <Grid.Col span={0.7}>
-                  <NumberInput
-                    placeholder="Units"
-                    min={0}
-                    hideControls
-                    readOnly={isReadOnly}
-                    value={charge.no_of_unit ?? undefined}
-                    onChange={(value) => {
-                      const noOfUnit = value as number | null;
-                      form.setFieldValue(
-                        `charges.${index}.no_of_unit`,
-                        noOfUnit,
-                      );
-                      const currentCharge = form.values.charges[index];
-                      if (
-                        noOfUnit != null &&
-                        noOfUnit > 0 &&
-                        currentCharge.amount_per_unit != null &&
-                        currentCharge.amount_per_unit > 0
-                      ) {
-                        const amt = clampAmount(
-                          noOfUnit * currentCharge.amount_per_unit,
+                  {/* No of Unit */}
+                  <Grid.Col span={0.65}>
+                    <NumberInput
+                      placeholder="Units"
+                      min={0}
+                      hideControls
+                      readOnly={isReadOnly}
+                      value={charge.no_of_unit ?? undefined}
+                      onChange={(value) => {
+                        const noOfUnit = value as number | null;
+                        form.setFieldValue(
+                          `charges.${index}.no_of_unit`,
+                          noOfUnit,
                         );
+                        const currentCharge = form.values.charges[index];
+                        if (
+                          noOfUnit != null &&
+                          noOfUnit > 0 &&
+                          currentCharge.amount_per_unit != null &&
+                          currentCharge.amount_per_unit > 0
+                        ) {
+                          const amt = clampAmount(
+                            noOfUnit * currentCharge.amount_per_unit,
+                          );
+                          form.setFieldValue(`charges.${index}.amount`, amt);
+                          const roe = currentCharge.roe;
+                          if (amt != null && roe != null && roe > 0) {
+                            form.setFieldValue(
+                              `charges.${index}.amount_in_local`,
+                              clampAmount(amt * roe),
+                            );
+                          }
+                        }
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  {/* Amount per Unit */}
+                  <Grid.Col span={0.85}>
+                    <NumberInput
+                      placeholder="Amt/Unit"
+                      min={0}
+                      hideControls
+                      decimalScale={amountDecimalScale}
+                      readOnly={isReadOnly}
+                      value={charge.amount_per_unit ?? undefined}
+                      onChange={(value) => {
+                        const amtPerUnit = value as number | null;
+                        form.setFieldValue(
+                          `charges.${index}.amount_per_unit`,
+                          amtPerUnit,
+                        );
+                        const currentCharge = form.values.charges[index];
+                        if (
+                          amtPerUnit != null &&
+                          amtPerUnit > 0 &&
+                          currentCharge.no_of_unit != null &&
+                          currentCharge.no_of_unit > 0
+                        ) {
+                          const amt = clampAmount(
+                            currentCharge.no_of_unit * amtPerUnit,
+                          );
+                          form.setFieldValue(`charges.${index}.amount`, amt);
+                          const roe = currentCharge.roe;
+                          if (amt != null && roe != null && roe > 0) {
+                            form.setFieldValue(
+                              `charges.${index}.amount_in_local`,
+                              clampAmount(amt * roe),
+                            );
+                          }
+                        }
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
+
+                  {/* Amount */}
+                  <Grid.Col span={0.85}>
+                    <NumberInput
+                      placeholder="Amount"
+                      min={0}
+                      hideControls
+                      decimalScale={amountDecimalScale}
+                      readOnly={isReadOnly}
+                      value={charge.amount ?? undefined}
+                      onChange={(value) => {
+                        const amt = value as number | null;
                         form.setFieldValue(`charges.${index}.amount`, amt);
-                        const roe = currentCharge.roe;
+                        const roe = form.values.charges[index].roe;
                         if (amt != null && roe != null && roe > 0) {
                           form.setFieldValue(
                             `charges.${index}.amount_in_local`,
                             clampAmount(amt * roe),
                           );
                         }
-                      }
-                    }}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                      }}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* Amount per Unit */}
-                <Grid.Col span={0.9}>
-                  <NumberInput
-                    placeholder="Amt/Unit"
-                    min={0}
-                    hideControls
-                    decimalScale={amountDecimalScale}
-                    readOnly={isReadOnly}
-                    value={charge.amount_per_unit ?? undefined}
-                    onChange={(value) => {
-                      const amtPerUnit = value as number | null;
-                      form.setFieldValue(
-                        `charges.${index}.amount_per_unit`,
-                        amtPerUnit,
-                      );
-                      const currentCharge = form.values.charges[index];
-                      if (
-                        amtPerUnit != null &&
-                        amtPerUnit > 0 &&
-                        currentCharge.no_of_unit != null &&
-                        currentCharge.no_of_unit > 0
-                      ) {
-                        const amt = clampAmount(
-                          currentCharge.no_of_unit * amtPerUnit,
-                        );
-                        form.setFieldValue(`charges.${index}.amount`, amt);
-                        const roe = currentCharge.roe;
-                        if (amt != null && roe != null && roe > 0) {
-                          form.setFieldValue(
-                            `charges.${index}.amount_in_local`,
-                            clampAmount(amt * roe),
-                          );
-                        }
-                      }
-                    }}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                  {/* Local Amount */}
+                  <Grid.Col span={0.85}>
+                    <NumberInput
+                      placeholder="Local Amt"
+                      hideControls
+                      decimalScale={amountDecimalScale}
+                      {...getAmountNumberInputFormatProps()}
+                      readOnly
+                      value={charge.amount_in_local ?? undefined}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                          backgroundColor: "var(--mantine-color-gray-0)",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* Amount */}
-                <Grid.Col span={0.9}>
-                  <NumberInput
-                    placeholder="Amount"
-                    min={0}
-                    hideControls
-                    decimalScale={amountDecimalScale}
-                    readOnly={isReadOnly}
-                    value={charge.amount ?? undefined}
-                    onChange={(value) => {
-                      const amt = value as number | null;
-                      form.setFieldValue(`charges.${index}.amount`, amt);
-                      const roe = form.values.charges[index].roe;
-                      if (amt != null && roe != null && roe > 0) {
+                  {/* SAC Code */}
+                  <Grid.Col span={1}>
+                    <Dropdown
+                      searchable
+                      clearable
+                      placeholder="SAC Code"
+                      data={sacCodeOptionsForForm}
+                      value={String(charge.tax_code ?? "").trim() || null}
+                      onChange={(val) =>
                         form.setFieldValue(
-                          `charges.${index}.amount_in_local`,
-                          clampAmount(amt * roe),
-                        );
+                          `charges.${index}.tax_code`,
+                          String(val ?? "").trim(),
+                        )
                       }
-                    }}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                      disabled={isReadOnly}
+                      dropdownZIndex={1000}
+                      styles={{
+                        input: {
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                          height: "36px",
+                        },
+                      }}
+                    />
+                  </Grid.Col>
 
-                {/* Local Amount */}
-                <Grid.Col span={0.9}>
-                  <NumberInput
-                    placeholder="Local Amt"
-                    hideControls
-                    decimalScale={amountDecimalScale}
-                    {...getAmountNumberInputFormatProps()}
-                    readOnly
-                    value={charge.amount_in_local ?? undefined}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                        backgroundColor: "var(--mantine-color-gray-0)",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* SAC Code */}
-                <Grid.Col span={1}>
-                  <Dropdown
-                    searchable
-                    clearable
-                    placeholder="SAC Code"
-                    data={sacCodeOptionsForForm}
-                    value={String(charge.tax_code ?? "").trim() || null}
-                    onChange={(val) =>
-                      form.setFieldValue(
-                        `charges.${index}.tax_code`,
-                        String(val ?? "").trim(),
-                      )
-                    }
-                    disabled={isReadOnly}
-                    dropdownZIndex={1000}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        height: "36px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
-
-                {/* Tax */}
-                {/* <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
+                  {/* Tax */}
+                  {/* <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
                   <Box
                     style={{
                       display: "flex",
@@ -3446,112 +3861,75 @@ function PaymentRequest() {
                   </Box>
                 </Grid.Col> */}
 
-                {/* Actions */}
-                {!isReadOnly && (
-                  <Grid.Col span={0.7}>
-                    <Group gap={4} wrap="nowrap">
-                      {form.values.charges.length > 1 && (
-                        <Button
-                          radius="sm"
-                          px={8}
-                          size="sm"
-                          variant="light"
-                          color="red"
-                          onClick={() => {
-                            setChargeErrors((prev) => {
-                              const next: Record<
-                                number,
-                                Record<string, string>
-                              > = {};
-                              Object.entries(prev).forEach(([key, value]) => {
-                                const idx = Number(key);
-                                if (Number.isNaN(idx) || idx === index) return;
-                                next[idx > index ? idx - 1 : idx] = value;
+                  {/* Actions */}
+                  {!isReadOnly && (
+                    <Grid.Col span={0.7}>
+                      <Group gap={4} wrap="nowrap">
+                        {form.values.charges.length > 1 && (
+                          <Button
+                            radius="sm"
+                            px={8}
+                            size="sm"
+                            variant="light"
+                            color="red"
+                            onClick={() => {
+                              setChargeErrors((prev) => {
+                                const next: Record<
+                                  number,
+                                  Record<string, string>
+                                > = {};
+                                Object.entries(prev).forEach(([key, value]) => {
+                                  const idx = Number(key);
+                                  if (Number.isNaN(idx) || idx === index)
+                                    return;
+                                  next[idx > index ? idx - 1 : idx] = value;
+                                });
+                                return next;
                               });
-                              return next;
-                            });
-                            form.removeListItem("charges", index);
-                          }}
-                        >
-                          <IconTrash size={14} />
-                        </Button>
-                      )}
-                      {form.values.charges.length - 1 === index && (
-                        <Button
-                          radius="sm"
-                          px={8}
-                          size="sm"
-                          variant="light"
-                          color="#105476"
-                          onClick={() => {
-                            const newChargeCurrency =
-                              defaultBranchCurrency || "";
-                            const roe = newChargeCurrency
-                              ? getRoeValue(newChargeCurrency)
-                              : null;
-                            const newChargeCurrencyId =
-                              defaultBranchCurrencyId ||
-                              (currencyOptions.find(
-                                (o) =>
-                                  (o.label || "").toUpperCase() ===
-                                  (newChargeCurrency || "").toUpperCase(),
-                              )?.value ?? "");
-                            form.insertListItem("charges", {
-                              ...emptyCharge(),
-                              currency: newChargeCurrency,
-                              currency_id: newChargeCurrencyId,
-                              roe,
-                            });
-                          }}
-                        >
-                          <IconPlus size={14} />
-                        </Button>
-                      )}
-                    </Group>
-                  </Grid.Col>
-                )}
-              </Grid>
-            ))}
-
-            {/* ── Totals row – aligns under the "Local Amt" column ── */}
-            <Grid
-              w="100%"
-              gutter="xs"
-              mt="xs"
-              style={{ borderTop: "2px solid #dee2e6", paddingTop: "6px" }}
-            >
-              {/* spans before Local Amt: 0.4+0.5+0.7+0.6+0.6+1+0.7+0.5+0.8+0.7+0.9+0.9 = 8.3 */}
-              <Grid.Col span={8.3}>
-                <Box
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    alignItems: "center",
-                    height: "100%",
-                    paddingRight: "8px",
-                  }}
-                >
-                  <Text size="sm" fw={600} c="#105476">
-                    Total
-                  </Text>
-                </Box>
-              </Grid.Col>
-
-              {/* Local Amt column */}
-              <Grid.Col span={0.9}>
-                <Text size="sm" fw={700} c="#105476">
-                  {formatMoneyAmountForUi(
-                    form.values.charges.reduce(
-                      (sum, c) => sum + (c.amount_in_local ?? 0),
-                      0,
-                    ),
+                              form.removeListItem("charges", index);
+                            }}
+                          >
+                            <IconTrash size={14} />
+                          </Button>
+                        )}
+                        {form.values.charges.length - 1 === index && (
+                          <Button
+                            radius="sm"
+                            px={8}
+                            size="sm"
+                            variant="light"
+                            color="#105476"
+                            onClick={() => {
+                              const newChargeCurrency =
+                                defaultBranchCurrency || "";
+                              const roe = newChargeCurrency
+                                ? getRoeValue(newChargeCurrency)
+                                : null;
+                              const newChargeCurrencyId =
+                                defaultBranchCurrencyId ||
+                                (currencyOptions.find(
+                                  (o) =>
+                                    (o.label || "").toUpperCase() ===
+                                    (newChargeCurrency || "").toUpperCase(),
+                                )?.value ??
+                                  "");
+                              form.insertListItem("charges", {
+                                ...emptyCharge(),
+                                currency: newChargeCurrency,
+                                currency_id: newChargeCurrencyId,
+                                roe,
+                              });
+                            }}
+                          >
+                            <IconPlus size={14} />
+                          </Button>
+                        )}
+                      </Group>
+                    </Grid.Col>
                   )}
-                </Text>
-              </Grid.Col>
+                </Grid>
+              ))}
 
-              {/* remaining cols: SAC(0.8) + Tax(0.5) + Actions(0.5) = 1.8 */}
-              <Grid.Col span={1.8} />
-            </Grid>
             </Box>
           </Box>
 
@@ -3576,7 +3954,8 @@ function PaymentRequest() {
                     const newErrors: { [key: number]: string } = {};
                     supportingDocuments.forEach((doc, idx) => {
                       if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] = `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        newErrors[idx] =
+                          `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                       }
                     });
                     setFileErrors(newErrors);
@@ -3626,9 +4005,7 @@ function PaymentRequest() {
                     rightSection={<IconChevronRight size={16} />}
                     loading={isSubmitting}
                   >
-                    {saveResponse?.id
-                      ? "Update"
-                      : "Save"}
+                    {saveResponse?.id ? "Update" : "Save"}
                   </Button>
                 </>
               )}
@@ -3641,7 +4018,9 @@ function PaymentRequest() {
       <Modal
         opened={documentsModalOpened}
         onClose={closeDocumentsModal}
-        title={isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"}
+        title={
+          isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"
+        }
         size="xl"
         centered
         style={{ fontFamily: "Inter" }}
@@ -3657,7 +4036,10 @@ function PaymentRequest() {
                   disabled={isReadOnly}
                   onChange={(e) => {
                     const updated = [...supportingDocuments];
-                    updated[index] = { ...updated[index], name: e.target.value };
+                    updated[index] = {
+                      ...updated[index],
+                      name: e.target.value,
+                    };
                     setSupportingDocuments(updated);
                   }}
                 />
@@ -3679,7 +4061,8 @@ function PaymentRequest() {
                       }
                       if (file.size > MAX_FILE_SIZE) {
                         const newErrors = { ...fileErrors };
-                        newErrors[index] = `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
+                        newErrors[index] =
+                          `File size exceeds 10MB limit. Current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB`;
                         setFileErrors(newErrors);
                         ToastNotification({
                           type: "error",
@@ -3698,7 +4081,11 @@ function PaymentRequest() {
                     onReject={(files: any[]) => {
                       if (isReadOnly) return;
                       const rejection = files[0];
-                      if (rejection?.errors?.some((e: any) => e.code === "file-too-large")) {
+                      if (
+                        rejection?.errors?.some(
+                          (e: any) => e.code === "file-too-large",
+                        )
+                      ) {
                         const newErrors = { ...fileErrors };
                         newErrors[index] = "File size exceeds 10MB limit";
                         setFileErrors(newErrors);
@@ -3726,23 +4113,36 @@ function PaymentRequest() {
                       justify="space-between"
                       gap="xs"
                       px="sm"
-                      style={{ minHeight: "36px", pointerEvents: "none", cursor: "pointer" }}
+                      style={{
+                        minHeight: "36px",
+                        pointerEvents: "none",
+                        cursor: "pointer",
+                      }}
                     >
                       <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
                         {doc.file ? (
                           <>
-                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
+                            <IconUpload
+                              size={16}
+                              color="var(--mantine-color-dimmed)"
+                            />
                             <Text
                               size="sm"
                               truncate
-                              style={{ flex: 1, color: "var(--mantine-color-dark)" }}
+                              style={{
+                                flex: 1,
+                                color: "var(--mantine-color-dark)",
+                              }}
                             >
                               {doc.file.name}
                             </Text>
                           </>
                         ) : doc.document_url ? (
                           <>
-                            <IconDownload size={16} color="var(--mantine-color-blue-6)" />
+                            <IconDownload
+                              size={16}
+                              color="var(--mantine-color-blue-6)"
+                            />
                             <Text
                               size="sm"
                               truncate
@@ -3755,20 +4155,38 @@ function PaymentRequest() {
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (doc.document_url && doc.original_document_name) {
-                                  downloadFile(doc.document_url, doc.original_document_name);
+                                if (
+                                  doc.document_url &&
+                                  doc.original_document_name
+                                ) {
+                                  downloadFile(
+                                    doc.document_url,
+                                    doc.original_document_name,
+                                  );
                                 }
                               }}
-                              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.opacity = "0.8";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.opacity = "1";
+                              }}
                             >
                               {doc.original_document_name || "Download file"}
                             </Text>
                           </>
                         ) : (
                           <>
-                            <IconUpload size={16} color="var(--mantine-color-dimmed)" />
-                            <Text size="sm" c="dimmed" truncate style={{ flex: 1 }}>
+                            <IconUpload
+                              size={16}
+                              color="var(--mantine-color-dimmed)"
+                            />
+                            <Text
+                              size="sm"
+                              c="dimmed"
+                              truncate
+                              style={{ flex: 1 }}
+                            >
                               Drag and drop or click to select file
                             </Text>
                           </>
@@ -3825,13 +4243,17 @@ function PaymentRequest() {
                     if (supportingDocuments.length === 1) {
                       setSupportingDocuments([{ name: "", file: null }]);
                     } else {
-                      const updated = supportingDocuments.filter((_, i) => i !== index);
+                      const updated = supportingDocuments.filter(
+                        (_, i) => i !== index,
+                      );
                       setSupportingDocuments(updated);
                       const newErrors: { [key: number]: string } = {};
                       Object.keys(fileErrors).forEach((key) => {
                         const keyNum = parseInt(key);
-                        if (keyNum < index) newErrors[keyNum] = fileErrors[keyNum];
-                        else if (keyNum > index) newErrors[keyNum - 1] = fileErrors[keyNum];
+                        if (keyNum < index)
+                          newErrors[keyNum] = fileErrors[keyNum];
+                        else if (keyNum > index)
+                          newErrors[keyNum - 1] = fileErrors[keyNum];
                       });
                       setFileErrors(newErrors);
                     }
@@ -3846,7 +4268,10 @@ function PaymentRequest() {
                     variant="light"
                     color="#105476"
                     onClick={() => {
-                      setSupportingDocuments([...supportingDocuments, { name: "", file: null }]);
+                      setSupportingDocuments([
+                        ...supportingDocuments,
+                        { name: "", file: null },
+                      ]);
                     }}
                   >
                     <IconPlus size={16} />
