@@ -185,6 +185,90 @@ export function resolveStateCodeFromPartyAddress(
   );
 }
 
+export function findPartyAddressByStateId(
+  addresses: PartyAddressLike[] | undefined | null,
+  stateId: string,
+  stateOptions: Array<{ value: string; label?: string }>,
+): PartyAddressLike | undefined {
+  const target = String(stateId ?? "").trim();
+  if (!target || !Array.isArray(addresses)) return undefined;
+
+  return addresses.find(
+    (address) => resolveStateCodeFromPartyAddress(address, stateOptions) === target,
+  );
+}
+
+export function getPartyGstForStateId(
+  addresses: PartyAddressLike[] | undefined | null,
+  stateId: string,
+  stateOptions: Array<{ value: string; label?: string }>,
+): string {
+  const address = findPartyAddressByStateId(addresses, stateId, stateOptions);
+  const gst = address?.gst_id;
+  return gst != null && String(gst).trim() !== "" ? String(gst).trim() : "";
+}
+
+/** Unique state options from party addresses (primary first when present). */
+export function collectPartyStateOptions(
+  addresses: PartyAddressLike[] | undefined | null,
+  stateOptions: Array<{ value: string; label?: string }>,
+): Array<{ value: string; label: string }> {
+  if (!Array.isArray(addresses) || addresses.length === 0) return [];
+
+  const primary = findPrimaryPartyAddress(addresses);
+  const seen = new Set<string>();
+  const options: Array<{ value: string; label: string }> = [];
+
+  const pushOption = (address: PartyAddressLike) => {
+    const value = resolveStateCodeFromPartyAddress(address, stateOptions);
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    const masterLabel = stateOptions.find((s) => s.value === value)?.label;
+    const addressStateLabel =
+      address.state != null ? String(address.state).trim() : "";
+    options.push({
+      value,
+      label: masterLabel ?? (addressStateLabel || value),
+    });
+  };
+
+  if (primary) pushOption(primary);
+  for (const address of addresses) pushOption(address);
+
+  return options;
+}
+
+export function extractPartyAddressesFromRecord(
+  record: unknown,
+): PartyAddressLike[] {
+  if (!record || typeof record !== "object") return [];
+  const data = record as {
+    addresses_data?: PartyAddressLike[];
+    addresses?: PartyAddressLike[];
+  };
+  const addresses = data.addresses_data ?? data.addresses;
+  return Array.isArray(addresses) ? addresses : [];
+}
+
+export function mergeStateOptionsWithPartyAddresses(
+  stateOptions: Array<{ value: string; label?: string }>,
+  partyStateOptions: Array<{ value: string; label: string }>,
+): Array<{ value: string; label: string }> {
+  const merged = stateOptions.map((option) => ({
+    value: option.value,
+    label: option.label ?? option.value,
+  }));
+  const seen = new Set(merged.map((option) => option.value));
+
+  for (const option of partyStateOptions) {
+    if (seen.has(option.value)) continue;
+    seen.add(option.value);
+    merged.push(option);
+  }
+
+  return merged;
+}
+
 export function mapChargeToPaymentRequestPrefill(
   charge: ChargeSourceForPrqPrefill,
   context: PaymentRequestChargePrefillContext,

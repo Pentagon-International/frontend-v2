@@ -52,6 +52,15 @@ import {
   unwrapApiStatusBody,
 } from "../../../utils/apiErrorMessage";
 import {
+  collectPartyStateOptions,
+  extractPartyAddressesFromRecord,
+  findPrimaryPartyAddress,
+  getPartyGstForStateId,
+  getPartyGstFromPrimaryAddress,
+  resolveStateCodeFromPartyAddress,
+  type PartyAddressLike,
+} from "../../../utils/paymentRequestChargePrefill";
+import {
   findJobCreateDropdownRow,
   mapJobCreateDropdownOptions,
 } from "../../../utils/jobCreateDropdown";
@@ -852,15 +861,69 @@ export default function SupplierInvoiceCreate({
     }));
   }, [stateData]);
 
+  const [partyAddresses, setPartyAddresses] = useState<PartyAddressLike[]>([]);
+
+  const partyStateOptions = useMemo(
+    () => collectPartyStateOptions(partyAddresses, stateOptions),
+    [partyAddresses, stateOptions],
+  );
+
   const effectiveStateOptions = useMemo(() => {
+    const currentStateId = String(form.values.state_id ?? "").trim();
+    let options: Array<{ value: string; label: string }>;
+
+    if (partyStateOptions.length > 0) {
+      options = [...partyStateOptions];
+    } else {
+      options = stateOptions.map((option) => ({
+        value: option.value,
+        label: option.label ?? option.value,
+      }));
+    }
+
+    if (currentStateId && !options.some((option) => option.value === currentStateId)) {
+      const masterLabel = stateOptions.find(
+        (option) => option.value === currentStateId,
+      )?.label;
+      options = [
+        { value: currentStateId, label: masterLabel ?? currentStateId },
+        ...options,
+      ];
+    }
+
     // For reversal-create: ensure the selected state's *name* is visible even before master loads.
     const data = (invoiceFromState ?? {}) as Record<string, unknown>;
     const id = data.state_id != null ? String(data.state_id) : "";
     const name = data.state_name != null ? String(data.state_name) : "";
-    if (!isReversalCreate || !id || !name) return stateOptions;
-    if (stateOptions.some((o) => o.value === id)) return stateOptions;
-    return [{ value: id, label: name }, ...stateOptions];
-  }, [invoiceFromState, isReversalCreate, stateOptions]);
+    if (isReversalCreate && id && name && !options.some((o) => o.value === id)) {
+      options = [{ value: id, label: name }, ...options];
+    }
+
+    return options;
+  }, [
+    form.values.state_id,
+    invoiceFromState,
+    isReversalCreate,
+    partyStateOptions,
+    stateOptions,
+  ]);
+
+  const handlePartyStateChange = useCallback(
+    (stateId: string | null) => {
+      const nextStateId = stateId ?? "";
+      form.setFieldValue("state_id", nextStateId);
+      if (!nextStateId) {
+        form.setFieldValue("customer_gst_no", "");
+        return;
+      }
+
+      form.setFieldValue(
+        "customer_gst_no",
+        getPartyGstForStateId(partyAddresses, nextStateId, stateOptions),
+      );
+    },
+    [form, partyAddresses, stateOptions],
+  );
 
   const tdsSectionOptions = useMemo(() => {
     const data = tdsSectionData as {
@@ -952,6 +1015,80 @@ export default function SupplierInvoiceCreate({
   const isVendorSelected =
     !!String(form.values.agent_code ?? "").trim() ||
     !!String(agentDisplayName ?? "").trim();
+
+  const applyPartyAddressFields = useCallback(
+    (addresses: PartyAddressLike[] | null | undefined) => {
+      const normalized = Array.isArray(addresses) ? addresses : [];
+      setPartyAddresses(normalized);
+
+      const primary = findPrimaryPartyAddress(normalized);
+
+      if (!isIndiaUser) return;
+
+      const stateCode = resolveStateCodeFromPartyAddress(primary, stateOptions);
+      form.setFieldValue("state_id", stateCode);
+      form.setFieldValue(
+        "customer_gst_no",
+        getPartyGstFromPrimaryAddress(normalized),
+      );
+    },
+    [form, isIndiaUser, stateOptions],
+  );
+
+  const fetchVendorPartyAddresses = useCallback(
+    async (customerCode: string) => {
+      const query = String(customerCode ?? "").trim();
+      if (!query) return;
+
+      try {
+        const response = await getAPICall(
+          `${vendorApiEndpoint}?search=${encodeURIComponent(query)}`,
+          API_HEADER,
+        );
+        const first = Array.isArray(response)
+          ? response[0]
+          : Array.isArray((response as { data?: unknown[] })?.data)
+            ? (response as { data: unknown[] }).data[0]
+            : null;
+        const fetchedAddresses = extractPartyAddressesFromRecord(first);
+        if (fetchedAddresses.length > 0) {
+          applyPartyAddressFields(fetchedAddresses);
+        }
+      } catch {
+        // State/GST can be set manually if fetch fails.
+      }
+    },
+    [applyPartyAddressFields, vendorApiEndpoint],
+  );
+
+  useEffect(() => {
+    if (!isIndiaUser || partyAddresses.length === 0 || stateOptions.length === 0) {
+      return;
+    }
+    if (!isVendorSelected) return;
+
+    const primary = findPrimaryPartyAddress(partyAddresses);
+    const stateCode = resolveStateCodeFromPartyAddress(primary, stateOptions);
+    if (!stateCode) return;
+
+    const currentStateId = String(form.values.state_id ?? "").trim();
+    if (!currentStateId) {
+      form.setFieldValue("state_id", stateCode);
+    }
+
+    const stateForGst = currentStateId || stateCode;
+    if (!String(form.values.customer_gst_no ?? "").trim()) {
+      const gstForState = getPartyGstForStateId(
+        partyAddresses,
+        stateForGst,
+        stateOptions,
+      );
+      if (gstForState) {
+        form.setFieldValue("customer_gst_no", gstForState);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyAddresses, stateOptions, isIndiaUser, isVendorSelected]);
 
   useEffect(() => {
     const effectiveCurrency =
@@ -2046,8 +2183,10 @@ export default function SupplierInvoiceCreate({
                   if (!isReversalCreate) {
                     form.setFieldValue("agent_code", "");
                     setAgentDisplayName(null);
+                    setPartyAddresses([]);
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
+                      form.setFieldValue("customer_gst_no", "");
                     }
                   }
                 }}
@@ -2106,30 +2245,23 @@ export default function SupplierInvoiceCreate({
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("agent_code", value ?? "");
                   setAgentDisplayName(selectedData?.label ?? null);
-                  const addresses =
-                    (originalData?.addresses_data as
-                      | Array<{
-                          address_type?: string;
-                          state_id?: number | null;
-                          gst_id?: string | null;
-                        }>
-                      | undefined) ?? [];
 
-                  const primary =
-                    addresses.find(
-                      (a) =>
-                        String(a.address_type ?? "").toUpperCase() ===
-                        "PRIMARY",
-                    ) ?? addresses[0];
-
-                  if (isIndiaUser) {
-                    if (primary?.state_id != null) {
-                      form.setFieldValue("state_id", String(primary.state_id));
+                  const isCleared =
+                    value == null ||
+                    (typeof value === "string" && value.trim() === "");
+                  if (isCleared) {
+                    setPartyAddresses([]);
+                    if (isIndiaUser) {
+                      form.setFieldValue("state_id", "");
+                      form.setFieldValue("customer_gst_no", "");
                     }
-                    form.setFieldValue(
-                      "customer_gst_no",
-                      primary?.gst_id != null ? String(primary.gst_id) : "",
-                    );
+                  } else {
+                    const addresses = extractPartyAddressesFromRecord(originalData);
+                    if (addresses.length > 0) {
+                      applyPartyAddressFields(addresses);
+                    } else {
+                      void fetchVendorPartyAddresses(String(value ?? ""));
+                    }
                   }
                 }}
                 dropdownZIndex={1000}
@@ -2143,7 +2275,7 @@ export default function SupplierInvoiceCreate({
                   placeholder={isStateLoading ? "Loading..." : "Select state"}
                   data={effectiveStateOptions}
                   value={form.values.state_id || null}
-                  onChange={(v) => form.setFieldValue("state_id", v ?? "")}
+                  onChange={handlePartyStateChange}
                   searchable
                   withAsterisk
                   error={form.errors.state_id}
