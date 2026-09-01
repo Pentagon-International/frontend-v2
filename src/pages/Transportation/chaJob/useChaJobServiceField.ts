@@ -35,7 +35,10 @@ export function useChaJobServiceField(
     const serviceId = form.values.service_id?.trim();
     if (serviceId) {
       return (
-        chaServices.find((item) => String(item.id) === serviceId) ?? null
+        chaServices.find(
+          (item) =>
+            String(item.id ?? item.service_id ?? "") === serviceId,
+        ) ?? null
       );
     }
     const code = form.values.service_code?.trim();
@@ -93,22 +96,19 @@ export function useChaJobServiceField(
 
   useEffect(() => {
     if (!isChaMode || !chaConfig || chaServices.length === 0) return;
-    if (
-      form.values.service?.trim() ||
-      form.values.service_code?.trim() ||
-      form.values.service_id?.trim()
-    ) {
-      return;
-    }
-    applyChaService(chaServices[0]);
+    // Only skip when service_id is already set. Air job forms default service to
+    // "AIR", which previously blocked auto-apply and left service_id empty.
+    if (form.values.service_id?.trim()) return;
+
+    const match = selectedChaService ?? chaServices[0];
+    applyChaService(match);
   }, [
     applyChaService,
     chaConfig,
     chaServices,
-    form.values.service,
-    form.values.service_code,
     form.values.service_id,
     isChaMode,
+    selectedChaService,
   ]);
 
   return {

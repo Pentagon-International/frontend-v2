@@ -4,6 +4,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 
 export type ChaServiceMasterItem = {
   id?: number;
+  service_id?: number;
   service_code: string;
   service_name: string;
   transport_mode?: string;
@@ -61,7 +62,12 @@ export function resolveChaServicePayload(
   return {
     service: serviceValue,
     service_code: String(service.service_code),
-    service_id: service.id != null ? String(service.id) : "",
+    service_id:
+      service.id != null
+        ? String(service.id)
+        : service.service_id != null
+          ? String(service.service_id)
+          : "",
     service_type: serviceType,
   };
 }
