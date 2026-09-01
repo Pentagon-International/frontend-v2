@@ -656,6 +656,7 @@ type ChargeItem = {
   charge_id: number | null;
   charge_name: string;
   charge_code?: string;
+  charge_master_name?: string;
   shipment_id?: string;
   unit_code: string;
   no_of_unit: number | null;
@@ -882,6 +883,7 @@ function applyReversableDataToReverseForm(
                 : {}),
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
+              charge_master_name: c.charge_name ?? "",
               charge_code: c.charge_code ?? "",
               shipment_id: c.shipment_id ?? c.shipment_no ?? "",
               unit_code: c.unit_code ?? "",
@@ -920,6 +922,33 @@ function pickReverseDocumentNo(source: unknown): string {
   const rec = source as Record<string, unknown>;
   const value = rec.reverse_document_no ?? rec.reverse_document_number;
   return value != null ? String(value).trim() : "";
+}
+
+function resolveMasterChargeIdForPayload(
+  chargeId: number | null | undefined,
+): number | null {
+  if (chargeId == null) return null;
+  const parsed = Number(chargeId);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSelectedMasterChargeId(
+  value: string | null,
+): number | null {
+  if (!value || String(value).startsWith("temp_")) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveMasterChargeNameFromSelection(
+  selectedData?: { label?: string } | null,
+  originalData?: Record<string, unknown> | null,
+): string {
+  if (selectedData?.label) return selectedData.label;
+  if (originalData?.charge_name != null) {
+    return String(originalData.charge_name);
+  }
+  return "";
 }
 
 function reverseChargeIdPayload(
@@ -965,7 +994,8 @@ function buildReverseChargePayload(
       charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
         ? String(charge.shipment_id)
         : null,
-    charge_id: charge.charge_id ?? null,
+    charge_id: resolveMasterChargeIdForPayload(charge.charge_id),
+    charge_name: charge.charge_name ?? "",
     unit_id: unitId,
     no_of_unit: charge.no_of_unit ?? 0,
     currency_id: chargeCurrencyId,
@@ -1978,6 +2008,7 @@ function InvoiceReverse() {
           return {
             charge_id: c.charge_id ?? null,
             charge_name: c.charge_name ?? "",
+            charge_master_name: c.charge_name ?? "",
             charge_code: c.charge_code ?? "",
             shipment_id: c.shipment_id ?? c.shipment_no ?? "",
             unit_code: c.unit_code ?? "",
@@ -2115,8 +2146,8 @@ function InvoiceReverse() {
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
       const err: Record<string, string> = {};
-      if (!charge.charge_name && charge.charge_id == null)
-        err.charge_name = "Charge is required";
+      if (charge.charge_id == null)
+        err.charge_id = "Charge is required";
       if (!charge.currency) err.currency = "Currency is required";
       if (charge.roe === null || charge.roe === undefined)
         err.roe = "ROE is required";
@@ -2925,56 +2956,86 @@ function InvoiceReverse() {
                           }
                           displayValue={charge.charge_name || undefined}
                           returnOriginalData
+                          preserveLinkedValueOnClear
+                          hideValueInDisplay
+                          linkedLabelEditWithoutSearch
+                          onSearchTextChange={(text) => {
+                            form.setFieldValue(
+                              `charges.${index}.charge_name`,
+                              text,
+                            );
+                            if (chargeErrors[index]?.charge_id) {
+                              const newErrors = { ...chargeErrors };
+                              if (newErrors[index]) {
+                                delete newErrors[index].charge_id;
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
+                              }
+                              setChargeErrors(newErrors);
+                            }
+                          }}
                           onChange={(value, selectedData, originalData) => {
-                            const chargeId = value ? Number(value) : null;
-                            const chargeName = selectedData?.label ?? "";
+                            const chargeId =
+                              resolveSelectedMasterChargeId(value);
+                            if (chargeId == null) return;
+
+                            const masterName =
+                              resolveMasterChargeNameFromSelection(
+                                selectedData,
+                                originalData,
+                              );
                             form.setFieldValue(
                               `charges.${index}.charge_id`,
                               chargeId,
                             );
                             form.setFieldValue(
                               `charges.${index}.charge_name`,
-                              chargeName,
+                              masterName,
                             );
-                            form.setFieldValue(`charges.${index}.tax_code`, "");
-                            if (chargeErrors[index]?.charge_name) {
+                            if (originalData?.charge_code != null) {
+                              form.setFieldValue(
+                                `charges.${index}.charge_code`,
+                                String(originalData.charge_code),
+                              );
+                            }
+                            form.setFieldValue(
+                              `charges.${index}.tax_code`,
+                              "",
+                            );
+                            if (chargeErrors[index]?.charge_id) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
-                                delete newErrors[index].charge_name;
+                                delete newErrors[index].charge_id;
                                 if (Object.keys(newErrors[index]).length === 0)
                                   delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
 
-                            if (value) {
-                              const navState = location.state as {
-                                serviceType?: string;
-                                job?: { service?: string };
-                              } | null;
-                              const defaultUnitCode =
-                                resolveAutoUnitForNewCharge({
-                                  calculationType: (
-                                    originalData as {
-                                      calculation_type?: string;
-                                    } | null
-                                  )?.calculation_type,
-                                  service:
-                                    navState?.serviceType ||
-                                    navState?.job?.service,
-                                  currentUnit: charge.unit_code,
-                                });
-                              if (defaultUnitCode) {
-                                const unitValue =
-                                  findUnitOptionValueByCode(
-                                    defaultUnitCode,
-                                    unitOptions,
-                                  ) ?? defaultUnitCode;
-                                form.setFieldValue(
-                                  `charges.${index}.unit_code`,
-                                  unitValue,
-                                );
-                              }
+                            const navState = location.state as {
+                              serviceType?: string;
+                              job?: { service?: string };
+                            } | null;
+                            const defaultUnitCode = resolveAutoUnitForNewCharge({
+                              calculationType: (
+                                originalData as {
+                                  calculation_type?: string;
+                                } | null
+                              )?.calculation_type,
+                              service:
+                                navState?.serviceType || navState?.job?.service,
+                              currentUnit: charge.unit_code,
+                            });
+                            if (defaultUnitCode) {
+                              const unitValue =
+                                findUnitOptionValueByCode(
+                                  defaultUnitCode,
+                                  unitOptions,
+                                ) ?? defaultUnitCode;
+                              form.setFieldValue(
+                                `charges.${index}.unit_code`,
+                                unitValue,
+                              );
                             }
 
                             if (
@@ -3004,8 +3065,8 @@ function InvoiceReverse() {
                                     if (newErrors[index]) {
                                       delete newErrors[index].tax_code;
                                       if (
-                                        Object.keys(newErrors[index]).length ===
-                                        0
+                                        Object.keys(newErrors[index])
+                                          .length === 0
                                       )
                                         delete newErrors[index];
                                     }
@@ -3018,7 +3079,7 @@ function InvoiceReverse() {
                           withAsterisk
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          error={chargeErrors[index]?.charge_name}
+                          error={chargeErrors[index]?.charge_id}
                           minSearchLength={2}
                           dropdownZIndex={1000}
                         />

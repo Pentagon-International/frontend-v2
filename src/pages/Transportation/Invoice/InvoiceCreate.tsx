@@ -694,7 +694,8 @@ type ChargeItem = {
   id?: number | null; // primary key from API when editing existing charge
   charge_id: number | null; // id from charge master (value when selecting charge)
   charge_code?: string; // e.g. ISC / IGST (from API)
-  charge_name: string; // display label for charge
+  charge_master_name?: string; // charge master label for dropdown display only
+  charge_name: string; // editable display label sent as charge_name in payload
   shipment_id?: string; // per-charge shipment id (when from job level, from corresponding HAWB)
   shipper_id?: string; // per-charge shipper id/code (from corresponding HAWB)
   unit_code: string;
@@ -734,6 +735,33 @@ type InvoiceFormData = {
   fapiao_no: string;
   charges: ChargeItem[];
 };
+
+function resolveMasterChargeIdForPayload(
+  chargeId: number | null | undefined,
+): number | null {
+  if (chargeId == null) return null;
+  const parsed = Number(chargeId);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSelectedMasterChargeId(
+  value: string | null,
+): number | null {
+  if (!value || String(value).startsWith("temp_")) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveMasterChargeNameFromSelection(
+  selectedData?: { label?: string } | null,
+  originalData?: Record<string, unknown> | null,
+): string {
+  if (selectedData?.label) return selectedData.label;
+  if (originalData?.charge_name != null) {
+    return String(originalData.charge_name);
+  }
+  return "";
+}
 
 // Invoice API payloads: document/due dates always sent as DD-MM-YYYY.
 /** YYYY-MM-DD for invoice create/update API payloads (local calendar day) */
@@ -2705,6 +2733,9 @@ function InvoiceCreate({
                   charge_name: charge.charge_name
                     ? String(charge.charge_name)
                     : "",
+                  charge_master_name: charge.charge_name
+                    ? String(charge.charge_name)
+                    : "",
                   shipment_id:
                     charge.shipment_id != null &&
                     String(charge.shipment_id).trim() !== ""
@@ -2830,6 +2861,7 @@ function InvoiceCreate({
               {
                 charge_id: null,
                 charge_name: "",
+                charge_master_name: "",
                 shipment_id: newChargeShipmentId,
                 unit_code: "",
                 unit_id: "",
@@ -2863,6 +2895,7 @@ function InvoiceCreate({
         {
           charge_id: null,
           charge_name: "",
+          charge_master_name: "",
           shipment_id: newChargeShipmentId,
           unit_code: "",
           no_of_unit: null,
@@ -3029,6 +3062,7 @@ function InvoiceCreate({
                 charge_id: c.charge_id != null ? Number(c.charge_id) : null,
                 charge_code: c.charge_code ?? "",
                 charge_name: c.charge_name ?? "",
+                charge_master_name: c.charge_name ?? "",
                 shipment_id: c.shipment_id
                   ? String(c.shipment_id)
                   : c.shipment_no
@@ -3123,6 +3157,7 @@ function InvoiceCreate({
                 {
                   charge_id: null,
                   charge_name: "",
+                  charge_master_name: "",
                   shipment_id:
                     String(invoiceData.shipment_no ?? "").trim() || undefined,
                   unit_code: "",
@@ -3920,7 +3955,8 @@ function InvoiceCreate({
                   ? String(charge.shipment_id)
                   : null,
               ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
-              charge_id: charge.charge_id ?? null,
+              charge_id: resolveMasterChargeIdForPayload(charge.charge_id),
+              charge_name: charge.charge_name ?? "",
               unit_id: unitId,
               no_of_unit: charge.no_of_unit ?? 0,
               currency_id: chargeCurrencyId,
@@ -3963,7 +3999,8 @@ function InvoiceCreate({
                 : null,
             // : values.shipment_no,
             ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
-            charge_id: charge.charge_id ?? null,
+            charge_id: resolveMasterChargeIdForPayload(charge.charge_id),
+            charge_name: charge.charge_name ?? "",
             unit_id: unitId,
             no_of_unit: charge.no_of_unit ?? 0,
             currency_id: chargeCurrencyId,
@@ -4303,7 +4340,8 @@ function InvoiceCreate({
                   ? String(charge.shipment_id)
                   : null,
               ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
-              charge_id: charge.charge_id ?? null,
+              charge_id: resolveMasterChargeIdForPayload(charge.charge_id),
+              charge_name: charge.charge_name ?? "",
               unit_id: unitId,
               no_of_unit: charge.no_of_unit ?? 0,
               currency_id: chargeCurrencyId,
@@ -4346,7 +4384,8 @@ function InvoiceCreate({
                 : null,
             // : values.shipment_no,
             ...(charge.shipper_id ? { shipper_id: charge.shipper_id } : {}),
-            charge_id: charge.charge_id ?? null,
+            charge_id: resolveMasterChargeIdForPayload(charge.charge_id),
+            charge_name: charge.charge_name ?? "",
             unit_id: unitId,
             no_of_unit: charge.no_of_unit ?? 0,
             currency_id: chargeCurrencyId,
@@ -4379,7 +4418,9 @@ function InvoiceCreate({
                 );
               return {
                 shipment_no: values.shipment_no,
-                charge_id: row.vat_charge_id ?? null,
+                charge_id: resolveMasterChargeIdForPayload(row.vat_charge_id),
+                charge_name:
+                  row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
                 unit_id: null,
                 no_of_unit: 0,
                 currency_id: taxRowCurrencyId,
@@ -4416,7 +4457,8 @@ function InvoiceCreate({
                   );
                 return {
                   shipment_no: values.shipment_no,
-                  charge_id: row.charge_id ?? null,
+                  charge_id: resolveMasterChargeIdForPayload(row.charge_id),
+                  charge_name: row.charge_name ?? "",
                   unit_id: null,
                   no_of_unit: 0,
                   currency_id: taxRowCurrencyId,
@@ -4583,6 +4625,7 @@ function InvoiceCreate({
             charge_id: c.charge_id ?? null,
             charge_code: (c as { charge_code?: string }).charge_code ?? "",
             charge_name: c.charge_name ?? "",
+            charge_master_name: c.charge_name ?? "",
             shipment_id: (c as { shipment_id?: string }).shipment_id
               ? String((c as { shipment_id: string }).shipment_id)
               : (c as { shipment_no?: string }).shipment_no
@@ -4672,7 +4715,7 @@ function InvoiceCreate({
                 values.currency,
               );
             return {
-              charge_id: row.vat_charge_id ?? null,
+              charge_id: resolveMasterChargeIdForPayload(row.vat_charge_id),
               charge_code: row.vat_charge_code ?? "VAT",
               charge_name:
                 row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
@@ -5712,17 +5755,48 @@ function InvoiceCreate({
                         }
                         displayValue={charge.charge_name || undefined}
                         returnOriginalData
+                        preserveLinkedValueOnClear
+                        hideValueInDisplay
+                        linkedLabelEditWithoutSearch
+                        onSearchTextChange={(text) => {
+                          form.setFieldValue(
+                            `charges.${index}.charge_name`,
+                            text,
+                          );
+                          if (chargeErrors[index]?.charge_id) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].charge_id;
+                              if (Object.keys(newErrors[index]).length === 0) {
+                                delete newErrors[index];
+                              }
+                            }
+                            setChargeErrors(newErrors);
+                          }
+                        }}
                         onChange={(value, selectedData, originalData) => {
-                          const chargeId = value ? Number(value) : null;
-                          const chargeName = selectedData?.label ?? "";
+                          const chargeId = resolveSelectedMasterChargeId(value);
+                          if (chargeId == null) return;
+
+                          const masterName =
+                            resolveMasterChargeNameFromSelection(
+                              selectedData,
+                              originalData,
+                            );
                           form.setFieldValue(
                             `charges.${index}.charge_id`,
                             chargeId,
                           );
                           form.setFieldValue(
                             `charges.${index}.charge_name`,
-                            chargeName,
+                            masterName,
                           );
+                          if (originalData?.charge_code != null) {
+                            form.setFieldValue(
+                              `charges.${index}.charge_code`,
+                              String(originalData.charge_code),
+                            );
+                          }
                           form.setFieldValue(`charges.${index}.tax_code`, "");
                           if (applyVat) {
                             form.setFieldValue(
@@ -5730,10 +5804,10 @@ function InvoiceCreate({
                               null,
                             );
                           }
-                          if (chargeErrors[index]?.charge_name) {
+                          if (chargeErrors[index]?.charge_id) {
                             const newErrors = { ...chargeErrors };
                             if (newErrors[index]) {
-                              delete newErrors[index].charge_name;
+                              delete newErrors[index].charge_id;
                               if (Object.keys(newErrors[index]).length === 0) {
                                 delete newErrors[index];
                               }
@@ -5741,33 +5815,31 @@ function InvoiceCreate({
                             setChargeErrors(newErrors);
                           }
 
-                          if (value) {
-                            const defaultUnitCode = resolveAutoUnitForNewCharge({
-                              calculationType: (
-                                originalData as {
-                                  calculation_type?: string;
-                                } | null
-                              )?.calculation_type,
-                              service: location.state?.serviceType,
-                              currentUnitId: charge.unit_id,
-                              currentUnitCode: charge.unit_code,
-                            });
-                            if (defaultUnitCode) {
-                              const unitOpt = findJobUnitOptionByCode(
-                                defaultUnitCode,
-                                unitOptions,
+                          const defaultUnitCode = resolveAutoUnitForNewCharge({
+                            calculationType: (
+                              originalData as {
+                                calculation_type?: string;
+                              } | null
+                            )?.calculation_type,
+                            service: location.state?.serviceType,
+                            currentUnitId: charge.unit_id,
+                            currentUnitCode: charge.unit_code,
+                          });
+                          if (defaultUnitCode) {
+                            const unitOpt = findJobUnitOptionByCode(
+                              defaultUnitCode,
+                              unitOptions,
+                            );
+                            if (unitOpt) {
+                              form.setFieldValue(
+                                `charges.${index}.unit_id`,
+                                unitOpt.value,
                               );
-                              if (unitOpt) {
-                                form.setFieldValue(
-                                  `charges.${index}.unit_id`,
-                                  unitOpt.value,
-                                );
-                                form.setFieldValue(
-                                  `charges.${index}.unit_code`,
-                                  unitOpt.unit_code ||
-                                    String(unitOpt.label || unitOpt.value),
-                                );
-                              }
+                              form.setFieldValue(
+                                `charges.${index}.unit_code`,
+                                unitOpt.unit_code ||
+                                  String(unitOpt.label || unitOpt.value),
+                              );
                             }
                           }
 
@@ -5821,7 +5893,7 @@ function InvoiceCreate({
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
-                        error={chargeErrors[index]?.charge_name}
+                        error={chargeErrors[index]?.charge_id}
                         minSearchLength={2}
                         dropdownZIndex={chargesDropdownZIndex}
                       />
@@ -6792,6 +6864,7 @@ function InvoiceCreate({
                                   form.insertListItem("charges", {
                                     charge_id: null,
                                     charge_name: "",
+                                    charge_master_name: "",
                                     shipment_id: defaultShipmentId,
                                     shipper_id: "",
                                     unit_code: "",
