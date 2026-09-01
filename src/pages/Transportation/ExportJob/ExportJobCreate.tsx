@@ -122,6 +122,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
+import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   JobMasterPartyDetailsPanel,
@@ -5568,28 +5569,15 @@ function ExportJobCreate() {
                           e.charge_id != null ||
                           (e.charge_name && e.charge_name.trim() !== ""),
                       )
-                      .map((e) => ({
-                        charge_id: e.charge_id,
-                        charge_name: e.charge_name ?? "",
-                        segment: "",
-                        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                        sub_job: "",
-                        cn_r: "",
-                        currency: e.currency_code ?? "",
-                        currency_id: e.currency_id ?? "",
-                        roe: e.roe,
-                        unit_code: e.unit_code ?? "",
-                        unit_id: e.unit_id ?? "",
-                        no_of_unit: e.no_of_unit,
-                        amount_per_unit: e.cost_per_unit,
-                        amount: e.total_cost,
-                        amount_in_local:
-                          e.total_cost != null && e.roe != null
-                            ? Math.round(e.total_cost * e.roe * 100) / 100
-                            : e.total_cost,
-                        tax_code: "",
-                        tax: "false",
-                      }));
+                      .map((e) =>
+                        mapChargeToPaymentRequestPrefill(
+                          e,
+                          {
+                            job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+                          },
+                          { source: "estimate" },
+                        ),
+                      );
                     const firstSupplier =
                       estimates.find(
                         (e) =>

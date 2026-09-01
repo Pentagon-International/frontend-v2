@@ -1,9 +1,14 @@
 export type BranchCurrencyContext = {
   is_default?: boolean;
+  main_default?: boolean;
   branch_code?: string | null;
   branch_name?: string | null;
+  reporting_name?: string | null;
+  reporting_address?: string | null;
+  gstn?: string | null;
+  gst_no?: string | null;
   country?: { country_code?: string; country_name?: string | null };
-  currency?: { currency_code?: string };
+  currency?: { currency_code?: string; currency_id?: number };
 };
 
 /** True when the logged-in user's country is India (lakhs/crores grouping). */
@@ -66,7 +71,18 @@ export function getDefaultUserBranch(
   branches?: BranchCurrencyContext[] | null,
 ): BranchCurrencyContext | undefined {
   if (!branches?.length) return undefined;
-  return branches.find((b) => b.is_default) ?? branches[0];
+  return (
+    branches.find((b) => b.main_default === true) ??
+    branches.find((b) => b.is_default === true) ??
+    branches[0]
+  );
+}
+
+/** Branch GST number from login payload (`gst_no` or legacy `gstn`). */
+export function getBranchGstNo(
+  branch?: BranchCurrencyContext | null,
+): string {
+  return String(branch?.gst_no ?? branch?.gstn ?? "").trim();
 }
 
 export function getDefaultBranchCurrencyCode(

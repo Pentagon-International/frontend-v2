@@ -1279,7 +1279,17 @@ export default function SupplierInvoiceCreate({
     const actualInvNo = String(
       prData.actual_inv_no ?? prData.actual_invoice_no ?? "",
     ).trim();
+    const actualInvDate =
+      parseDDMMYYYY(
+        String(prData.actual_inv_date ?? prData.actual_invoice_date ?? ""),
+      ) ??
+      normalizeDate(
+        String(prData.actual_inv_date ?? prData.actual_invoice_date ?? ""),
+      );
     form.setFieldValue("Inv_Crn_no", actualInvNo);
+    if (actualInvDate) {
+      form.setFieldValue("Inv_Crn_note", actualInvDate);
+    }
     form.setFieldValue("creditor_agent", String(prData.paid_to ?? ""));
     form.setFieldValue("agent_code", String(prData.paid_to ?? ""));
     form.setFieldValue("customer_gst_no", String(prData.customer_gst_no ?? ""));

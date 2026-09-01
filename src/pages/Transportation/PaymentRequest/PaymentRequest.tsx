@@ -55,8 +55,10 @@ import {
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import {
+  getBranchGstNo,
   getDefaultBranchCountryCode,
   getDefaultBranchCurrencyCode,
+  getDefaultUserBranch,
   isIndianOutstandingBranch,
   isIndianUserCountry,
 } from "../../../utils/userNumberFormat";
@@ -76,8 +78,28 @@ import {
 } from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import {
+  collectPartyGstOptions,
+  findPartyAddressByGst,
+  findPrimaryPartyAddress,
+  getPartyGstFromPrimaryAddress,
+  type PartyAddressLike,
+  recalculatePrqChargeAmounts,
+  resolveStateCodeFromPartyAddress,
+} from "../../../utils/paymentRequestChargePrefill";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function formatReferenceDisplayValue(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return text !== "" ? text : "-";
+}
+
+function appendGstToReportingValue(value: unknown, gstn: unknown): string {
+  const base = formatReferenceDisplayValue(value);
+  const gst = formatReferenceDisplayValue(gstn);
+  return `${base} | GSTN: ${gst}`;
+}
 
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
@@ -617,12 +639,23 @@ function mapChargesFromState(
       no_of_unit:
         c.no_of_unit != null && c.no_of_unit !== ""
           ? Number(c.no_of_unit)
-          : null,
+          : c.no_of_units != null && c.no_of_units !== ""
+            ? Number(c.no_of_units)
+            : null,
       amount_per_unit:
         c.amount_per_unit != null && c.amount_per_unit !== ""
           ? Number(c.amount_per_unit)
-          : null,
-      amount: c.amount != null && c.amount !== "" ? Number(c.amount) : null,
+          : c.unit_cost != null && c.unit_cost !== ""
+            ? Number(c.unit_cost)
+            : c.cost_per_unit != null && c.cost_per_unit !== ""
+              ? Number(c.cost_per_unit)
+              : null,
+      amount:
+        c.amount != null && c.amount !== ""
+          ? Number(c.amount)
+          : c.total_cost != null && c.total_cost !== ""
+            ? Number(c.total_cost)
+            : null,
       amount_in_local:
         c.amount_in_local != null && c.amount_in_local !== ""
           ? Number(c.amount_in_local)
@@ -723,21 +756,24 @@ function PaymentRequest() {
   const [accountNameDisplay, setAccountNameDisplay] = useState<string | null>(
     null,
   );
+  const [partyAddresses, setPartyAddresses] = useState<PartyAddressLike[]>([]);
   const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
   const isUpdate =
     (saveResponse?.id != null && saveResponse.id > 0) || Boolean(requestId);
 
-  const defaultBranch = user?.branches?.find(
-    (b: { is_default?: boolean }) => b.is_default === true,
-  ) as
-    { currency?: { currency_id?: number; currency_code?: string } } | undefined;
+  const defaultBranch = getDefaultUserBranch(user?.branches);
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
   const defaultBranchCurrencyId =
     defaultBranch?.currency?.currency_id != null
       ? String(defaultBranch.currency.currency_id)
       : "";
+  const branchReportingName = String(defaultBranch?.reporting_name ?? "").trim();
+  const branchReportingAddress = String(
+    defaultBranch?.reporting_address ?? "",
+  ).trim();
+  const branchLocationGstNo = getBranchGstNo(defaultBranch);
 
   const getRoeValue = useCallback(
     (currency: string): number => {
@@ -977,6 +1013,24 @@ function PaymentRequest() {
     },
   });
 
+  const partyGstOptions = useMemo(
+    () => collectPartyGstOptions(partyAddresses),
+    [partyAddresses],
+  );
+
+  const applyPartyAddressState = useCallback(
+    (address: PartyAddressLike | undefined) => {
+      const stateCode = resolveStateCodeFromPartyAddress(
+        address,
+        stateOptions,
+      );
+      if (stateCode) {
+        form.setFieldValue("state_code_1", stateCode);
+      }
+    },
+    [form, stateOptions],
+  );
+
   const sacCodeOptionsForForm = useMemo(() => {
     const uniq = new Set<string>(sacCodeOptions);
     (form.values.charges ?? []).forEach((c) => {
@@ -1131,40 +1185,21 @@ function PaymentRequest() {
     // Keep the "Paid To" text input in sync with the selected supplier.
     form.setFieldValue("paid_to", supplierName);
 
-    const applyStateFromAddresses = (addresses: any) => {
-      if (!Array.isArray(addresses) || addresses.length === 0) return;
-
-      const primaryAddress =
-        addresses.find(
-          (a: any) =>
-            String(a?.address_type ?? "")
-              .trim()
-              .toUpperCase() === "PRIMARY",
-        ) ?? addresses[0];
-
-      const stateCandidate =
-        (primaryAddress as any)?.state_id ?? (primaryAddress as any)?.state;
-
-      if (stateCandidate == null || String(stateCandidate).trim() === "")
+    const applyStateFromAddresses = (addresses: PartyAddressLike[] | null | undefined) => {
+      if (!Array.isArray(addresses) || addresses.length === 0) {
+        setPartyAddresses([]);
         return;
+      }
 
-      const candidateStr = String(stateCandidate).trim();
-      const numericMatch = candidateStr.match(/^\d+$/);
-      const matchedState = numericMatch
-        ? (stateOptions.find((s) => String(s.value).trim() === candidateStr) ??
-          null)
-        : (stateOptions.find(
-            (s) =>
-              String(s.label ?? "")
-                .trim()
-                .toLowerCase() === candidateStr.toLowerCase(),
-          ) ?? null);
+      setPartyAddresses(addresses);
 
+      const primaryAddress = findPrimaryPartyAddress(addresses);
       form.setFieldValue(
-        "state_code_1",
-        matchedState?.value ??
-          (numericMatch ? candidateStr : String(stateCandidate).trim()),
+        "customer_gst_no",
+        getPartyGstFromPrimaryAddress(addresses),
       );
+      form.setFieldValue("location_gst_no", branchLocationGstNo);
+      applyPartyAddressState(primaryAddress);
     };
 
     // Auto-fill state from PRIMARY address if already provided in supplier object.
@@ -1236,7 +1271,39 @@ function PaymentRequest() {
         // Ignore; state_code_1 can be set manually if fetch fails.
       }
     })();
-  }, [isEditOrViewMode, location.state, stateOptions, form]);
+  }, [isEditOrViewMode, location.state, stateOptions, form, applyPartyAddressState]);
+
+  // ─── Derive PRQ amount/local amount from prefilled qty × cost/unit × ROE ──
+  useEffect(() => {
+    if (isEditOrViewMode || !prefillFromState?.charges?.length) return;
+
+    let changed = false;
+    const nextCharges = form.values.charges.map((charge) => {
+      const { amount: calcAmount, amount_in_local: calcLocal } =
+        recalculatePrqChargeAmounts(charge);
+      const amount = charge.amount ?? calcAmount;
+      const amount_in_local =
+        charge.amount_in_local ??
+        (amount != null && charge.roe != null && charge.roe > 0
+          ? clampAmount(amount * charge.roe)
+          : calcLocal);
+
+      if (
+        amount === charge.amount &&
+        amount_in_local === charge.amount_in_local
+      ) {
+        return charge;
+      }
+
+      changed = true;
+      return { ...charge, amount, amount_in_local };
+    });
+
+    if (changed) {
+      form.setFieldValue("charges", nextCharges);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Batch-fetch SAC codes for charges prefilled from location.state ─────
   useEffect(() => {
@@ -2563,10 +2630,22 @@ function PaymentRequest() {
                 <Grid columns={12} gutter="sm">
                   {(
                     [
-                      // {
-                      //   label: "Request No",
-                      //   value: form.values.request_no,
-                      // },
+                      {
+                        label: "Reporting Name",
+                        value: appendGstToReportingValue(
+                          branchReportingName,
+                          form.values.location_gst_no || branchLocationGstNo,
+                        ),
+                        alwaysShow: true,
+                      },
+                      {
+                        label: "Reporting Address",
+                        value: appendGstToReportingValue(
+                          branchReportingAddress,
+                          form.values.location_gst_no || branchLocationGstNo,
+                        ),
+                        alwaysShow: true,
+                      },
                       {
                         label: "Job Reference",
                         value: form.values.job_reference_1,
@@ -2598,21 +2677,18 @@ function PaymentRequest() {
                         label: "Prepared By",
                         value: form.values.prepared_by_1,
                       },
-                      {
-                        label: "Customer GST No",
-                        value: form.values.customer_gst_no,
-                      },
-                      // {
-                      //   label: "Location GST No",
-                      //   value: form.values.location_gst_no,
-                      // },
-                    ] as { label: string; value: string }[]
+                    ] as {
+                      label: string;
+                      value: string;
+                      alwaysShow?: boolean;
+                    }[]
                   )
                     .filter(
-                      ({ value }) =>
-                        value != null &&
-                        String(value).trim() !== "" &&
-                        String(value) !== "—",
+                      ({ value, alwaysShow }) =>
+                        alwaysShow ||
+                        (value != null &&
+                          String(value).trim() !== "" &&
+                          String(value) !== "—"),
                     )
                     .map(({ label, value }) => (
                       <Grid.Col key={label} span={4}>
@@ -2782,7 +2858,12 @@ function PaymentRequest() {
                   form.setFieldValue("paid_to_type", value ?? "");
                   // Reset account selection when type changes to avoid mismatch.
                   form.setFieldValue("account_id", "");
+                  form.setFieldValue("account_code", "");
+                  form.setFieldValue("customer_gst_no", "");
+                  form.setFieldValue("location_gst_no", "");
+                  form.setFieldValue("paid_to", "");
                   setAccountNameDisplay(null);
+                  setPartyAddresses([]);
                 }}
                 readOnly={isReadOnly}
                 styles={inputStyles}
@@ -2814,7 +2895,9 @@ function PaymentRequest() {
                   ),
                 })}
                 value={form.values.account_id || null}
-                displayValue={accountNameDisplay}
+                displayValue={
+                  String(form.values.paid_to ?? "").trim() || undefined
+                }
                 returnOriginalData
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("account_id", value ?? "");
@@ -2833,54 +2916,27 @@ function PaymentRequest() {
                   // Auto-fill Paid To from selected account name; user can edit later.
                   form.setFieldValue("paid_to", selectedAccountName);
 
-                  // Auto-fill State from PRIMARY address inside `addresses_data`.
                   const addresses = (originalData as any)?.addresses_data as
-                    | Array<{
-                        state_id?: number;
-                        state?: unknown;
-                        address_type?: string;
-                      }>
+                    | PartyAddressLike[]
                     | undefined;
-                  const primaryAddress =
-                    Array.isArray(addresses) && addresses.length > 0
-                      ? (addresses.find(
-                          (a) =>
-                            String(a?.address_type ?? "")
-                              .trim()
-                              .toUpperCase() === "PRIMARY",
-                        ) ?? addresses[0])
-                      : undefined;
 
-                  const stateCandidate =
-                    (primaryAddress as any)?.state_id ??
-                    (primaryAddress as any)?.state;
-
-                  if (
-                    stateCandidate != null &&
-                    String(stateCandidate).trim() !== ""
-                  ) {
-                    // If it's a numeric state_id, use it directly; otherwise try label match.
-                    const candidateStr = String(stateCandidate).trim();
-                    const numericMatch = candidateStr.match(/^\d+$/);
-                    const matchedState = numericMatch
-                      ? (stateOptions.find(
-                          (s) => String(s.value).trim() === candidateStr,
-                        ) ?? null)
-                      : (stateOptions.find(
-                          (s) =>
-                            String(s.label ?? "")
-                              .trim()
-                              .toLowerCase() === candidateStr.toLowerCase(),
-                        ) ?? null);
-
-                    form.setFieldValue(
-                      "state_code_1",
-                      matchedState?.value ??
-                        (numericMatch
-                          ? candidateStr
-                          : String(stateCandidate).trim()),
-                    );
+                  if (!value) {
+                    form.setFieldValue("customer_gst_no", "");
+                    form.setFieldValue("location_gst_no", "");
+                    form.setFieldValue("state_code_1", "");
+                    setPartyAddresses([]);
+                    return;
                   }
+
+                  setPartyAddresses(Array.isArray(addresses) ? addresses : []);
+
+                  form.setFieldValue(
+                    "customer_gst_no",
+                    getPartyGstFromPrimaryAddress(addresses),
+                  );
+                  form.setFieldValue("location_gst_no", branchLocationGstNo);
+
+                  applyPartyAddressState(findPrimaryPartyAddress(addresses));
                 }}
                 minSearchLength={3}
                 dropdownZIndex={1000}
@@ -3098,7 +3154,46 @@ function PaymentRequest() {
             ) : null}
           </Grid>
 
-          <Group justify="flex-end" mt="md" mb="sm">
+          <Group justify="space-between" align="center" mt="md" mb="sm">
+            <Group gap="xl">
+              <Group gap="xs" align="center">
+                <Text size="sm" style={{ fontFamily: "Inter" }}>
+                  <Text component="span" fw={600} c="#105476">
+                    Customer GSTN :
+                  </Text>{" "}
+                  {partyGstOptions.length <= 1
+                    ? formatReferenceDisplayValue(form.values.customer_gst_no)
+                    : null}
+                </Text>
+                {partyGstOptions.length > 1 ? (
+                  <Dropdown
+                    placeholder="Select GSTN"
+                    data={partyGstOptions.map((option) => ({
+                      value: option.value,
+                      label: option.value,
+                    }))}
+                    value={form.values.customer_gst_no || null}
+                    onChange={(gst) => {
+                      if (!gst) return;
+                      form.setFieldValue("customer_gst_no", gst);
+                      applyPartyAddressState(
+                        findPartyAddressByGst(partyAddresses, gst),
+                      );
+                    }}
+                    disabled={isReadOnly}
+                    searchable
+                    styles={inputStyles}
+                  />
+                ) : null}
+              </Group>
+              <Text size="sm" style={{ fontFamily: "Inter" }}>
+                <Text component="span" fw={600} c="#105476">
+                  Location GSTN :
+                </Text>{" "}
+                {formatReferenceDisplayValue(form.values.location_gst_no)}
+              </Text>
+            </Group>
+            <Group>
             <Button
               type="button"
               variant="light"
@@ -3124,6 +3219,7 @@ function PaymentRequest() {
                 Calculate TDS
               </Button>
             ) : null}
+            </Group>
           </Group>
 
           {/* ── Charges Section ── */}
