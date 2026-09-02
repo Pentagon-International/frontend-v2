@@ -3771,6 +3771,26 @@ function InvoiceCreate({
       const nextChargeErrors: Record<number, Record<string, string>> = {};
       let chargeRoeErrorMessage: string | null = null;
 
+      const missingMasterCharge = values.charges.some((charge, index) => {
+        if (charge.is_tax_row === true) return false;
+        if (charge.charge_id != null) return false;
+        nextChargeErrors[index] = {
+          ...(nextChargeErrors[index] ?? {}),
+          charge_id: "Select a charge from charge master",
+        };
+        return true;
+      });
+      if (missingMasterCharge) {
+        setChargeErrors((prev) => ({ ...prev, ...nextChargeErrors }));
+        ToastNotification({
+          message:
+            "Each charge must be selected from charge master before saving.",
+          type: "error",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       values.charges.forEach((charge, index) => {
         const chargeCurrencyCode = resolveChargeCurrencyCode(
           charge,
@@ -5741,7 +5761,11 @@ function InvoiceCreate({
                     )}
                     <Grid.Col span={chargeGridCols.charge}>
                       <SearchableSelect
-                        placeholder="Type charge name"
+                        placeholder={
+                          charge.charge_id != null
+                            ? "Type charge name"
+                            : "Search charge master"
+                        }
                         apiEndpoint={URL.chargeMaster}
                         searchFields={["charge_name", "charge_code"]}
                         displayFormat={(item: Record<string, unknown>) => ({
@@ -5753,12 +5777,17 @@ function InvoiceCreate({
                             ? String(charge.charge_id)
                             : null
                         }
-                        displayValue={charge.charge_name || undefined}
+                        displayValue={
+                          charge.charge_id != null
+                            ? charge.charge_name || undefined
+                            : undefined
+                        }
                         returnOriginalData
-                        preserveLinkedValueOnClear
+                        preserveLinkedValueOnClear={charge.charge_id != null}
                         hideValueInDisplay
-                        linkedLabelEditWithoutSearch
+                        linkedLabelEditWithoutSearch={charge.charge_id != null}
                         onSearchTextChange={(text) => {
+                          if (charge.charge_id == null) return;
                           form.setFieldValue(
                             `charges.${index}.charge_name`,
                             text,
