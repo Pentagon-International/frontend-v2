@@ -10,7 +10,10 @@ import {
   Menu,
   Modal,
   NumberInput,
+  ScrollArea,
   Stack,
+  Table,
+  Tabs,
   Text,
   Textarea,
   TextInput,
@@ -95,12 +98,6 @@ function formatReferenceDisplayValue(value: unknown): string {
   return text !== "" ? text : "-";
 }
 
-function appendGstToReportingValue(value: unknown, gstn: unknown): string {
-  const base = formatReferenceDisplayValue(value);
-  const gst = formatReferenceDisplayValue(gstn);
-  return `${base} | GSTN: ${gst}`;
-}
-
 function clampAmount(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value))
     return value === undefined ? null : value;
@@ -109,6 +106,113 @@ function clampAmount(value: number | null | undefined): number | null {
   const maxVal = 99999999.99;
   if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
   return rounded;
+}
+
+function formatPaymentRequestPayloadAmount(
+  value: number | null | undefined,
+): number | undefined {
+  if (value == null) return undefined;
+  const rounded = clampAmount(value);
+  return rounded == null ? undefined : rounded;
+}
+
+type PaymentRequestTaxBreakup = {
+  sac_wise_totals?: Array<{
+    sac_code?: string;
+    charge_name?: string;
+    total_amount?: number | string;
+    charge_names?: string[];
+    charge_count?: number;
+    charge_id?: number;
+    rate?: number | string;
+    rate_type?: string;
+    Dr_Cr?: string;
+    roe?: number | string;
+    currency_code?: string;
+    currency_id?: number | string;
+    job_id?: string;
+  }>;
+  cgst_total?: string | number;
+  sgst_total?: string | number;
+  igst_total?: string | number;
+  total?: string | number;
+};
+
+function parsePaymentRequestGstBreakupResponse(
+  response: unknown,
+): PaymentRequestTaxBreakup {
+  const axiosBody = (response as { data?: unknown })?.data ?? response;
+  const statusBody = unwrapApiStatusBody(axiosBody) as Record<string, unknown>;
+  const nested =
+    statusBody.data &&
+    typeof statusBody.data === "object" &&
+    !Array.isArray(statusBody.data)
+      ? (statusBody.data as Record<string, unknown>)
+      : null;
+
+  if (
+    nested &&
+    (Array.isArray(nested.sac_wise_totals) ||
+      nested.total != null ||
+      nested.cgst_total != null ||
+      nested.sgst_total != null ||
+      nested.igst_total != null)
+  ) {
+    return nested as PaymentRequestTaxBreakup;
+  }
+
+  return statusBody as PaymentRequestTaxBreakup;
+}
+
+const fetchPaymentRequestGstBreakup = async (paymentRequestId: number) => {
+  const response = await postAPICall(
+    URL.invoiceCalculateGstBreakup,
+    { payment_request_id: paymentRequestId },
+    API_HEADER,
+  );
+  return parsePaymentRequestGstBreakupResponse(response);
+};
+
+function formatGstBreakupRate(
+  rate: number | string | null | undefined,
+  rateType: string | null | undefined,
+): string {
+  if (rate == null || String(rate).trim() === "") return "—";
+  const typeStr = String(rateType ?? "").trim();
+  if (typeStr === "%" || typeStr === "％") return `${rate}%`;
+  if (typeStr !== "") return `${rate}${typeStr}`;
+  return String(rate);
+}
+
+function parseGstBreakupAmount(value: unknown): number {
+  if (value == null || String(value).trim() === "") return 0;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function isChargeTdsRow(charge: {
+  is_tds_row?: boolean;
+  is_tds_calcualted_record?: unknown;
+  is_tds_calculated_record?: unknown;
+}): boolean {
+  if (charge.is_tds_row === true) return true;
+  const raw =
+    charge.is_tds_calcualted_record ?? charge.is_tds_calculated_record;
+  if (raw === true || raw === 1) return true;
+  if (raw === false || raw === 0) return false;
+  const normalized = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
+}
+
+function calcPaymentRequestLocalTotal(charges: ChargeItem[]): number {
+  return charges.reduce((sum, charge) => {
+    if (isChargeTdsRow(charge)) return sum;
+    const local = charge.amount_in_local;
+    if (local == null || !Number.isFinite(local)) return sum;
+    return sum + local;
+  }, 0);
 }
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -237,6 +341,10 @@ type ChargeItem = {
   amount_in_local: number | null;
   tax_code: string;
   tax: string;
+  is_tds_row?: boolean;
+  is_tax_row?: boolean;
+  is_tds_calcualted_record?: boolean;
+  is_tds_calculated_record?: boolean;
 };
 
 type PaymentRequestFormData = {
@@ -321,6 +429,8 @@ type PaymentRequestFromApi = {
   currency_code?: string;
   currency_id?: number;
   state_id?: number;
+  reporting_name?: string;
+  reporting_address?: string;
   // API returns charges as "charges" (both POST and GET responses)
   charges?: Array<{
     id?: number;
@@ -347,6 +457,8 @@ type PaymentRequestFromApi = {
     local_amount?: number | string;
     sac_code?: string;
     tax?: boolean | string;
+    is_tds_calcualted_record?: boolean;
+    is_tds_calculated_record?: boolean;
   }>;
   documents?: Array<{
     id?: number;
@@ -574,11 +686,9 @@ function mapPaymentRequestChargeToPayload(
     unit_id: c.unit_id ? Number(c.unit_id) : undefined,
     roe: c.roe != null ? Number(c.roe) : undefined,
     no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : undefined,
-    amount_per_unit:
-      c.amount_per_unit != null ? Number(c.amount_per_unit) : undefined,
-    amount: c.amount != null ? Number(c.amount) : undefined,
-    local_amount:
-      c.amount_in_local != null ? Number(c.amount_in_local) : undefined,
+    amount_per_unit: formatPaymentRequestPayloadAmount(c.amount_per_unit),
+    amount: formatPaymentRequestPayloadAmount(c.amount),
+    local_amount: formatPaymentRequestPayloadAmount(c.amount_in_local),
     sac_code: c.tax_code ?? "",
   };
 }
@@ -606,11 +716,17 @@ function mapApiChargeToChargeItem(
     unit_id: c.unit_id != null ? String(c.unit_id) : "",
     no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : null,
     amount_per_unit:
-      c.amount_per_unit != null ? Number(c.amount_per_unit) : null,
-    amount: c.amount != null ? Number(c.amount) : null,
-    amount_in_local: c.local_amount != null ? Number(c.local_amount) : null,
+      c.amount_per_unit != null
+        ? clampAmount(Number(c.amount_per_unit))
+        : null,
+    amount: c.amount != null ? clampAmount(Number(c.amount)) : null,
+    amount_in_local:
+      c.local_amount != null ? clampAmount(Number(c.local_amount)) : null,
     tax_code: c.sac_code ?? "",
     tax: c.tax === true || c.tax === "true" ? "true" : "false",
+    is_tds_row: isChargeTdsRow(c),
+    is_tds_calcualted_record: c.is_tds_calcualted_record,
+    is_tds_calculated_record: c.is_tds_calculated_record,
   };
 }
 
@@ -728,6 +844,12 @@ function PaymentRequest() {
     Record<number, boolean>
   >({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [chargesTabActive, setChargesTabActive] = useState("charges");
+  const [gstBreakup, setGstBreakup] = useState<PaymentRequestTaxBreakup | null>(
+    null,
+  );
+  const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
+  const showTaxTab = isIndiaUser;
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
@@ -769,10 +891,6 @@ function PaymentRequest() {
     defaultBranch?.currency?.currency_id != null
       ? String(defaultBranch.currency.currency_id)
       : "";
-  const branchReportingName = String(defaultBranch?.reporting_name ?? "").trim();
-  const branchReportingAddress = String(
-    defaultBranch?.reporting_address ?? "",
-  ).trim();
   const branchLocationGstNo = getBranchGstNo(defaultBranch);
 
   const getRoeValue = useCallback(
@@ -1091,6 +1209,45 @@ function PaymentRequest() {
     !!String(form.values.account_id ?? "").trim() ||
     !!String(accountNameDisplay ?? "").trim();
 
+  const chargesDropdownZIndex = 200;
+
+  const chargesLocalTotal = useMemo(
+    () => clampAmount(calcPaymentRequestLocalTotal(form.values.charges)) ?? 0,
+    [form.values.charges],
+  );
+
+  const gstBreakupTotals = useMemo(
+    () => ({
+      igst_total: parseGstBreakupAmount(gstBreakup?.igst_total),
+      cgst_total: parseGstBreakupAmount(gstBreakup?.cgst_total),
+      sgst_total: parseGstBreakupAmount(gstBreakup?.sgst_total),
+      total: parseGstBreakupAmount(gstBreakup?.total),
+    }),
+    [gstBreakup],
+  );
+
+  useEffect(() => {
+    if (!saveResponse?.id || !showTaxTab) {
+      return;
+    }
+    let cancelled = false;
+    setGstBreakupLoading(true);
+    setGstBreakup(null);
+    fetchPaymentRequestGstBreakup(saveResponse.id)
+      .then((data) => {
+        if (!cancelled) setGstBreakup(data);
+      })
+      .catch(() => {
+        if (!cancelled) setGstBreakup(null);
+      })
+      .finally(() => {
+        if (!cancelled) setGstBreakupLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [saveResponse?.id, showTaxTab]);
+
   useEffect(() => {
     // In create flow, if voucher type is empty, auto-fill from source screen.
     if (isEditOrViewMode) return;
@@ -1402,7 +1559,7 @@ function PaymentRequest() {
             ? Number(values.account_id)
             : undefined,
         ...(values.account_code ? { account_code: values.account_code } : {}),
-        amount: values.amount != null ? Number(values.amount) : null,
+        amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
         paid_to: values.paid_to ?? "",
@@ -1462,13 +1619,13 @@ function PaymentRequest() {
         throw new Error("Payment request id not found in response.");
       }
 
-      const gstBreakupResponse = (await postAPICall(
-        URL.invoiceCalculateGstBreakup,
-        { payment_request_id: paymentRequestId },
-        API_HEADER,
-      )) as {
-        sac_wise_totals?: Array<Record<string, unknown>>;
-      };
+      const gstBreakupResponse = parsePaymentRequestGstBreakupResponse(
+        await postAPICall(
+          URL.invoiceCalculateGstBreakup,
+          { payment_request_id: paymentRequestId },
+          API_HEADER,
+        ),
+      );
 
       const sacWiseTotals = Array.isArray(gstBreakupResponse?.sac_wise_totals)
         ? gstBreakupResponse.sac_wise_totals
@@ -1509,10 +1666,13 @@ function PaymentRequest() {
             amount: totalAmount,
             amount_in_local:
               totalAmount != null ? totalAmount * roeValue : null,
+            is_tax_row: true,
           };
         });
         form.setFieldValue("charges", [...form.values.charges, ...gstCharges]);
       }
+
+      setGstBreakup(gstBreakupResponse);
 
       ToastNotification({
         message: "GST calculated successfully",
@@ -1530,99 +1690,96 @@ function PaymentRequest() {
   };
 
   const handleCalculateTds = async () => {
-    let paymentRequestId =
-      saveResponse?.id != null && saveResponse.id > 0
-        ? Number(saveResponse.id)
-        : requestId
-          ? Number(requestId)
-          : null;
+    const validation = form.validate();
+    if (validation.hasErrors) return;
+    setIsSubmitting(true);
+    try {
+      const values = form.values;
+      const formatDate = (d: Date | null) => {
+        if (!d) return null;
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${year}-${month}-${day}`;
+      };
 
-    if (!paymentRequestId) {
-      const hasCharge = form.values.charges.some(
-        (c) => c.amount != null && c.amount !== 0,
-      );
-      if (!hasCharge) {
-        ToastNotification({
-          type: "error",
-          message: "Please enter at least one charge before calculating TDS.",
-        });
-        return;
+      const currencyList = currencyData as Array<{
+        id?: number;
+        currency_code?: string;
+        code?: string;
+      }>;
+      const mainCurrencyId = currencyList?.find(
+        (item) =>
+          (item.currency_code ?? item.code ?? "")
+            .toString()
+            .trim()
+            .toUpperCase() ===
+          (values.currency ?? "").toString().trim().toUpperCase(),
+      )?.id;
+
+      const stateIdNum = values.state_code_1
+        ? Number(values.state_code_1)
+        : undefined;
+
+      const payload: Record<string, unknown> = {
+        ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
+        job_reference: values.job_reference_1 ?? "",
+        crj_number: values.payment_crj_did ?? "",
+        approved_by: values.approved_by_1 ?? "",
+        approved_date: formatDate(values.approved_date),
+        customer_gst_no: values.customer_gst_no ?? "",
+        location_gst_no: values.location_gst_no ?? "",
+        date: formatDate(values.date),
+        payment_type: values.payment_type ?? "",
+        vouchar_type: values.voucher_type ?? "",
+        CINV: values.cinv ?? false,
+        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        proforma_inv_date: formatDate(values.proforma_invoice_date),
+        actual_inv_no: values.actual_invoice_no ?? "",
+        actual_inv_date: formatDate(values.actual_invoice_date),
+        account_id:
+          values.account_id && Number.isFinite(Number(values.account_id))
+            ? Number(values.account_id)
+            : undefined,
+        ...(values.account_code ? { account_code: values.account_code } : {}),
+        amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
+        crj_date: formatDate(values.crj_date),
+        paid_to_type: values.paid_to_type ?? "",
+        paid_to: values.paid_to ?? "",
+        not_over: values.not_over ?? "",
+        tds_section_code: values.tds_section_code ?? "",
+        account_note: values.accountant_note ?? "",
+        note: values.note ?? "",
+        rejected_note: values.rejected_note || null,
+        on_hold_note: values.on_hold_note || null,
+        ...(values.approved ? { status: values.approved } : {}),
+        charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
+      };
+      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+        payload.currency_id = mainCurrencyId;
       }
-    }
+      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+        payload.state_id = stateIdNum;
+      }
 
-    if (!paymentRequestId) {
-      const validation = form.validate();
-      if (validation.hasErrors) return;
-      setIsSubmitting(true);
-      try {
-        const values = form.values;
-        const formatDate = (d: Date | null) => {
-          if (!d) return null;
-          const day = String(d.getDate()).padStart(2, "0");
-          const month = String(d.getMonth() + 1).padStart(2, "0");
-          const year = d.getFullYear();
-          return `${year}-${month}-${day}`;
-        };
-
-        const currencyList = currencyData as Array<{
-          id?: number;
-          currency_code?: string;
-          code?: string;
-        }>;
-        const mainCurrencyId = currencyList?.find(
-          (item) =>
-            (item.currency_code ?? item.code ?? "")
-              .toString()
-              .trim()
-              .toUpperCase() ===
-            (values.currency ?? "").toString().trim().toUpperCase(),
-        )?.id;
-
-        const stateIdNum = values.state_code_1
-          ? Number(values.state_code_1)
-          : undefined;
-
-        const payload: Record<string, unknown> = {
-          job_reference: values.job_reference_1 ?? "",
-          crj_number: values.payment_crj_did ?? "",
-          approved_by: values.approved_by_1 ?? "",
-          approved_date: formatDate(values.approved_date),
-          customer_gst_no: values.customer_gst_no ?? "",
-          location_gst_no: values.location_gst_no ?? "",
-          date: formatDate(values.date),
-          payment_type: values.payment_type ?? "",
-          vouchar_type: values.voucher_type ?? "",
-          CINV: values.cinv ?? false,
-          proforma_inv_no: values.proforma_invoice_no_1 ?? "",
-          proforma_inv_date: formatDate(values.proforma_invoice_date),
-          actual_inv_no: values.actual_invoice_no ?? "",
-          actual_inv_date: formatDate(values.actual_invoice_date),
-          account_id:
-            values.account_id && Number.isFinite(Number(values.account_id))
-              ? Number(values.account_id)
-              : undefined,
-          ...(values.account_code ? { account_code: values.account_code } : {}),
-          amount: values.amount != null ? Number(values.amount) : null,
-          crj_date: formatDate(values.crj_date),
-          paid_to_type: values.paid_to_type ?? "",
-          paid_to: values.paid_to ?? "",
-          not_over: values.not_over ?? "",
-          tds_section_code: values.tds_section_code ?? "",
-          account_note: values.accountant_note ?? "",
-          note: values.note ?? "",
-          rejected_note: values.rejected_note || null,
-          on_hold_note: values.on_hold_note || null,
-          ...(values.approved ? { status: values.approved } : {}),
-          charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
-        };
-        if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
-          payload.currency_id = mainCurrencyId;
-        }
-        if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
-          payload.state_id = stateIdNum;
-        }
-
-        const rawResponse = await apiCallProtected.post(
+      let rawResponse: unknown = null;
+      if (isUpdate) {
+        const updateId = saveResponse?.id ?? Number(requestId);
+        rawResponse = await apiCallProtected.put(
+          `${(URL as any).paymentRequest}${updateId}/`,
+          buildPaymentRequestFormData(
+            payload as Record<string, unknown>,
+            supportingDocuments,
+          ),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
+        );
+      } else {
+        rawResponse = await apiCallProtected.post(
           (URL as any).paymentRequest,
           buildPaymentRequestFormData(
             payload as Record<string, unknown>,
@@ -1635,40 +1792,25 @@ function PaymentRequest() {
             },
           },
         );
-
-        const saveData: PaymentRequestFromApi =
-          (rawResponse as { data?: { data?: PaymentRequestFromApi } })?.data
-            ?.data ??
-          (rawResponse as { data?: PaymentRequestFromApi })?.data ??
-          (rawResponse as PaymentRequestFromApi);
-        paymentRequestId =
-          saveData?.id != null ? Number(saveData.id) : undefined;
-        if (!paymentRequestId || Number.isNaN(paymentRequestId)) {
-          throw new Error("Payment request id not found in response.");
-        }
-        setSaveResponse({
-          id: paymentRequestId,
-          request_no: saveData.request_no ?? "",
-          status: saveData.status,
-        });
-      } catch (error: unknown) {
-        ToastNotification({
-          message:
-            (error as { message?: string })?.message ??
-            "Failed to save payment request",
-          type: "error",
-        });
-        setIsSubmitting(false);
-        return;
       }
-    }
 
-    if (!paymentRequestId || Number.isNaN(paymentRequestId)) {
-      return;
-    }
+      const saveData: PaymentRequestFromApi =
+        (rawResponse as { data?: { data?: PaymentRequestFromApi } })?.data
+          ?.data ??
+        (rawResponse as { data?: PaymentRequestFromApi })?.data ??
+        (rawResponse as PaymentRequestFromApi);
+      const paymentRequestId =
+        saveData?.id != null ? Number(saveData.id) : undefined;
+      if (!paymentRequestId || Number.isNaN(paymentRequestId)) {
+        throw new Error("Payment request id not found in response.");
+      }
 
-    try {
-      setIsSubmitting(true);
+      setSaveResponse({
+        id: paymentRequestId,
+        request_no: saveData.request_no ?? saveResponse?.request_no ?? "",
+        status: saveData.status ?? saveResponse?.status,
+      });
+
       const res = await postAPICall(
         URL.tdsCalculation,
         { payment_request_id: paymentRequestId },
@@ -1699,11 +1841,6 @@ function PaymentRequest() {
         return;
       }
 
-      const currencyList = currencyData as Array<{
-        id?: number;
-        currency_code?: string;
-        code?: string;
-      }>;
       const existing = form.values.charges;
       const tdsCharges: ChargeItem[] = rows
         .map((item): ChargeItem | null => {
@@ -1742,6 +1879,7 @@ function PaymentRequest() {
               (item.cr_dr as unknown) ??
               "",
           );
+          const roe = Number.isFinite(roeValue) ? roeValue : 1;
           return {
             ...emptyCharge(),
             charge_id:
@@ -1761,10 +1899,10 @@ function PaymentRequest() {
             cn_r: drCr,
             currency: String(currencyCode),
             currency_id: currencyId,
-            roe: Number.isFinite(roeValue) ? roeValue : 1,
-            amount,
-            amount_in_local:
-              amount * (Number.isFinite(roeValue) ? roeValue : 1),
+            roe,
+            amount: clampAmount(amount),
+            amount_in_local: clampAmount(amount * roe),
+            is_tds_row: true,
           };
         })
         .filter((x): x is ChargeItem => x !== null);
@@ -1783,101 +1921,8 @@ function PaymentRequest() {
         );
       });
 
-      const mergedCharges =
-        deduped.length > 0 ? [...existing, ...deduped] : existing;
       if (deduped.length > 0) {
-        form.setFieldValue("charges", mergedCharges);
-      }
-
-      const values = form.values;
-      const mainCurrencyId = currencyList?.find(
-        (item) =>
-          (item.currency_code ?? item.code ?? "")
-            .toString()
-            .trim()
-            .toUpperCase() ===
-          (values.currency ?? "").toString().trim().toUpperCase(),
-      )?.id;
-      const stateIdNum = values.state_code_1
-        ? Number(values.state_code_1)
-        : undefined;
-
-      const updatePayload: Record<string, unknown> = {
-        id: paymentRequestId,
-        job_reference: values.job_reference_1 ?? "",
-        crj_number: values.payment_crj_did ?? "",
-        approved_by: values.approved_by_1 ?? "",
-        approved_date: formatPaymentRequestDate(values.approved_date),
-        customer_gst_no: values.customer_gst_no ?? "",
-        location_gst_no: values.location_gst_no ?? "",
-        date: formatPaymentRequestDate(values.date),
-        payment_type: values.payment_type ?? "",
-        vouchar_type: values.voucher_type ?? "",
-        CINV: values.cinv ?? false,
-        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
-        proforma_inv_date: formatPaymentRequestDate(
-          values.proforma_invoice_date,
-        ),
-        actual_inv_no: values.actual_invoice_no ?? "",
-        actual_inv_date: formatPaymentRequestDate(values.actual_invoice_date),
-        account_id:
-          values.account_id && Number.isFinite(Number(values.account_id))
-            ? Number(values.account_id)
-            : undefined,
-        ...(values.account_code ? { account_code: values.account_code } : {}),
-        amount: values.amount != null ? Number(values.amount) : null,
-        crj_date: formatPaymentRequestDate(values.crj_date),
-        paid_to_type: values.paid_to_type ?? "",
-        paid_to: values.paid_to ?? "",
-        not_over: values.not_over ?? "",
-        tds_section_code: values.tds_section_code ?? "",
-        account_note: values.accountant_note ?? "",
-        note: values.note ?? "",
-        rejected_note: values.rejected_note || null,
-        on_hold_note: values.on_hold_note || null,
-        ...(values.approved ? { status: values.approved } : {}),
-        charges_data: mergedCharges.map(mapPaymentRequestChargeToPayload),
-      };
-      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
-        updatePayload.currency_id = mainCurrencyId;
-      }
-      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
-        updatePayload.state_id = stateIdNum;
-      }
-
-      const rawPut = (await apiCallProtected.put(
-        `${(URL as any).paymentRequest}${paymentRequestId}/`,
-        buildPaymentRequestFormData(
-          updatePayload as Record<string, unknown>,
-          supportingDocuments,
-        ),
-        {
-          headers: {
-            ...FORM_DATA_HEADERS,
-            ...API_HEADER.headers,
-          },
-        },
-      )) as {
-        data?: {
-          data?: PaymentRequestFromApi;
-          charges?: PaymentRequestFromApi["charges"];
-        };
-        charges?: PaymentRequestFromApi["charges"];
-      };
-
-      const savedData: PaymentRequestFromApi =
-        rawPut?.data?.data ??
-        (rawPut as { data?: PaymentRequestFromApi })?.data ??
-        (rawPut as PaymentRequestFromApi);
-      const resCharges = savedData?.charges;
-      if (resCharges && Array.isArray(resCharges)) {
-        form.setFieldValue(
-          "charges",
-          mergedCharges.map((c, i) => ({
-            ...c,
-            id: resCharges[i]?.id != null ? Number(resCharges[i].id) : c.id,
-          })),
-        );
+        form.setFieldValue("charges", [...existing, ...deduped]);
       }
 
       ToastNotification({
@@ -1949,7 +1994,7 @@ function PaymentRequest() {
             ? Number(values.account_id)
             : undefined,
         ...(values.account_code ? { account_code: values.account_code } : {}),
-        amount: values.amount != null ? Number(values.amount) : null,
+        amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
         paid_to: values.paid_to ?? "",
@@ -2088,7 +2133,8 @@ function PaymentRequest() {
               account_id: d.account_id != null ? String(d.account_id) : "",
               account_code: d.account_code ?? "",
               currency: d.currency_code ?? values.currency,
-              amount: d.amount != null ? Number(d.amount) : null,
+              amount:
+                d.amount != null ? clampAmount(Number(d.amount)) : null,
               crj_date: normalizeDate(d.crj_date),
               paid_to_type: d.paid_to_type ?? "",
               not_over: d.not_over ?? "",
@@ -2173,7 +2219,7 @@ function PaymentRequest() {
       account_id: d.account_id != null ? String(d.account_id) : "",
       account_code: d.account_code ?? "",
       currency: d.currency_code ?? defaultBranchCurrency,
-      amount: d.amount != null ? Number(d.amount) : null,
+      amount: d.amount != null ? clampAmount(Number(d.amount)) : null,
       crj_date: normalizeDate(d.crj_date),
       paid_to_type: d.paid_to_type ?? "",
       not_over: d.not_over ?? "",
@@ -2631,22 +2677,6 @@ function PaymentRequest() {
                   {(
                     [
                       {
-                        label: "Reporting Name",
-                        value: appendGstToReportingValue(
-                          branchReportingName,
-                          form.values.location_gst_no || branchLocationGstNo,
-                        ),
-                        alwaysShow: true,
-                      },
-                      {
-                        label: "Reporting Address",
-                        value: appendGstToReportingValue(
-                          branchReportingAddress,
-                          form.values.location_gst_no || branchLocationGstNo,
-                        ),
-                        alwaysShow: true,
-                      },
-                      {
                         label: "Job Reference",
                         value: form.values.job_reference_1,
                       },
@@ -2939,7 +2969,7 @@ function PaymentRequest() {
                   applyPartyAddressState(findPrimaryPartyAddress(addresses));
                 }}
                 minSearchLength={3}
-                dropdownZIndex={1000}
+                dropdownZIndex={chargesDropdownZIndex}
                 disabled={!form.values.paid_to_type || isReadOnly}
                 readOnly={isReadOnly}
                 styles={inputStyles}
@@ -3182,6 +3212,7 @@ function PaymentRequest() {
                     }}
                     disabled={isReadOnly}
                     searchable
+                    dropdownZIndex={chargesDropdownZIndex}
                     styles={inputStyles}
                   />
                 ) : null}
@@ -3224,6 +3255,21 @@ function PaymentRequest() {
 
           {/* ── Charges Section ── */}
           <Box mt="md">
+            <Tabs
+              variant="default"
+              color="#105476"
+              value={chargesTabActive}
+              onChange={(v) => setChargesTabActive(v ?? "charges")}
+              defaultValue="charges"
+            >
+              {saveResponse && showTaxTab && (
+                <Tabs.List>
+                  <Tabs.Tab value="charges">Charges</Tabs.Tab>
+                  <Tabs.Tab value="tax">Tax</Tabs.Tab>
+                </Tabs.List>
+              )}
+
+              <Tabs.Panel value="charges">
             <Box>
               {/* Charges header row (sticky) */}
               <Grid
@@ -3235,7 +3281,7 @@ function PaymentRequest() {
                   flexWrap: "nowrap",
                   position: "sticky",
                   top: 45,
-                  zIndex: 100,
+                  zIndex: 2,
                   backgroundColor: "white",
                   fontWeight: 600,
                   color: "#105476",
@@ -3380,7 +3426,7 @@ function PaymentRequest() {
                         searchFields={["shipment_id", "job_id", "type"]}
                         displayFormat={jobCreateDropdownDisplayFormat}
                         readOnly={isReadOnly}
-                        dropdownZIndex={1100}
+                        dropdownZIndex={chargesDropdownZIndex}
                         onChange={(value) =>
                           form.setFieldValue(
                             `charges.${index}.job_no`,
@@ -3517,7 +3563,7 @@ function PaymentRequest() {
                       readOnly={isReadOnly}
                       error={chargeErrors[index]?.charge_name}
                       minSearchLength={2}
-                      dropdownZIndex={1000}
+                      dropdownZIndex={chargesDropdownZIndex}
                       styles={{
                         input: {
                           fontSize: "13px",
@@ -3538,7 +3584,7 @@ function PaymentRequest() {
                           ? String(charge.account_id)
                           : null
                       }
-                      dropdownZIndex={1100}
+                      dropdownZIndex={chargesDropdownZIndex}
                       minSearchLength={1}
                       searchFields={[
                         "gl_name",
@@ -3668,6 +3714,7 @@ function PaymentRequest() {
                       placeholder="Curr."
                       searchable
                       data={currencyOptions}
+                      dropdownZIndex={chargesDropdownZIndex}
                       value={charge.currency_id || charge.currency || null}
                       readOnly={isReadOnly}
                       onChange={(value) => {
@@ -3743,6 +3790,7 @@ function PaymentRequest() {
                       placeholder="Unit"
                       searchable
                       data={unitOptions}
+                      dropdownZIndex={chargesDropdownZIndex}
                       value={charge.unit_id || charge.unit_code || null}
                       readOnly={isReadOnly}
                       onChange={(value) => {
@@ -3918,7 +3966,7 @@ function PaymentRequest() {
                         )
                       }
                       disabled={isReadOnly}
-                      dropdownZIndex={1000}
+                      dropdownZIndex={chargesDropdownZIndex}
                       styles={{
                         input: {
                           fontSize: "13px",
@@ -4026,7 +4074,234 @@ function PaymentRequest() {
                 </Grid>
               ))}
 
+              {form.values.charges.length > 0 && (
+                <Box
+                  mt="xl"
+                  p="md"
+                  style={{
+                    backgroundColor: "#f8f9fa",
+                    borderRadius: 8,
+                    border: "1px solid #dee2e6",
+                  }}
+                >
+                  <Grid gutter="md">
+                    <Grid.Col span={showTaxTab && gstBreakup ? 3 : 6}>
+                      <Box>
+                        <Text size="sm" fw={500} c="dimmed" mb={4}>
+                          Local Amount Total
+                        </Text>
+                        <Text size="lg" fw={600} c="#105476">
+                          {formatMoneyAmountForUi(chargesLocalTotal)}
+                        </Text>
+                      </Box>
+                    </Grid.Col>
+                    {showTaxTab && gstBreakup && (
+                      <>
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              IGST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                gstBreakupTotals.igst_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              CGST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                gstBreakupTotals.cgst_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              SGST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                gstBreakupTotals.sgst_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      </>
+                    )}
+                  </Grid>
+                </Box>
+              )}
+
             </Box>
+              </Tabs.Panel>
+
+              {saveResponse && showTaxTab && (
+                <Tabs.Panel value="tax">
+                  {gstBreakupLoading && (
+                    <Stack align="center" py="xl">
+                      <Loader size="md" color="#105476" />
+                      <Text size="sm" c="dimmed">
+                        Loading GST breakup...
+                      </Text>
+                    </Stack>
+                  )}
+                  {!gstBreakupLoading &&
+                    !gstBreakup &&
+                    chargesTabActive === "tax" &&
+                    saveResponse?.id && (
+                      <Text size="sm" c="dimmed" py="md">
+                        No GST breakup data.
+                      </Text>
+                    )}
+                  {!gstBreakupLoading && gstBreakup && (
+                    <>
+                      <Grid gutter="md" mt="md">
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              IGST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                gstBreakupTotals.igst_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              CGST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                gstBreakupTotals.cgst_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              SGST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                gstBreakupTotals.sgst_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                        <Grid.Col span={3}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              GST Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(gstBreakupTotals.total)}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      </Grid>
+                      <ScrollArea mt="md">
+                        <Table
+                          withTableBorder
+                          withColumnBorders
+                          striped
+                          highlightOnHover
+                          style={{ minWidth: 400 }}
+                        >
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                SAC
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Charge Name
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Rate
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Amount
+                              </Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {(gstBreakup.sac_wise_totals ?? []).map((row, idx) => (
+                              <Table.Tr key={idx}>
+                                <Table.Td style={{ fontSize: "13px" }}>
+                                  {row.sac_code ?? "—"}
+                                </Table.Td>
+                                <Table.Td style={{ fontSize: "13px" }}>
+                                  {row.charge_name ?? "—"}
+                                </Table.Td>
+                                <Table.Td style={{ fontSize: "13px" }}>
+                                  {formatGstBreakupRate(row.rate, row.rate_type)}
+                                </Table.Td>
+                                <Table.Td style={{ fontSize: "13px" }}>
+                                  {row.total_amount != null
+                                    ? formatMoneyAmountForUi(
+                                        Number(row.total_amount),
+                                      )
+                                    : "—"}
+                                </Table.Td>
+                              </Table.Tr>
+                            ))}
+                          </Table.Tbody>
+                          <Table.Tfoot>
+                            <Table.Tr>
+                              <Table.Td style={{ fontSize: "13px" }} />
+                              <Table.Td style={{ fontSize: "13px" }} />
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
+                                Total:
+                              </Table.Td>
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
+                                {formatMoneyAmountForUi(gstBreakupTotals.total)}
+                              </Table.Td>
+                            </Table.Tr>
+                          </Table.Tfoot>
+                        </Table>
+                      </ScrollArea>
+                    </>
+                  )}
+                  {chargesTabActive === "tax" &&
+                    saveResponse &&
+                    !saveResponse.id && (
+                      <Text size="sm" c="dimmed" py="md">
+                        Save the payment request to load tax breakup.
+                      </Text>
+                    )}
+                </Tabs.Panel>
+              )}
+            </Tabs>
           </Box>
 
           {/* ── Form action buttons ── */}
