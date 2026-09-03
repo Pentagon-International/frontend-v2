@@ -710,7 +710,7 @@ type ChargeItem = {
   header_amount: number | null;
   amount_in_local: number | null; // Auto-calculated as: amount * roe
   tax_code: string; // sac_code from get-effective-sac / payload
-  dr_cr: "Cr" | "Dr"; // Dr/Cr for charge row, default "Cr"
+  dr_cr: "Cr" | "Dr"; // Dr/Cr for charge row, default "Dr" on credit note
   is_tax_row?: boolean; // appended tax row during POST; don't fetch/calc GST for this row
   igst_rate?: number | null;
   cgst_rate?: number | null;
@@ -856,7 +856,7 @@ type DrCrChargeLike = {
 
 function resolveChargeDrCr(
   charge: Pick<DrCrChargeLike, "dr_cr" | "Dr_Cr">,
-  fallback: "Dr" | "Cr" = "Cr",
+  fallback: "Dr" | "Cr" = "Dr",
 ): "Cr" | "Dr" {
   const raw = charge.dr_cr ?? charge.Dr_Cr;
   if (raw == null || String(raw).trim() === "") return fallback;
@@ -1299,22 +1299,14 @@ type InvoiceDataFromApi = {
   }>;
 };
 
-type InvoiceCreateProps = {
-  documentType?: "INV" | "CRN";
-  baseDrCr?: "Dr" | "Cr";
-  chargeDefaultDrCr?: "Dr" | "Cr";
-  documentLabel?: string;
-};
+const CREDIT_NOTE_HEADER_DR_CR = "Cr" as const;
+const CREDIT_NOTE_CHARGE_DEFAULT_DR_CR = "Dr" as const;
 
-const INVOICE_HEADER_DR_CR = "Dr" as const;
-const INVOICE_CHARGE_DEFAULT_DR_CR = "Cr" as const;
-
-function InvoiceCreate({
-  documentType = "INV",
-  baseDrCr = INVOICE_HEADER_DR_CR,
-  chargeDefaultDrCr = INVOICE_CHARGE_DEFAULT_DR_CR,
-  documentLabel = "Invoice",
-}: InvoiceCreateProps = {}) {
+function CreditNoteCreate() {
+  const documentType = "CRN" as const;
+  const baseDrCr = CREDIT_NOTE_HEADER_DR_CR;
+  const chargeDefaultDrCr = CREDIT_NOTE_CHARGE_DEFAULT_DR_CR;
+  const documentLabel = "Credit Note";
   const navigate = useNavigate();
   const location = useLocation();
   const handleInvoiceBack = () => {
@@ -7338,4 +7330,4 @@ function InvoiceCreate({
   );
 }
 
-export default InvoiceCreate;
+export default CreditNoteCreate;

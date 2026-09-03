@@ -502,6 +502,10 @@ function normalizeDrCr(value: unknown): "Dr" | "Cr" {
   return "Dr";
 }
 
+function invertNormalizedDrCr(value: "Dr" | "Cr"): "Dr" | "Cr" {
+  return value === "Dr" ? "Cr" : "Dr";
+}
+
 function isGstChargeRow(chargeName: unknown): boolean {
   return isPrqGstChargeName(chargeName);
 }
@@ -871,17 +875,6 @@ export default function SupplierInvoiceCreate({
     (location.state as { id?: number } | null | undefined)?.id,
   ]);
 
-  // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
-  useEffect(() => {
-    if (isReversal) {
-      form.setFieldValue("Dr_Cr", "Cr");
-      form.values.charges_data.forEach((_, i) => {
-        form.setFieldValue(`charges_data.${i}.Dr_Cr`, "Dr");
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReversal]);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
@@ -1222,6 +1215,14 @@ export default function SupplierInvoiceCreate({
         ? ({ header: "Dr", charge: "Cr" } as const)
         : ({ header: "Cr", charge: "Dr" } as const),
     [],
+  );
+
+  const getReversalDrCrDefaultsByType = useCallback(
+    (type: "INV" | "CRN") => {
+      const created = getDrCrDefaultsByType(type);
+      return { header: created.charge, charge: created.header } as const;
+    },
+    [getDrCrDefaultsByType],
   );
 
   const { data: currencyData = [], isLoading: isCurrencyLoading } = useQuery({
@@ -2056,12 +2057,37 @@ export default function SupplierInvoiceCreate({
     // Dr/Cr handling:
     // - View/Edit: keep Dr/Cr as returned by API (including GST/TDS-generated rows).
     // - Reversal Create: invert charge row Dr/Cr relative to source invoice.
-    const headerDrCr = isReversal ? ("Dr" as const) : ("Cr" as const);
+    const sourceType = ((data.type as "INV" | "CRN" | undefined) ?? "INV") as
+      | "INV"
+      | "CRN";
+    const sourceHeaderRaw =
+      (data as { Dr_Cr?: unknown; Dr_cr?: unknown; dr_cr?: unknown }).Dr_Cr ??
+      (data as { Dr_cr?: unknown }).Dr_cr ??
+      (data as { dr_cr?: unknown }).dr_cr;
+    const headerDrCr = runForReversalCreate
+      ? String(sourceHeaderRaw ?? "").trim() !== ""
+        ? invertNormalizedDrCr(normalizeDrCr(sourceHeaderRaw))
+        : getReversalDrCrDefaultsByType(sourceType).header
+      : String(data.Dr_Cr ?? "").trim() !== ""
+        ? normalizeDrCr(data.Dr_Cr)
+        : isReversal
+          ? getReversalDrCrDefaultsByType(sourceType).header
+          : getDrCrDefaultsByType(sourceType).header;
     if (runForReversalCreate) {
-      mappedCharges = mappedCharges.map((c) => ({
-        ...c,
-        Dr_Cr: c.Dr_Cr === "Cr" ? "Dr" : "Cr",
-      }));
+      mappedCharges = mappedCharges.map((c, i) => {
+        const src = chargesArray[i] as ApiCharge & {
+          Dr_cr?: string;
+          dr_cr?: string;
+        };
+        const raw = src?.Dr_Cr ?? src?.Dr_cr ?? src?.dr_cr;
+        return {
+          ...c,
+          Dr_Cr:
+            raw == null || String(raw).trim() === ""
+              ? getReversalDrCrDefaultsByType(sourceType).charge
+              : invertNormalizedDrCr(normalizeDrCr(raw)),
+        };
+      });
     }
     // Reversal create: daybook empty so user selects; date and due_date auto-set to today
     const daybookId = runForReversalCreate
@@ -2656,7 +2682,14 @@ export default function SupplierInvoiceCreate({
       approved_amount: toLocalAmount(data.approved_amount),
       difference_amount: toLocalAmount(data.difference_amount),
       status: (data.status ?? "UNPOSTED") as string,
-      Dr_Cr: (data.Dr_Cr ?? "Cr") as "Cr" | "Dr",
+      Dr_Cr:
+        String(data.Dr_Cr ?? "").trim() !== ""
+          ? normalizeDrCr(data.Dr_Cr)
+          : getReversalDrCrDefaultsByType(
+              ((data.type as "INV" | "CRN" | undefined) ??
+                form.values.type ??
+                "INV") as "INV" | "CRN",
+            ).header,
       charges_data: mappedCharges,
     });
     form.setFieldValue("charges_data", mappedCharges);
@@ -3253,7 +3286,9 @@ export default function SupplierInvoiceCreate({
       tax_code: "",
       igst_rate: null,
       igst: null,
-      Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
+      Dr_Cr: isReversal
+        ? getReversalDrCrDefaultsByType(form.values.type).charge
+        : getDrCrDefaultsByType(form.values.type).charge,
     });
     if (currCode) {
       syncRoeForCurrencyChange(
@@ -5047,7 +5082,7 @@ export default function SupplierInvoiceCreate({
                             (v === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
                           )
                         }
-                        disabled={isReadOnly || reversalFormDisabled}
+                        disabled={isReadOnly}
                         styles={{
                           input: {
                             fontSize: "13px",

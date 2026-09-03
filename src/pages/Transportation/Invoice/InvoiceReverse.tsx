@@ -230,7 +230,8 @@ type DrCrChargeLike = {
 function resolveChargeDrCr(
   charge: Pick<DrCrChargeLike, "dr_cr" | "Dr_Cr">,
 ): "Cr" | "Dr" {
-  const raw = charge.dr_cr ?? charge.Dr_Cr ?? "Cr";
+  const raw = charge.dr_cr ?? charge.Dr_Cr;
+  if (raw == null || String(raw).trim() === "") return "Dr";
   return String(raw).trim().toLowerCase() === "dr" ? "Dr" : "Cr";
 }
 
@@ -607,12 +608,24 @@ function unsignedFinite(n: number | null): number | null {
   return Math.abs(n);
 }
 
-function flipChargeDrCr(value: string | null | undefined): "Dr" | "Cr" {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase() === "dr"
-    ? "Cr"
-    : "Dr";
+function pickDrCrRaw(
+  source: {
+    dr_cr?: string | null;
+    Dr_cr?: string | null;
+    Dr_Cr?: string | null;
+  },
+): string | null {
+  const raw = source.dr_cr ?? source.Dr_cr ?? source.Dr_Cr;
+  if (raw == null || String(raw).trim() === "") return null;
+  return String(raw);
+}
+
+function resolveHeaderDrCr(
+  value: string | null | undefined,
+  emptyFallback: "Dr" | "Cr" = "Cr",
+): "Dr" | "Cr" {
+  if (value == null || String(value).trim() === "") return emptyFallback;
+  return String(value).trim().toLowerCase() === "dr" ? "Dr" : "Cr";
 }
 
 function isUnitedStatesCountry(
@@ -687,6 +700,8 @@ type InvoiceFormData = {
   narration: string;
   irn_no: string;
   fapiao_no: string;
+  /** Header Dr/Cr for payload only (no UI). Reciprocated from source on create. */
+  Dr_Cr: "Cr" | "Dr";
   charges: ChargeItem[];
 };
 
@@ -771,6 +786,8 @@ type ReversableDataResponse = {
   total?: string | number;
   header_total?: string | number;
   Dr_Cr?: string;
+  dr_cr?: string;
+  Dr_cr?: string;
   is_agent?: boolean;
   has_sez?: boolean;
   charges?: Array<{
@@ -792,6 +809,8 @@ type ReversableDataResponse = {
     tax_rate?: string | number | null;
     tax_amount?: string | number | null;
     Dr_Cr?: string;
+    dr_cr?: string;
+    Dr_cr?: string;
     is_tax_row?: boolean;
   }>;
 };
@@ -804,7 +823,6 @@ function applyReversableDataToReverseForm(
     setBillToDisplayName: (v: string | null) => void;
     emptyDaybook: boolean;
     preserveChargeIds?: boolean;
-    invertChargeDrCr?: boolean;
   },
 ) {
   opts.setIsAgentInvoice(data.is_agent === true);
@@ -815,6 +833,7 @@ function applyReversableDataToReverseForm(
         : data.roe
       : null;
   opts.setBillToDisplayName(data.bill_to_name ?? null);
+  const sourceHeaderDrCr = pickDrCrRaw(data);
   form.setValues({
     bill_to: data.bill_to ?? "",
     address: data.address ?? "",
@@ -833,6 +852,7 @@ function applyReversableDataToReverseForm(
     narration: data.narration ?? "",
     irn_no: data.irn_no ?? "",
     fapiao_no: data.fapiao_no ?? "",
+    Dr_Cr: resolveHeaderDrCr(sourceHeaderDrCr, "Cr"),
     charges:
       data.charges && data.charges.length > 0
         ? data.charges.map((c) => {
@@ -901,11 +921,10 @@ function applyReversableDataToReverseForm(
                 Number.isFinite(amountInLocal) ? amountInLocal : null,
               ),
               tax_code: c.tax_code ?? "",
-              dr_cr: opts.invertChargeDrCr
-                ? flipChargeDrCr(c.Dr_Cr)
-                : c.Dr_Cr === "Dr"
-                  ? "Dr"
-                  : "Cr",
+              dr_cr: resolveChargeDrCr({
+                dr_cr: c.dr_cr,
+                Dr_Cr: c.Dr_Cr,
+              }),
               is_tax_row: isTaxRow,
               tax_rate: isTaxRow ? null : parseNullableNumber(c.tax_rate),
               tax_amount: isTaxRow
@@ -1238,6 +1257,7 @@ function InvoiceReverse() {
       narration: "",
       irn_no: "",
       fapiao_no: "",
+      Dr_Cr: "Cr",
       charges: [],
     },
     validate: {
@@ -1768,7 +1788,6 @@ function InvoiceReverse() {
           setBillToDisplayName,
           emptyDaybook: true,
           preserveChargeIds: false,
-          invertChargeDrCr: true,
         });
         setHasSez(Boolean(data.has_sez));
       })
@@ -1919,7 +1938,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Cr",
+        Dr_Cr: values.Dr_Cr ?? "Cr",
         has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
         taxes: [],
@@ -2026,7 +2045,10 @@ function InvoiceReverse() {
               Number.isFinite(amountInLocal) ? amountInLocal : null,
             ),
             tax_code: c.tax_code ?? "",
-            dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+            dr_cr: resolveChargeDrCr({
+              Dr_Cr: c.Dr_Cr,
+              dr_cr: (c as { dr_cr?: string | null }).dr_cr,
+            }),
             is_tax_row: isTaxRow,
             tax_rate: isTaxRow
               ? null
@@ -2259,7 +2281,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: "Cr",
+        Dr_Cr: values.Dr_Cr ?? "Cr",
         has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
       };

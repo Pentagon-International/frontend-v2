@@ -118,6 +118,7 @@ import AirImportJobMaster from "./Transportation/AirImportJob";
 import AirImportJobCreate from "./Transportation/AirImportJob/AirImportJobCreate";
 import AirHouseCreate from "./Transportation/AirImportJob/AirHouseCreate";
 import InvoiceCreate from "./Transportation/Invoice/InvoiceCreate";
+import CreditNoteCreate from "./Transportation/Invoice/CreditNoteCreate";
 import InvoiceReverse from "./Transportation/Invoice/InvoiceReverse";
 import PaymentRequestCreate from "./Transportation/PaymentRequest/PaymentRequest";
 import PaymentRequestApproval from "./Transportation/PaymentRequest/PaymentRequestApproval";
@@ -370,6 +371,7 @@ export {
   AirImportJobCreate,
   AirHouseCreate,
   InvoiceCreate,
+  CreditNoteCreate,
   InvoiceReverse,
   PaymentRequestCreate,
   PaymentRequestApproval,
