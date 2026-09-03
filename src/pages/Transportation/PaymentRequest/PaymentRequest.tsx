@@ -83,11 +83,13 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import {
   collectPartyGstOptions,
+  extractPartyTdsSectionsFromRecord,
   findPartyAddressByGst,
   findPrimaryPartyAddress,
   getPartyGstFromPrimaryAddress,
   type PartyAddressLike,
   recalculatePrqChargeAmounts,
+  resolvePartyTdsSectionCode,
   resolveStateCodeFromPartyAddress,
 } from "../../../utils/paymentRequestChargePrefill";
 
@@ -96,6 +98,17 @@ import {
 function formatReferenceDisplayValue(value: unknown): string {
   const text = String(value ?? "").trim();
   return text !== "" ? text : "-";
+}
+
+function resolvePaymentRequestGstPayloadValues(
+  values: { customer_gst_no?: string; location_gst_no?: string },
+  branchLocationGstNo: string,
+) {
+  return {
+    customer_gst_no: String(values.customer_gst_no ?? "").trim(),
+    location_gst_no:
+      String(values.location_gst_no ?? "").trim() || branchLocationGstNo,
+  };
 }
 
 function clampAmount(value: number | null | undefined): number | null {
@@ -691,9 +704,10 @@ function mapPaymentRequestChargeToPayload(
     subledger_code: c.subledger_code || undefined,
     narration: c.narration || undefined,
     cn_r: c.cn_r || undefined,
-    Dr_Cr: isChargeTdsRow(c) || c.is_tax_row === true
-      ? normalizeChargeDrCr(c.Dr_Cr)
-      : "Dr",
+    Dr_Cr:
+      isChargeTdsRow(c) || c.is_tax_row === true
+        ? normalizeChargeDrCr(c.Dr_Cr)
+        : "Dr",
     job_id: (c.job_no ?? "") || (c.job_id ?? ""),
     currency_id: c.currency_id ? Number(c.currency_id) : undefined,
     unit_id: c.unit_id ? Number(c.unit_id) : undefined,
@@ -729,9 +743,7 @@ function mapApiChargeToChargeItem(
     unit_id: c.unit_id != null ? String(c.unit_id) : "",
     no_of_unit: c.no_of_unit != null ? Number(c.no_of_unit) : null,
     amount_per_unit:
-      c.amount_per_unit != null
-        ? clampAmount(Number(c.amount_per_unit))
-        : null,
+      c.amount_per_unit != null ? clampAmount(Number(c.amount_per_unit)) : null,
     amount: c.amount != null ? clampAmount(Number(c.amount)) : null,
     amount_in_local:
       c.local_amount != null ? clampAmount(Number(c.local_amount)) : null,
@@ -872,6 +884,10 @@ function PaymentRequest() {
   const [
     documentsModalOpened,
     { open: openDocumentsModal, close: closeDocumentsModal },
+  ] = useDisclosure(false);
+  const [
+    rejectModalOpened,
+    { open: openRejectModal, close: closeRejectModal },
   ] = useDisclosure(false);
   const [supportingDocuments, setSupportingDocuments] = useState<
     SupportingDocumentItem[]
@@ -1137,13 +1153,25 @@ function PaymentRequest() {
       customer_gst_no: "",
       rejected_note: "",
       on_hold_note: "",
-      location_gst_no: "",
+      location_gst_no: branchLocationGstNo,
       charges: prefillFromState?.charges ?? [emptyCharge()],
     },
     validate: {
       date: (v) => (!v ? "Date is required" : null),
       payment_type: (v) => (!v ? "Payment Type is required" : null),
       paid_to: (v) => (!v?.trim() ? "Paid To is required" : null),
+      customer_gst_no: (v, values) => {
+        if (!isIndiaUser) return null;
+        const hasAccount =
+          Boolean(values.account_id?.trim()) || Boolean(values.paid_to?.trim());
+        if (!hasAccount) return null;
+        return !String(v ?? "").trim() ? "Vendor GSTN is required" : null;
+      },
+      location_gst_no: (v) => {
+        if (!isIndiaUser) return null;
+        const gst = String(v ?? "").trim() || branchLocationGstNo;
+        return !gst ? "Location GSTN is required" : null;
+      },
     },
   });
 
@@ -1152,12 +1180,20 @@ function PaymentRequest() {
     [partyAddresses],
   );
 
+  const resolvedLocationGstNo =
+    form.values.location_gst_no?.trim() || branchLocationGstNo;
+
+  useEffect(() => {
+    if (!branchLocationGstNo) return;
+    if (!form.values.location_gst_no?.trim()) {
+      form.setFieldValue("location_gst_no", branchLocationGstNo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchLocationGstNo]);
+
   const applyPartyAddressState = useCallback(
     (address: PartyAddressLike | undefined) => {
-      const stateCode = resolveStateCodeFromPartyAddress(
-        address,
-        stateOptions,
-      );
+      const stateCode = resolveStateCodeFromPartyAddress(address, stateOptions);
       if (stateCode) {
         form.setFieldValue("state_code_1", stateCode);
       }
@@ -1359,7 +1395,9 @@ function PaymentRequest() {
     // Keep the "Paid To" text input in sync with the selected supplier.
     form.setFieldValue("paid_to", supplierName);
 
-    const applyStateFromAddresses = (addresses: PartyAddressLike[] | null | undefined) => {
+    const applyStateFromAddresses = (
+      addresses: PartyAddressLike[] | null | undefined,
+    ) => {
       if (!Array.isArray(addresses) || addresses.length === 0) {
         setPartyAddresses([]);
         return;
@@ -1372,14 +1410,24 @@ function PaymentRequest() {
         "customer_gst_no",
         getPartyGstFromPrimaryAddress(addresses),
       );
+      form.clearFieldError("customer_gst_no");
       form.setFieldValue("location_gst_no", branchLocationGstNo);
       applyPartyAddressState(primaryAddress);
+    };
+
+    const applyTdsFromPartyRecord = (record: unknown) => {
+      const nextTdsCode = resolvePartyTdsSectionCode(
+        extractPartyTdsSectionsFromRecord(record),
+        tdsSectionOptions,
+      );
+      form.setFieldValue("tds_section_code", nextTdsCode);
     };
 
     // Auto-fill state from PRIMARY address if already provided in supplier object.
     const addresses = (supplierDetails.addresses_data ??
       supplierDetails.addresses ??
       []) as Array<any>;
+    applyTdsFromPartyRecord(supplierDetails);
 
     if (Array.isArray(addresses) && addresses.length > 0) {
       applyStateFromAddresses(addresses);
@@ -1412,6 +1460,7 @@ function PaymentRequest() {
           (first as any)?.addresses_data ?? (first as any)?.addresses;
 
         applyStateFromAddresses(fetchedAddresses);
+        applyTdsFromPartyRecord(first);
 
         const fetchedId =
           (first as any)?.id ??
@@ -1445,7 +1494,15 @@ function PaymentRequest() {
         // Ignore; state_code_1 can be set manually if fetch fails.
       }
     })();
-  }, [isEditOrViewMode, location.state, stateOptions, form, applyPartyAddressState]);
+  }, [
+    isEditOrViewMode,
+    location.state,
+    stateOptions,
+    tdsSectionOptions,
+    branchLocationGstNo,
+    form,
+    applyPartyAddressState,
+  ]);
 
   // ─── Derive PRQ amount/local amount from prefilled qty × cost/unit × ROE ──
   useEffect(() => {
@@ -1519,6 +1576,11 @@ function PaymentRequest() {
   const handleReject = async () => {
     const validation = form.validate();
     if (validation.hasErrors) return;
+    openRejectModal();
+  };
+
+  const confirmReject = async () => {
+    closeRejectModal();
     shouldRejectRef.current = true;
     await handleSubmit(form.values);
   };
@@ -1561,8 +1623,7 @@ function PaymentRequest() {
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
-        customer_gst_no: values.customer_gst_no ?? "",
-        location_gst_no: values.location_gst_no ?? "",
+        ...resolvePaymentRequestGstPayloadValues(values, branchLocationGstNo),
         date: formatDate(values.date),
         payment_type: values.payment_type ?? "",
         vouchar_type: values.voucher_type ?? "",
@@ -1745,8 +1806,7 @@ function PaymentRequest() {
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
-        customer_gst_no: values.customer_gst_no ?? "",
-        location_gst_no: values.location_gst_no ?? "",
+        ...resolvePaymentRequestGstPayloadValues(values, branchLocationGstNo),
         date: formatDate(values.date),
         payment_type: values.payment_type ?? "",
         vouchar_type: values.voucher_type ?? "",
@@ -1998,8 +2058,7 @@ function PaymentRequest() {
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
-        customer_gst_no: values.customer_gst_no ?? "",
-        location_gst_no: values.location_gst_no ?? "",
+        ...resolvePaymentRequestGstPayloadValues(values, branchLocationGstNo),
         date: formatDate(values.date),
         payment_type: values.payment_type ?? "",
         vouchar_type: values.voucher_type ?? "",
@@ -2152,8 +2211,7 @@ function PaymentRequest() {
               account_id: d.account_id != null ? String(d.account_id) : "",
               account_code: d.account_code ?? "",
               currency: d.currency_code ?? values.currency,
-              amount:
-                d.amount != null ? clampAmount(Number(d.amount)) : null,
+              amount: d.amount != null ? clampAmount(Number(d.amount)) : null,
               crj_date: normalizeDate(d.crj_date),
               paid_to_type: d.paid_to_type ?? "",
               not_over: d.not_over ?? "",
@@ -2173,7 +2231,7 @@ function PaymentRequest() {
               customer_gst_no: d.customer_gst_no ?? "",
               rejected_note: d.rejected_note ?? "",
               on_hold_note: d.on_hold_note ?? "",
-              location_gst_no: d.location_gst_no ?? "",
+              location_gst_no: d.location_gst_no?.trim() || branchLocationGstNo,
               charges:
                 d.charges && d.charges.length > 0
                   ? d.charges.map(mapApiChargeToChargeItem)
@@ -2257,7 +2315,7 @@ function PaymentRequest() {
       customer_gst_no: d.customer_gst_no ?? "",
       rejected_note: d.rejected_note ?? "",
       on_hold_note: d.on_hold_note ?? "",
-      location_gst_no: d.location_gst_no ?? "",
+      location_gst_no: d.location_gst_no?.trim() || branchLocationGstNo,
       charges:
         d.charges && d.charges.length > 0
           ? d.charges.map(mapApiChargeToChargeItem)
@@ -2871,7 +2929,9 @@ function PaymentRequest() {
                   form.setFieldValue("account_id", "");
                   form.setFieldValue("account_code", "");
                   form.setFieldValue("customer_gst_no", "");
-                  form.setFieldValue("location_gst_no", "");
+                  if (branchLocationGstNo) {
+                    form.setFieldValue("location_gst_no", branchLocationGstNo);
+                  }
                   form.setFieldValue("paid_to", "");
                   setAccountNameDisplay(null);
                   setPartyAddresses([]);
@@ -2928,13 +2988,12 @@ function PaymentRequest() {
                   form.setFieldValue("paid_to", selectedAccountName);
 
                   const addresses = (originalData as any)?.addresses_data as
-                    | PartyAddressLike[]
-                    | undefined;
+                    PartyAddressLike[] | undefined;
 
                   if (!value) {
                     form.setFieldValue("customer_gst_no", "");
-                    form.setFieldValue("location_gst_no", "");
                     form.setFieldValue("state_code_1", "");
+                    form.setFieldValue("tds_section_code", "");
                     setPartyAddresses([]);
                     return;
                   }
@@ -2945,7 +3004,15 @@ function PaymentRequest() {
                     "customer_gst_no",
                     getPartyGstFromPrimaryAddress(addresses),
                   );
+                  form.clearFieldError("customer_gst_no");
                   form.setFieldValue("location_gst_no", branchLocationGstNo);
+                  form.setFieldValue(
+                    "tds_section_code",
+                    resolvePartyTdsSectionCode(
+                      extractPartyTdsSectionsFromRecord(originalData),
+                      tdsSectionOptions,
+                    ),
+                  );
 
                   applyPartyAddressState(findPrimaryPartyAddress(addresses));
                 }}
@@ -3131,7 +3198,8 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            {/* Hide status-related notes on the initial "Save" (create) flow. */}
+            {/* Rejected Note is now collected via the rejection modal.
+               On Hold Note is not needed for now.
             {saveResponse?.id ? (
               <>
                 <Grid.Col span={3}>
@@ -3162,19 +3230,24 @@ function PaymentRequest() {
                   />
                 </Grid.Col>
               </>
-            ) : null}
+            ) : null} */}
           </Grid>
 
-          <Group justify="space-between" align="center" mt="md" mb="sm">
-            <Group gap="xl">
-              <Group gap="xs" align="center">
-                <Text size="sm" style={{ fontFamily: "Inter" }}>
-                  <Text component="span" fw={600} c="#105476">
-                    Customer GSTN :
-                  </Text>{" "}
-                  {partyGstOptions.length <= 1
-                    ? formatReferenceDisplayValue(form.values.customer_gst_no)
-                    : null}
+          <Group
+            justify="space-between"
+            align="flex-start"
+            mt="md"
+            mb="sm"
+            wrap="nowrap"
+          >
+            <Group gap="lg" align="center" wrap="nowrap" style={{ flexShrink: 0 }}>
+              <Group gap={6} align="center" wrap="nowrap">
+                <Text size="sm" fw={600} c="#105476" style={{ fontFamily: "Inter", whiteSpace: "nowrap" }}>
+                  Vendor GSTN
+                  {isIndiaUser ? (
+                    <Text component="span" c="red">{" "}*</Text>
+                  ) : null}
+                  :
                 </Text>
                 {partyGstOptions.length > 1 ? (
                   <Dropdown
@@ -3187,6 +3260,7 @@ function PaymentRequest() {
                     onChange={(gst) => {
                       if (!gst) return;
                       form.setFieldValue("customer_gst_no", gst);
+                      form.clearFieldError("customer_gst_no");
                       applyPartyAddressState(
                         findPartyAddressByGst(partyAddresses, gst),
                       );
@@ -3194,43 +3268,67 @@ function PaymentRequest() {
                     disabled={isReadOnly}
                     searchable
                     dropdownZIndex={chargesDropdownZIndex}
-                    styles={inputStyles}
+                    styles={{
+                      ...inputStyles,
+                      root: { minWidth: 200 },
+                    }}
+                    error={form.errors.customer_gst_no}
                   />
+                ) : (
+                  <Text size="sm" style={{ fontFamily: "Inter" }}>
+                    {formatReferenceDisplayValue(form.values.customer_gst_no)}
+                  </Text>
+                )}
+                {partyGstOptions.length <= 1 && form.errors.customer_gst_no ? (
+                  <Text size="xs" c="red" style={{ whiteSpace: "nowrap" }}>
+                    {form.errors.customer_gst_no}
+                  </Text>
                 ) : null}
               </Group>
-              <Text size="sm" style={{ fontFamily: "Inter" }}>
-                <Text component="span" fw={600} c="#105476">
-                  Location GSTN :
-                </Text>{" "}
-                {formatReferenceDisplayValue(form.values.location_gst_no)}
-              </Text>
+              <Group gap={6} align="center" wrap="nowrap">
+                <Text size="sm" fw={600} c="#105476" style={{ fontFamily: "Inter", whiteSpace: "nowrap" }}>
+                  Location GSTN
+                  {isIndiaUser ? (
+                    <Text component="span" c="red">{" "}*</Text>
+                  ) : null}
+                  :
+                </Text>
+                <Text size="sm" style={{ fontFamily: "Inter" }}>
+                  {formatReferenceDisplayValue(resolvedLocationGstNo)}
+                </Text>
+                {form.errors.location_gst_no ? (
+                  <Text size="xs" c="red" style={{ whiteSpace: "nowrap" }}>
+                    {form.errors.location_gst_no}
+                  </Text>
+                ) : null}
+              </Group>
             </Group>
-            <Group>
-            <Button
-              type="button"
-              variant="light"
-              color="#105476"
-              size="sm"
-              onClick={handleCalculateGst}
-              loading={isSubmitting}
-              disabled={isReadOnly}
-            >
-              Calculate GST
-            </Button>
-            {isIndiaUser &&
-            String(form.values.tds_section_code ?? "").trim() !== "" ? (
+            <Group justify="flex-end" style={{ flexShrink: 0 }}>
               <Button
                 type="button"
                 variant="light"
                 color="#105476"
                 size="sm"
-                onClick={handleCalculateTds}
+                onClick={handleCalculateGst}
                 loading={isSubmitting}
-                disabled={isReadOnly || !isPaidToSelected}
+                disabled={isReadOnly}
               >
-                Calculate TDS
+                Calculate GST
               </Button>
-            ) : null}
+              {isIndiaUser &&
+              String(form.values.tds_section_code ?? "").trim() !== "" ? (
+                <Button
+                  type="button"
+                  variant="light"
+                  color="#105476"
+                  size="sm"
+                  onClick={handleCalculateTds}
+                  loading={isSubmitting}
+                  disabled={isReadOnly || !isPaidToSelected}
+                >
+                  Calculate TDS
+                </Button>
+              ) : null}
             </Group>
           </Group>
 
@@ -3251,109 +3349,109 @@ function PaymentRequest() {
               )}
 
               <Tabs.Panel value="charges">
-            <Box>
-              {/* Charges header row (sticky) */}
-              <Grid
-                w="100%"
-                py="sm"
-                mb="sm"
-                gutter="xs"
-                style={{
-                  flexWrap: "nowrap",
-                  position: "sticky",
-                  top: 45,
-                  zIndex: 2,
-                  backgroundColor: "white",
-                  fontWeight: 600,
-                  color: "#105476",
-                }}
-              >
-                <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
-                  SNo
-                </Grid.Col>
-                {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                <Box>
+                  {/* Charges header row (sticky) */}
+                  <Grid
+                    w="100%"
+                    py="sm"
+                    mb="sm"
+                    gutter="xs"
+                    style={{
+                      flexWrap: "nowrap",
+                      position: "sticky",
+                      top: 45,
+                      zIndex: 2,
+                      backgroundColor: "white",
+                      fontWeight: 600,
+                      color: "#105476",
+                    }}
+                  >
+                    <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
+                      SNo
+                    </Grid.Col>
+                    {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
-                <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
-                  Job Id
-                </Grid.Col>
-                {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
+                      Job Id
+                    </Grid.Col>
+                    {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 Subjob
               </Grid.Col>
               <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 C/N/R
               </Grid.Col> */}
-                <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
-                  Charge
-                </Grid.Col>
-                <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
-                  Account Name
-                </Grid.Col>
-                <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
-                  Subledger
-                </Grid.Col>
-                <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-                  Currency
-                </Grid.Col>
-                <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
-                  ROE
-                </Grid.Col>
-                <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-                  Unit
-                </Grid.Col>
-                <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
-                  No of Unit
-                </Grid.Col>
-                <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
-                  Amt/Unit
-                </Grid.Col>
-                <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
-                  Amount
-                </Grid.Col>
-                <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
-                  Local Amt
-                </Grid.Col>
-                <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-                  SAC Code
-                </Grid.Col>
-                {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
+                      Charge
+                    </Grid.Col>
+                    <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
+                      Account Name
+                    </Grid.Col>
+                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                      Subledger
+                    </Grid.Col>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                      Currency
+                    </Grid.Col>
+                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                      ROE
+                    </Grid.Col>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                      Unit
+                    </Grid.Col>
+                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                      No of Unit
+                    </Grid.Col>
+                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                      Amt/Unit
+                    </Grid.Col>
+                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                      Amount
+                    </Grid.Col>
+                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                      Local Amt
+                    </Grid.Col>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                      SAC Code
+                    </Grid.Col>
+                    {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
               </Grid.Col> */}
-                {!isReadOnly && (
-                  <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
-                    Actions
-                  </Grid.Col>
-                )}
-              </Grid>
+                    {!isReadOnly && (
+                      <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                        Actions
+                      </Grid.Col>
+                    )}
+                  </Grid>
 
-              {/* Charge rows */}
-              {form.values.charges.map((charge, index) => (
-                <Grid
-                  key={index}
-                  w="100%"
-                  gutter="xs"
-                  mt={index !== 0 ? "sm" : "xs"}
-                  style={{ flexWrap: "nowrap" }}
-                >
-                  {/* SNo */}
-                  <Grid.Col span={0.4}>
-                    <TextInput
-                      value={String(index + 1)}
-                      readOnly
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                          backgroundColor: "var(--mantine-color-gray-0)",
-                          textAlign: "center",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+                  {/* Charge rows */}
+                  {form.values.charges.map((charge, index) => (
+                    <Grid
+                      key={index}
+                      w="100%"
+                      gutter="xs"
+                      mt={index !== 0 ? "sm" : "xs"}
+                      style={{ flexWrap: "nowrap" }}
+                    >
+                      {/* SNo */}
+                      <Grid.Col span={0.4}>
+                        <TextInput
+                          value={String(index + 1)}
+                          readOnly
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                              backgroundColor: "var(--mantine-color-gray-0)",
+                              textAlign: "center",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                  {/* Seg */}
-                  {/* <Grid.Col span={0.5}>
+                      {/* Seg */}
+                      {/* <Grid.Col span={0.5}>
                   <TextInput
                     placeholder="Seg"
                     value={charge.segment}
@@ -3374,59 +3472,59 @@ function PaymentRequest() {
                   />
                 </Grid.Col> */}
 
-                  {/* Job No */}
-                  <Grid.Col span={0.98}>
-                    {isJobChargesPrefillFlow ? (
-                      <Dropdown
-                        placeholder="Select job id"
-                        data={prefillJobOptions}
-                        value={charge.job_no || null}
-                        onChange={(value) =>
-                          form.setFieldValue(
-                            `charges.${index}.job_no`,
-                            value ?? "",
-                          )
-                        }
-                        searchable
-                        readOnly={isReadOnly}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    ) : (
-                      <SearchableSelect
-                        placeholder="Search by job id"
-                        apiEndpoint={URL.filterJobCreate}
-                        value={charge.job_no || null}
-                        displayValue={charge.job_no || undefined}
-                        minSearchLength={1}
-                        searchFields={["shipment_id", "job_id", "type"]}
-                        displayFormat={jobCreateDropdownDisplayFormat}
-                        readOnly={isReadOnly}
-                        dropdownZIndex={chargesDropdownZIndex}
-                        onChange={(value) =>
-                          form.setFieldValue(
-                            `charges.${index}.job_no`,
-                            String(value ?? "").trim(),
-                          )
-                        }
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
-                    )}
-                  </Grid.Col>
+                      {/* Job No */}
+                      <Grid.Col span={0.98}>
+                        {isJobChargesPrefillFlow ? (
+                          <Dropdown
+                            placeholder="Select job id"
+                            data={prefillJobOptions}
+                            value={charge.job_no || null}
+                            onChange={(value) =>
+                              form.setFieldValue(
+                                `charges.${index}.job_no`,
+                                value ?? "",
+                              )
+                            }
+                            searchable
+                            readOnly={isReadOnly}
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                            }}
+                          />
+                        ) : (
+                          <SearchableSelect
+                            placeholder="Search by job id"
+                            apiEndpoint={URL.filterJobCreate}
+                            value={charge.job_no || null}
+                            displayValue={charge.job_no || undefined}
+                            minSearchLength={1}
+                            searchFields={["shipment_id", "job_id", "type"]}
+                            displayFormat={jobCreateDropdownDisplayFormat}
+                            readOnly={isReadOnly}
+                            dropdownZIndex={chargesDropdownZIndex}
+                            onChange={(value) =>
+                              form.setFieldValue(
+                                `charges.${index}.job_no`,
+                                String(value ?? "").trim(),
+                              )
+                            }
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                            }}
+                          />
+                        )}
+                      </Grid.Col>
 
-                  {/* Subjob */}
-                  {/* <Grid.Col span={0.6}>
+                      {/* Subjob */}
+                      {/* <Grid.Col span={0.6}>
                   <TextInput
                     placeholder="Subjob"
                     value={charge.sub_job}
@@ -3447,8 +3545,8 @@ function PaymentRequest() {
                   />
                 </Grid.Col> */}
 
-                  {/* C/N/R */}
-                  {/* <Grid.Col span={0.6}>
+                      {/* C/N/R */}
+                      {/* <Grid.Col span={0.6}>
                   <Dropdown
                     placeholder="C/N/R"
                     data={CN_R_OPTIONS}
@@ -3470,496 +3568,524 @@ function PaymentRequest() {
                   />
                 </Grid.Col> */}
 
-                  {/* Charge */}
-                  <Grid.Col span={1.2}>
-                    <SearchableSelect
-                      placeholder="Type charge name"
-                      apiEndpoint={(URL as any).chargeMaster}
-                      searchFields={["charge_name", "charge_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.id ?? ""),
-                        label: String(item.charge_name ?? ""),
-                      })}
-                      value={
-                        charge.charge_id != null
-                          ? String(charge.charge_id)
-                          : null
-                      }
-                      displayValue={charge.charge_name || undefined}
-                      onChange={(value, selectedData) => {
-                        const chargeId = value ? Number(value) : null;
-                        const chargeName = selectedData?.label ?? "";
-                        form.setFieldValue(
-                          `charges.${index}.charge_id`,
-                          chargeId,
-                        );
-                        form.setFieldValue(
-                          `charges.${index}.charge_name`,
-                          chargeName,
-                        );
-                        form.setFieldValue(`charges.${index}.tax_code`, "");
-                        if (chargeErrors[index]?.charge_name) {
-                          const newErrors = { ...chargeErrors };
-                          if (newErrors[index]) {
-                            delete newErrors[index].charge_name;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
+                      {/* Charge */}
+                      <Grid.Col span={1.2}>
+                        <SearchableSelect
+                          placeholder="Type charge name"
+                          apiEndpoint={(URL as any).chargeMaster}
+                          searchFields={["charge_name", "charge_code"]}
+                          displayFormat={(item: Record<string, unknown>) => ({
+                            value: String(item.id ?? ""),
+                            label: String(item.charge_name ?? ""),
+                          })}
+                          value={
+                            charge.charge_id != null
+                              ? String(charge.charge_id)
+                              : null
                           }
-                          setChargeErrors(newErrors);
-                        }
-                        // Auto-fetch SAC code whenever a charge is selected/changed
-                        if (chargeId != null) {
-                          setSacCodeLoadingByIndex((prev) => ({
-                            ...prev,
-                            [index]: true,
-                          }));
-                          fetchGetEffectiveSac([
-                            {
-                              charge_id: chargeId,
-                              service_id: jobServiceId ?? 0,
-                            },
-                          ])
-                            .then((data) => {
-                              const item = data[0];
-                              if (
-                                item?.sac_code != null &&
-                                item.sac_code !== ""
-                              ) {
-                                form.setFieldValue(
-                                  `charges.${index}.tax_code`,
-                                  item.sac_code,
-                                );
+                          displayValue={charge.charge_name || undefined}
+                          onChange={(value, selectedData) => {
+                            const chargeId = value ? Number(value) : null;
+                            const chargeName = selectedData?.label ?? "";
+                            form.setFieldValue(
+                              `charges.${index}.charge_id`,
+                              chargeId,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.charge_name`,
+                              chargeName,
+                            );
+                            form.setFieldValue(`charges.${index}.tax_code`, "");
+                            if (chargeErrors[index]?.charge_name) {
+                              const newErrors = { ...chargeErrors };
+                              if (newErrors[index]) {
+                                delete newErrors[index].charge_name;
+                                if (
+                                  Object.keys(newErrors[index]).length === 0
+                                ) {
+                                  delete newErrors[index];
+                                }
                               }
-                            })
-                            .finally(() => {
+                              setChargeErrors(newErrors);
+                            }
+                            // Auto-fetch SAC code whenever a charge is selected/changed
+                            if (chargeId != null) {
                               setSacCodeLoadingByIndex((prev) => ({
                                 ...prev,
-                                [index]: false,
+                                [index]: true,
                               }));
-                            });
-                        }
-                      }}
-                      withAsterisk
-                      readOnly={isReadOnly}
-                      error={chargeErrors[index]?.charge_name}
-                      minSearchLength={2}
-                      dropdownZIndex={chargesDropdownZIndex}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+                              fetchGetEffectiveSac([
+                                {
+                                  charge_id: chargeId,
+                                  service_id: jobServiceId ?? 0,
+                                },
+                              ])
+                                .then((data) => {
+                                  const item = data[0];
+                                  if (
+                                    item?.sac_code != null &&
+                                    item.sac_code !== ""
+                                  ) {
+                                    form.setFieldValue(
+                                      `charges.${index}.tax_code`,
+                                      item.sac_code,
+                                    );
+                                  }
+                                })
+                                .finally(() => {
+                                  setSacCodeLoadingByIndex((prev) => ({
+                                    ...prev,
+                                    [index]: false,
+                                  }));
+                                });
+                            }
+                          }}
+                          withAsterisk
+                          readOnly={isReadOnly}
+                          error={chargeErrors[index]?.charge_name}
+                          minSearchLength={2}
+                          dropdownZIndex={chargesDropdownZIndex}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                  {/* Account Name */}
-                  <Grid.Col span={1.1}>
-                    <SearchableSelect
-                      placeholder="Search by account name"
-                      apiEndpoint={URL.chartOfAccounts}
-                      value={
-                        charge.account_id != null
-                          ? String(charge.account_id)
-                          : null
-                      }
-                      dropdownZIndex={chargesDropdownZIndex}
-                      minSearchLength={1}
-                      searchFields={[
-                        "gl_name",
-                        "gl_account_code",
-                        "account_name",
-                        "id",
-                      ]}
-                      displayFormat={(item: Record<string, unknown>) => {
-                        const id = String(item.id ?? "").trim();
-                        const glName = String(item.gl_name ?? "").trim();
-                        const gl = String(item.gl_account_code ?? "").trim();
-                        const name = String(item.account_name ?? "").trim();
-                        return {
-                          value: id,
-                          label: [name, gl, glName].filter(Boolean).join(" - "),
-                        };
-                      }}
-                      displayValue={
-                        charge.account_name
-                          ? `${charge.account_name}${
-                              charge.account_code
-                                ? ` - ${charge.account_code}`
-                                : ""
-                            }`
-                          : charge.account_code || undefined
-                      }
-                      returnOriginalData
-                      onChange={(value, _selectedData, originalData) => {
-                        if (!value || !originalData) {
-                          form.setFieldValue(
-                            `charges.${index}.account_id`,
-                            null,
-                          );
-                          form.setFieldValue(
-                            `charges.${index}.account_code`,
-                            "",
-                          );
-                          form.setFieldValue(
-                            `charges.${index}.subledger_code`,
-                            "",
-                          );
-                          form.setFieldValue(
-                            `charges.${index}.account_name`,
-                            "",
-                          );
-                          return;
-                        }
-                        form.setFieldValue(
-                          `charges.${index}.account_id`,
-                          Number.isFinite(Number(value))
-                            ? Number(value)
-                            : null,
-                        );
-                        form.setFieldValue(
-                          `charges.${index}.account_code`,
-                          originalData.gl_account_code !== undefined &&
-                            originalData.gl_account_code !== null
-                            ? String(originalData.gl_account_code)
-                            : "",
-                        );
-                        form.setFieldValue(
-                          `charges.${index}.subledger_code`,
-                          originalData.sl_code !== undefined &&
-                            originalData.sl_code !== null
-                            ? String(originalData.sl_code)
-                            : "",
-                        );
-                        form.setFieldValue(
-                          `charges.${index}.account_name`,
-                          [
-                            String(
-                              (originalData as Record<string, unknown>)
-                                .gl_account_code ?? "",
-                            ).trim(),
-                            String(
-                              (originalData as Record<string, unknown>)
-                                .account_name ?? "",
-                            ).trim(),
-                            String(
-                              (originalData as Record<string, unknown>)
-                                .gl_name ?? "",
-                            ).trim(),
-                          ]
-                            .filter(Boolean)
-                            .join(" - "),
-                        );
-                      }}
-                      disabled={
-                        isReadOnly ||
-                        (String(charge.job_no ?? "").trim() !== "" &&
-                          charge.charge_id != null)
-                      }
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-
-                  {/* Subledger */}
-                  <Grid.Col span={0.75}>
-                    <TextInput
-                      placeholder="Subledger"
-                      value={charge.subledger_code ?? ""}
-                      readOnly
-                      disabled={
-                        isReadOnly ||
-                        (String(charge.job_no ?? "").trim() !== "" &&
-                          charge.charge_id != null)
-                      }
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-
-                  {/* Currency */}
-                  <Grid.Col span={0.9}>
-                    <Dropdown
-                      placeholder="Curr."
-                      searchable
-                      data={currencyOptions}
-                      dropdownZIndex={chargesDropdownZIndex}
-                      value={charge.currency_id || charge.currency || null}
-                      readOnly={isReadOnly}
-                      onChange={(value) => {
-                        const v = value ?? "";
-                        form.setFieldValue(`charges.${index}.currency_id`, v);
-                        const opt = currencyOptions.find((o) => o.value === v);
-                        const code = opt ? (opt.label ?? opt.value) : v;
-                        form.setFieldValue(`charges.${index}.currency`, code);
-                        const newRoe = code ? getRoeValue(code) : null;
-                        if (newRoe !== null) {
-                          form.setFieldValue(`charges.${index}.roe`, newRoe);
-                        }
-                        const currentCharge = form.values.charges[index];
-                        const amt = currentCharge.amount;
-                        if (
-                          amt != null &&
-                          amt > 0 &&
-                          newRoe != null &&
-                          newRoe > 0
-                        ) {
-                          const local = clampAmount(amt * newRoe);
-                          if (local != null)
-                            form.setFieldValue(
-                              `charges.${index}.amount_in_local`,
-                              local,
-                            );
-                        }
-                      }}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-
-                  {/* ROE */}
-                  <Grid.Col span={0.5}>
-                    <NumberInput
-                      placeholder="ROE"
-                      min={0}
-                      hideControls
-                      readOnly={isReadOnly}
-                      value={charge.roe || undefined}
-                      onChange={(value) => {
-                        const roe = value as number | null;
-                        form.setFieldValue(`charges.${index}.roe`, roe);
-                        const currentCharge = form.values.charges[index];
-                        const amt = currentCharge.amount;
-                        if (amt != null && amt > 0 && roe != null && roe > 0) {
-                          const local = clampAmount(amt * roe);
-                          form.setFieldValue(
-                            `charges.${index}.amount_in_local`,
-                            local,
-                          );
-                        }
-                      }}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-
-                  {/* Unit */}
-                  <Grid.Col span={0.9}>
-                    <Dropdown
-                      placeholder="Unit"
-                      searchable
-                      data={unitOptions}
-                      dropdownZIndex={chargesDropdownZIndex}
-                      value={charge.unit_id || charge.unit_code || null}
-                      readOnly={isReadOnly}
-                      onChange={(value) => {
-                        const v = value ?? "";
-                        form.setFieldValue(`charges.${index}.unit_id`, v);
-                        const opt = unitOptions.find((o) => o.value === v);
-                        form.setFieldValue(
-                          `charges.${index}.unit_code`,
-                          opt ? String(opt.label || opt.value) : v,
-                        );
-                      }}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-
-                  {/* No of Unit */}
-                  <Grid.Col span={0.65}>
-                    <NumberInput
-                      placeholder="Units"
-                      min={0}
-                      hideControls
-                      readOnly={isReadOnly}
-                      value={charge.no_of_unit ?? undefined}
-                      onChange={(value) => {
-                        const noOfUnit = value as number | null;
-                        form.setFieldValue(
-                          `charges.${index}.no_of_unit`,
-                          noOfUnit,
-                        );
-                        const currentCharge = form.values.charges[index];
-                        if (
-                          noOfUnit != null &&
-                          noOfUnit > 0 &&
-                          currentCharge.amount_per_unit != null &&
-                          currentCharge.amount_per_unit > 0
-                        ) {
-                          const amt = clampAmount(
-                            noOfUnit * currentCharge.amount_per_unit,
-                          );
-                          form.setFieldValue(`charges.${index}.amount`, amt);
-                          const roe = currentCharge.roe;
-                          if (amt != null && roe != null && roe > 0) {
-                            form.setFieldValue(
-                              `charges.${index}.amount_in_local`,
-                              clampAmount(amt * roe),
-                            );
+                      {/* Account Name */}
+                      <Grid.Col span={1.1}>
+                        <SearchableSelect
+                          placeholder="Search by account name"
+                          apiEndpoint={URL.chartOfAccounts}
+                          value={
+                            charge.account_id != null
+                              ? String(charge.account_id)
+                              : null
                           }
-                        }
-                      }}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
-
-                  {/* Amount per Unit */}
-                  <Grid.Col span={0.85}>
-                    <NumberInput
-                      placeholder="Amt/Unit"
-                      min={0}
-                      hideControls
-                      decimalScale={amountDecimalScale}
-                      readOnly={isReadOnly}
-                      value={charge.amount_per_unit ?? undefined}
-                      onChange={(value) => {
-                        const amtPerUnit = value as number | null;
-                        form.setFieldValue(
-                          `charges.${index}.amount_per_unit`,
-                          amtPerUnit,
-                        );
-                        const currentCharge = form.values.charges[index];
-                        if (
-                          amtPerUnit != null &&
-                          amtPerUnit > 0 &&
-                          currentCharge.no_of_unit != null &&
-                          currentCharge.no_of_unit > 0
-                        ) {
-                          const amt = clampAmount(
-                            currentCharge.no_of_unit * amtPerUnit,
-                          );
-                          form.setFieldValue(`charges.${index}.amount`, amt);
-                          const roe = currentCharge.roe;
-                          if (amt != null && roe != null && roe > 0) {
-                            form.setFieldValue(
-                              `charges.${index}.amount_in_local`,
-                              clampAmount(amt * roe),
-                            );
+                          dropdownZIndex={chargesDropdownZIndex}
+                          minSearchLength={1}
+                          searchFields={[
+                            "gl_name",
+                            "gl_account_code",
+                            "account_name",
+                            "id",
+                          ]}
+                          displayFormat={(item: Record<string, unknown>) => {
+                            const id = String(item.id ?? "").trim();
+                            const glName = String(item.gl_name ?? "").trim();
+                            const gl = String(
+                              item.gl_account_code ?? "",
+                            ).trim();
+                            const name = String(item.account_name ?? "").trim();
+                            return {
+                              value: id,
+                              label: [name, gl, glName]
+                                .filter(Boolean)
+                                .join(" - "),
+                            };
+                          }}
+                          displayValue={
+                            charge.account_name
+                              ? `${charge.account_name}${
+                                  charge.account_code
+                                    ? ` - ${charge.account_code}`
+                                    : ""
+                                }`
+                              : charge.account_code || undefined
                           }
-                        }
-                      }}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+                          returnOriginalData
+                          onChange={(value, _selectedData, originalData) => {
+                            if (!value || !originalData) {
+                              form.setFieldValue(
+                                `charges.${index}.account_id`,
+                                null,
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.account_code`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.subledger_code`,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.account_name`,
+                                "",
+                              );
+                              return;
+                            }
+                            form.setFieldValue(
+                              `charges.${index}.account_id`,
+                              Number.isFinite(Number(value))
+                                ? Number(value)
+                                : null,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.account_code`,
+                              originalData.gl_account_code !== undefined &&
+                                originalData.gl_account_code !== null
+                                ? String(originalData.gl_account_code)
+                                : "",
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.subledger_code`,
+                              originalData.sl_code !== undefined &&
+                                originalData.sl_code !== null
+                                ? String(originalData.sl_code)
+                                : "",
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.account_name`,
+                              [
+                                String(
+                                  (originalData as Record<string, unknown>)
+                                    .gl_account_code ?? "",
+                                ).trim(),
+                                String(
+                                  (originalData as Record<string, unknown>)
+                                    .account_name ?? "",
+                                ).trim(),
+                                String(
+                                  (originalData as Record<string, unknown>)
+                                    .gl_name ?? "",
+                                ).trim(),
+                              ]
+                                .filter(Boolean)
+                                .join(" - "),
+                            );
+                          }}
+                          disabled={
+                            isReadOnly ||
+                            (String(charge.job_no ?? "").trim() !== "" &&
+                              charge.charge_id != null)
+                          }
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                  {/* Amount */}
-                  <Grid.Col span={0.85}>
-                    <NumberInput
-                      placeholder="Amount"
-                      min={0}
-                      hideControls
-                      decimalScale={amountDecimalScale}
-                      readOnly={isReadOnly}
-                      value={charge.amount ?? undefined}
-                      onChange={(value) => {
-                        const amt = value as number | null;
-                        form.setFieldValue(`charges.${index}.amount`, amt);
-                        const roe = form.values.charges[index].roe;
-                        if (amt != null && roe != null && roe > 0) {
-                          form.setFieldValue(
-                            `charges.${index}.amount_in_local`,
-                            clampAmount(amt * roe),
-                          );
-                        }
-                      }}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+                      {/* Subledger */}
+                      <Grid.Col span={0.75}>
+                        <TextInput
+                          placeholder="Subledger"
+                          value={charge.subledger_code ?? ""}
+                          readOnly
+                          disabled={
+                            isReadOnly ||
+                            (String(charge.job_no ?? "").trim() !== "" &&
+                              charge.charge_id != null)
+                          }
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                  {/* Local Amount */}
-                  <Grid.Col span={0.85}>
-                    <NumberInput
-                      placeholder="Local Amt"
-                      hideControls
-                      decimalScale={amountDecimalScale}
-                      {...getAmountNumberInputFormatProps()}
-                      readOnly
-                      value={charge.amount_in_local ?? undefined}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                          backgroundColor: "var(--mantine-color-gray-0)",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+                      {/* Currency */}
+                      <Grid.Col span={0.9}>
+                        <Dropdown
+                          placeholder="Curr."
+                          searchable
+                          data={currencyOptions}
+                          dropdownZIndex={chargesDropdownZIndex}
+                          value={charge.currency_id || charge.currency || null}
+                          readOnly={isReadOnly}
+                          onChange={(value) => {
+                            const v = value ?? "";
+                            form.setFieldValue(
+                              `charges.${index}.currency_id`,
+                              v,
+                            );
+                            const opt = currencyOptions.find(
+                              (o) => o.value === v,
+                            );
+                            const code = opt ? (opt.label ?? opt.value) : v;
+                            form.setFieldValue(
+                              `charges.${index}.currency`,
+                              code,
+                            );
+                            const newRoe = code ? getRoeValue(code) : null;
+                            if (newRoe !== null) {
+                              form.setFieldValue(
+                                `charges.${index}.roe`,
+                                newRoe,
+                              );
+                            }
+                            const currentCharge = form.values.charges[index];
+                            const amt = currentCharge.amount;
+                            if (
+                              amt != null &&
+                              amt > 0 &&
+                              newRoe != null &&
+                              newRoe > 0
+                            ) {
+                              const local = clampAmount(amt * newRoe);
+                              if (local != null)
+                                form.setFieldValue(
+                                  `charges.${index}.amount_in_local`,
+                                  local,
+                                );
+                            }
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                  {/* SAC Code */}
-                  <Grid.Col span={1}>
-                    <Dropdown
-                      searchable
-                      clearable
-                      placeholder="SAC Code"
-                      data={sacCodeOptionsForForm}
-                      value={String(charge.tax_code ?? "").trim() || null}
-                      onChange={(val) =>
-                        form.setFieldValue(
-                          `charges.${index}.tax_code`,
-                          String(val ?? "").trim(),
-                        )
-                      }
-                      disabled={isReadOnly}
-                      dropdownZIndex={chargesDropdownZIndex}
-                      styles={{
-                        input: {
-                          fontSize: "13px",
-                          fontFamily: "Inter",
-                          height: "36px",
-                        },
-                      }}
-                    />
-                  </Grid.Col>
+                      {/* ROE */}
+                      <Grid.Col span={0.5}>
+                        <NumberInput
+                          placeholder="ROE"
+                          min={0}
+                          hideControls
+                          readOnly={isReadOnly}
+                          value={charge.roe || undefined}
+                          onChange={(value) => {
+                            const roe = value as number | null;
+                            form.setFieldValue(`charges.${index}.roe`, roe);
+                            const currentCharge = form.values.charges[index];
+                            const amt = currentCharge.amount;
+                            if (
+                              amt != null &&
+                              amt > 0 &&
+                              roe != null &&
+                              roe > 0
+                            ) {
+                              const local = clampAmount(amt * roe);
+                              form.setFieldValue(
+                                `charges.${index}.amount_in_local`,
+                                local,
+                              );
+                            }
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
 
-                  {/* Tax */}
-                  {/* <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
+                      {/* Unit */}
+                      <Grid.Col span={0.9}>
+                        <Dropdown
+                          placeholder="Unit"
+                          searchable
+                          data={unitOptions}
+                          dropdownZIndex={chargesDropdownZIndex}
+                          value={charge.unit_id || charge.unit_code || null}
+                          readOnly={isReadOnly}
+                          onChange={(value) => {
+                            const v = value ?? "";
+                            form.setFieldValue(`charges.${index}.unit_id`, v);
+                            const opt = unitOptions.find((o) => o.value === v);
+                            form.setFieldValue(
+                              `charges.${index}.unit_code`,
+                              opt ? String(opt.label || opt.value) : v,
+                            );
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {/* No of Unit */}
+                      <Grid.Col span={0.65}>
+                        <NumberInput
+                          placeholder="Units"
+                          min={0}
+                          hideControls
+                          readOnly={isReadOnly}
+                          value={charge.no_of_unit ?? undefined}
+                          onChange={(value) => {
+                            const noOfUnit = value as number | null;
+                            form.setFieldValue(
+                              `charges.${index}.no_of_unit`,
+                              noOfUnit,
+                            );
+                            const currentCharge = form.values.charges[index];
+                            if (
+                              noOfUnit != null &&
+                              noOfUnit > 0 &&
+                              currentCharge.amount_per_unit != null &&
+                              currentCharge.amount_per_unit > 0
+                            ) {
+                              const amt = clampAmount(
+                                noOfUnit * currentCharge.amount_per_unit,
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.amount`,
+                                amt,
+                              );
+                              const roe = currentCharge.roe;
+                              if (amt != null && roe != null && roe > 0) {
+                                form.setFieldValue(
+                                  `charges.${index}.amount_in_local`,
+                                  clampAmount(amt * roe),
+                                );
+                              }
+                            }
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {/* Amount per Unit */}
+                      <Grid.Col span={0.85}>
+                        <NumberInput
+                          placeholder="Amt/Unit"
+                          min={0}
+                          hideControls
+                          decimalScale={amountDecimalScale}
+                          readOnly={isReadOnly}
+                          value={charge.amount_per_unit ?? undefined}
+                          onChange={(value) => {
+                            const amtPerUnit = value as number | null;
+                            form.setFieldValue(
+                              `charges.${index}.amount_per_unit`,
+                              amtPerUnit,
+                            );
+                            const currentCharge = form.values.charges[index];
+                            if (
+                              amtPerUnit != null &&
+                              amtPerUnit > 0 &&
+                              currentCharge.no_of_unit != null &&
+                              currentCharge.no_of_unit > 0
+                            ) {
+                              const amt = clampAmount(
+                                currentCharge.no_of_unit * amtPerUnit,
+                              );
+                              form.setFieldValue(
+                                `charges.${index}.amount`,
+                                amt,
+                              );
+                              const roe = currentCharge.roe;
+                              if (amt != null && roe != null && roe > 0) {
+                                form.setFieldValue(
+                                  `charges.${index}.amount_in_local`,
+                                  clampAmount(amt * roe),
+                                );
+                              }
+                            }
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {/* Amount */}
+                      <Grid.Col span={0.85}>
+                        <NumberInput
+                          placeholder="Amount"
+                          min={0}
+                          hideControls
+                          decimalScale={amountDecimalScale}
+                          readOnly={isReadOnly}
+                          value={charge.amount ?? undefined}
+                          onChange={(value) => {
+                            const amt = value as number | null;
+                            form.setFieldValue(`charges.${index}.amount`, amt);
+                            const roe = form.values.charges[index].roe;
+                            if (amt != null && roe != null && roe > 0) {
+                              form.setFieldValue(
+                                `charges.${index}.amount_in_local`,
+                                clampAmount(amt * roe),
+                              );
+                            }
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {/* Local Amount */}
+                      <Grid.Col span={0.85}>
+                        <NumberInput
+                          placeholder="Local Amt"
+                          hideControls
+                          decimalScale={amountDecimalScale}
+                          {...getAmountNumberInputFormatProps()}
+                          readOnly
+                          value={charge.amount_in_local ?? undefined}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                              backgroundColor: "var(--mantine-color-gray-0)",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {/* SAC Code */}
+                      <Grid.Col span={1}>
+                        <Dropdown
+                          searchable
+                          clearable
+                          placeholder="SAC Code"
+                          data={sacCodeOptionsForForm}
+                          value={String(charge.tax_code ?? "").trim() || null}
+                          onChange={(val) =>
+                            form.setFieldValue(
+                              `charges.${index}.tax_code`,
+                              String(val ?? "").trim(),
+                            )
+                          }
+                          disabled={isReadOnly}
+                          dropdownZIndex={chargesDropdownZIndex}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      </Grid.Col>
+
+                      {/* Tax */}
+                      {/* <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
                   <Box
                     style={{
                       display: "flex",
@@ -3986,141 +4112,143 @@ function PaymentRequest() {
                   </Box>
                 </Grid.Col> */}
 
-                  {/* Actions */}
-                  {!isReadOnly && (
-                    <Grid.Col span={0.7}>
-                      <Group gap={4} wrap="nowrap">
-                        {form.values.charges.length > 1 && (
-                          <Button
-                            radius="sm"
-                            px={8}
-                            size="sm"
-                            variant="light"
-                            color="red"
-                            onClick={() => {
-                              setChargeErrors((prev) => {
-                                const next: Record<
-                                  number,
-                                  Record<string, string>
-                                > = {};
-                                Object.entries(prev).forEach(([key, value]) => {
-                                  const idx = Number(key);
-                                  if (Number.isNaN(idx) || idx === index)
-                                    return;
-                                  next[idx > index ? idx - 1 : idx] = value;
-                                });
-                                return next;
-                              });
-                              form.removeListItem("charges", index);
-                            }}
-                          >
-                            <IconTrash size={14} />
-                          </Button>
+                      {/* Actions */}
+                      {!isReadOnly && (
+                        <Grid.Col span={0.7}>
+                          <Group gap={4} wrap="nowrap">
+                            {form.values.charges.length > 1 && (
+                              <Button
+                                radius="sm"
+                                px={8}
+                                size="sm"
+                                variant="light"
+                                color="red"
+                                onClick={() => {
+                                  setChargeErrors((prev) => {
+                                    const next: Record<
+                                      number,
+                                      Record<string, string>
+                                    > = {};
+                                    Object.entries(prev).forEach(
+                                      ([key, value]) => {
+                                        const idx = Number(key);
+                                        if (Number.isNaN(idx) || idx === index)
+                                          return;
+                                        next[idx > index ? idx - 1 : idx] =
+                                          value;
+                                      },
+                                    );
+                                    return next;
+                                  });
+                                  form.removeListItem("charges", index);
+                                }}
+                              >
+                                <IconTrash size={14} />
+                              </Button>
+                            )}
+                            {form.values.charges.length - 1 === index && (
+                              <Button
+                                radius="sm"
+                                px={8}
+                                size="sm"
+                                variant="light"
+                                color="#105476"
+                                onClick={() => {
+                                  const newChargeCurrency =
+                                    defaultBranchCurrency || "";
+                                  const roe = newChargeCurrency
+                                    ? getRoeValue(newChargeCurrency)
+                                    : null;
+                                  const newChargeCurrencyId =
+                                    defaultBranchCurrencyId ||
+                                    (currencyOptions.find(
+                                      (o) =>
+                                        (o.label || "").toUpperCase() ===
+                                        (newChargeCurrency || "").toUpperCase(),
+                                    )?.value ??
+                                      "");
+                                  form.insertListItem("charges", {
+                                    ...emptyCharge(),
+                                    currency: newChargeCurrency,
+                                    currency_id: newChargeCurrencyId,
+                                    roe,
+                                  });
+                                }}
+                              >
+                                <IconPlus size={14} />
+                              </Button>
+                            )}
+                          </Group>
+                        </Grid.Col>
+                      )}
+                    </Grid>
+                  ))}
+
+                  {form.values.charges.length > 0 && (
+                    <Box
+                      mt="xl"
+                      p="md"
+                      style={{
+                        backgroundColor: "#f8f9fa",
+                        borderRadius: 8,
+                        border: "1px solid #dee2e6",
+                      }}
+                    >
+                      <Grid gutter="md">
+                        <Grid.Col span={showTaxTab && gstBreakup ? 3 : 6}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              Local Amount Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(chargesLocalTotal)}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                        {showTaxTab && gstBreakup && (
+                          <>
+                            <Grid.Col span={3}>
+                              <Box>
+                                <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                  IGST Total
+                                </Text>
+                                <Text size="lg" fw={600} c="#105476">
+                                  {formatMoneyAmountForUi(
+                                    gstBreakupTotals.igst_total,
+                                  )}
+                                </Text>
+                              </Box>
+                            </Grid.Col>
+                            <Grid.Col span={3}>
+                              <Box>
+                                <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                  CGST Total
+                                </Text>
+                                <Text size="lg" fw={600} c="#105476">
+                                  {formatMoneyAmountForUi(
+                                    gstBreakupTotals.cgst_total,
+                                  )}
+                                </Text>
+                              </Box>
+                            </Grid.Col>
+                            <Grid.Col span={3}>
+                              <Box>
+                                <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                  SGST Total
+                                </Text>
+                                <Text size="lg" fw={600} c="#105476">
+                                  {formatMoneyAmountForUi(
+                                    gstBreakupTotals.sgst_total,
+                                  )}
+                                </Text>
+                              </Box>
+                            </Grid.Col>
+                          </>
                         )}
-                        {form.values.charges.length - 1 === index && (
-                          <Button
-                            radius="sm"
-                            px={8}
-                            size="sm"
-                            variant="light"
-                            color="#105476"
-                            onClick={() => {
-                              const newChargeCurrency =
-                                defaultBranchCurrency || "";
-                              const roe = newChargeCurrency
-                                ? getRoeValue(newChargeCurrency)
-                                : null;
-                              const newChargeCurrencyId =
-                                defaultBranchCurrencyId ||
-                                (currencyOptions.find(
-                                  (o) =>
-                                    (o.label || "").toUpperCase() ===
-                                    (newChargeCurrency || "").toUpperCase(),
-                                )?.value ??
-                                  "");
-                              form.insertListItem("charges", {
-                                ...emptyCharge(),
-                                currency: newChargeCurrency,
-                                currency_id: newChargeCurrencyId,
-                                roe,
-                              });
-                            }}
-                          >
-                            <IconPlus size={14} />
-                          </Button>
-                        )}
-                      </Group>
-                    </Grid.Col>
+                      </Grid>
+                    </Box>
                   )}
-                </Grid>
-              ))}
-
-              {form.values.charges.length > 0 && (
-                <Box
-                  mt="xl"
-                  p="md"
-                  style={{
-                    backgroundColor: "#f8f9fa",
-                    borderRadius: 8,
-                    border: "1px solid #dee2e6",
-                  }}
-                >
-                  <Grid gutter="md">
-                    <Grid.Col span={showTaxTab && gstBreakup ? 3 : 6}>
-                      <Box>
-                        <Text size="sm" fw={500} c="dimmed" mb={4}>
-                          Local Amount Total
-                        </Text>
-                        <Text size="lg" fw={600} c="#105476">
-                          {formatMoneyAmountForUi(chargesLocalTotal)}
-                        </Text>
-                      </Box>
-                    </Grid.Col>
-                    {showTaxTab && gstBreakup && (
-                      <>
-                        <Grid.Col span={3}>
-                          <Box>
-                            <Text size="sm" fw={500} c="dimmed" mb={4}>
-                              IGST Total
-                            </Text>
-                            <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmountForUi(
-                                gstBreakupTotals.igst_total,
-                              )}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                        <Grid.Col span={3}>
-                          <Box>
-                            <Text size="sm" fw={500} c="dimmed" mb={4}>
-                              CGST Total
-                            </Text>
-                            <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmountForUi(
-                                gstBreakupTotals.cgst_total,
-                              )}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                        <Grid.Col span={3}>
-                          <Box>
-                            <Text size="sm" fw={500} c="dimmed" mb={4}>
-                              SGST Total
-                            </Text>
-                            <Text size="lg" fw={600} c="#105476">
-                              {formatMoneyAmountForUi(
-                                gstBreakupTotals.sgst_total,
-                              )}
-                            </Text>
-                          </Box>
-                        </Grid.Col>
-                      </>
-                    )}
-                  </Grid>
                 </Box>
-              )}
-
-            </Box>
               </Tabs.Panel>
 
               {saveResponse && showTaxTab && (
@@ -4224,26 +4352,31 @@ function PaymentRequest() {
                             </Table.Tr>
                           </Table.Thead>
                           <Table.Tbody>
-                            {(gstBreakup.sac_wise_totals ?? []).map((row, idx) => (
-                              <Table.Tr key={idx}>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.sac_code ?? "—"}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.charge_name ?? "—"}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {formatGstBreakupRate(row.rate, row.rate_type)}
-                                </Table.Td>
-                                <Table.Td style={{ fontSize: "13px" }}>
-                                  {row.total_amount != null
-                                    ? formatMoneyAmountForUi(
-                                        Number(row.total_amount),
-                                      )
-                                    : "—"}
-                                </Table.Td>
-                              </Table.Tr>
-                            ))}
+                            {(gstBreakup.sac_wise_totals ?? []).map(
+                              (row, idx) => (
+                                <Table.Tr key={idx}>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.sac_code ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.charge_name ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {formatGstBreakupRate(
+                                      row.rate,
+                                      row.rate_type,
+                                    )}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.total_amount != null
+                                      ? formatMoneyAmountForUi(
+                                          Number(row.total_amount),
+                                        )
+                                      : "—"}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ),
+                            )}
                           </Table.Tbody>
                           <Table.Tfoot>
                             <Table.Tr>
@@ -4321,7 +4454,7 @@ function PaymentRequest() {
               </Button>
               {!isReadOnly && !isApprovedStatus && (
                 <>
-                  {saveResponse?.id && (
+                  {isEditMode && saveResponse?.id && (
                     <>
                       <Button
                         color="red"
@@ -4367,14 +4500,50 @@ function PaymentRequest() {
         </Box>
       </Stack>
 
+      {/* ── Reject Confirmation Modal ── */}
+      <Modal
+        opened={rejectModalOpened}
+        onClose={closeRejectModal}
+        title="Reject Payment Request"
+        size="md"
+        centered
+        style={{ fontFamily: "Inter" }}
+      >
+        <Stack gap="md">
+          <Textarea
+            label="Rejected Note"
+            placeholder="Enter reason for rejection"
+            value={form.values.rejected_note}
+            onChange={(e) =>
+              form.setFieldValue("rejected_note", e.target.value)
+            }
+            rows={4}
+            styles={textareaStyles}
+            withAsterisk
+          />
+          <Group justify="flex-end" gap="sm">
+            <Button variant="outline" color="gray" onClick={closeRejectModal}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconX size={16} />}
+              onClick={confirmReject}
+              loading={isSubmitting}
+              disabled={!form.values.rejected_note?.trim()}
+            >
+              Confirm Reject
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* ── Supporting Documents Modal ── */}
       <Modal
         opened={documentsModalOpened}
         onClose={closeDocumentsModal}
         title={
-          docsReadOnly
-            ? "Supporting Documents"
-            : "Attach Supporting Documents"
+          docsReadOnly ? "Supporting Documents" : "Attach Supporting Documents"
         }
         size="xl"
         centered

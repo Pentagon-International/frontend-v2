@@ -89,10 +89,14 @@ import {
 import {
   collectPartyStateOptions,
   extractPartyAddressesFromRecord,
+  extractPartyTdsSectionsFromRecord,
   findPrimaryPartyAddress,
   getPartyGstForStateId,
   getPartyGstFromPrimaryAddress,
+  isPrqGstChargeName,
+  resolvePartyTdsSectionCode,
   resolveStateCodeFromPartyAddress,
+  splitPrqChargesForSupplierInvoiceAgentInv,
   type PartyAddressLike,
 } from "../../../utils/paymentRequestChargePrefill";
 
@@ -498,11 +502,9 @@ function normalizeDrCr(value: unknown): "Dr" | "Cr" {
   return "Dr";
 }
 
-const GST_CHARGE_NAMES = [
-  "STATE GOODS AND SERVICE TAX",
-  "CENTRAL GOODS AND SERVICE TAX",
-  "INTEGRATED GOODS AND SERVICE TAX",
-];
+function isGstChargeRow(chargeName: unknown): boolean {
+  return isPrqGstChargeName(chargeName);
+}
 
 function resolveDaybookLabelFromPaidToType(paidToType: unknown): string {
   const type = String(paidToType ?? "")
@@ -516,10 +518,9 @@ function mapPaymentRequestChargeToSupplierRow(
   c: Record<string, unknown>,
 ): ChargeRow {
   const chargeName = String(c.charge_name ?? "").trim();
-  const chargeNameUpper = chargeName.toUpperCase();
   const accountCode = String(c.account_code ?? "").trim();
   const accountName = String(c.account_name ?? "").trim();
-  const isGstRow = GST_CHARGE_NAMES.includes(chargeNameUpper);
+  const isGstRow = isGstChargeRow(chargeName);
   const isTdsRow =
     (c.charge_id == null || c.charge_id === "") && accountCode !== "";
 
@@ -1602,7 +1603,10 @@ export default function SupplierInvoiceCreate({
     !!String(agentDisplayName ?? "").trim();
 
   const applyPartyAddressFields = useCallback(
-    (addresses: PartyAddressLike[] | null | undefined) => {
+    (
+      addresses: PartyAddressLike[] | null | undefined,
+      partyRecord?: unknown,
+    ) => {
       const normalized = Array.isArray(addresses) ? addresses : [];
       setPartyAddresses(normalized);
 
@@ -1621,8 +1625,15 @@ export default function SupplierInvoiceCreate({
         "customer_gst_no",
         getPartyGstFromPrimaryAddress(normalized),
       );
+      form.setFieldValue(
+        "tds_section_code",
+        resolvePartyTdsSectionCode(
+          extractPartyTdsSectionsFromRecord(partyRecord),
+          tdsSectionOptions,
+        ),
+      );
     },
-    [form, isIndiaUser, stateOptions],
+    [form, isIndiaUser, stateOptions, tdsSectionOptions],
   );
 
   const fetchVendorPartyAddresses = useCallback(
@@ -1640,15 +1651,22 @@ export default function SupplierInvoiceCreate({
           : Array.isArray((response as { data?: unknown[] })?.data)
             ? (response as { data: unknown[] }).data[0]
             : null;
+        form.setFieldValue(
+          "tds_section_code",
+          resolvePartyTdsSectionCode(
+            extractPartyTdsSectionsFromRecord(first),
+            tdsSectionOptions,
+          ),
+        );
         const fetchedAddresses = extractPartyAddressesFromRecord(first);
         if (fetchedAddresses.length > 0) {
-          applyPartyAddressFields(fetchedAddresses);
+          applyPartyAddressFields(fetchedAddresses, first);
         }
       } catch {
         // State/GST can be set manually if fetch fails.
       }
     },
-    [applyPartyAddressFields, vendorApiEndpoint],
+    [applyPartyAddressFields, form, tdsSectionOptions, vendorApiEndpoint],
   );
 
   useEffect(() => {
@@ -2213,8 +2231,12 @@ export default function SupplierInvoiceCreate({
         : null;
 
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
-    const mappedCharges: ChargeRow[] = charges.map((c) =>
-      mapPaymentRequestChargeToSupplierRow(c as Record<string, unknown>),
+    const agentInvSplit = splitPrqChargesForSupplierInvoiceAgentInv(
+      charges,
+      amountNum,
+    );
+    const mappedCharges: ChargeRow[] = agentInvSplit.charges.map((c) =>
+      mapPaymentRequestChargeToSupplierRow(c),
     );
 
     // Header fields
@@ -2258,6 +2280,25 @@ export default function SupplierInvoiceCreate({
     if (amountNum != null) {
       form.setFieldValue("Inv_crn_amount", amountNum);
       form.setFieldValue("approved_amount", amountNum);
+    }
+
+    if (agentInvSplit.taxable_amount != null) {
+      form.setFieldValue("taxable_amount", agentInvSplit.taxable_amount);
+    }
+    if (agentInvSplit.non_taxable_amount != null) {
+      form.setFieldValue(
+        "non_taxable_amount",
+        agentInvSplit.non_taxable_amount,
+      );
+    }
+    if (agentInvSplit.cgst_amount != null) {
+      form.setFieldValue("cgst_amount", agentInvSplit.cgst_amount);
+    }
+    if (agentInvSplit.sgst_amount != null) {
+      form.setFieldValue("sgst_amount", agentInvSplit.sgst_amount);
+    }
+    if (agentInvSplit.igst_amount != null) {
+      form.setFieldValue("igst_amount", agentInvSplit.igst_amount);
     }
 
     setAgentDisplayName(String(prData.paid_to ?? "") || null);
@@ -3522,12 +3563,20 @@ export default function SupplierInvoiceCreate({
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
                       form.setFieldValue("customer_gst_no", "");
+                      form.setFieldValue("tds_section_code", "");
                     }
                   } else {
                     pendingApplyDueDateFromCreditRef.current = true;
+                    form.setFieldValue(
+                      "tds_section_code",
+                      resolvePartyTdsSectionCode(
+                        extractPartyTdsSectionsFromRecord(originalData),
+                        tdsSectionOptions,
+                      ),
+                    );
                     const addresses = extractPartyAddressesFromRecord(originalData);
                     if (addresses.length > 0) {
-                      applyPartyAddressFields(addresses);
+                      applyPartyAddressFields(addresses, originalData);
                     } else {
                       void fetchVendorPartyAddresses(String(value ?? ""));
                     }

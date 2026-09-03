@@ -250,6 +250,65 @@ export function extractPartyAddressesFromRecord(
   return Array.isArray(addresses) ? addresses : [];
 }
 
+export type PartyTdsSectionLike = {
+  section_id?: number | null;
+  section_code?: string | null;
+  section_name?: string | null;
+  tds_section_code?: string | null;
+  tds_section_name?: string | null;
+};
+
+export function extractPartyTdsSectionsFromRecord(
+  record: unknown,
+): PartyTdsSectionLike[] {
+  if (!record || typeof record !== "object") return [];
+  const data = record as {
+    tds_section_data?: PartyTdsSectionLike[];
+    tds_sections?: PartyTdsSectionLike[];
+  };
+  const rows = data.tds_section_data ?? data.tds_sections;
+  return Array.isArray(rows) ? rows : [];
+}
+
+/**
+ * TDS section code mapped from a party (vendor/agent/customer) master record.
+ * Matched against the TDS section master options so an inactive or unknown code
+ * is never pushed into the dropdown. Options built as `{name} - {code}`.
+ */
+export function resolvePartyTdsSectionCode(
+  tdsSections: PartyTdsSectionLike[] | null | undefined,
+  tdsSectionOptions?: Array<{ value: string; label?: string }>,
+): string {
+  const rows = Array.isArray(tdsSections) ? tdsSections : [];
+  const options = Array.isArray(tdsSectionOptions) ? tdsSectionOptions : [];
+
+  for (const row of rows) {
+    const code = String(row.section_code ?? row.tds_section_code ?? "").trim();
+    if (code) {
+      if (options.length === 0) return code;
+      const matched = options.find(
+        (option) =>
+          String(option.value).trim().toUpperCase() === code.toUpperCase(),
+      );
+      if (matched) return matched.value;
+    }
+
+    const name = String(row.section_name ?? row.tds_section_name ?? "")
+      .trim()
+      .toUpperCase();
+    if (!name || options.length === 0) continue;
+    const matchedByName = options.find((option) => {
+      const label = String(option.label ?? "")
+        .trim()
+        .toUpperCase();
+      return label === name || label.startsWith(`${name} - `);
+    });
+    if (matchedByName) return matchedByName.value;
+  }
+
+  return "";
+}
+
 export function mergeStateOptionsWithPartyAddresses(
   stateOptions: Array<{ value: string; label?: string }>,
   partyStateOptions: Array<{ value: string; label: string }>,
@@ -267,6 +326,135 @@ export function mergeStateOptionsWithPartyAddresses(
   }
 
   return merged;
+}
+
+export const PRQ_GST_CHARGE_NAME = {
+  SGST: "STATE GOODS AND SERVICE TAX",
+  CGST: "CENTRAL GOODS AND SERVICE TAX",
+  IGST: "INTEGRATED GOODS AND SERVICE TAX",
+} as const;
+
+const PRQ_GST_CHARGE_NAME_SET = new Set<string>(
+  Object.values(PRQ_GST_CHARGE_NAME),
+);
+
+export function isPrqGstChargeName(chargeName: unknown): boolean {
+  return PRQ_GST_CHARGE_NAME_SET.has(
+    String(chargeName ?? "").trim().toUpperCase(),
+  );
+}
+
+export function isPrqTdsChargeRow(charge: Record<string, unknown>): boolean {
+  return (
+    (charge.charge_id == null || charge.charge_id === "") &&
+    String(charge.account_code ?? "").trim() !== "" &&
+    !isPrqGstChargeName(charge.charge_name)
+  );
+}
+
+function parsePrqChargeAmount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function parsePrqChargeLocalAmount(
+  charge: Record<string, unknown>,
+): number | null {
+  return (
+    parsePrqChargeAmount(charge.local_amount) ??
+    parsePrqChargeAmount(charge.amount_in_local) ??
+    parsePrqChargeAmount(charge.amount)
+  );
+}
+
+function parsePrqChargeForeignAmount(
+  charge: Record<string, unknown>,
+): number | null {
+  return parsePrqChargeAmount(charge.amount);
+}
+
+export type PrqAgentInvAmountSplit = {
+  taxable_amount: number | null;
+  non_taxable_amount: number | null;
+  cgst_amount: number | null;
+  sgst_amount: number | null;
+  igst_amount: number | null;
+  charges: Record<string, unknown>[];
+};
+
+/**
+ * Derive the Agent INV/CRN header amounts from PRQ charges so the supplier
+ * invoice mirrors the payment request without a manual GST calculation.
+ *
+ * GST charge rows feed the CGST/SGST/IGST fields and the remaining ("actual")
+ * charges feed Taxable Amount. With no GST rows at all, the actual charge total
+ * becomes the Non Taxable Amount instead. Charge rows are carried over as-is.
+ */
+export function splitPrqChargesForSupplierInvoiceAgentInv(
+  charges: unknown[],
+  fallbackTotalAmount: number | null,
+): PrqAgentInvAmountSplit {
+  const rows = Array.isArray(charges) ? charges : [];
+  const carriedCharges: Record<string, unknown>[] = [];
+  let cgst_amount: number | null = null;
+  let sgst_amount: number | null = null;
+  let igst_amount: number | null = null;
+  let actualSum = 0;
+  let hasActualRow = false;
+
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+    const charge = raw as Record<string, unknown>;
+    carriedCharges.push(charge);
+
+    const nameUpper = String(charge.charge_name ?? "").trim().toUpperCase();
+
+    if (nameUpper === PRQ_GST_CHARGE_NAME.CGST) {
+      cgst_amount = parsePrqChargeLocalAmount(charge);
+      continue;
+    }
+    if (nameUpper === PRQ_GST_CHARGE_NAME.SGST) {
+      sgst_amount = parsePrqChargeLocalAmount(charge);
+      continue;
+    }
+    if (nameUpper === PRQ_GST_CHARGE_NAME.IGST) {
+      igst_amount = parsePrqChargeLocalAmount(charge);
+      continue;
+    }
+
+    if (isPrqTdsChargeRow(charge)) continue;
+
+    const amount = parsePrqChargeForeignAmount(charge);
+    if (amount != null) {
+      actualSum += amount;
+      hasActualRow = true;
+    }
+  }
+
+  const actualTotal = hasActualRow ? clampPrqAmount(actualSum) : null;
+  const hasGst =
+    cgst_amount != null || sgst_amount != null || igst_amount != null;
+
+  if (hasGst) {
+    return {
+      taxable_amount: actualTotal,
+      non_taxable_amount: null,
+      cgst_amount,
+      sgst_amount,
+      igst_amount,
+      charges: carriedCharges,
+    };
+  }
+
+  return {
+    taxable_amount: null,
+    non_taxable_amount: actualTotal ?? fallbackTotalAmount,
+    cgst_amount: null,
+    sgst_amount: null,
+    igst_amount: null,
+    charges: carriedCharges,
+  };
 }
 
 export function mapChargeToPaymentRequestPrefill(
