@@ -1219,6 +1219,7 @@ function PaymentRequest() {
       .toString()
       .trim()
       .toUpperCase() === "APPROVED";
+  const docsReadOnly = isReadOnly || isApprovedStatus;
 
   const isPaidToSelected =
     !!String(form.values.paid_to ?? "").trim() ||
@@ -2396,44 +2397,6 @@ function PaymentRequest() {
                   },
                 }}
               >
-                <Menu.Item
-                  onClick={openDocumentsModal}
-                  leftSection={
-                    <Box
-                      style={{
-                        backgroundColor: "#E7F5FF",
-                        borderRadius: "6px",
-                        padding: "6px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <IconFileInvoice size={16} color="#105476" />
-                    </Box>
-                  }
-                  styles={{
-                    item: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      borderRadius: "6px",
-                      padding: "10px 12px",
-                      marginBottom: "4px",
-                      "&:hover": {
-                        backgroundColor: "#F8F9FA",
-                      },
-                    },
-                    itemLabel: {
-                      fontFamily: "Inter",
-                      fontSize: "13px",
-                      fontWeight: 500,
-                      color: "#424242",
-                    },
-                  }}
-                >
-                  Attach Documents
-                </Menu.Item>
                 <Menu.Item
                   disabled={isReadOnly}
                   leftSection={
@@ -4332,29 +4295,30 @@ function PaymentRequest() {
               Cancel
             </Button>
             <Group gap="sm">
-              {!isReadOnly && !isApprovedStatus && (
-                <Button
-                  variant="outline"
-                  color="#105476"
-                  onClick={() => {
-                    if (supportingDocuments.length === 0) {
-                      setSupportingDocuments([{ name: "", file: null }]);
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={() => {
+                  const canAttach = !isReadOnly && !isApprovedStatus;
+                  if (canAttach && supportingDocuments.length === 0) {
+                    setSupportingDocuments([{ name: "", file: null }]);
+                  }
+                  const newErrors: { [key: number]: string } = {};
+                  supportingDocuments.forEach((doc, idx) => {
+                    if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+                      newErrors[idx] =
+                        `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
                     }
-                    const newErrors: { [key: number]: string } = {};
-                    supportingDocuments.forEach((doc, idx) => {
-                      if (doc.file && doc.file.size > MAX_FILE_SIZE) {
-                        newErrors[idx] =
-                          `File size exceeds 10MB limit. Current size: ${(doc.file.size / (1024 * 1024)).toFixed(2)}MB`;
-                      }
-                    });
-                    setFileErrors(newErrors);
-                    openDocumentsModal();
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Attach Supporting Documents
-                </Button>
-              )}
+                  });
+                  setFileErrors(newErrors);
+                  openDocumentsModal();
+                }}
+                disabled={isSubmitting}
+              >
+                {!isReadOnly && !isApprovedStatus
+                  ? "Attach supporting document"
+                  : "View supporting document(s)"}
+              </Button>
               {!isReadOnly && !isApprovedStatus && (
                 <>
                   {saveResponse?.id && (
@@ -4408,7 +4372,9 @@ function PaymentRequest() {
         opened={documentsModalOpened}
         onClose={closeDocumentsModal}
         title={
-          isReadOnly ? "Supporting Documents" : "Attach Supporting Documents"
+          docsReadOnly
+            ? "Supporting Documents"
+            : "Attach Supporting Documents"
         }
         size="xl"
         centered
@@ -4422,7 +4388,7 @@ function PaymentRequest() {
                   label="Document Name"
                   placeholder="Enter document name"
                   value={doc.name}
-                  disabled={isReadOnly}
+                  disabled={docsReadOnly}
                   onChange={(e) => {
                     const updated = [...supportingDocuments];
                     updated[index] = {
@@ -4440,7 +4406,7 @@ function PaymentRequest() {
                   </Text>
                   <Dropzone
                     onDrop={(files: File[]) => {
-                      if (isReadOnly) return;
+                      if (docsReadOnly) return;
                       if (files.length === 0) return;
                       const file = files[0];
                       if (fileErrors[index]) {
@@ -4468,7 +4434,7 @@ function PaymentRequest() {
                       setSupportingDocuments(updated);
                     }}
                     onReject={(files: any[]) => {
-                      if (isReadOnly) return;
+                      if (docsReadOnly) return;
                       const rejection = files[0];
                       if (
                         rejection?.errors?.some(
@@ -4483,7 +4449,7 @@ function PaymentRequest() {
                     maxSize={MAX_FILE_SIZE}
                     accept={undefined}
                     multiple={false}
-                    disabled={isReadOnly}
+                    disabled={docsReadOnly}
                     styles={{
                       root: {
                         border: "1px solid var(--mantine-color-gray-4)",
@@ -4581,7 +4547,7 @@ function PaymentRequest() {
                           </>
                         )}
                       </Group>
-                      {!isReadOnly && (doc.file || doc.document_url) && (
+                      {!docsReadOnly && (doc.file || doc.document_url) && (
                         <Button
                           variant="subtle"
                           color="red"
@@ -4621,9 +4587,9 @@ function PaymentRequest() {
                 <Button
                   variant="light"
                   color="red"
-                  disabled={isReadOnly}
+                  disabled={docsReadOnly}
                   onClick={() => {
-                    if (isReadOnly) return;
+                    if (docsReadOnly) return;
                     if (fileErrors[index]) {
                       const newErrors = { ...fileErrors };
                       delete newErrors[index];
@@ -4652,7 +4618,7 @@ function PaymentRequest() {
                 </Button>
               </Grid.Col>
               <Grid.Col span={1} offset={11}>
-                {!isReadOnly && index === supportingDocuments.length - 1 && (
+                {!docsReadOnly && index === supportingDocuments.length - 1 && (
                   <Button
                     variant="light"
                     color="#105476"
@@ -4675,9 +4641,9 @@ function PaymentRequest() {
               variant="light"
               color="#105476"
               leftSection={<IconPlus size={16} />}
-              disabled={isReadOnly}
+              disabled={docsReadOnly}
               onClick={() => {
-                if (isReadOnly) return;
+                if (docsReadOnly) return;
                 setSupportingDocuments([{ name: "", file: null }]);
               }}
               fullWidth

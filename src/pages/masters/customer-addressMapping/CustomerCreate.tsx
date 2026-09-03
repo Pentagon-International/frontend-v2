@@ -523,11 +523,16 @@ const addressItemSchema = yup.object({
       "Phone number can only contain digits, spaces, hyphens, plus signs, and parentheses",
     )
     .max(20, "Phone number must not exceed 20 characters"),
-  mobile_no: yup.string().required("Mobile number is required"),
+  mobile_no: yup.string().optional().max(20, "Mobile number must not exceed 20 characters"),
   email: yup
     .string()
-    .email("Please enter a valid email address")
-    .required("Email is required")
+    .trim()
+    .optional()
+    .test(
+      "valid-email-if-present",
+      "Please enter a valid email address",
+      (v) => !v || yup.string().email().isValidSync(v),
+    )
     .max(100, "Email must not exceed 100 characters"),
   trn_no: yup
     .string()
@@ -580,40 +585,17 @@ const addressItemSchema = yup.object({
 //     .min(1, "At least one address is required"),
 // });
 
-function buildKenyaOptionalContactFields() {
-  return {
-    mobile_no: yup.string().optional(),
-    email: yup
-      .string()
-      .trim()
-      .optional()
-      .test(
-        "valid-email-if-present",
-        "Please enter a valid email address",
-        (v) => !v || yup.string().email().isValidSync(v),
-      )
-      .max(100, "Email must not exceed 100 characters"),
-  };
-}
-
-function buildAddressValidationSchema(
-  isIndiaUser: boolean,
-  isKenyaUser = false,
-) {
-  const baseItemSchema = isKenyaUser
-    ? addressItemSchema.shape(buildKenyaOptionalContactFields())
-    : addressItemSchema;
-
+function buildAddressValidationSchema(isIndiaUser: boolean) {
   if (!isIndiaUser) {
     return yup.object({
       addresses_data: yup
         .array()
-        .of(baseItemSchema)
+        .of(addressItemSchema)
         .min(1, "At least one address is required"),
     });
   }
 
-  const indianAddressItemSchema = baseItemSchema.shape({
+  const indianAddressItemSchema = addressItemSchema.shape({
     gst_registration_status: yup
       .string()
       .required("GST Registration Status is required")
@@ -1047,71 +1029,80 @@ function buildAddressDropdownState(
 
 const tdsDisplayValidationSchema = yup
   .object({
-    tds_sections: yup
-      .array()
-      .of(
-        yup.object({
-          section_id: yup
-            .number()
-            .nullable()
-            .required("Section name is required"),
-          section_code: yup.string().required("Section name is required"),
-          section_name: yup.string().required("Section name is required"),
-          exemption_tds: yup.boolean().required(),
-          exemption_certificate_no: yup.string().when("exemption_tds", {
-            is: true,
+    tds_sections: yup.array().of(
+      yup.object({
+        section_id: yup.number().nullable().optional(),
+        section_code: yup.string().when("section_id", {
+          is: (id: number | null | undefined) => id != null,
+          then: (s) => s.required("Section name is required"),
+          otherwise: (s) => s.optional(),
+        }),
+        section_name: yup.string().when("section_id", {
+          is: (id: number | null | undefined) => id != null,
+          then: (s) => s.required("Section name is required"),
+          otherwise: (s) => s.optional(),
+        }),
+        exemption_tds: yup.boolean().optional(),
+        exemption_certificate_no: yup
+          .string()
+          .when(["exemption_tds", "section_id"], {
+            is: (exemption_tds: boolean, section_id: number | null) =>
+              Boolean(exemption_tds) && section_id != null,
             then: (s) => s.required("Exemption certificate number is required"),
             otherwise: (s) => s.optional(),
           }),
-          tds_percent: yup.string().when("exemption_tds", {
-            is: true,
-            then: (s) =>
-              s
-                .required("TDS % is required")
-                .matches(twoDecimalRequiredRegex, "Enter a valid number"),
-            otherwise: (s) =>
-              s
-                .optional()
-                .test(
-                  "two-decimals",
-                  "Enter a valid number",
-                  (v) => !v || twoDecimalRequiredRegex.test(v),
-                ),
-          }),
-          valid_from: yup
-            .date()
-            .nullable()
-            .when("exemption_tds", {
-              is: true,
-              then: (s) => s.required("Valid from is required"),
-              otherwise: (s) => s.optional(),
-            }),
-          valid_to: yup
-            .date()
-            .nullable()
-            .when("exemption_tds", {
-              is: true,
-              then: (s) => s.required("Valid to is required"),
-              otherwise: (s) => s.optional(),
-            }),
-          tds_lower_limit: yup.string().when("exemption_tds", {
-            is: true,
-            then: (s) =>
-              s
-                .required("TDS lower limit is required")
-                .matches(twoDecimalRequiredRegex, "Enter a valid number"),
-            otherwise: (s) =>
-              s
-                .optional()
-                .test(
-                  "two-decimals",
-                  "Enter a valid number",
-                  (v) => !v || twoDecimalRequiredRegex.test(v),
-                ),
-          }),
+        tds_percent: yup.string().when(["exemption_tds", "section_id"], {
+          is: (exemption_tds: boolean, section_id: number | null) =>
+            Boolean(exemption_tds) && section_id != null,
+          then: (s) =>
+            s
+              .required("TDS % is required")
+              .matches(twoDecimalRequiredRegex, "Enter a valid number"),
+          otherwise: (s) =>
+            s
+              .optional()
+              .test(
+                "two-decimals",
+                "Enter a valid number",
+                (v) => !v || twoDecimalRequiredRegex.test(v),
+              ),
         }),
-      )
-      .min(1, "At least one TDS section is required"),
+        valid_from: yup
+          .date()
+          .nullable()
+          .when(["exemption_tds", "section_id"], {
+            is: (exemption_tds: boolean, section_id: number | null) =>
+              Boolean(exemption_tds) && section_id != null,
+            then: (s) => s.required("Valid from is required"),
+            otherwise: (s) => s.optional(),
+          }),
+        valid_to: yup
+          .date()
+          .nullable()
+          .when(["exemption_tds", "section_id"], {
+            is: (exemption_tds: boolean, section_id: number | null) =>
+              Boolean(exemption_tds) && section_id != null,
+            then: (s) => s.required("Valid to is required"),
+            otherwise: (s) => s.optional(),
+          }),
+        tds_lower_limit: yup.string().when(["exemption_tds", "section_id"], {
+          is: (exemption_tds: boolean, section_id: number | null) =>
+            Boolean(exemption_tds) && section_id != null,
+          then: (s) =>
+            s
+              .required("TDS lower limit is required")
+              .matches(twoDecimalRequiredRegex, "Enter a valid number"),
+          otherwise: (s) =>
+            s
+              .optional()
+              .test(
+                "two-decimals",
+                "Enter a valid number",
+                (v) => !v || twoDecimalRequiredRegex.test(v),
+              ),
+        }),
+      }),
+    ),
   })
   .required();
 
@@ -1426,7 +1417,6 @@ const AddressCard = ({
             <Grid.Col span={4}>
               <FormTextInput
                 label="Mobile Number"
-                withAsterisk={!isKenyaUser}
                 placeholder="Enter mobile number"
                 format="normal"
                 disabled={isViewMode}
@@ -1439,7 +1429,6 @@ const AddressCard = ({
             <Grid.Col span={4}>
               <FormTextInput
                 label="Email Id"
-                withAsterisk={!isKenyaUser}
                 placeholder="Enter email address"
                 format="normal"
                 disabled={isViewMode}
@@ -2326,7 +2315,7 @@ function CustomerCreate() {
     },
     validate: isViewMode
       ? undefined
-      : yupResolver(buildAddressValidationSchema(isIndiaUser, isKenyaUser)),
+      : yupResolver(buildAddressValidationSchema(isIndiaUser)),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,

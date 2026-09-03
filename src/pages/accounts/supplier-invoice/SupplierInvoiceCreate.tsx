@@ -929,6 +929,27 @@ export default function SupplierInvoiceCreate({
     document.body.removeChild(link);
   };
 
+  const fetchUrlAsFile = async (
+    url: string,
+    fileName: string,
+  ): Promise<File | null> => {
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(url, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      const safeName = (fileName || "document").trim() || "document";
+      return new File([blob], safeName, {
+        type: blob.type || "application/octet-stream",
+      });
+    } catch {
+      return null;
+    }
+  };
+
   const {
     defaultBranchCurrencyId,
     isLocalCurrency,
@@ -2242,6 +2263,35 @@ export default function SupplierInvoiceCreate({
     setAgentDisplayName(String(prData.paid_to ?? "") || null);
     if (mappedCharges.length > 0) {
       form.setFieldValue("charges_data", mappedCharges);
+    }
+
+    // Carry payment-request supporting documents for preview + re-upload on create
+    const prDocsRaw = (prData.documents ??
+      prData.supporting_documents) as
+      | Array<Record<string, any>>
+      | undefined;
+    const mappedPrDocs = mapApiDocumentsToSupportingDocuments(prDocsRaw).map(
+      (doc) => ({
+        ...doc,
+        // PR document PKs must not be treated as supplier-invoice document ids
+        document_id: undefined,
+      }),
+    );
+    if (mappedPrDocs.length > 0) {
+      form.setFieldValue("supporting_documents", mappedPrDocs);
+
+      void (async () => {
+        const withFiles = await Promise.all(
+          mappedPrDocs.map(async (doc) => {
+            if (!doc.document_url || doc.file) return doc;
+            const fileName =
+              doc.original_document_name || doc.name || "document";
+            const file = await fetchUrlAsFile(doc.document_url, fileName);
+            return file ? { ...doc, file } : doc;
+          }),
+        );
+        form.setFieldValue("supporting_documents", withFiles);
+      })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -5132,24 +5182,7 @@ export default function SupplierInvoiceCreate({
                             }}
                           >
                             <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
-                              {doc.file ? (
-                                <>
-                                  <IconUpload
-                                    size={16}
-                                    color="var(--mantine-color-dimmed)"
-                                  />
-                                  <Text
-                                    size="sm"
-                                    truncate
-                                    style={{
-                                      flex: 1,
-                                      color: "var(--mantine-color-dark)",
-                                    }}
-                                  >
-                                    {doc.file.name}
-                                  </Text>
-                                </>
-                              ) : doc.document_url ? (
+                              {doc.document_url ? (
                                 <>
                                   <IconDownload
                                     size={16}
@@ -5167,15 +5200,14 @@ export default function SupplierInvoiceCreate({
                                     }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (
-                                        doc.document_url &&
-                                        doc.original_document_name
-                                      ) {
-                                        downloadFile(
-                                          doc.document_url,
-                                          doc.original_document_name,
-                                        );
-                                      }
+                                      if (!doc.document_url) return;
+                                      downloadFile(
+                                        doc.document_url,
+                                        doc.original_document_name ||
+                                          doc.name ||
+                                          doc.file?.name ||
+                                          "document",
+                                      );
                                     }}
                                     onMouseEnter={(e) => {
                                       e.currentTarget.style.opacity = "0.8";
@@ -5185,7 +5217,26 @@ export default function SupplierInvoiceCreate({
                                     }}
                                   >
                                     {doc.original_document_name ||
-                                      "Download file"}
+                                      doc.name ||
+                                      doc.file?.name ||
+                                      "Preview / Download"}
+                                  </Text>
+                                </>
+                              ) : doc.file ? (
+                                <>
+                                  <IconUpload
+                                    size={16}
+                                    color="var(--mantine-color-dimmed)"
+                                  />
+                                  <Text
+                                    size="sm"
+                                    truncate
+                                    style={{
+                                      flex: 1,
+                                      color: "var(--mantine-color-dark)",
+                                    }}
+                                  >
+                                    {doc.file.name}
                                   </Text>
                                 </>
                               ) : (
