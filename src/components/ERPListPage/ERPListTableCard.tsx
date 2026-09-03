@@ -36,7 +36,7 @@ export function ERPListTableCard({
       component="main"
       py={mainPy}
       px={flush ? 0 : ERP_LIST_INNER_PAD_X}
-      style={{ flexShrink: 0 }}
+      style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
     >
       <Paper
         withBorder
@@ -47,13 +47,18 @@ export function ERPListTableCard({
           overflow: "hidden",
           borderColor: theme.border,
           backgroundColor: theme.cardBg,
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         {selectionBar}
         <Box
           style={{
-            overflowX: "auto",
-            overflowY: "hidden",
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
             backgroundColor: theme.cardBg,
           }}
         >

@@ -319,7 +319,7 @@ const mblDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
-  job_date: yup.date().nullable(),
+  job_date: yup.date().required("Job Date is required"),
   igm_no: yup.string().optional(),
   igm_date: yup.date().nullable(),
 });

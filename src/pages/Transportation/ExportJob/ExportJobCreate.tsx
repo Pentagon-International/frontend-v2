@@ -324,7 +324,7 @@ const mblDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
-  job_date: yup.date().nullable(),
+  job_date: yup.date().required("Job Date is required"),
 });
 
 const carrierDetailsSchema = yup.object({

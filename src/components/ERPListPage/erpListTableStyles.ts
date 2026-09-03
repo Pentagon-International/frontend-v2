@@ -33,6 +33,9 @@ export function erpListThStyle(theme: ErpListTheme, options?: ErpListThOptions):
     borderBottom: `1px solid ${theme.border}`,
     whiteSpace: "nowrap",
     userSelect: "none",
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
   };
 }
 

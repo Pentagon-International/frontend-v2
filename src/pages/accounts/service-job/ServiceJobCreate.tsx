@@ -1719,6 +1719,11 @@ export default function ServiceJobCreate() {
       eta: null,
       job_date: null,
     },
+    validate: {
+      etd: (value) => (!value ? "ETD is required" : null),
+      eta: (value) => (!value ? "ETA is required" : null),
+      job_date: (value) => (!value ? "Job Date is required" : null),
+    },
   });
 
   const partyDetailsForm = useForm<JobMasterPartyDetailsValues>({
@@ -2551,6 +2556,10 @@ export default function ServiceJobCreate() {
   ]);
 
   const handleSubmit = async () => {
+    const validation = form.validate();
+    if (validation.hasErrors) {
+      return;
+    }
     setIsSubmitting(true);
     try {
       const payload = buildPayload();

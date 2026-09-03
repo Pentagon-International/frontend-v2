@@ -42,6 +42,7 @@ export function ERPListFilterPanel({
       pt="sm"
       pb="md"
       style={{
+        flexShrink: 0,
         backgroundColor: theme.pageBg,
         borderBottom: `1px solid ${theme.border}`,
       }}
