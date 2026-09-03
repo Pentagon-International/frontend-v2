@@ -711,15 +711,23 @@ export const generateDeliveryOrderPDF = (
     doc.setFont("helvetica", "bold");
     doc.text("Load Port HBL:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(loadPortHBL || "", valueStartX, currentY);
-    currentY += lineHeight;
+    const loadPortHblLines = doc.splitTextToSize(
+      loadPortHBL || "",
+      pageWidth - valueStartX - margin - boxPadding
+    );
+    doc.text(loadPortHblLines, valueStartX, currentY);
+    currentY += Math.max(loadPortHblLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // ETA
     doc.setFont("helvetica", "bold");
     doc.text("ETA:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(eta || "", valueStartX, currentY);
-    currentY += lineHeight;
+    const etaLines = doc.splitTextToSize(
+      eta || "",
+      pageWidth - valueStartX - margin - boxPadding
+    );
+    doc.text(etaLines, valueStartX, currentY);
+    currentY += Math.max(etaLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // IGM NO./Date
     doc.setFont("helvetica", "bold");
@@ -747,15 +755,23 @@ export const generateDeliveryOrderPDF = (
     doc.setFont("helvetica", "bold");
     doc.text("Item / Line No.:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(itemLineNo || "", valueStartX, currentY);
-    currentY += lineHeight;
+    const itemLineNoLines = doc.splitTextToSize(
+      itemLineNo || "",
+      pageWidth - valueStartX - margin - boxPadding
+    );
+    doc.text(itemLineNoLines, valueStartX, currentY);
+    currentY += Math.max(itemLineNoLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // Sub Item / Line No.
     doc.setFont("helvetica", "bold");
     doc.text("Sub Item / Line No.:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    doc.text(subItemLineNo || "", valueStartX, currentY);
-    currentY += lineHeight;
+    const subItemLineNoLines = doc.splitTextToSize(
+      subItemLineNo || "",
+      pageWidth - valueStartX - margin - boxPadding
+    );
+    doc.text(subItemLineNoLines, valueStartX, currentY);
+    currentY += Math.max(subItemLineNoLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
 
     // ===== CONTAINER INFORMATION TABLE =====
     const cargoDetails = housingData?.cargo_details || [];
@@ -939,86 +955,100 @@ export const generateDeliveryOrderPDF = (
     // ===== MARKS & DESCRIPTION SECTION =====
     currentY += 5; // Gap after table
 
-    // Check if we need a new page before Marks & Description
-    const marksDescHeight = 20; // Estimated height
-    if (needsNewPage(currentY, marksDescHeight, fixedBoxEndY, bottomBorderPadding)) {
-      // Create new page with layout
+    // Text starts at valueStartX - 20; wrap to the inner right edge of the content box
+    // (not from leftColumnX, which made lines wider than the remaining space).
+    const contentInnerRightX = pageWidth - margin - boxPadding;
+    const marksDescTextX = valueStartX - 20;
+    const marksDescMaxWidth = Math.max(20, contentInnerRightX - marksDescTextX);
+
+    const startNewContentPage = () => {
       doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
+      const newPageInfo = createPageLayout(
+        doc,
+        pageWidth,
+        pageHeight,
+        margin,
+        boxPadding,
+        branchInfo,
+        logoImage,
+        leftColumnX,
+        doNumber,
+        todayDate,
+        jobInfo,
+        headingText,
+      );
       currentY = newPageInfo.yPos;
       boxStartY = newPageInfo.boxStartY;
       boxX = newPageInfo.boxX;
       boxWidth = newPageInfo.boxWidth;
+    };
+
+    const drawLinesInsideContentBox = (lines: string[]) => {
+      const startPage = doc.getCurrentPageInfo().pageNumber;
+      const startY = currentY;
+      if (lines.length === 0) {
+        currentY += lineHeight;
+        return;
+      }
+      lines.forEach((line: string) => {
+        if (
+          needsNewPage(
+            currentY,
+            DO_INNER_TEXT_LINE_HEIGHT,
+            fixedBoxEndY,
+            bottomBorderPadding,
+          )
+        ) {
+          startNewContentPage();
+        }
+        doc.text(line, marksDescTextX, currentY);
+        currentY += DO_INNER_TEXT_LINE_HEIGHT;
+      });
+      if (
+        doc.getCurrentPageInfo().pageNumber === startPage &&
+        currentY < startY + lineHeight
+      ) {
+        currentY = startY + lineHeight;
+      }
+    };
+
+    // Check if we need a new page before Marks & Description
+    const marksDescHeight = 20; // Estimated height
+    if (needsNewPage(currentY, marksDescHeight, fixedBoxEndY, bottomBorderPadding)) {
+      startNewContentPage();
     }
 
     doc.setFontSize(DO_INNER_FONT_SIZE);
     doc.setFont("helvetica", "bold");
     doc.text("Marks & Nos:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    const marksLines = doc.splitTextToSize(
-      marksNo || "",
-      pageWidth - leftColumnX - margin - boxPadding
-    );
-    
-    // Check if marks will fit on current page
-    const marksHeight = marksLines.length * DO_INNER_TEXT_LINE_HEIGHT;
-    if (needsNewPage(currentY, marksHeight + lineHeight, fixedBoxEndY, bottomBorderPadding)) {
-      // Create new page with layout
-      doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
-      currentY = newPageInfo.yPos;
-      boxStartY = newPageInfo.boxStartY;
-      boxX = newPageInfo.boxX;
-      boxWidth = newPageInfo.boxWidth;
-      
-      // Redraw label on new page
-      doc.setFont("helvetica", "bold");
-      doc.text("Marks & Nos:", leftColumnX, currentY);
-      doc.setFont("helvetica", "normal");
-    }
-    
-    doc.text(marksLines, valueStartX - 20, currentY);
-    currentY += Math.max(marksLines.length * DO_INNER_TEXT_LINE_HEIGHT, lineHeight);
+    const marksLines = doc.splitTextToSize(marksNo || "", marksDescMaxWidth);
+    drawLinesInsideContentBox(marksLines);
 
-    // Check if we need a new page before Description
+    doc.setFontSize(DO_INNER_FONT_SIZE);
+    doc.setFont("helvetica", "normal");
     const descLines = doc.splitTextToSize(
       commodityDescription || "",
-      pageWidth - leftColumnX - margin - boxPadding
+      marksDescMaxWidth,
     );
-    const descHeight = descLines.length * DO_INNER_TEXT_LINE_HEIGHT;
-    
-    if (needsNewPage(currentY, descHeight + lineHeight, fixedBoxEndY, bottomBorderPadding)) {
-      // Create new page with layout
-      doc.addPage();
-      const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
-      currentY = newPageInfo.yPos;
-      boxStartY = newPageInfo.boxStartY;
-      boxX = newPageInfo.boxX;
-      boxWidth = newPageInfo.boxWidth;
+
+    // Keep "Description:" with at least the first line on the same page
+    if (
+      needsNewPage(
+        currentY,
+        DO_INNER_TEXT_LINE_HEIGHT + lineHeight,
+        fixedBoxEndY,
+        bottomBorderPadding,
+      )
+    ) {
+      startNewContentPage();
     }
-    
+
     doc.setFont("helvetica", "bold");
     doc.text("Description:", leftColumnX, currentY);
     doc.setFont("helvetica", "normal");
-    
-    // Handle description text that might span multiple pages
-    descLines.forEach((line: string) => {
-      if (needsNewPage(currentY, DO_INNER_TEXT_LINE_HEIGHT, fixedBoxEndY, bottomBorderPadding)) {
-        // Create new page with layout
-        doc.addPage();
-        const newPageInfo = createPageLayout(doc, pageWidth, pageHeight, margin, boxPadding, branchInfo, logoImage, leftColumnX, doNumber, todayDate, jobInfo, headingText);
-        currentY = newPageInfo.yPos;
-        boxStartY = newPageInfo.boxStartY;
-        boxX = newPageInfo.boxX;
-        boxWidth = newPageInfo.boxWidth;
-      }
-      doc.text(line, valueStartX - 20, currentY);
-      currentY += DO_INNER_TEXT_LINE_HEIGHT;
-    });
-    
-    if (descLines.length === 0) {
-      currentY += lineHeight;
-    }
+
+    drawLinesInsideContentBox(descLines);
 
     // ===== NOTES SECTION =====
     currentY += 4; // Gap before notes
