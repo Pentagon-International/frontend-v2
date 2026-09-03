@@ -553,10 +553,8 @@ function mapPaymentRequestChargeToSupplierRow(
       c.igst_rate as string | number | null | undefined,
     ),
     igst: toLocalAmount(c.igst as string | number | null | undefined),
-    Dr_Cr:
-      String(c.cn_r ?? c.Dr_cr ?? c.Dr_Cr ?? "").trim() !== ""
-        ? normalizeDrCr(c.cn_r ?? c.Dr_cr ?? c.Dr_Cr)
-        : "Cr",
+    // PR → Supplier Invoice: keep Cr from payment request; otherwise default Dr.
+    Dr_Cr: normalizeDrCr(c.Dr_Cr ?? c.Dr_cr ?? c.dr_cr),
   };
 }
 

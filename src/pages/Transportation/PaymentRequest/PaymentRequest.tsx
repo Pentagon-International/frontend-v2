@@ -206,6 +206,14 @@ function isChargeTdsRow(charge: {
   return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
+function normalizeChargeDrCr(value: unknown): "Dr" | "Cr" {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "cr" || raw === "credit") return "Cr";
+  return "Dr";
+}
+
 function calcPaymentRequestLocalTotal(charges: ChargeItem[]): number {
   return charges.reduce((sum, charge) => {
     if (isChargeTdsRow(charge)) return sum;
@@ -341,6 +349,7 @@ type ChargeItem = {
   amount_in_local: number | null;
   tax_code: string;
   tax: string;
+  Dr_Cr: "Dr" | "Cr";
   is_tds_row?: boolean;
   is_tax_row?: boolean;
   is_tds_calcualted_record?: boolean;
@@ -457,6 +466,7 @@ type PaymentRequestFromApi = {
     local_amount?: number | string;
     sac_code?: string;
     tax?: boolean | string;
+    Dr_Cr?: string;
     is_tds_calcualted_record?: boolean;
     is_tds_calculated_record?: boolean;
   }>;
@@ -658,6 +668,7 @@ const emptyCharge = (): ChargeItem => ({
   amount_in_local: null,
   tax_code: "",
   tax: "",
+  Dr_Cr: "Dr",
 });
 
 function formatPaymentRequestDate(d: Date | null): string | null {
@@ -680,7 +691,9 @@ function mapPaymentRequestChargeToPayload(
     subledger_code: c.subledger_code || undefined,
     narration: c.narration || undefined,
     cn_r: c.cn_r || undefined,
-    Dr_cr: c.cn_r || undefined,
+    Dr_Cr: isChargeTdsRow(c) || c.is_tax_row === true
+      ? normalizeChargeDrCr(c.Dr_Cr)
+      : "Dr",
     job_id: (c.job_no ?? "") || (c.job_id ?? ""),
     currency_id: c.currency_id ? Number(c.currency_id) : undefined,
     unit_id: c.unit_id ? Number(c.unit_id) : undefined,
@@ -724,6 +737,9 @@ function mapApiChargeToChargeItem(
       c.local_amount != null ? clampAmount(Number(c.local_amount)) : null,
     tax_code: c.sac_code ?? "",
     tax: c.tax === true || c.tax === "true" ? "true" : "false",
+    Dr_Cr: normalizeChargeDrCr(
+      c.Dr_Cr ?? (isChargeTdsRow(c) ? c.cn_r : undefined),
+    ),
     is_tds_row: isChargeTdsRow(c),
     is_tds_calcualted_record: c.is_tds_calcualted_record,
     is_tds_calculated_record: c.is_tds_calculated_record,
@@ -1660,6 +1676,7 @@ function PaymentRequest() {
             charge_name: String(item.charge_name ?? ""),
             job_no: String(item.job_id ?? ""),
             cn_r: String(item.Dr_Cr ?? ""),
+            Dr_Cr: normalizeChargeDrCr(item.Dr_Cr),
             currency: currencyCode,
             currency_id: currencyId,
             roe: roeValue,
@@ -1897,6 +1914,7 @@ function PaymentRequest() {
             narration: String(item.narration ?? ""),
             job_no: String(item.job_id ?? item.job_no ?? ""),
             cn_r: drCr,
+            Dr_Cr: normalizeChargeDrCr(drCr),
             currency: String(currencyCode),
             currency_id: currencyId,
             roe,
