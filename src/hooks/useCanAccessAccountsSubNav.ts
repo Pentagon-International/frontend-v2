@@ -7,14 +7,10 @@ const VIETNAM_ACCOUNTS_TEAM_NAMES = [
   "wendy",
   "dhaval",
   "dipali",
+  "linal",
 ] as const;
 
-/** Accounts access only when logged into Vietnam branch (denied on other branches). */
-const VIETNAM_ONLY_ACCOUNTS_TEAM_NAMES = ["linal"] as const;
-
-type AccountsTeamName =
-  | (typeof VIETNAM_ACCOUNTS_TEAM_NAMES)[number]
-  | (typeof VIETNAM_ONLY_ACCOUNTS_TEAM_NAMES)[number];
+type AccountsTeamName = (typeof VIETNAM_ACCOUNTS_TEAM_NAMES)[number];
 
 function normalizeIdentity(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
@@ -72,16 +68,7 @@ function isAccountsTeamMember(
 export function isVietnamAccountsAllowedUser(
   user: ReturnType<typeof useAuthStore.getState>["user"],
 ): boolean {
-  return (
-    isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES) ||
-    isAccountsTeamMember(user, VIETNAM_ONLY_ACCOUNTS_TEAM_NAMES)
-  );
-}
-
-function isVietnamOnlyAccountsUser(
-  user: ReturnType<typeof useAuthStore.getState>["user"],
-): boolean {
-  return isAccountsTeamMember(user, VIETNAM_ONLY_ACCOUNTS_TEAM_NAMES);
+  return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
 }
 
 export function canAccessAccountsSubNav(
@@ -89,9 +76,6 @@ export function canAccessAccountsSubNav(
 ): boolean {
   if (user?.is_staff) return true;
 
-  if (isVietnamOnlyAccountsUser(user)) {
-    return isVietnamBranchFromUser(user);
-  }
   if (!isVietnamBranchFromUser(user)) return true;
   return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
 }
