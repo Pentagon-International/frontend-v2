@@ -28,6 +28,7 @@ export type ReverseInvoiceDetail = {
   total?: string | number;
   header_total?: string | number;
   Dr_Cr?: string;
+  document_type?: string;
   is_agent?: boolean;
   charges?: Array<{
     id?: number;

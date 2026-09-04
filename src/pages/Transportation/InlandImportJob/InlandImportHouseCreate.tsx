@@ -88,7 +88,7 @@ import {
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
 import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
-import {  } from "../../../utils/invoiceDocumentNumber";
+import {} from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -3424,7 +3424,10 @@ function HouseCreate() {
 
                       form.setFieldValue("consignee_address", "");
                       if (primaryAddr?.value) {
-                        form.setFieldValue("consignee_address", primaryAddr.value);
+                        form.setFieldValue(
+                          "consignee_address",
+                          primaryAddr.value,
+                        );
                         setConsigneeAddressSearch(primaryAddr.value);
                       } else {
                         setConsigneeAddressSearch("");
