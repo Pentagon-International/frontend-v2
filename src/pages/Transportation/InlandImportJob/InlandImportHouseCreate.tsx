@@ -87,6 +87,7 @@ import {
   validateMeaningfulHouseCharges,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
+import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import {
   formatInvoiceDocumentNo,
   getInvoiceDocumentNo,
@@ -4487,50 +4488,29 @@ function HouseCreate() {
                             (e?.charge_name &&
                               String(e.charge_name).trim() !== ""),
                         )
-                        .map((e: any) => ({
-                          charge_id: e?.charge_id ?? null,
-                          charge_name: e?.charge_name ?? "",
-                          segment: "",
-                          // NOTE: PRQ "Job Id" should receive shipment_id from house context
-                          job_no: String(
-                            (fullDetail as { shipment_id?: unknown })
-                              ?.shipment_id ??
-                              (
-                                location.state?.job as {
-                                  shipment_id?: unknown;
-                                } | null
-                              )?.shipment_id ??
-                              location.state?.job?.job_id ??
-                              location.state?.job?.id ??
-                              "",
-                          ),
-                          sub_job: String(
-                            fullDetail?.hawb_number ??
-                              fullDetail?.hawb_no ??
-                              fullDetail?.id ??
-                              "",
-                          ),
-                          cn_r: "",
-                          currency: e?.currency_code ?? e?.currency ?? "",
-                          currency_id: e?.currency_id ?? "",
-                          roe: e?.roe ?? null,
-                          unit_code: e?.unit_code ?? e?.unit ?? "",
-                          unit_id: e?.unit_id ?? "",
-                          no_of_unit: e?.no_of_unit ?? null,
-                          amount_per_unit:
-                            e?.cost_per_unit ?? e?.amount_per_unit ?? null,
-                          amount: e?.total_cost ?? e?.amount ?? null,
-                          amount_in_local:
-                            e?.cost_local_amount ??
-                            e?.local_amount ??
-                            (e?.total_cost != null && e?.roe != null
-                              ? Math.round(
-                                  Number(e.total_cost) * Number(e.roe) * 100,
-                                ) / 100
-                              : (e?.total_cost ?? null)),
-                          tax_code: "",
-                          tax: "false",
-                        }));
+                        .map((e: any) =>
+                          mapChargeToPaymentRequestPrefill(e, {
+                            // NOTE: PRQ "Job Id" should receive shipment_id from house context
+                            job_no: String(
+                              (fullDetail as { shipment_id?: unknown })
+                                ?.shipment_id ??
+                                (
+                                  location.state?.job as {
+                                    shipment_id?: unknown;
+                                  } | null
+                                )?.shipment_id ??
+                                location.state?.job?.job_id ??
+                                location.state?.job?.id ??
+                                "",
+                            ),
+                            sub_job: String(
+                              fullDetail?.hawb_number ??
+                                fullDetail?.hawb_no ??
+                                fullDetail?.id ??
+                                "",
+                            ),
+                          }),
+                        );
 
                       const firstSupplier =
                         charges.find(

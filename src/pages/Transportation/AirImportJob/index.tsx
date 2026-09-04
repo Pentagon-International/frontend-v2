@@ -81,6 +81,8 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import { buildChaListFilters } from "../chaJob/chaJobService";
 
 const LIST_KEY = "AIR_IMPORT_JOB_MASTER";
 
@@ -214,6 +216,11 @@ type AirImportJobFilters = {
 function AirImportJobMaster() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { basePath, listKey, isChaMode, chaConfig } = useJobModulePaths({
+    basePath: "/air/import-job",
+    listKey: LIST_KEY,
+    invoiceServiceType: "AIR",
+  });
   const theme = DEFAULT_ERP_LIST_THEME;
   const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
   const { muted, fg, primary } = theme;
@@ -315,7 +322,7 @@ function AirImportJobMaster() {
           next = { ...next, job_date_from: "", job_date_to: "" };
         }
         setAppliedFilters(next);
-        setStoreFilters(LIST_KEY, next);
+        setStoreFilters(listKey, next);
         return next;
       });
       setPagination((p) => ({ ...p, pageIndex: 0 }));
@@ -336,7 +343,7 @@ function AirImportJobMaster() {
   };
 
   useEffect(() => {
-    const stored = getState(LIST_KEY);
+    const stored = getState(listKey);
     const shouldRestore = stored?.shouldRestore === true;
     setIsInitialLoad(true);
 
@@ -358,8 +365,8 @@ function AirImportJobMaster() {
 
     setPagination((p) => ({ ...p, pageIndex: 0 }));
 
-    clearAllExcept(LIST_KEY);
-    setShouldRestore(LIST_KEY, false);
+    clearAllExcept(listKey);
+    setShouldRestore(listKey, false);
     setIsRestoring(false);
     setIsInitialLoad(false);
   }, [location.key]);
@@ -386,8 +393,8 @@ function AirImportJobMaster() {
     setDraftFilters(next);
     setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, next);
-    setStoreSearch(LIST_KEY, search);
+    setStoreFilters(listKey, next);
+    setStoreSearch(listKey, search);
     setShowFilters(false);
   };
 
@@ -395,7 +402,7 @@ function AirImportJobMaster() {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    clearAllStore(LIST_KEY);
+    clearAllStore(listKey);
   };
 
   const buildFiltersPayload = (
@@ -455,20 +462,21 @@ function AirImportJobMaster() {
     queryFn: async (): Promise<AirImportJobListQueryResult> => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
+      const baseFilters =
+        isChaMode && chaConfig
+          ? buildChaListFilters(chaConfig)
+          : { service: "AIR", service_type: "Import" };
+
       const payload =
         Object.keys(filtersPayload).length > 0
           ? {
               filters: {
-                service: "AIR",
-                service_type: "Import",
+                ...baseFilters,
                 ...filtersPayload,
               },
             }
           : {
-              filters: {
-                service: "AIR",
-                service_type: "Import",
-              },
+              filters: baseFilters,
             };
 
       setIsInitialLoad(false);
@@ -740,10 +748,10 @@ function AirImportJobMaster() {
                   leftSection={<IconPlus size={14} />}
                   styles={erpToolbarPrimaryButtonStyles(theme)}
                   onClick={() => {
-                    setStoreFilters(LIST_KEY, appliedFilters);
-                    setStoreSearch(LIST_KEY, search);
-                    setShouldRestore(LIST_KEY, true);
-                    navigate("/air/import-job/create");
+                    setStoreFilters(listKey, appliedFilters);
+                    setStoreSearch(listKey, search);
+                    setShouldRestore(listKey, true);
+                    navigate(`${basePath}/create`);
                   }}
                 >
                   Create New
@@ -1505,18 +1513,18 @@ function AirImportJobMaster() {
                                     variant="job-page"
                                     canCancel={canCancel}
                                     onEdit={() => {
-                                      setStoreFilters(LIST_KEY, appliedFilters);
-                                      setStoreSearch(LIST_KEY, search);
-                                      setShouldRestore(LIST_KEY, true);
-                                      navigate(`/air/import-job/edit`, {
+                                      setStoreFilters(listKey, appliedFilters);
+                                      setStoreSearch(listKey, search);
+                                      setShouldRestore(listKey, true);
+                                      navigate(`${basePath}/edit`, {
                                         state: { job: row },
                                       });
                                     }}
                                     onView={() => {
-                                      setStoreFilters(LIST_KEY, appliedFilters);
-                                      setStoreSearch(LIST_KEY, search);
-                                      setShouldRestore(LIST_KEY, true);
-                                      navigate(`/air/import-job/view`, {
+                                      setStoreFilters(listKey, appliedFilters);
+                                      setStoreSearch(listKey, search);
+                                      setShouldRestore(listKey, true);
+                                      navigate(`${basePath}/view`, {
                                         state: {
                                           job: row,
                                           jobId: row.id ?? row.job_id,

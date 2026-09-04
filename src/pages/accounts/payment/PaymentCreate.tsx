@@ -388,6 +388,16 @@ function mapPaymentPartyDrCr(
   return side === "Dr" ? "Cr" : "Dr";
 }
 
+/** Payment header nets Dr − Cr; reversal nets Cr − Dr so the header amount matches the source payment. */
+function paymentPartyHeaderNetSign(
+  drCr: "Cr" | "Dr",
+  isReversal: boolean,
+): 1 | -1 {
+  const isDr = drCr === "Dr";
+  if (isReversal) return isDr ? -1 : 1;
+  return isDr ? 1 : -1;
+}
+
 const getDefaultDetailRow = (
   localCurrency: string,
   isReversalFlow = false,
@@ -1077,55 +1087,63 @@ export default function PaymentCreate({
     syncRoeForCurrencyChange,
   ]);
 
+  // Payment: header amount = Σ(Dr) − Σ(Cr). Reversal: Σ(Cr) − Σ(Dr) so the header matches the source payment.
+  // This is important because backend may append extra party rows on save.
   const partyLocalAmountsSnapshot = form.values.details
-    .map((d) => d.local_amount ?? "")
+    .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
+    .join(";");
+  const partyAmountsSnapshot = form.values.details
+    .map((d) => `${d.dr_cr}|${d.amount ?? ""}`)
     .join(";");
   const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
   const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
+  const prevPartyAmountsRef = useRef(partyAmountsSnapshot);
   const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
 
   useEffect(() => {
     const partyLocalChanged =
       prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
+    const partyAmountsChanged =
+      prevPartyAmountsRef.current !== partyAmountsSnapshot;
     const headerAmountRoeChanged =
       prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
 
+    const details = form.values.details ?? [];
+    let amountForLocal = form.values.amount;
+
+    if (partyAmountsChanged) {
+      const netAmount = details.reduce((s, d) => {
+        const amt =
+          d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
+        return s + paymentPartyHeaderNetSign(d.dr_cr, _isReversal) * amt;
+      }, 0);
+      const headerAmount = clampAmount(netAmount);
+      if (form.values.amount !== headerAmount) {
+        form.setFieldValue("amount", headerAmount);
+      }
+      amountForLocal = headerAmount;
+    }
+
     if (partyLocalChanged) {
-      const sum = (form.values.details ?? []).reduce(
-        (s, d) =>
-          s +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
+      const netLocal = details.reduce((s, d) => {
+        const local =
+          d.local_amount != null && Number.isFinite(d.local_amount)
             ? d.local_amount
-            : 0),
-        0,
-      );
-      const headerLocal = clampLocalAmount(sum);
-      const roeVal = form.values.roe;
-      const derivedHeaderAmount =
-        headerLocal != null &&
-        roeVal != null &&
-        Number.isFinite(roeVal) &&
-        roeVal !== 0
-          ? clampAmount(headerLocal / roeVal)
-          : null;
+            : 0;
+        return s + paymentPartyHeaderNetSign(d.dr_cr, _isReversal) * local;
+      }, 0);
+      const headerLocal = clampLocalAmount(netLocal);
       if (form.values.local_amount !== headerLocal) {
         form.setFieldValue("local_amount", headerLocal);
       }
-      if (
-        derivedHeaderAmount != null &&
-        form.values.amount !== derivedHeaderAmount
-      ) {
-        form.setFieldValue("amount", derivedHeaderAmount);
-      }
-    } else if (headerAmountRoeChanged) {
-      const amt = form.values.amount;
+    } else if (headerAmountRoeChanged || partyAmountsChanged) {
       const roeVal = form.values.roe;
       const local =
-        amt != null &&
-        Number.isFinite(amt) &&
+        amountForLocal != null &&
+        Number.isFinite(amountForLocal) &&
         roeVal != null &&
         Number.isFinite(roeVal)
-          ? clampLocalAmount(amt * roeVal)
+          ? clampLocalAmount(amountForLocal * roeVal)
           : null;
       if (form.values.local_amount !== local) {
         form.setFieldValue("local_amount", local);
@@ -1133,8 +1151,14 @@ export default function PaymentCreate({
     }
 
     prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+    prevPartyAmountsRef.current = partyAmountsSnapshot;
     prevHeaderAmountRoeRef.current = headerAmountRoeKey;
-  }, [partyLocalAmountsSnapshot, headerAmountRoeKey]);
+  }, [
+    partyLocalAmountsSnapshot,
+    partyAmountsSnapshot,
+    headerAmountRoeKey,
+    _isReversal,
+  ]);
 
   /** Skip one amount→local recalculation after allocation sync (adj local is the source). */
   const skipPartyLocalFromAmountRef = useRef(false);

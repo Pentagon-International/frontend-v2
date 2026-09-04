@@ -110,6 +110,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
+import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   formatInvoiceDocumentNo,
@@ -149,10 +150,26 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
+import {
+  buildChaServiceJobPayload,
+  getChaJobPageTitle,
+} from "../chaJob/chaJobPayload";
+import {
+  pickChaServiceFormFields,
+  readChaServiceFormFields,
+  readChaMasterAgentFields,
+} from "../chaJob/chaJobMasterSnapshot";
+import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
+import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
+import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
 
 // Type definitions
 type MAWBDetailsForm = {
   service: string;
+  service_code?: string;
+  service_id?: string;
   pp_cc: string;
   note: string;
   origin_agent: string; // Stores agent_code (code) for API payload
@@ -388,7 +405,7 @@ const mawbDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
-  job_date: yup.date().nullable(),
+  job_date: yup.date().required("Job Date is required"),
   igm_no: yup.string().optional(),
   igm_date: yup.date().nullable(),
 });
@@ -438,6 +455,11 @@ function AirImportJobCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { basePath: jobModuleBasePath, isChaMode, chaConfig } = useJobModulePaths({
+    basePath: "/air/import-job",
+    listKey: "AIR_IMPORT_JOB_MASTER",
+    invoiceServiceType: "AIR",
+  });
   const jobData = location.state?.job;
   const {
     invoiceList,
@@ -566,6 +588,13 @@ function AirImportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+
+  useChaJobEditHydration(
+    mode,
+    jobData,
+    jobModuleBasePath,
+    setIsFetchingJobById,
+  );
   const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
@@ -575,7 +604,7 @@ function AirImportJobCreate() {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate("/air/import-job");
+    navigate(jobModuleBasePath);
   };
 
   // When navigated from Customer Service Import with jobId only - fetch job and show
@@ -599,7 +628,7 @@ function AirImportJobCreate() {
         const job =
           list.length > 0 ? (list[0] as Record<string, unknown>) : null;
         if (!cancelled && job) {
-          navigate("/air/import-job/edit", {
+          navigate(`${jobModuleBasePath}/edit`, {
             state: {
               job,
               returnTo: location.state?.returnTo,
@@ -636,6 +665,11 @@ function AirImportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
+      service_id:
+        jobData?.service_id != null ? String(jobData.service_id) : "",
+      service_code: jobData?.service_code
+        ? String(jobData.service_code)
+        : "",
       pp_cc: resolveJobFreightPpCc(
         jobData?.pp_cc,
         (jobData as { freight?: string } | undefined)?.freight,
@@ -775,8 +809,15 @@ function AirImportJobCreate() {
     validate: yupResolver(mawbDetailsSchema),
   });
 
+  const {
+    serviceDropdownData,
+    serviceDropdownValue,
+    handleServiceChange,
+  } = useChaJobServiceField(["AIR"], mawbDetailsForm);
+
   const getMawbDetailsSnapshot = useCallback(
     () => ({
+      ...pickChaServiceFormFields(mawbDetailsForm.values),
       service: mawbDetailsForm.values.service || "Air",
       pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
       note: mawbDetailsForm.values.note || "",
@@ -947,6 +988,8 @@ function AirImportJobCreate() {
 
         // Populate MAWB Details using setValues - ensure all fields are set
         const mawbInitialValues = {
+          ...readChaServiceFormFields(jobData as Record<string, unknown>),
+          ...readChaMasterAgentFields(jobData as Record<string, unknown>),
           service: jobData.service || "AIR",
           pp_cc: resolveJobFreightPpCc(
             jobData.pp_cc,
@@ -954,7 +997,11 @@ function AirImportJobCreate() {
           ),
           note: String((jobData as { note?: unknown }).note ?? ""),
           // Use origin_agent_name from API response, fallback to origin_agent for backward compatibility
-          origin_agent: jobData.agent_code || jobData.origin_agent || "",
+          origin_agent:
+            jobData.agent_code ||
+            jobData.origin_agent ||
+            (jobData as { agent?: string }).agent ||
+            "",
           origin_agent_name:
             jobData.agent_name || jobData.origin_agent_name || "",
           origin_code: jobData.origin_code || "",
@@ -1220,6 +1267,7 @@ function AirImportJobCreate() {
                         house.hawb_number || house.hawb_no || house.hbl_number,
                       )
                     : "",
+                ...readChaHouseBlFromApi(house as Record<string, unknown>),
                 routed: house.routed
                   ? String(house.routed).toLowerCase() === "self"
                     ? "self"
@@ -2070,6 +2118,7 @@ function AirImportJobCreate() {
         if (shouldRestore && savedMawbDetails) {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
+            ...readChaServiceFormFields(savedMawbDetails),
             service: savedMawbDetails.service || "Air",
             pp_cc: resolveJobFreightPpCc(savedMawbDetails.pp_cc),
             note: String((savedMawbDetails as { note?: unknown })?.note ?? ""),
@@ -2344,7 +2393,7 @@ function AirImportJobCreate() {
         fromLocationState: !!location.state?.mawbDetails?.origin_agent_data,
       });
 
-      navigate("/air/import-job/house-create", {
+      navigate(`${jobModuleBasePath}/house-create`, {
         state: {
           hawbDetails: hawbDetails,
           // Support legacy housingDetails key for backward compatibility
@@ -2980,6 +3029,7 @@ function AirImportJobCreate() {
           // Only send positive ids (avoid id: 0 which backend may mishandle)
           ...(Number(hawb.id) > 0 && { id: Number(hawb.id) }),
           hawb_no: hawb.hawb_number,
+          ...pickChaHouseBlPayloadFields(hawb),
           origin_code: hawb.origin_code,
           destination_code: hawb.destination_code,
           trade: hawb.trade,
@@ -3018,6 +3068,13 @@ function AirImportJobCreate() {
           ...(hawb.shipment_terms_code != null &&
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
+              ...((hawb as { shipment_terms_name?: string }).shipment_terms_name !=
+                null &&
+                (hawb as { shipment_terms_name?: string }).shipment_terms_name !==
+                  "" && {
+                  shipment_terms_name: (hawb as { shipment_terms_name?: string })
+                    .shipment_terms_name,
+                }),
             }),
           ...buildDocumentIdsPayloadField(hawb.document_ids),
           events: Array.isArray((hawb as { events?: unknown }).events)
@@ -3193,27 +3250,38 @@ function AirImportJobCreate() {
       };
       console.log("Payload value---", payload);
 
+      const finalPayload =
+        isChaMode && chaConfig
+          ? buildChaServiceJobPayload({
+              agentPayload: payload,
+              serviceId: mawbDetailsForm.values.service_id,
+              transportMode: chaConfig.transportMode === "AIR" ? "AIR" : "SEA",
+            })
+          : payload;
+
       // API call to create or update air import job
       if (mode === "edit" && jobData?.id) {
         await putAPICall(
           `${URL.base}${URL.jobCreate}`,
           {
-            ...payload,
+            ...finalPayload,
             id: jobData.id,
           },
           API_HEADER,
         );
       } else {
-        await postAPICall(`${URL.base}${URL.jobCreate}`, payload, API_HEADER);
+        await postAPICall(`${URL.base}${URL.jobCreate}`, finalPayload, API_HEADER);
       }
 
       // Clear hawb details from state when navigating and trigger refetch
-      navigate("/air/import-job", {
+      navigate(jobModuleBasePath, {
         state: { hawbDetails: [], refreshData: true },
       });
       ToastNotification({
         type: "success",
-        message: `Air Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
+        message: isChaMode && chaConfig
+          ? `${chaConfig.pageTitle} ${mode === "edit" ? "updated" : "created"} successfully`
+          : `Air Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
       });
     } catch (err) {
       console.error("Error submitting form:", err);
@@ -3246,11 +3314,13 @@ function AirImportJobCreate() {
             justify="flex-start"
           >
             <Text size="xl" fw={600} c="#105476">
-              {mode === "view"
-                ? "View Import Job"
-                : mode === "edit"
-                  ? "Edit Import Job"
-                  : "Create Import Job"}
+              {isChaMode && chaConfig
+                ? getChaJobPageTitle(chaConfig, mode)
+                : mode === "view"
+                  ? "View Import Job"
+                  : mode === "edit"
+                    ? "Edit Import Job"
+                    : "Create Import Job"}
             </Text>
           </EditPageHeadingRow>
           {jobData?.job_id && (
@@ -3365,7 +3435,7 @@ function AirImportJobCreate() {
                             },
                           ];
 
-                          navigate("/air/import-job/invoice", {
+                          navigate(`${jobModuleBasePath}/invoice`, {
                             state: {
                               serviceType: "AIR",
                               hawbDetails: housingDetailsForInvoice,
@@ -3624,8 +3694,10 @@ function AirImportJobCreate() {
                   required
                   placeholder="Select Service"
                   searchable
-                  data={["AIR"]}
-                  {...mawbDetailsForm.getInputProps("service")}
+                  data={serviceDropdownData}
+                  value={serviceDropdownValue}
+                  onChange={handleServiceChange}
+                  error={mawbDetailsForm.errors.service as string}
                 />
               </Grid.Col>
 
@@ -5145,28 +5217,17 @@ function AirImportJobCreate() {
                             e.charge_id != null ||
                             (e.charge_name && e.charge_name.trim() !== ""),
                         )
-                        .map((e) => ({
-                          charge_id: e.charge_id,
-                          charge_name: e.charge_name ?? "",
-                          segment: "",
-                          job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                          sub_job: "",
-                          cn_r: "",
-                          currency: e.currency_code ?? "",
-                          currency_id: e.currency_id ?? "",
-                          roe: e.roe,
-                          unit_code: e.unit_code ?? "",
-                          unit_id: e.unit_id ?? "",
-                          no_of_unit: e.no_of_unit,
-                          amount_per_unit: e.cost_per_unit,
-                          amount: e.total_cost,
-                          amount_in_local:
-                            e.total_cost != null && e.roe != null
-                              ? Math.round(e.total_cost * e.roe * 100) / 100
-                              : e.total_cost,
-                          tax_code: "",
-                          tax: "false",
-                        }));
+                        .map((e) =>
+                          mapChargeToPaymentRequestPrefill(
+                            e,
+                            {
+                              job_no: String(
+                                jobData?.job_id ?? jobData?.id ?? "",
+                              ),
+                            },
+                            { source: "estimate" },
+                          ),
+                        );
                       const firstSupplier =
                         estimates.find(
                           (e) =>
@@ -5462,7 +5523,7 @@ function AirImportJobCreate() {
                                         }}
                                         onClick={() =>
                                           navigate(
-                                            `/air/import-job/invoice/view/${invoiceViewId}`,
+                                            `${jobModuleBasePath}/invoice/view/${invoiceViewId}`,
                                             {
                                               state: {
                                                 invoiceData: row,
@@ -5518,7 +5579,7 @@ function AirImportJobCreate() {
                                             }}
                                             onClick={() =>
                                               navigate(
-                                                `/air/import-job/invoice/edit/${row.invoice_id}`,
+                                                `${jobModuleBasePath}/invoice/edit/${row.invoice_id}`,
                                                 {
                                                   state: {
                                                     invoiceData: row,
@@ -5585,7 +5646,7 @@ function AirImportJobCreate() {
                                           }}
                                           onClick={() =>
                                             navigate(
-                                              "/air/import-job/invoice/reverse",
+                                              `${jobModuleBasePath}/invoice/reverse`,
                                               {
                                                 state: {
                                                   document_no:
@@ -5779,7 +5840,7 @@ function AirImportJobCreate() {
                                                       rev={rev}
                                                       readOnly={isReadOnly}
                                                       parentRow={row}
-                                                      jobBasePath="/air/import-job"
+                                                      jobBasePath={jobModuleBasePath}
                                                       navigate={navigate}
                                                       job={location.state?.job}
                                                       deletingReverseId={
@@ -5961,7 +6022,7 @@ function AirImportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate("/air/import-job");
+              navigate(jobModuleBasePath);
             }}
           >
             Yes, close
@@ -6167,7 +6228,7 @@ function AirImportJobCreate() {
                             onClick={() => handleOpenHouseEvents(index)}
                           />
                           <HouseCreateAgentInvoiceMenuItem
-                            invoicePath="/air/import-job/invoice"
+                            invoicePath={`${jobModuleBasePath}/invoice`}
                             serviceType="AIR"
                             getCurrentHousingDetail={() => hawb}
                             jobId={jobData?.id}

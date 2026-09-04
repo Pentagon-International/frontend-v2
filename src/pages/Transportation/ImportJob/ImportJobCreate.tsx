@@ -121,6 +121,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
+import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   formatHouseCargoChargeableForPayload,
@@ -167,10 +168,27 @@ import {
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
+import {
+  buildChaServiceJobPayload,
+  getChaJobPageTitle,
+} from "../chaJob/chaJobPayload";
+import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
+import {
+  pickChaServiceFormFields,
+  readChaServiceFormFields,
+  readChaMasterAgentFields,
+  type ChaServiceFormFields,
+} from "../chaJob/chaJobMasterSnapshot";
+import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
+import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 
 // Type definitions
 type MBLDetailsForm = {
   service: string;
+  service_code?: string;
+  service_id?: string;
   pp_cc: string;
   note: string;
   origin_agent: string; // Stores customer_code (code) for API payload
@@ -301,7 +319,7 @@ const mblDetailsSchema = yup.object({
   eta: yup.date().required("ETA is required"),
   atd: yup.date().nullable(),
   ata: yup.date().nullable(),
-  job_date: yup.date().nullable(),
+  job_date: yup.date().required("Job Date is required"),
   igm_no: yup.string().optional(),
   igm_date: yup.date().nullable(),
 });
@@ -567,6 +585,11 @@ function ImportJobCreate() {
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
+  const { basePath: jobModuleBasePath, isChaMode, chaConfig } = useJobModulePaths({
+    basePath: "/SeaExport/import-job",
+    listKey: "OCEAN_IMPORT_JOB_MASTER",
+    invoiceServiceType: ["FCL", "LCL"],
+  });
   const jobData = location.state?.job;
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -722,6 +745,13 @@ function ImportJobCreate() {
   const isReadOnly = isViewOnly || isClosedJob;
   const documentsReadOnly = isViewOnly;
 
+  useChaJobEditHydration(
+    mode,
+    jobData,
+    jobModuleBasePath,
+    setIsFetchingJobById,
+  );
+
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
     // In create mode the job is not saved yet; confirm before leaving.
@@ -729,7 +759,7 @@ function ImportJobCreate() {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate("/SeaExport/import-job");
+    navigate(jobModuleBasePath);
   };
 
   // When navigated from Customer Service Import with jobId only - fetch job and show
@@ -753,7 +783,7 @@ function ImportJobCreate() {
         const job =
           list.length > 0 ? (list[0] as Record<string, unknown>) : null;
         if (!cancelled && job) {
-          navigate("/SeaExport/import-job/edit", {
+          navigate(`${jobModuleBasePath}/edit`, {
             state: {
               job,
               returnTo: location.state?.returnTo,
@@ -789,6 +819,11 @@ function ImportJobCreate() {
   const mblDetailsForm = useForm<MBLDetailsForm>({
     initialValues: {
       service: "",
+      service_id:
+        jobData?.service_id != null ? String(jobData.service_id) : "",
+      service_code: jobData?.service_code
+        ? String(jobData.service_code)
+        : "",
       pp_cc: normalizeFreightPpCc(
         (location.state?.mblDetails as { pp_cc?: unknown } | undefined)
           ?.pp_cc ??
@@ -832,6 +867,12 @@ function ImportJobCreate() {
     },
     validate: yupResolver(mblDetailsSchema),
   });
+
+  const {
+    serviceDropdownData,
+    serviceDropdownValue,
+    handleServiceChange,
+  } = useChaJobServiceField(["FCL", "LCL"], mblDetailsForm);
 
   // Carrier Details Form
   const carrierDetailsForm = useForm<CarrierDetailsForm>({
@@ -975,6 +1016,8 @@ function ImportJobCreate() {
             : undefined;
 
         mblDetailsForm.setValues({
+          ...readChaServiceFormFields(mblData as ChaServiceFormFields),
+          ...readChaMasterAgentFields(mblData as Record<string, unknown>),
           service: mblData.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblData as { pp_cc?: unknown }).pp_cc ??
@@ -992,8 +1035,12 @@ function ImportJobCreate() {
             mblData.agent_code ||
             mblData.origin_agent_code ||
             mblData.origin_agent ||
+            (mblData as { agent?: string }).agent ||
             "",
-          agent_name: mblData.agent_name || mblData.origin_agent_name || "",
+          agent_name:
+            mblData.agent_name ||
+            mblData.origin_agent_name ||
+            "",
           agent_address: originAgentAddress,
           origin_code: mblData.origin_code || "",
           origin_name: mblData.origin_name || "",
@@ -1138,6 +1185,7 @@ function ImportJobCreate() {
                 : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
+              ...readChaHouseBlFromApi(house),
               house_date: house.house_date
                 ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
                 : null,
@@ -1964,6 +2012,8 @@ function ImportJobCreate() {
       if (location.state?.mblDetails) {
         const mblDetails = location.state.mblDetails;
         mblDetailsForm.setValues({
+          ...readChaServiceFormFields(mblDetails),
+          ...readChaMasterAgentFields(mblDetails as Record<string, unknown>),
           service: mblDetails.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblDetails as { pp_cc?: unknown })?.pp_cc ??
@@ -2538,7 +2588,7 @@ function ImportJobCreate() {
         .map((container) => container.container_no)
         .filter((no) => no && no.trim() !== "");
 
-      navigate("/SeaExport/import-job/house-create", {
+      navigate(`${jobModuleBasePath}/house-create`, {
         state: {
           fromHouseCreate: true,
           housingDetails: housingDetails,
@@ -2548,6 +2598,7 @@ function ImportJobCreate() {
             job: jobWithMergedHousingDetails,
           }),
           mblDetails: {
+            ...pickChaServiceFormFields(mblDetailsForm.values),
             service: mblDetailsForm.values.service || "",
             pp_cc: mblDetailsForm.values.pp_cc || "Collect",
             note: mblDetailsForm.values.note || "",
@@ -3552,6 +3603,7 @@ function ImportJobCreate() {
           ...(house.id && { id: house.id }),
           ...(house.shipment_id && { shipment_id: house.shipment_id }),
           hbl_number: house.hbl_number,
+          ...pickChaHouseBlPayloadFields(house),
           house_date: house.house_date
             ? dayjs(house.house_date as string | Date).format("YYYY-MM-DD")
             : null,
@@ -3594,6 +3646,10 @@ function ImportJobCreate() {
           ...(house.shipment_terms_code != null &&
             house.shipment_terms_code !== "" && {
               shipment_terms_code: house.shipment_terms_code,
+              ...(house.shipment_terms_name != null &&
+                house.shipment_terms_name !== "" && {
+                  shipment_terms_name: house.shipment_terms_name,
+                }),
             }),
           pp_cc:
             normalizeFreightPpCc(
@@ -3780,29 +3836,51 @@ function ImportJobCreate() {
         document_ids: jobDocuments.document_ids,
       };
 
+      const finalPayload =
+        isChaMode && chaConfig
+          ? buildChaServiceJobPayload({
+              agentPayload: payload,
+              serviceId: mblDetailsForm.values.service_id,
+              transportMode: chaConfig.transportMode === "AIR" ? "AIR" : "SEA",
+            })
+          : payload;
+
       // API call to create or update import job
       if (mode === "edit" && jobData?.id) {
-        // Edit mode: Use PUT method with ID in payload
-        await putAPICall(
-          URL.importJob,
-          {
-            ...payload,
-            id: jobData.id,
-          },
-          API_HEADER,
-        );
+        if (isChaMode) {
+          await putAPICall(
+            `${URL.base}${URL.jobCreate}`,
+            { ...finalPayload, id: jobData.id },
+            API_HEADER,
+          );
+        } else {
+          await putAPICall(
+            URL.importJob,
+            { ...finalPayload, id: jobData.id },
+            API_HEADER,
+          );
+        }
       } else {
-        // Create mode: Use POST method
-        await postAPICall(URL.importJob, payload, API_HEADER);
+        if (isChaMode) {
+          await postAPICall(
+            `${URL.base}${URL.jobCreate}`,
+            finalPayload,
+            API_HEADER,
+          );
+        } else {
+          await postAPICall(URL.importJob, finalPayload, API_HEADER);
+        }
       }
 
       ToastNotification({
         type: "success",
-        message: `Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
+        message: isChaMode && chaConfig
+          ? `${chaConfig.pageTitle} ${mode === "edit" ? "updated" : "created"} successfully`
+          : `Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
       });
 
       // Clear housing details from state when navigating and trigger refetch
-      navigate("/SeaExport/import-job", {
+      navigate(jobModuleBasePath, {
         state: { housingDetails: [], refreshData: true },
       });
     } catch (err) {
@@ -3836,11 +3914,13 @@ function ImportJobCreate() {
             justify="flex-start"
           >
             <Text size="xl" fw={600} c="#105476">
-              {mode === "view"
-                ? "View Import Job"
-                : mode === "edit"
-                  ? "Edit Import Job"
-                  : "Create Import Job"}
+              {isChaMode && chaConfig
+                ? getChaJobPageTitle(chaConfig, mode)
+                : mode === "view"
+                  ? "View Import Job"
+                  : mode === "edit"
+                    ? "Edit Import Job"
+                    : "Create Import Job"}
             </Text>
           </EditPageHeadingRow>
           {jobData?.job_id && (
@@ -3999,7 +4079,7 @@ function ImportJobCreate() {
                             charges: allCollectCharges,
                           },
                         ];
-                        navigate("/SeaExport/import-job/invoice", {
+                        navigate(`${jobModuleBasePath}/invoice`, {
                           state: {
                             serviceType: ["FCL", "LCL"],
                             hawbDetails: housingDetailsForInvoice,
@@ -4236,8 +4316,10 @@ function ImportJobCreate() {
                   required
                   placeholder="Select Service"
                   searchable
-                  data={["FCL", "LCL"]}
-                  {...mblDetailsForm.getInputProps("service")}
+                  data={serviceDropdownData}
+                  value={serviceDropdownValue}
+                  onChange={handleServiceChange}
+                  error={mblDetailsForm.errors.service as string}
                 />
               </Grid.Col>
 
@@ -6171,28 +6253,17 @@ function ImportJobCreate() {
                             e.charge_id != null ||
                             (e.charge_name && e.charge_name.trim() !== ""),
                         )
-                        .map((e) => ({
-                          charge_id: e.charge_id,
-                          charge_name: e.charge_name ?? "",
-                          segment: "",
-                          job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-                          sub_job: "",
-                          cn_r: "",
-                          currency: e.currency_code ?? "",
-                          currency_id: e.currency_id ?? "",
-                          roe: e.roe,
-                          unit_code: e.unit_code ?? "",
-                          unit_id: e.unit_id ?? "",
-                          no_of_unit: e.no_of_unit,
-                          amount_per_unit: e.cost_per_unit,
-                          amount: e.total_cost,
-                          amount_in_local:
-                            e.total_cost != null && e.roe != null
-                              ? Math.round(e.total_cost * e.roe * 100) / 100
-                              : e.total_cost,
-                          tax_code: "",
-                          tax: "false",
-                        }));
+                        .map((e) =>
+                          mapChargeToPaymentRequestPrefill(
+                            e,
+                            {
+                              job_no: String(
+                                jobData?.job_id ?? jobData?.id ?? "",
+                              ),
+                            },
+                            { source: "estimate" },
+                          ),
+                        );
                       const firstSupplier =
                         estimates.find(
                           (e) =>
@@ -6483,7 +6554,7 @@ function ImportJobCreate() {
                                         }}
                                         onClick={() =>
                                           navigate(
-                                            `/SeaExport/import-job/invoice/view/${invoiceViewId}`,
+                                            `${jobModuleBasePath}/invoice/view/${invoiceViewId}`,
                                             {
                                               state: {
                                                 invoiceData: row,
@@ -6539,7 +6610,7 @@ function ImportJobCreate() {
                                             }}
                                             onClick={() =>
                                               navigate(
-                                                `/SeaExport/import-job/invoice/edit/${row.invoice_id}`,
+                                                `${jobModuleBasePath}/invoice/edit/${row.invoice_id}`,
                                                 {
                                                   state: {
                                                     invoiceData: row,
@@ -6606,7 +6677,7 @@ function ImportJobCreate() {
                                           }}
                                           onClick={() =>
                                             navigate(
-                                              "/SeaExport/import-job/invoice/reverse",
+                                              `${jobModuleBasePath}/invoice/reverse`,
                                               {
                                                 state: {
                                                   document_no:
@@ -6808,7 +6879,7 @@ function ImportJobCreate() {
                                                       rev={rev}
                                                       readOnly={isReadOnly}
                                                       parentRow={row}
-                                                      jobBasePath="/SeaExport/import-job"
+                                                      jobBasePath={jobModuleBasePath}
                                                       navigate={navigate}
                                                       job={location.state?.job}
                                                       deletingReverseId={
@@ -7022,7 +7093,7 @@ function ImportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate("/SeaExport/import-job");
+              navigate(jobModuleBasePath);
             }}
           >
             Yes, close
@@ -7305,7 +7376,7 @@ function ImportJobCreate() {
                             onClick={() => handleOpenHouseEvents(index)}
                           />
                           <HouseCreateAgentInvoiceMenuItem
-                            invoicePath="/SeaExport/import-job/invoice"
+                            invoicePath={`${jobModuleBasePath}/invoice`}
                             serviceType={mblDetailsForm.values.service || "FCL"}
                             getCurrentHousingDetail={() => house}
                             jobId={jobData?.id}

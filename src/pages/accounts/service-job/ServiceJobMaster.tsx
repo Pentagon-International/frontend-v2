@@ -688,7 +688,7 @@ export default function ServiceJobMaster() {
                 <Loader color="#105476" size="lg" />
               </Center>
             ) : (
-              <Box style={{ overflowX: "auto" }}>
+              <Box>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>

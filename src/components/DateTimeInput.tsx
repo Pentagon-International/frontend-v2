@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import useDateFormat from "../hooks/useDateFormat";
+import { parseTypedDate } from "../utils/dateFormat";
 
 export interface DateTimeInputProps {
   label?: string;
@@ -224,6 +225,7 @@ const DateTimeInput: React.FC<DateTimeInputProps> = ({
         value={dateValue}
         onChange={handleDateChange}
         valueFormat={`${dateFormat}`}
+        dateParser={(input) => parseTypedDate(input, dateFormat)}
         leftSection={<IconCalendar size={18} />}
         leftSectionPointerEvents="none"
         radius="sm"

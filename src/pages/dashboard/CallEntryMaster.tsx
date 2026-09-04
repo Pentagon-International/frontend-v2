@@ -532,6 +532,13 @@ function CallEntry() {
   const [fromDate, setFromDate] = useState<Date | null>(getDefaultFromDate());
   const [toDate, setToDate] = useState<Date | null>(getDefaultToDate());
   const isMountedRef = useRef(false);
+  /** When true, unfiltered fetch omits the default current-month date range (user cleared dates and applied). */
+  const skipDefaultDateRangeRef = useRef(false);
+  const [skipDefaultDateRange, setSkipDefaultDateRange] = useState(false);
+  const setSkipDefaultDateRangeValue = (skip: boolean) => {
+    skipDefaultDateRangeRef.current = skip;
+    setSkipDefaultDateRange(skip);
+  };
 
   // Store initial dates for the main query (these won't change when user modifies dates)
   const initialFromDateRef = useRef<Date | null>(getDefaultFromDate());
@@ -624,7 +631,7 @@ function CallEntry() {
     isFetching: callEntryFetching,
     refetch: refetchCallEntries,
   } = useQuery({
-    queryKey: ["callEntries", pageIndex, pageSize],
+    queryKey: ["callEntries", pageIndex, pageSize, skipDefaultDateRange],
     enabled: !isFilteredOrSearchActive,
     /** Keeps prior page totals/rows while the next page loads — avoids total→0 and clamp resetting pageIndex to 0. */
     placeholderData: (previousData) => previousData,
@@ -635,11 +642,15 @@ function CallEntry() {
         // Only Apply Filters button will use the new dates via appliedFilters
         const requestBody: { filters: any } = { filters: {} };
 
-        // Use default date range for initial load
+        // Use default date range for initial load (unless user cleared dates and applied)
         let dateFrom: string | null = null;
         let dateTo: string | null = null;
 
-        if (initialFromDateRef.current && initialToDateRef.current) {
+        if (
+          !skipDefaultDateRangeRef.current &&
+          initialFromDateRef.current &&
+          initialToDateRef.current
+        ) {
           dateFrom = dayjs(initialFromDateRef.current).format("YYYY-MM-DD");
           dateTo = dayjs(initialToDateRef.current).format("YYYY-MM-DD");
         }
@@ -784,12 +795,17 @@ function CallEntry() {
           date_to: restoredFilters.date_to || null,
         });
 
-        // Restore date range if available
+        // Restore date range if available; otherwise keep dates cleared
         if (restoredFilters.date_from && restoredFilters.date_to) {
           const parsedFrom = dayjs(restoredFilters.date_from, "YYYY-MM-DD", true);
           const parsedTo = dayjs(restoredFilters.date_to, "YYYY-MM-DD", true);
           if (parsedFrom.isValid()) setFromDate(parsedFrom.toDate());
           if (parsedTo.isValid()) setToDate(parsedTo.toDate());
+          setSkipDefaultDateRangeValue(false);
+        } else {
+          setFromDate(null);
+          setToDate(null);
+          setSkipDefaultDateRangeValue(true);
         }
 
         hasFilters = Boolean(
@@ -1126,6 +1142,11 @@ function CallEntry() {
                 const parsedTo = dayjs(restoredFilters.date_to, "YYYY-MM-DD", true);
                 if (parsedFrom.isValid()) setFromDate(parsedFrom.toDate());
                 if (parsedTo.isValid()) setToDate(parsedTo.toDate());
+                setSkipDefaultDateRangeValue(false);
+              } else {
+                setFromDate(null);
+                setToDate(null);
+                setSkipDefaultDateRangeValue(true);
               }
 
               setAppliedFilters({
@@ -1485,7 +1506,8 @@ function CallEntry() {
         (fromDate && toDate);
 
       if (!hasFilterValues) {
-        // If no filter values, show unfiltered data
+        // If no filter values, show unfiltered data (do not re-inject current-month dates)
+        setSkipDefaultDateRangeValue(true);
         setPageIndex(0);
         setFiltersApplied(false);
         setAppliedFilters({
@@ -1512,6 +1534,7 @@ function CallEntry() {
         return;
       }
 
+      setSkipDefaultDateRangeValue(!(fromDate && toDate));
       setPageIndex(0); // Reset to first page when applying filters
       setFiltersApplied(true); // Mark filters as applied
 
@@ -1584,6 +1607,7 @@ function CallEntry() {
     });
 
     // Reset to initial date range (first day of month to today)
+    setSkipDefaultDateRangeValue(false);
     setFromDate(getDefaultFromDate());
     setToDate(getDefaultToDate());
 

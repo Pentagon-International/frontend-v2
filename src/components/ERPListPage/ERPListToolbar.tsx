@@ -38,6 +38,7 @@ export function ERPListToolbar({
     <Box
       mx={bleed ? ERP_LIST_FULL_BLEED_MX : 0}
       style={{
+        flexShrink: 0,
         backgroundColor: theme.cardBg,
         borderBottom: `1px solid ${theme.border}`,
       }}

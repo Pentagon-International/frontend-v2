@@ -31,6 +31,7 @@ const pathTitleMap: Record<string, string> = {
   "/inland": "Inland",
   "/air": "Air",
   "/SeaExport": "Ocean",
+  "/cha": "CHA",
   "/air/import-dsr": "Air Import DSR",
   "/air/export-dsr": "Air Export DSR",
   "/SeaExport/import-dsr": "Ocean Import DSR",
@@ -138,6 +139,10 @@ const pathActiveNavMap: Record<string, string> = {
   "/air/export-dsr": "Transportation",
   "/SeaExport/import-dsr": "Transportation",
   "/SeaExport/export-dsr": "Transportation",
+  "/cha/air-import-job": "Transportation",
+  "/cha/air-export-job": "Transportation",
+  "/cha/ocean-import-job": "Transportation",
+  "/cha/ocean-export-job": "Transportation",
 };
 
 const pathActiveSubNavMap: Record<string, string> = {
@@ -150,6 +155,10 @@ const pathActiveSubNavMap: Record<string, string> = {
   "/air/export-dsr": "Air export DSR",
   "/SeaExport/import-dsr": "Ocean Import DSR",
   "/SeaExport/export-dsr": "Ocean Export DSR",
+  "/cha/air-import-job": "CHA Air Import Job",
+  "/cha/air-export-job": "CHA Air Export Job",
+  "/cha/ocean-import-job": "CHA Ocean Import Job",
+  "/cha/ocean-export-job": "CHA Ocean Export Job",
   "/checker": "Checker",
   "/unposted-documents": "Unposted Documents",
   "/invoices": "Unposted Documents",

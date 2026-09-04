@@ -71,6 +71,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
+import { createChaJobFromBooking } from "../../../utils/bookingCreateChaJob";
 import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 
 const LIST_KEY = "OCEAN_EXPORT_BOOKING_MASTER";
@@ -346,6 +347,9 @@ function OceanExportBookingMaster() {
   const [createJobBookingId, setCreateJobBookingId] = useState<number | null>(
     null,
   );
+  const [createChaJobBookingId, setCreateChaJobBookingId] = useState<
+    number | null
+  >(null);
   const [isDuplicatingBooking, setIsDuplicatingBooking] = useState(false);
   const [duplicateCustomerCode, setDuplicateCustomerCode] = useState<
     string | null
@@ -1039,6 +1043,21 @@ function OceanExportBookingMaster() {
     });
   };
 
+  const handleCreateChaJob = async (booking: ExportShipmentData) => {
+    await createChaJobFromBooking(booking as unknown as Record<string, unknown>, {
+      navigate,
+      mode: "ocean-export",
+      onStart: () => setCreateChaJobBookingId(booking.id),
+      onEnd: () => setCreateChaJobBookingId(null),
+      invalidateList: () => {
+        queryClient.invalidateQueries({
+          queryKey: ["ocean-export-booking/filter/"],
+        });
+        void refetchExportShipments();
+      },
+    });
+  };
+
   const renderRowActions = useCallback(
     (row: ExportShipmentData) => {
       const statusUpper = (row.status ?? "").toUpperCase();
@@ -1046,7 +1065,7 @@ function OceanExportBookingMaster() {
       const canCancel = statusUpper !== "GENERATED" && !isCancel;
       const isBooked = statusUpper === "BOOKED";
       return (
-        <Menu shadow="md" width={140}>
+        <Menu shadow="md" width={168}>
           <Menu.Target>
             <ActionIcon variant="subtle" color="gray">
               <IconDotsVertical size={16} />
@@ -1080,13 +1099,32 @@ function OceanExportBookingMaster() {
               Duplicate
             </Menu.Item>
             {isBooked && (
-              <Menu.Item
-                leftSection={<IconPlus size={14} />}
-                disabled={createJobBookingId === row.id}
-                onClick={() => void handleCreateJob(row)}
-              >
-                {createJobBookingId === row.id ? "Creating job…" : "Create Job"}
-              </Menu.Item>
+              <>
+                <Menu.Item
+                  leftSection={<IconPlus size={14} />}
+                  disabled={
+                    createJobBookingId === row.id ||
+                    createChaJobBookingId === row.id
+                  }
+                  onClick={() => void handleCreateJob(row)}
+                >
+                  {createJobBookingId === row.id
+                    ? "Creating job…"
+                    : "Create Job"}
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconPlus size={14} />}
+                  disabled={
+                    createJobBookingId === row.id ||
+                    createChaJobBookingId === row.id
+                  }
+                  onClick={() => void handleCreateChaJob(row)}
+                >
+                  {createChaJobBookingId === row.id
+                    ? "Creating CHA job…"
+                    : "Create CHA Job"}
+                </Menu.Item>
+              </>
             )}
             {canCancel && (
               <Tooltip
@@ -1113,7 +1151,9 @@ function OceanExportBookingMaster() {
       navigate,
       persistListState,
       createJobBookingId,
+      createChaJobBookingId,
       handleCreateJob,
+      handleCreateChaJob,
       isDuplicatingBooking,
       openDuplicateForRow,
     ],
@@ -1847,7 +1887,11 @@ function OceanExportBookingMaster() {
           />
         </Drawer>
         <BookingCreateJobLoader
-          active={createJobBookingId != null || isDuplicatingBooking}
+          active={
+            createJobBookingId != null ||
+            createChaJobBookingId != null ||
+            isDuplicatingBooking
+          }
           message={
             isDuplicatingBooking
               ? "Preparing duplicate booking…"

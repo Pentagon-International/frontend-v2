@@ -24,6 +24,7 @@ import {
   IconX,
   IconSearch,
   IconFilter,
+  IconPlus,
   IconPackage,
   IconCircleCheck,
   IconClock,
@@ -49,6 +50,7 @@ import {
   ERPListScreen,
   ERPListStatPill,
   erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   erpListFilterUnifiedMantineStyles,
   erpListFilterFieldCellStyle,
@@ -79,6 +81,8 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import { buildChaListFilters } from "../chaJob/chaJobService";
 
 const LIST_KEY = "AIR_EXPORT_JOB_MASTER";
 
@@ -213,6 +217,11 @@ type AirExportJobFilters = {
 function AirExportJobMaster() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { basePath, listKey, isChaMode, chaConfig } = useJobModulePaths({
+    basePath: "/air/export-job",
+    listKey: LIST_KEY,
+    invoiceServiceType: "AIR",
+  });
   const theme = DEFAULT_ERP_LIST_THEME;
   const filterFieldStyles = erpListFilterUnifiedMantineStyles(theme);
   const { muted, fg, primary } = theme;
@@ -314,7 +323,7 @@ function AirExportJobMaster() {
           next = { ...next, job_date_from: "", job_date_to: "" };
         }
         setAppliedFilters(next);
-        setStoreFilters(LIST_KEY, next);
+        setStoreFilters(listKey, next);
         return next;
       });
       setPagination((p) => ({ ...p, pageIndex: 0 }));
@@ -335,7 +344,7 @@ function AirExportJobMaster() {
   };
 
   useEffect(() => {
-    const stored = getState(LIST_KEY);
+    const stored = getState(listKey);
     const shouldRestore = stored?.shouldRestore === true;
     setIsInitialLoad(true);
 
@@ -357,8 +366,8 @@ function AirExportJobMaster() {
 
     setPagination((p) => ({ ...p, pageIndex: 0 }));
 
-    clearAllExcept(LIST_KEY);
-    setShouldRestore(LIST_KEY, false);
+    clearAllExcept(listKey);
+    setShouldRestore(listKey, false);
     setIsRestoring(false);
     setIsInitialLoad(false);
   }, [location.key]);
@@ -385,8 +394,8 @@ function AirExportJobMaster() {
     setDraftFilters(next);
     setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, next);
-    setStoreSearch(LIST_KEY, search);
+    setStoreFilters(listKey, next);
+    setStoreSearch(listKey, search);
     setShowFilters(false);
   };
 
@@ -394,7 +403,7 @@ function AirExportJobMaster() {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    clearAllStore(LIST_KEY);
+    clearAllStore(listKey);
   };
 
   const buildFiltersPayload = (
@@ -454,20 +463,21 @@ function AirExportJobMaster() {
     queryFn: async (): Promise<AirExportJobListQueryResult> => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
 
+      const baseFilters =
+        isChaMode && chaConfig
+          ? buildChaListFilters(chaConfig)
+          : { service: "AIR", service_type: "Export" };
+
       const payload =
         Object.keys(filtersPayload).length > 0
           ? {
               filters: {
-                service: "AIR",
-                service_type: "Export",
+                ...baseFilters,
                 ...filtersPayload,
               },
             }
           : {
-              filters: {
-                service: "AIR",
-                service_type: "Export",
-              },
+              filters: baseFilters,
             };
 
       setIsInitialLoad(false);
@@ -734,21 +744,21 @@ function AirExportJobMaster() {
                 >
                   {showFilters ? "Hide filters" : "Filters"}
                 </Button>
-                {/* Create New hidden: export jobs should be created from bookings
-                <Button
-                  size="xs"
-                  leftSection={<IconPlus size={14} />}
-                  styles={erpToolbarPrimaryButtonStyles(theme)}
-                  onClick={() => {
-                    setStoreFilters(LIST_KEY, appliedFilters);
-                    setStoreSearch(LIST_KEY, search);
-                    setShouldRestore(LIST_KEY, true);
-                    navigate("/air/export-job/create");
-                  }}
-                >
-                  Create New
-                </Button>
-                */}
+                {isChaMode && (
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(theme)}
+                    onClick={() => {
+                      setStoreFilters(listKey, appliedFilters);
+                      setStoreSearch(listKey, search);
+                      setShouldRestore(listKey, true);
+                      navigate(`${basePath}/create`);
+                    }}
+                  >
+                    Create New
+                  </Button>
+                )}
               </>
             ),
           }}
@@ -1507,18 +1517,18 @@ function AirExportJobMaster() {
                                     variant="job-page"
                                     canCancel={canCancel}
                                     onEdit={() => {
-                                      setStoreFilters(LIST_KEY, appliedFilters);
-                                      setStoreSearch(LIST_KEY, search);
-                                      setShouldRestore(LIST_KEY, true);
-                                      navigate(`/air/export-job/edit`, {
+                                      setStoreFilters(listKey, appliedFilters);
+                                      setStoreSearch(listKey, search);
+                                      setShouldRestore(listKey, true);
+                                      navigate(`${basePath}/edit`, {
                                         state: { job: row },
                                       });
                                     }}
                                     onView={() => {
-                                      setStoreFilters(LIST_KEY, appliedFilters);
-                                      setStoreSearch(LIST_KEY, search);
-                                      setShouldRestore(LIST_KEY, true);
-                                      navigate(`/air/export-job/view`, {
+                                      setStoreFilters(listKey, appliedFilters);
+                                      setStoreSearch(listKey, search);
+                                      setShouldRestore(listKey, true);
+                                      navigate(`${basePath}/view`, {
                                         state: {
                                           job: row,
                                           jobId: row.id ?? row.job_id,

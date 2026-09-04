@@ -264,7 +264,8 @@ function isCreditNoteSourceDocument(
 function resolveChargeDrCr(
   charge: Pick<DrCrChargeLike, "dr_cr" | "Dr_Cr">,
 ): "Cr" | "Dr" {
-  const raw = charge.dr_cr ?? charge.Dr_Cr ?? "Cr";
+  const raw = charge.dr_cr ?? charge.Dr_Cr;
+  if (raw == null || String(raw).trim() === "") return "Dr";
   return String(raw).trim().toLowerCase() === "dr" ? "Dr" : "Cr";
 }
 
@@ -656,12 +657,24 @@ function unsignedFinite(n: number | null): number | null {
   return Math.abs(n);
 }
 
-function flipChargeDrCr(value: string | null | undefined): "Dr" | "Cr" {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase() === "dr"
-    ? "Cr"
-    : "Dr";
+function pickDrCrRaw(
+  source: {
+    dr_cr?: string | null;
+    Dr_cr?: string | null;
+    Dr_Cr?: string | null;
+  },
+): string | null {
+  const raw = source.dr_cr ?? source.Dr_cr ?? source.Dr_Cr;
+  if (raw == null || String(raw).trim() === "") return null;
+  return String(raw);
+}
+
+function resolveHeaderDrCr(
+  value: string | null | undefined,
+  emptyFallback: "Dr" | "Cr" = "Cr",
+): "Dr" | "Cr" {
+  if (value == null || String(value).trim() === "") return emptyFallback;
+  return String(value).trim().toLowerCase() === "dr" ? "Dr" : "Cr";
 }
 
 function isUnitedStatesCountry(
@@ -705,6 +718,7 @@ type ChargeItem = {
   charge_id: number | null;
   charge_name: string;
   charge_code?: string;
+  charge_master_name?: string;
   shipment_id?: string;
   unit_code: string;
   no_of_unit: number | null;
@@ -735,6 +749,8 @@ type InvoiceFormData = {
   narration: string;
   irn_no: string;
   fapiao_no: string;
+  /** Header Dr/Cr for payload only (no UI). Reciprocated from source on create. */
+  Dr_Cr: "Cr" | "Dr";
   charges: ChargeItem[];
 };
 
@@ -819,7 +835,8 @@ type ReversableDataResponse = {
   total?: string | number;
   header_total?: string | number;
   Dr_Cr?: string;
-  document_type?: string;
+  dr_cr?: string;
+  Dr_cr?: string;
   is_agent?: boolean;
   has_sez?: boolean;
   charges?: Array<{
@@ -841,6 +858,8 @@ type ReversableDataResponse = {
     tax_rate?: string | number | null;
     tax_amount?: string | number | null;
     Dr_Cr?: string;
+    dr_cr?: string;
+    Dr_cr?: string;
     is_tax_row?: boolean;
   }>;
 };
@@ -853,7 +872,6 @@ function applyReversableDataToReverseForm(
     setBillToDisplayName: (v: string | null) => void;
     emptyDaybook: boolean;
     preserveChargeIds?: boolean;
-    invertChargeDrCr?: boolean;
   },
 ) {
   opts.setIsAgentInvoice(data.is_agent === true);
@@ -864,6 +882,7 @@ function applyReversableDataToReverseForm(
         : data.roe
       : null;
   opts.setBillToDisplayName(data.bill_to_name ?? null);
+  const sourceHeaderDrCr = pickDrCrRaw(data);
   form.setValues({
     bill_to: data.bill_to ?? "",
     address: data.address ?? "",
@@ -882,6 +901,7 @@ function applyReversableDataToReverseForm(
     narration: data.narration ?? "",
     irn_no: data.irn_no ?? "",
     fapiao_no: data.fapiao_no ?? "",
+    Dr_Cr: resolveHeaderDrCr(sourceHeaderDrCr, "Cr"),
     charges:
       data.charges && data.charges.length > 0
         ? data.charges.map((c) => {
@@ -933,6 +953,7 @@ function applyReversableDataToReverseForm(
                 : {}),
               charge_id: c.charge_id ?? null,
               charge_name: c.charge_name ?? "",
+              charge_master_name: c.charge_name ?? "",
               charge_code: c.charge_code ?? "",
               shipment_id: c.shipment_id ?? c.shipment_no ?? "",
               unit_code: c.unit_code ?? "",
@@ -950,9 +971,10 @@ function applyReversableDataToReverseForm(
                 Number.isFinite(amountInLocal) ? amountInLocal : null,
               ),
               tax_code: c.tax_code ?? "",
-              dr_cr: opts.invertChargeDrCr
-                ? invertDrCr(sourceDrCr)
-                : sourceDrCr,
+              dr_cr: resolveChargeDrCr({
+                dr_cr: c.dr_cr,
+                Dr_Cr: c.Dr_Cr,
+              }),
               is_tax_row: isTaxRow,
               tax_rate: isTaxRow ? null : parseNullableNumber(c.tax_rate),
               tax_amount: isTaxRow
@@ -969,6 +991,33 @@ function pickReverseDocumentNo(source: unknown): string {
   const rec = source as Record<string, unknown>;
   const value = rec.reverse_document_no ?? rec.reverse_document_number;
   return value != null ? String(value).trim() : "";
+}
+
+function resolveMasterChargeIdForPayload(
+  chargeId: number | null | undefined,
+): number | null {
+  if (chargeId == null) return null;
+  const parsed = Number(chargeId);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveSelectedMasterChargeId(
+  value: string | null,
+): number | null {
+  if (!value || String(value).startsWith("temp_")) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveMasterChargeNameFromSelection(
+  selectedData?: { label?: string } | null,
+  originalData?: Record<string, unknown> | null,
+): string {
+  if (selectedData?.label) return selectedData.label;
+  if (originalData?.charge_name != null) {
+    return String(originalData.charge_name);
+  }
+  return "";
 }
 
 function reverseChargeIdPayload(
@@ -1015,7 +1064,8 @@ function buildReverseChargePayload(
       charge.shipment_id != null && String(charge.shipment_id).trim() !== ""
         ? String(charge.shipment_id)
         : null,
-    charge_id: charge.charge_id ?? null,
+    charge_id: resolveMasterChargeIdForPayload(charge.charge_id),
+    charge_name: charge.charge_name ?? "",
     unit_id: unitId,
     no_of_unit: charge.no_of_unit ?? 0,
     currency_id: chargeCurrencyId,
@@ -1280,6 +1330,7 @@ function InvoiceReverse() {
       narration: "",
       irn_no: "",
       fapiao_no: "",
+      Dr_Cr: "Cr",
       charges: [],
     },
     validate: {
@@ -1819,7 +1870,6 @@ function InvoiceReverse() {
           setBillToDisplayName,
           emptyDaybook: true,
           preserveChargeIds: false,
-          invertChargeDrCr: isCnSource,
         });
         setHasSez(Boolean(data.has_sez));
       })
@@ -1971,7 +2021,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: headerDrCr,
+        Dr_Cr: values.Dr_Cr ?? "Cr",
         has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
         taxes: [],
@@ -2060,6 +2110,7 @@ function InvoiceReverse() {
           return {
             charge_id: c.charge_id ?? null,
             charge_name: c.charge_name ?? "",
+            charge_master_name: c.charge_name ?? "",
             charge_code: c.charge_code ?? "",
             shipment_id: c.shipment_id ?? c.shipment_no ?? "",
             unit_code: c.unit_code ?? "",
@@ -2077,7 +2128,10 @@ function InvoiceReverse() {
               Number.isFinite(amountInLocal) ? amountInLocal : null,
             ),
             tax_code: c.tax_code ?? "",
-            dr_cr: c.Dr_Cr === "Dr" ? "Dr" : "Cr",
+            dr_cr: resolveChargeDrCr({
+              Dr_Cr: c.Dr_Cr,
+              dr_cr: (c as { dr_cr?: string | null }).dr_cr,
+            }),
             is_tax_row: isTaxRow,
             tax_rate: isTaxRow
               ? null
@@ -2197,8 +2251,8 @@ function InvoiceReverse() {
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
       const err: Record<string, string> = {};
-      if (!charge.charge_name && charge.charge_id == null)
-        err.charge_name = "Charge is required";
+      if (charge.charge_id == null)
+        err.charge_id = "Charge is required";
       if (!charge.currency) err.currency = "Currency is required";
       if (charge.roe === null || charge.roe === undefined)
         err.roe = "ROE is required";
@@ -2311,7 +2365,7 @@ function InvoiceReverse() {
         total,
         header_total,
         local_total,
-        Dr_Cr: headerDrCr,
+        Dr_Cr: values.Dr_Cr ?? "Cr",
         has_sez: isIndiaUser && !isAgentInvoice ? hasSez : false,
         charges: chargesPayload,
       };
@@ -3016,56 +3070,86 @@ function InvoiceReverse() {
                           }
                           displayValue={charge.charge_name || undefined}
                           returnOriginalData
+                          preserveLinkedValueOnClear
+                          hideValueInDisplay
+                          linkedLabelEditWithoutSearch
+                          onSearchTextChange={(text) => {
+                            form.setFieldValue(
+                              `charges.${index}.charge_name`,
+                              text,
+                            );
+                            if (chargeErrors[index]?.charge_id) {
+                              const newErrors = { ...chargeErrors };
+                              if (newErrors[index]) {
+                                delete newErrors[index].charge_id;
+                                if (Object.keys(newErrors[index]).length === 0)
+                                  delete newErrors[index];
+                              }
+                              setChargeErrors(newErrors);
+                            }
+                          }}
                           onChange={(value, selectedData, originalData) => {
-                            const chargeId = value ? Number(value) : null;
-                            const chargeName = selectedData?.label ?? "";
+                            const chargeId =
+                              resolveSelectedMasterChargeId(value);
+                            if (chargeId == null) return;
+
+                            const masterName =
+                              resolveMasterChargeNameFromSelection(
+                                selectedData,
+                                originalData,
+                              );
                             form.setFieldValue(
                               `charges.${index}.charge_id`,
                               chargeId,
                             );
                             form.setFieldValue(
                               `charges.${index}.charge_name`,
-                              chargeName,
+                              masterName,
                             );
-                            form.setFieldValue(`charges.${index}.tax_code`, "");
-                            if (chargeErrors[index]?.charge_name) {
+                            if (originalData?.charge_code != null) {
+                              form.setFieldValue(
+                                `charges.${index}.charge_code`,
+                                String(originalData.charge_code),
+                              );
+                            }
+                            form.setFieldValue(
+                              `charges.${index}.tax_code`,
+                              "",
+                            );
+                            if (chargeErrors[index]?.charge_id) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
-                                delete newErrors[index].charge_name;
+                                delete newErrors[index].charge_id;
                                 if (Object.keys(newErrors[index]).length === 0)
                                   delete newErrors[index];
                               }
                               setChargeErrors(newErrors);
                             }
 
-                            if (value) {
-                              const navState = location.state as {
-                                serviceType?: string;
-                                job?: { service?: string };
-                              } | null;
-                              const defaultUnitCode =
-                                resolveAutoUnitForNewCharge({
-                                  calculationType: (
-                                    originalData as {
-                                      calculation_type?: string;
-                                    } | null
-                                  )?.calculation_type,
-                                  service:
-                                    navState?.serviceType ||
-                                    navState?.job?.service,
-                                  currentUnit: charge.unit_code,
-                                });
-                              if (defaultUnitCode) {
-                                const unitValue =
-                                  findUnitOptionValueByCode(
-                                    defaultUnitCode,
-                                    unitOptions,
-                                  ) ?? defaultUnitCode;
-                                form.setFieldValue(
-                                  `charges.${index}.unit_code`,
-                                  unitValue,
-                                );
-                              }
+                            const navState = location.state as {
+                              serviceType?: string;
+                              job?: { service?: string };
+                            } | null;
+                            const defaultUnitCode = resolveAutoUnitForNewCharge({
+                              calculationType: (
+                                originalData as {
+                                  calculation_type?: string;
+                                } | null
+                              )?.calculation_type,
+                              service:
+                                navState?.serviceType || navState?.job?.service,
+                              currentUnit: charge.unit_code,
+                            });
+                            if (defaultUnitCode) {
+                              const unitValue =
+                                findUnitOptionValueByCode(
+                                  defaultUnitCode,
+                                  unitOptions,
+                                ) ?? defaultUnitCode;
+                              form.setFieldValue(
+                                `charges.${index}.unit_code`,
+                                unitValue,
+                              );
                             }
 
                             if (
@@ -3095,8 +3179,8 @@ function InvoiceReverse() {
                                     if (newErrors[index]) {
                                       delete newErrors[index].tax_code;
                                       if (
-                                        Object.keys(newErrors[index]).length ===
-                                        0
+                                        Object.keys(newErrors[index])
+                                          .length === 0
                                       )
                                         delete newErrors[index];
                                     }
@@ -3109,7 +3193,7 @@ function InvoiceReverse() {
                           withAsterisk
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
-                          error={chargeErrors[index]?.charge_name}
+                          error={chargeErrors[index]?.charge_id}
                           minSearchLength={2}
                           dropdownZIndex={1000}
                         />

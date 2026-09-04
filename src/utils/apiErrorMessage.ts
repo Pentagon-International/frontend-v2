@@ -9,6 +9,24 @@ export function isApiFailureResponse(response: unknown): boolean {
   return status === false || status === "false";
 }
 
+/**
+ * `{ status, message, data }` may be the body itself or nested under `.data`.
+ */
+export function unwrapApiStatusBody(response: unknown): unknown {
+  if (!response || typeof response !== "object") return response;
+  const obj = response as Record<string, unknown>;
+  const inner = obj.data;
+  if (
+    inner &&
+    typeof inner === "object" &&
+    !Array.isArray(inner) &&
+    ("status" in inner || "message" in inner)
+  ) {
+    return inner;
+  }
+  return response;
+}
+
 /** Read `message` from `{ status, message, data }` style API payloads. */
 export function getApiResponseMessage(
   response: unknown,
@@ -21,6 +39,16 @@ export function getApiResponseMessage(
     }
   }
   return fallback;
+}
+
+/** API `message` when `status` is false; otherwise null. */
+export function getApiFailureMessage(
+  response: unknown,
+  fallback: string,
+): string | null {
+  const body = unwrapApiStatusBody(response);
+  if (!isApiFailureResponse(body)) return null;
+  return getApiResponseMessage(body, fallback);
 }
 
 /** Resolve error text from thrown API errors or wrapped response bodies. */

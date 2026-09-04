@@ -28,6 +28,8 @@ type Props = {
   children?: ReactNode;
   openedLocal: boolean;
   setOpenedLocal: (value: boolean | ((prev: boolean) => boolean)) => void;
+  /** When false, the nav item is shown but cannot expand (no sub-menu / flyout). */
+  expandable?: boolean;
 };
 
 export const CollapsibleNav = ({
@@ -37,6 +39,7 @@ export const CollapsibleNav = ({
   parent,
   openedLocal,
   setOpenedLocal,
+  expandable = true,
 }: Props) => {
   const {
     activeNav,
@@ -66,11 +69,14 @@ export const CollapsibleNav = ({
         activeSubNav === "Vendor Invoice" ||
         activeSubNav === "ODEX Jobs")) ||
     (parent && activeSubNav === label) ||
-    (label === "Air" && activeSubNav.startsWith("Air")) ||
+    (label === "Air" &&
+      activeSubNav.startsWith("Air") &&
+      !activeSubNav.startsWith("CHA")) ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
     (label === "Ocean" && activeSubNav.startsWith("FCL")) ||
     (label === "Ocean" && activeSubNav.startsWith("LCL")) ||
     (label === "Inland" && activeSubNav.startsWith("Inland")) ||
+    (label === "CHA" && activeSubNav.startsWith("CHA")) ||
     (label === "Accounts" &&
       (activeSubNav === "Receipt" ||
         activeSubNav === "Receipt Reversal" ||
@@ -90,7 +96,9 @@ export const CollapsibleNav = ({
         activeSubNav === "Bank Reconciliation"));
 
   // compute opened based on mode
-  const opened = isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal;
+  const opened =
+    expandable &&
+    (isSidebarCollapsed ? !!openCollapsibles[label] : openedLocal);
 
   // now compute isActive (depends on opened)
   // Note: For "Air", "Ocean", and "Inland", we deliberately rely on `hasActiveChild`
@@ -128,7 +136,10 @@ export const CollapsibleNav = ({
       if (activeNavChanged) {
         const shouldBeOpen =
           activeNav === label ||
-          (label === "Air" || label === "Ocean" || label === "Inland"
+          (label === "Air" ||
+          label === "Ocean" ||
+          label === "Inland" ||
+          label === "CHA"
             ? activeNav === "Transportation"
             : false) ||
           hasActiveChild;
@@ -158,7 +169,10 @@ export const CollapsibleNav = ({
       if (activeNavChanged) {
         const shouldBeOpen =
           activeNav === label ||
-          (label === "Air" || label === "Ocean" || label === "Inland"
+          (label === "Air" ||
+          label === "Ocean" ||
+          label === "Inland" ||
+          label === "CHA"
             ? activeNav === "Transportation"
             : false) ||
           hasActiveChild;
@@ -262,6 +276,8 @@ export const CollapsibleNav = ({
   }, [opened, isSidebarCollapsed, label, setOpenCollapsible]);
 
   const handleClick = () => {
+    if (!expandable) return;
+
     // Don't clear activeTariffSubNav when toggling - let the child links handle navigation
     const shouldClearTariffSubNav = false;
 
@@ -273,34 +289,46 @@ export const CollapsibleNav = ({
         if (label === "Air") {
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Ocean") {
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Inland") {
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("CHA", false);
+          setOpenCollapsible("Sales", false);
+          setOpenCollapsible("Dashboard", false);
+        } else if (label === "CHA") {
+          setOpenCollapsible("Air", false);
+          setOpenCollapsible("Ocean", false);
+          setOpenCollapsible("Inland", false);
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Sales") {
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Dashboard", false);
         } else if (label === "Dashboard") {
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Finance Dashboard", false);
         } else if (label === "Finance Dashboard") {
           setOpenCollapsible("Sales", false);
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Dashboard", false);
         }
       }
@@ -373,7 +401,7 @@ export const CollapsibleNav = ({
           </div>
         }
         rightSection={
-          isSidebarCollapsed ? (
+          !expandable ? undefined : isSidebarCollapsed ? (
             label !== "Tariff" ? undefined : opened ? (
               <IconChevronLeft size={16} />
             ) : (
@@ -409,7 +437,7 @@ export const CollapsibleNav = ({
         navLinkWrapped
       )}
 
-      {!isSidebarCollapsed && (
+      {expandable && !isSidebarCollapsed && (
         <Collapse in={opened}>
           <Box
             ref={label === "Accounts" ? accountsSubNavRef : undefined}
@@ -427,7 +455,7 @@ export const CollapsibleNav = ({
         </Collapse>
       )}
 
-      {isSidebarCollapsed && opened && (
+      {expandable && isSidebarCollapsed && opened && (
         <Portal>
           <Box
             ref={flyoutRef}

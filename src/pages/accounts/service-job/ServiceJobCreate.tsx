@@ -72,6 +72,7 @@ import {
   getJobFormReadOnlyTabProps,
   JOB_ACCOUNTS_TAB_PANEL_CLASS,
 } from "../../../utils/jobFormReadOnly";
+import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import {
   JobMasterPartyDetailsPanel,
   type JobMasterPartyDetailsValues,
@@ -1725,6 +1726,11 @@ export default function ServiceJobCreate() {
       eta: null,
       job_date: null,
     },
+    validate: {
+      etd: (value) => (!value ? "ETD is required" : null),
+      eta: (value) => (!value ? "ETA is required" : null),
+      job_date: (value) => (!value ? "Job Date is required" : null),
+    },
   });
 
   const partyDetailsForm = useForm<JobMasterPartyDetailsValues>({
@@ -2387,30 +2393,18 @@ export default function ServiceJobCreate() {
         (e) =>
           e.charge_id != null || (e.charge_name && e.charge_name.trim() !== ""),
       )
-      .map((e) => ({
-        charge_id: e.charge_id,
-        charge_name: e.charge_name ?? "",
-        segment: "",
-        job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-        sub_job: "",
-        cn_r: "",
-        currency: e.currency ?? "",
-        currency_id: e.currency_id ?? "",
-        roe: e.roe,
-        unit_code: e.unit_code ?? "",
-        unit_id: e.unit_id ?? "",
-        no_of_unit: e.no_of_unit,
-        amount_per_unit: e.cost_per_unit,
-        amount: e.total_cost,
-        amount_in_local:
-          e.cost_local_amount != null
-            ? e.cost_local_amount
-            : e.total_cost != null && e.roe != null
-              ? Math.round(e.total_cost * e.roe * 100) / 100
-              : e.total_cost,
-        tax_code: "",
-        tax: "false",
-      }));
+      .map((e) =>
+        mapChargeToPaymentRequestPrefill(
+          {
+            ...e,
+            currency_code: e.currency,
+            cost_per_unit: e.cost_per_unit,
+          },
+          {
+            job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
+          },
+        ),
+      );
     const firstSupplier =
       charges.find(
         (e) =>
@@ -2569,6 +2563,10 @@ export default function ServiceJobCreate() {
   ]);
 
   const handleSubmit = async () => {
+    const validation = form.validate();
+    if (validation.hasErrors) {
+      return;
+    }
     setIsSubmitting(true);
     try {
       const payload = buildPayload();

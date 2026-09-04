@@ -402,6 +402,16 @@ function mapPaymentPartyDrCr(
   return side === "Dr" ? "Cr" : "Dr";
 }
 
+/** Payment header nets Dr − Cr; reversal nets Cr − Dr so the header amount matches the source payment. */
+function paymentPartyHeaderNetSign(
+  drCr: "Cr" | "Dr",
+  isReversal: boolean,
+): 1 | -1 {
+  const isDr = drCr === "Dr";
+  if (isReversal) return isDr ? -1 : 1;
+  return isDr ? 1 : -1;
+}
+
 const OVERSEAS_DEFAULT_CURRENCY = "USD";
 
 const getDefaultDetailRow = (
@@ -1161,70 +1171,56 @@ export default function OverseasPaymentCreate({
     syncRoeForCurrencyChange,
   ]);
 
-  const partyLocalAmountsSnapshot = form.values.details
-    .map((d) => d.local_amount ?? "")
+  // Payment: header amount = Σ(Dr) − Σ(Cr). Reversal: Σ(Cr) − Σ(Dr) so the header matches the source payment.
+  const partyNetSnapshot = form.values.details
+    .map(
+      (d) =>
+        `${d.dr_cr}|${d.amount ?? ""}|${d.local_amount ?? ""}|${d.roe ?? ""}`,
+    )
     .join(";");
-  const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
-  const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
-  const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
-
   useEffect(() => {
-    if (suppressAutoCalculationsRef.current) {
-      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
-      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
-      return;
+    if (suppressAutoCalculationsRef.current) return;
+
+    const details = form.values.details ?? [];
+    const netAmount = details.reduce((s, d) => {
+      const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
+      return s + paymentPartyHeaderNetSign(d.dr_cr, _isReversal) * amt;
+    }, 0);
+    const headerAmount = clampAmount(netAmount);
+    const roeVal = form.values.roe;
+    const headerLocal =
+      headerAmount != null &&
+      roeVal != null &&
+      Number.isFinite(roeVal) &&
+      roeVal !== 0
+        ? clampLocalAmount(headerAmount * roeVal)
+        : null;
+
+    if (form.values.amount !== headerAmount) {
+      form.setFieldValue("amount", headerAmount);
     }
-
-    const partyLocalChanged =
-      prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
-    const headerAmountRoeChanged =
-      prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
-
-    if (partyLocalChanged) {
-      const sum = (form.values.details ?? []).reduce(
-        (s, d) =>
-          s +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
-        0,
-      );
-      const headerLocal = clampLocalAmount(sum);
-      const roeVal = form.values.roe;
-      const derivedHeaderAmount =
-        headerLocal != null &&
-        roeVal != null &&
-        Number.isFinite(roeVal) &&
-        roeVal !== 0
-          ? clampAmount(headerLocal / roeVal)
-          : null;
-      if (form.values.local_amount !== headerLocal) {
-        form.setFieldValue("local_amount", headerLocal);
-      }
-      if (
-        derivedHeaderAmount != null &&
-        form.values.amount !== derivedHeaderAmount
-      ) {
-        form.setFieldValue("amount", derivedHeaderAmount);
-      }
-    } else if (headerAmountRoeChanged) {
-      const amt = form.values.amount;
-      const roeVal = form.values.roe;
-      const local =
-        amt != null &&
-        Number.isFinite(amt) &&
-        roeVal != null &&
-        Number.isFinite(roeVal)
-          ? clampLocalAmount(amt * roeVal)
-          : null;
-      if (form.values.local_amount !== local) {
-        form.setFieldValue("local_amount", local);
-      }
+    if (form.values.local_amount !== headerLocal) {
+      form.setFieldValue("local_amount", headerLocal);
     }
+  }, [partyNetSnapshot, form.values.roe, _isReversal]);
 
-    prevPartyLocalRef.current = partyLocalAmountsSnapshot;
-    prevHeaderAmountRoeRef.current = headerAmountRoeKey;
-  }, [partyLocalAmountsSnapshot, headerAmountRoeKey]);
+  // Header: keep local_amount aligned with amount only when no party rows exist
+  useEffect(() => {
+    if (suppressAutoCalculationsRef.current) return;
+    if ((form.values.details ?? []).length > 0) return;
+    const amt = form.values.amount;
+    const roeVal = form.values.roe;
+    const local =
+      amt != null &&
+      Number.isFinite(amt) &&
+      roeVal != null &&
+      Number.isFinite(roeVal)
+        ? clampLocalAmount(amt * roeVal)
+        : null;
+    if (form.values.local_amount !== local) {
+      form.setFieldValue("local_amount", local);
+    }
+  }, [form.values.amount, form.values.roe]);
 
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],

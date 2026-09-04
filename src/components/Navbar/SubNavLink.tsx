@@ -6,6 +6,8 @@ import { getSubLinkStyles, sectionIconBackground, sectionIconColors } from "./na
 type Props = {
   parent: string;
   label: string;
+  /** Layout-store active key when different from visible label */
+  subNavKey?: string;
   icon?: React.ComponentType<any>;
   path: string;
   collapsibles?: {
@@ -15,6 +17,7 @@ type Props = {
     setIsSeaExportOpen?: (v: boolean) => void;
     setIsAirOpen?: (v: boolean) => void;
     setIsInlandOpen?: (v: boolean) => void;
+    setIsChaOpen?: (v: boolean) => void;
     setIsAccountsOpen?: (v: boolean) => void;
     setIsDashboardOpen?: (v: boolean) => void;
     setIsFinanceDashboardOpen?: (v: boolean) => void;
@@ -24,6 +27,7 @@ type Props = {
 export const SubNavLink = ({
   parent,
   label,
+  subNavKey,
   icon: Icon,
   path,
   collapsibles,
@@ -39,8 +43,9 @@ export const SubNavLink = ({
   } = useLayoutStore();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const style = getSubLinkStyles(activeSubNav === label, label);
-  const isActive = activeSubNav === label;
+  const activeKey = subNavKey ?? label;
+  const style = getSubLinkStyles(activeSubNav === activeKey, label);
+  const isActive = activeSubNav === activeKey;
   const iconColor = sectionIconColors[parent] || "white";
   const iconBackground = sectionIconBackground[parent] || "#105476";
 
@@ -75,6 +80,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Accounts", false);
           setOpenCollapsible("Finance Dashboard", false);
           navigate("/", {
@@ -84,18 +90,20 @@ export const SubNavLink = ({
         } else if (
           title !== parent ||
           activeNav !== parent ||
-          activeSubNav !== label ||
+          activeSubNav !== activeKey ||
           pathname !== path
         ) {
           setActiveNav(parent);
-          setActiveSubNav(label);
+          setActiveSubNav(activeKey);
           setTitle(parent);
           navigate(path);
           if (label !== "Tariff") {
             // For Transportation, determine which popover to close (Air or Ocean)
             // For other parents like Sales, use parent directly
             if (parent === "Transportation") {
-              if (collapsibles?.setIsInlandOpen) {
+              if (collapsibles?.setIsChaOpen) {
+                setOpenCollapsible("CHA", false);
+              } else if (collapsibles?.setIsInlandOpen) {
                 setOpenCollapsible("Inland", false);
               } else if (collapsibles?.setIsAirOpen) {
                 // Air sub-link - close Air popover
@@ -123,6 +131,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Customer Service", false);
           setOpenCollapsible("Accounts", false);
           setOpenCollapsible("Dashboard", false);
@@ -130,34 +139,49 @@ export const SubNavLink = ({
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsCustomerServiceOpen?.(false);
           collapsibles?.setIsTariffOpen?.(false);
-          // Only close the opposite collapsible (Air, Ocean, or Inland), not the one being clicked
-          if (collapsibles?.setIsInlandOpen) {
+          // Only close the opposite collapsible (Air, Ocean, Inland, or CHA), not the one being clicked
+          if (collapsibles?.setIsChaOpen) {
             collapsibles?.setIsAirOpen?.(false);
             collapsibles?.setIsSeaExportOpen?.(false);
+            collapsibles?.setIsInlandOpen?.(false);
             setOpenCollapsible("Air", false);
             setOpenCollapsible("Ocean", false);
+            setOpenCollapsible("Inland", false);
+          } else if (collapsibles?.setIsInlandOpen) {
+            collapsibles?.setIsAirOpen?.(false);
+            collapsibles?.setIsSeaExportOpen?.(false);
+            collapsibles?.setIsChaOpen?.(false);
+            setOpenCollapsible("Air", false);
+            setOpenCollapsible("Ocean", false);
+            setOpenCollapsible("CHA", false);
           } else if (collapsibles?.setIsAirOpen) {
             collapsibles?.setIsSeaExportOpen?.(false);
             collapsibles?.setIsInlandOpen?.(false);
+            collapsibles?.setIsChaOpen?.(false);
             // Also close Ocean in layout store for collapsed mode
             setOpenCollapsible("Ocean", false);
             setOpenCollapsible("Inland", false);
+            setOpenCollapsible("CHA", false);
             // Don't close Air - keep it open like Sales
           } else if (collapsibles?.setIsSeaExportOpen) {
             collapsibles?.setIsAirOpen?.(false);
             collapsibles?.setIsInlandOpen?.(false);
+            collapsibles?.setIsChaOpen?.(false);
             // Also close Air in layout store for collapsed mode
             setOpenCollapsible("Air", false);
             setOpenCollapsible("Inland", false);
+            setOpenCollapsible("CHA", false);
             // Don't close Ocean - keep it open like Sales
           } else {
             // Fallback: close all if none is specified
             collapsibles?.setIsSeaExportOpen?.(false);
             collapsibles?.setIsAirOpen?.(false);
             collapsibles?.setIsInlandOpen?.(false);
+            collapsibles?.setIsChaOpen?.(false);
             setOpenCollapsible("Air", false);
             setOpenCollapsible("Ocean", false);
             setOpenCollapsible("Inland", false);
+            setOpenCollapsible("CHA", false);
           }
           // Close Sales in collapsed mode when Transportation sub-link is clicked
           setOpenCollapsible("Sales", false);
@@ -175,6 +199,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Accounts", false);
         } else if (parent === "Accounts") {
           collapsibles?.setIsSalesOpen?.(false);
@@ -187,6 +212,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
         } else if (parent === "Dashboard") {
           collapsibles?.setIsSalesOpen?.(false);
           collapsibles?.setIsTariffOpen?.(false);
@@ -199,6 +225,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Accounts", false);
           setOpenCollapsible("Finance Dashboard", false);
         } else if (parent === "Finance Dashboard") {
@@ -213,6 +240,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Accounts", false);
           setOpenCollapsible("Dashboard", false);
         } else {
@@ -227,6 +255,7 @@ export const SubNavLink = ({
           setOpenCollapsible("Air", false);
           setOpenCollapsible("Ocean", false);
           setOpenCollapsible("Inland", false);
+          setOpenCollapsible("CHA", false);
           setOpenCollapsible("Accounts", false);
         }
       }}

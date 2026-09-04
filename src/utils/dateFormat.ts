@@ -1,4 +1,7 @@
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+
+dayjs.extend(customParseFormat);
 
 export const getDateFormat = (countryCode?: string): string => {
   switch (countryCode) {
@@ -39,4 +42,24 @@ export function formatDateTimeForUi(
     return parsed.format(`${dateFormat} hh:mm A`);
   }
   return parsed.format(dateFormat);
+}
+
+/**
+ * Parse a typed date string using the UI format, with ISO `YYYY-MM-DD` fallback.
+ * Returns a local calendar Date so existing payload formatters stay correct.
+ */
+export function parseTypedDate(
+  input: string,
+  dateFormat: string,
+): Date | null {
+  const trimmed = input?.trim();
+  if (!trimmed) return null;
+
+  const fromUi = dayjs(trimmed, dateFormat, true);
+  if (fromUi.isValid()) return fromUi.toDate();
+
+  const fromIso = dayjs(trimmed, "YYYY-MM-DD", true);
+  if (fromIso.isValid()) return fromIso.toDate();
+
+  return null;
 }

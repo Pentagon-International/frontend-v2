@@ -7,6 +7,7 @@ import {
   IconChevronLeft,
 } from "@tabler/icons-react";
 import useDateFormat from "../hooks/useDateFormat";
+import { parseTypedDate } from "../utils/dateFormat";
 
 export interface DateRangeInputProps {
   fromDate: Date | null;
@@ -255,6 +256,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         value={fromDate}
         onChange={handleFromDateChange}
         valueFormat={dateFormat}
+        dateParser={(input) => parseTypedDate(input, dateFormat)}
         leftSection={<IconCalendar size={calendarIconSize} />}
         leftSectionPointerEvents="none"
         radius={filterRowLayout ? "sm" : "md"}
@@ -322,6 +324,7 @@ const DateRangeInput: React.FC<DateRangeInputProps> = ({
         value={toDate}
         onChange={handleToDateChange}
         valueFormat={dateFormat}
+        dateParser={(input) => parseTypedDate(input, dateFormat)}
         leftSection={<IconCalendar size={calendarIconSize} />}
         leftSectionPointerEvents="none"
         radius={filterRowLayout ? "sm" : "md"}

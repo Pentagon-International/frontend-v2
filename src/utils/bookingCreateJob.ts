@@ -19,6 +19,7 @@ import {
   roundMoneyToDecimals,
 } from "./nonDecimalMoneyAmount";
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
+import { pickPackageTypeCodeFromCargo } from "./packageTypeOptions";
 
 export type BookingCreateJobMode =
   | "air-export"
@@ -330,6 +331,12 @@ function mapCargoDetails(
           expanded.push({
             container_no: containerNo || null,
             no_of_packages: toNumberOrNull(container.no_of_packages),
+            package_type: pickPackageTypeCodeFromCargo(container) ||
+              pickPackageTypeCodeFromCargo(row),
+            package_type_code:
+              pickPackageTypeCodeFromCargo(container) ||
+              pickPackageTypeCodeFromCargo(row) ||
+              null,
             gross_weight:
               container.gross_weight ?? row.gross_weight ?? "",
             volume: container.volume ?? row.volume ?? "",
@@ -345,6 +352,8 @@ function mapCargoDetails(
       expanded.push({
         container_no: String(row.container_no ?? "").trim() || null,
         no_of_packages: toNumberOrNull(row.no_of_packages),
+        package_type: pickPackageTypeCodeFromCargo(row),
+        package_type_code: pickPackageTypeCodeFromCargo(row) || null,
         gross_weight: row.gross_weight || "",
         volume: row.volume ?? "",
         chargeable_weight: row.chargeable_weight || "",
@@ -361,6 +370,8 @@ function mapCargoDetails(
 
     return {
       no_of_packages: noOfPackages,
+      package_type: pickPackageTypeCodeFromCargo(row),
+      package_type_code: pickPackageTypeCodeFromCargo(row) || null,
       gross_weight: row.gross_weight || "",
       volume:
         transport === "air"
@@ -569,7 +580,7 @@ function mapBookingDocumentsForHousingPayload(
   return { document_ids };
 }
 
-async function resolveBookingRecordForJobCreate(
+export async function resolveBookingRecordForJobCreate(
   booking: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   if (parseJobDocumentsFromApi(booking).document_ids.length > 0) {

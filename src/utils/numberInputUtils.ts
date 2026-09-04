@@ -9,6 +9,39 @@
  * @returns Rounded number or null/undefined matching input
  */
 
+/**
+ * Parse a NumberInput / API money string into a finite number.
+ * Strips thousand separators (e.g. "9,381.12" → 9381.12, "9,381" → 9381).
+ */
+export function parseMoneyInputValue(
+  value: string | number | null | undefined,
+): number | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  let s = String(value).trim();
+  if (!s) return null;
+
+  const lastComma = s.lastIndexOf(",");
+  const lastPeriod = s.lastIndexOf(".");
+
+  if (lastComma > lastPeriod) {
+    // European "1.234,56" or comma-only strings
+    if (lastPeriod === -1) {
+      const usGrouped = /^-?\d{1,3}(,\d{3})+$/.test(s);
+      s = usGrouped ? s.replace(/,/g, "") : s.replace(",", ".");
+    } else {
+      s = s.replace(/\./g, "").replace(",", ".");
+    }
+  } else {
+    // Western / Indian "1,234.56" or plain decimals
+    s = s.replace(/,/g, "");
+  }
+
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export const roundToDecimals = (
   value: number | string | null | undefined,
   decimals: number = 2,

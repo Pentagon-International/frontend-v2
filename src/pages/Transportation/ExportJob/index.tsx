@@ -24,6 +24,7 @@ import {
   IconX,
   IconSearch,
   IconFilter,
+  IconPlus,
   IconBriefcase,
   IconCircleCheck,
   IconClock,
@@ -50,6 +51,7 @@ import {
   erpListFilterFieldCellStyle,
   ERP_LIST_FILTER_FIELD_COL_SPAN,
   erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
   erpToolbarSelectStyles,
   erpListFilterUnifiedMantineStyles,
   DEFAULT_ERP_LIST_THEME,
@@ -79,6 +81,8 @@ import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { getOceanJobListVolumeDisplay } from "../../../utils/oceanJobListVolume";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useJobModulePaths } from "../chaJob/chaJobContext";
+import { buildChaListFilters } from "../chaJob/chaJobService";
 
 const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
 
@@ -217,6 +221,11 @@ type OceanExportJobFilters = {
 function ExportJobMaster() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { basePath, listKey, isChaMode, chaConfig } = useJobModulePaths({
+    basePath: "/SeaExport/export-job",
+    listKey: LIST_KEY,
+    invoiceServiceType: ["FCL", "LCL"],
+  });
   const queryClient = useQueryClient();
   const isRefreshingFromEdit = useRef(false);
   const theme = DEFAULT_ERP_LIST_THEME;
@@ -324,7 +333,7 @@ function ExportJobMaster() {
           next = { ...next, job_date_from: "", job_date_to: "" };
         }
         setAppliedFilters(next);
-        setStoreFilters(LIST_KEY, next);
+        setStoreFilters(listKey, next);
         return next;
       });
       setPagination((p) => ({ ...p, pageIndex: 0 }));
@@ -347,7 +356,7 @@ function ExportJobMaster() {
   };
 
   useEffect(() => {
-    const stored = getState(LIST_KEY);
+    const stored = getState(listKey);
     const shouldRestore = stored?.shouldRestore === true;
     setIsInitialLoad(true);
 
@@ -369,8 +378,8 @@ function ExportJobMaster() {
 
     setPagination((p) => ({ ...p, pageIndex: 0 }));
 
-    clearAllExcept(LIST_KEY);
-    setShouldRestore(LIST_KEY, false);
+    clearAllExcept(listKey);
+    setShouldRestore(listKey, false);
     setIsRestoring(false);
     setIsInitialLoad(false);
   }, [location.key]);
@@ -398,8 +407,8 @@ function ExportJobMaster() {
     setDraftFilters(next);
     setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, next);
-    setStoreSearch(LIST_KEY, search);
+    setStoreFilters(listKey, next);
+    setStoreSearch(listKey, search);
     setShowFilters(false);
   };
 
@@ -407,7 +416,7 @@ function ExportJobMaster() {
     setDraftFilters(DEFAULT_FILTERS);
     setAppliedFilters(DEFAULT_FILTERS);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    clearAllStore(LIST_KEY);
+    clearAllStore(listKey);
   };
 
   const buildFiltersPayload = (
@@ -443,11 +452,14 @@ function ExportJobMaster() {
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
     const serviceVal = filters.service?.trim();
-    const base: Record<string, string | string[] | { from?: string; to?: string }> = {
-      service: serviceVal ? serviceVal : ["FCL", "LCL"],
-      service_type: "Export",
-      ...cleaned,
-    };
+    const base: Record<string, string | string[] | { from?: string; to?: string }> =
+      isChaMode && chaConfig
+        ? { ...buildChaListFilters(chaConfig), ...cleaned }
+        : {
+            service: serviceVal ? serviceVal : ["FCL", "LCL"],
+            service_type: "Export",
+            ...cleaned,
+          };
 
     const exactJobDate = filters.job_date?.trim();
     const jobDateFrom = filters.job_date_from?.trim();
@@ -574,9 +586,9 @@ function ExportJobMaster() {
 
   const persistListAndNavigate = useCallback(
     (to: string, state?: object) => {
-      setStoreFilters(LIST_KEY, appliedFilters);
-      setStoreSearch(LIST_KEY, search);
-      setShouldRestore(LIST_KEY, true);
+      setStoreFilters(listKey, appliedFilters);
+      setStoreSearch(listKey, search);
+      setShouldRestore(listKey, true);
       navigate(to, state !== undefined ? { state } : undefined);
     },
     [
@@ -791,16 +803,16 @@ function ExportJobMaster() {
                 >
                   {showFilters ? "Hide filters" : "Filters"}
                 </Button>
-                {/* Create New hidden: export jobs should be created from bookings
-                <Button
-                  size="xs"
-                  leftSection={<IconPlus size={14} />}
-                  styles={erpToolbarPrimaryButtonStyles(theme)}
-                  onClick={() => persistListAndNavigate("/SeaExport/export-job/create")}
-                >
-                  Create New
-                </Button>
-                */}
+                {isChaMode && (
+                  <Button
+                    size="xs"
+                    leftSection={<IconPlus size={14} />}
+                    styles={erpToolbarPrimaryButtonStyles(theme)}
+                    onClick={() => persistListAndNavigate(`${basePath}/create`)}
+                  >
+                    Create New
+                  </Button>
+                )}
               </>
             ),
           }}
@@ -1635,12 +1647,12 @@ function ExportJobMaster() {
                                     variant="job-page"
                                     canCancel={canCancel}
                                     onEdit={() => {
-                                      persistListAndNavigate(`/SeaExport/export-job/edit`, {
+                                      persistListAndNavigate(`${basePath}/edit`, {
                                         job: row,
                                       });
                                     }}
                                     onView={() => {
-                                      persistListAndNavigate(`/SeaExport/export-job/view`, {
+                                      persistListAndNavigate(`${basePath}/view`, {
                                         job: row,
                                         jobId: row.id ?? row.job_id,
                                         actionType: "view",

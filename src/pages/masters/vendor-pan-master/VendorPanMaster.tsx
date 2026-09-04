@@ -337,32 +337,27 @@ function validateAdditionalDetails(
     errors.msme_no = "MSME number is required";
   }
 
-  const hasValidTdsSection = tdsSections.some((r) => r.section_id != null);
-  if (!hasValidTdsSection) {
-    errors.tds_sections = "At least one TDS section is required";
-  } else {
-    for (const row of tdsSections) {
-      if (row.section_id == null) continue;
-      if (!row.exemption_tds) continue;
-      if (!row.exemption_certificate_no.trim()) {
-        errors.tds_sections = "Exemption certificate number is required";
-        break;
-      }
-      if (!row.tds_percent.trim() || !/^\d+(\.\d{1,2})?$/.test(row.tds_percent.trim())) {
-        errors.tds_sections = "Enter a valid TDS %";
-        break;
-      }
-      if (!row.valid_from || !row.valid_to) {
-        errors.tds_sections = "Valid from and valid to are required for exemption";
-        break;
-      }
-      if (
-        !row.tds_lower_limit.trim() ||
-        !/^\d+(\.\d{1,2})?$/.test(row.tds_lower_limit.trim())
-      ) {
-        errors.tds_sections = "Enter a valid TDS lower limit";
-        break;
-      }
+  for (const row of tdsSections) {
+    if (row.section_id == null) continue;
+    if (!row.exemption_tds) continue;
+    if (!row.exemption_certificate_no.trim()) {
+      errors.tds_sections = "Exemption certificate number is required";
+      break;
+    }
+    if (!row.tds_percent.trim() || !/^\d+(\.\d{1,2})?$/.test(row.tds_percent.trim())) {
+      errors.tds_sections = "Enter a valid TDS %";
+      break;
+    }
+    if (!row.valid_from || !row.valid_to) {
+      errors.tds_sections = "Valid from and valid to are required for exemption";
+      break;
+    }
+    if (
+      !row.tds_lower_limit.trim() ||
+      !/^\d+(\.\d{1,2})?$/.test(row.tds_lower_limit.trim())
+    ) {
+      errors.tds_sections = "Enter a valid TDS lower limit";
+      break;
     }
   }
 

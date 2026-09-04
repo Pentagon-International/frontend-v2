@@ -6,6 +6,7 @@ import {
   IconChevronLeft,
 } from "@tabler/icons-react";
 import useDateFormat from "../hooks/useDateFormat";
+import { parseTypedDate } from "../utils/dateFormat";
 
 export interface SingleDateInputProps {
   label?: string;
@@ -157,6 +158,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       value={value}
       onChange={handleDateChange}
       valueFormat={dateFormat}
+      dateParser={(input) => parseTypedDate(input, dateFormat)}
       leftSection={<IconCalendar size={18} />}
       leftSectionPointerEvents="none"
       radius="sm"

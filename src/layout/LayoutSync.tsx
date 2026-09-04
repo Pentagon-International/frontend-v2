@@ -155,6 +155,21 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport/export-dsr")) {
       setActiveNav("Transportation");
       setActiveSubNav("Ocean Export DSR");
+    } else if (path.startsWith("/cha/air-import-job")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("CHA Air Import Job");
+    } else if (path.startsWith("/cha/air-export-job")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("CHA Air Export Job");
+    } else if (path.startsWith("/cha/ocean-import-job")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("CHA Ocean Import Job");
+    } else if (path.startsWith("/cha/ocean-export-job")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("CHA Ocean Export Job");
+    } else if (path.startsWith("/cha")) {
+      setActiveNav("Transportation");
+      setActiveSubNav("CHA Air Import Job");
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Job Generation"); // Default to FCL

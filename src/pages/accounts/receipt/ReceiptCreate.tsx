@@ -68,6 +68,7 @@ import {
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
+import { parseMoneyInputValue } from "../../../utils/numberInputUtils";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import {
   mergeEditPageAuditSources,
@@ -493,7 +494,7 @@ function formatOutstandingDocumentAmountInLocal(
     return Number.isFinite(amountInLocal)
       ? formatMoneyAmountForUi(amountInLocal)
       : "—";
-  const n = parseFloat(String(amountInLocal).trim());
+  const n = parseMoneyInputValue(String(amountInLocal).trim());
   return Number.isFinite(n) ? formatMoneyAmountForUi(n) : String(amountInLocal);
 }
 
@@ -558,6 +559,139 @@ function partyHeaderNetSign(
   const isDr = drCr === "Dr";
   if (isReversal) return isDr ? 1 : -1;
   return isDr ? -1 : 1;
+}
+
+function getMatchingAllocationsForParty(
+  row: DetailRow,
+  adjustments: AdjustmentRow[],
+): AdjustmentRow[] {
+  const partyCode = (row.customer_code ?? "").toString().trim().toUpperCase();
+  const partyDisplay = (row.customer_display ?? "").toString().trim();
+  return adjustments.filter((a) => {
+    const adjCode = (a.subledger ?? "").toString().trim().toUpperCase();
+    const adjDisplay = (a.subledger_display ?? "").toString().trim();
+    const matchesParty =
+      (partyCode && adjCode === partyCode) ||
+      (partyDisplay && adjDisplay === partyDisplay);
+    if (!matchesParty) return false;
+    const hasDocument = (a.document_no ?? "").toString().trim() !== "";
+    const hasLocal =
+      a.adj_local_amount != null &&
+      Number.isFinite(a.adj_local_amount) &&
+      a.adj_local_amount !== 0;
+    const hasCurr =
+      a.adj_curr_amount != null &&
+      Number.isFinite(a.adj_curr_amount) &&
+      a.adj_curr_amount !== 0;
+    return hasDocument || hasLocal || hasCurr;
+  });
+}
+
+function computeSyncedDetailRow(
+  row: DetailRow,
+  adjustments: AdjustmentRow[],
+): DetailRow {
+  const matching = getMatchingAllocationsForParty(row, adjustments);
+  if (matching.length === 0) return row;
+  const sum = matching.reduce(
+    (s, a) =>
+      s +
+      (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+        ? a.adj_local_amount
+        : 0),
+    0,
+  );
+  const local = clampLocalAmount(sum);
+  const roeVal =
+    row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
+  const derivedAmount =
+    local != null && Number.isFinite(local)
+      ? clampAmount(local / roeVal)
+      : row.amount;
+  return {
+    ...row,
+    local_amount: local,
+    amount: derivedAmount,
+  };
+}
+
+function computeDetailsSyncedFromAllocations(
+  details: DetailRow[],
+  adjustments: AdjustmentRow[],
+): DetailRow[] {
+  return details.map((row) => computeSyncedDetailRow(row, adjustments));
+}
+
+function sumDetailLocalAmounts(details: DetailRow[]): number {
+  const sum = (details ?? []).reduce(
+    (total, d) =>
+      total +
+      (d.local_amount != null && Number.isFinite(d.local_amount)
+        ? d.local_amount
+        : 0),
+    0,
+  );
+  return clampLocalAmount(sum) ?? sum;
+}
+
+function sumAdjustmentLocalAmounts(adjustments: AdjustmentRow[]): number {
+  const sum = (adjustments ?? []).reduce(
+    (total, a) =>
+      total +
+      (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+        ? a.adj_local_amount
+        : 0),
+    0,
+  );
+  return clampLocalAmount(sum) ?? sum;
+}
+
+function parseApiMoneyAmount(
+  value: string | number | null | undefined,
+): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  return parseMoneyInputValue(String(value));
+}
+
+/** Keep adj_curr / adj_local in sync; adj_curr is the editable source of truth. */
+function normalizeAdjustmentAmounts(
+  adjustments: AdjustmentRow[],
+): AdjustmentRow[] {
+  return adjustments.map((a) => {
+    const curr = a.adj_curr_amount;
+    if (curr == null || !Number.isFinite(curr)) return a;
+    const roe =
+      a.roe != null && Number.isFinite(a.roe) && a.roe !== 0 ? a.roe : 1;
+    const clampedCurr = clampAmount(curr);
+    return {
+      ...a,
+      adj_curr_amount: clampedCurr,
+      adj_local_amount: clampLocalAmount((clampedCurr ?? curr) * roe),
+    };
+  });
+}
+
+function computeHeaderAmountsFromDetails(
+  details: DetailRow[],
+  isReversal: boolean,
+): { amount: number | null; local_amount: number | null } {
+  let netAmount = 0;
+  let netLocal = 0;
+  for (const d of details ?? []) {
+    const sign = partyHeaderNetSign(d.dr_cr, isReversal);
+    netAmount +=
+      sign * (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0);
+    netLocal +=
+      sign *
+      (d.local_amount != null && Number.isFinite(d.local_amount)
+        ? d.local_amount
+        : 0);
+  }
+  return {
+    amount: clampAmount(netAmount),
+    local_amount: clampLocalAmount(netLocal),
+  };
 }
 
 type ReceiptCreateProps = {
@@ -821,8 +955,7 @@ export default function ReceiptCreate({
     const parseNum = (v: string | number | null | undefined): number | null => {
       if (v == null) return null;
       if (typeof v === "number") return Number.isFinite(v) ? v : null;
-      const n = parseFloat(String(v));
-      return Number.isFinite(n) ? n : null;
+      return parseApiMoneyAmount(String(v));
     };
 
     const dateVal = parseDocumentDate(receiptFromState.date);
@@ -884,7 +1017,17 @@ export default function ReceiptCreate({
           })
         : [getDefaultAdjustmentRow(localCurrency)];
 
-    setLoadedDetails(details);
+    const normalizedAdjustments = normalizeAdjustmentAmounts(adjustments);
+    const syncedDetailsFromAllocations = computeDetailsSyncedFromAllocations(
+      details,
+      normalizedAdjustments,
+    );
+    const loadedHeaderAmounts = computeHeaderAmountsFromDetails(
+      syncedDetailsFromAllocations,
+      _isReversal,
+    );
+
+    setLoadedDetails(syncedDetailsFromAllocations);
     form.setValues({
       daybook_id: isReversalCreate
         ? ""
@@ -897,8 +1040,8 @@ export default function ReceiptCreate({
         .toString()
         .trim(),
       roe: roeVal ?? 1,
-      amount: amountVal,
-      local_amount: localAmountVal,
+      amount: loadedHeaderAmounts.amount ?? amountVal,
+      local_amount: loadedHeaderAmounts.local_amount ?? localAmountVal,
       narration: (receiptFromState.narration ?? "").toString(),
       note: (receiptFromState.note ?? "").toString(),
       account_code: "",
@@ -907,12 +1050,12 @@ export default function ReceiptCreate({
       cheque_no: (receiptFromState.cheque_no ?? "").toString(),
       cheque_date: chequeDateVal,
       chq_clrd_date: chqClrdDateVal,
-      details,
-      adjustments,
+      details: syncedDetailsFromAllocations,
+      adjustments: normalizedAdjustments,
     });
     // Force details to apply (ensures all parties from list are shown, e.g. when navigating from Receipt Reversal)
-    if (details.length > 0) {
-      form.setFieldValue("details", details);
+    if (syncedDetailsFromAllocations.length > 0) {
+      form.setFieldValue("details", syncedDetailsFromAllocations);
     }
 
     if (_isReversal) {
@@ -1079,27 +1222,7 @@ export default function ReceiptCreate({
   const getMatchingAllocations = (
     row: DetailRow,
     adjustments: AdjustmentRow[],
-  ) => {
-    const partyCode = (row.customer_code ?? "").toString().trim();
-    const partyDisplay = (row.customer_display ?? "").toString().trim();
-    return adjustments.filter((a) => {
-      const matchesParty =
-        (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
-        (partyDisplay &&
-          (a.subledger_display ?? "").toString().trim() === partyDisplay);
-      if (!matchesParty) return false;
-      const hasDocument = (a.document_no ?? "").toString().trim() !== "";
-      const hasLocal =
-        a.adj_local_amount != null &&
-        Number.isFinite(a.adj_local_amount) &&
-        a.adj_local_amount !== 0;
-      const hasCurr =
-        a.adj_curr_amount != null &&
-        Number.isFinite(a.adj_curr_amount) &&
-        a.adj_curr_amount !== 0;
-      return hasDocument || hasLocal || hasCurr;
-    });
-  };
+  ) => getMatchingAllocationsForParty(row, adjustments);
 
   const applyAdjLocalToPartyDetail = (
     idx: number,
@@ -1107,30 +1230,16 @@ export default function ReceiptCreate({
     allocationRows: AdjustmentRow[],
   ) => {
     if (allocationRows.length === 0) return;
-    const sum = allocationRows.reduce(
-      (s, a) =>
-        s +
-        (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-          ? a.adj_local_amount
-          : 0),
-      0,
-    );
-    const local = clampLocalAmount(sum);
-    const roeVal =
-      row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
-    const derivedAmount =
-      local != null && Number.isFinite(local)
-        ? clampAmount(local / roeVal)
-        : null;
+    const synced = computeSyncedDetailRow(row, allocationRows);
     skipPartyLocalFromAmountRef.current = true;
-    if (form.values.details[idx].local_amount !== local) {
-      form.setFieldValue(`details.${idx}.local_amount`, local);
+    if (form.values.details[idx].local_amount !== synced.local_amount) {
+      form.setFieldValue(`details.${idx}.local_amount`, synced.local_amount);
     }
     if (
-      derivedAmount != null &&
-      form.values.details[idx].amount !== derivedAmount
+      synced.amount != null &&
+      form.values.details[idx].amount !== synced.amount
     ) {
-      form.setFieldValue(`details.${idx}.amount`, derivedAmount);
+      form.setFieldValue(`details.${idx}.amount`, synced.amount);
     }
   };
 
@@ -1225,7 +1334,18 @@ export default function ReceiptCreate({
 
   const removeAdjustmentRow = (idx: number) => {
     if (form.values.adjustments.length <= 1) return;
-    form.removeListItem("adjustments", idx);
+    const nextAdjustments = form.values.adjustments.filter((_, i) => i !== idx);
+    form.setFieldValue(
+      "adjustments",
+      nextAdjustments.length > 0
+        ? nextAdjustments
+        : [getDefaultAdjustmentRow(localCurrency)],
+    );
+    syncPartyDetailsFromAllocations(
+      nextAdjustments.length > 0
+        ? nextAdjustments
+        : [getDefaultAdjustmentRow(localCurrency)],
+    );
   };
 
   const openInvoiceModal = (detailRowIndex: number) => {
@@ -1399,25 +1519,25 @@ export default function ReceiptCreate({
           ? typeof inv.amount === "number"
             ? inv.amount
             : typeof inv.amount === "string"
-              ? parseFloat(inv.amount) || null
+              ? parseApiMoneyAmount(inv.amount)
               : null
           : typeof inv.total === "number"
             ? inv.total
             : typeof inv.total === "string"
-              ? parseFloat(inv.total) || null
+              ? parseApiMoneyAmount(inv.total)
               : null;
       const localTotalNum =
         inv.amount_in_local != null
           ? typeof inv.amount_in_local === "number"
             ? inv.amount_in_local
             : typeof inv.amount_in_local === "string"
-              ? parseFloat(inv.amount_in_local) || null
+              ? parseApiMoneyAmount(inv.amount_in_local)
               : null
           : inv.local_total != null
             ? typeof inv.local_total === "number"
               ? inv.local_total
               : typeof inv.local_total === "string"
-                ? parseFloat(inv.local_total) || null
+                ? parseApiMoneyAmount(inv.local_total)
                 : null
             : null;
       const invRoe =
@@ -1425,7 +1545,7 @@ export default function ReceiptCreate({
           ? typeof inv.roe === "number"
             ? inv.roe
             : typeof inv.roe === "string"
-              ? parseFloat(inv.roe) || null
+              ? parseApiMoneyAmount(inv.roe)
               : null
           : null;
       const daybookId = inv.day_book_id ?? inv.daybook_id;
@@ -1442,7 +1562,7 @@ export default function ReceiptCreate({
         doc_date: docDate,
         currency: inv.currency_code ?? localCurrency,
         roe: invRoe,
-        adj_curr_amount: totalNum,
+        adj_curr_amount: clampAmount(totalNum),
         adj_local_amount:
           localTotalNum != null
             ? toLocalAmount(localTotalNum)
@@ -1473,9 +1593,14 @@ export default function ReceiptCreate({
     if (nextAdjustments.length === 0) {
       nextAdjustments.push(getDefaultAdjustmentRow(localCurrency));
     }
-    form.setFieldValue("adjustments", nextAdjustments);
-    const partyAllocations = nextAdjustments.filter((a) => isSameParty(a));
-    syncPartyDetailsFromAllocations(nextAdjustments, {
+    const normalizedNextAdjustments =
+      normalizeAdjustmentAmounts(nextAdjustments);
+    form.setFieldValue("adjustments", normalizedNextAdjustments);
+    setLoadedDetails(null);
+    const partyAllocations = normalizedNextAdjustments.filter((a) =>
+      isSameParty(a),
+    );
+    syncPartyDetailsFromAllocations(normalizedNextAdjustments, {
       detailIndex: invoiceModalDetailRowIndex,
       allocationsForDetail:
         partyAllocations.length > 0 ? partyAllocations : newRows,
@@ -1552,7 +1677,7 @@ export default function ReceiptCreate({
         document_no: a.document_no ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        adj_curr_amount: a.adj_curr_amount ?? 0,
+        adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
       })),
     };
@@ -1637,7 +1762,7 @@ export default function ReceiptCreate({
         ...(a.invoice_id != null && a.invoice_id > 0
           ? { invoice_id: a.invoice_id }
           : {}),
-        adj_curr_amount: a.adj_curr_amount ?? 0,
+        adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
       })),
     };
@@ -1865,25 +1990,55 @@ export default function ReceiptCreate({
       return hasAmounts || hasDocument;
     });
 
+    const adjustments = normalizeAdjustmentAmounts(values.adjustments ?? []);
+    const syncedDetails = computeDetailsSyncedFromAllocations(
+      values.details ?? [],
+      adjustments,
+    );
+    const headerAmounts = computeHeaderAmountsFromDetails(
+      syncedDetails,
+      _isReversal,
+    );
+    const valuesForSave: ReceiptFormValues = {
+      ...values,
+      adjustments,
+      details: syncedDetails,
+      amount: headerAmounts.amount,
+      local_amount: headerAmounts.local_amount,
+    };
+
+    const detailsChanged = syncedDetails.some((d, i) => {
+      const prev = values.details?.[i];
+      return (
+        prev?.local_amount !== d.local_amount || prev?.amount !== d.amount
+      );
+    });
+    const adjustmentsChanged = adjustments.some((a, i) => {
+      const prev = values.adjustments?.[i];
+      return (
+        prev?.adj_curr_amount !== a.adj_curr_amount ||
+        prev?.adj_local_amount !== a.adj_local_amount
+      );
+    });
+    if (
+      detailsChanged ||
+      adjustmentsChanged ||
+      values.amount !== valuesForSave.amount ||
+      values.local_amount !== valuesForSave.local_amount
+    ) {
+      form.setFieldValue("adjustments", adjustments);
+      form.setFieldValue("details", syncedDetails);
+      if (valuesForSave.amount !== values.amount) {
+        form.setFieldValue("amount", valuesForSave.amount);
+      }
+      if (valuesForSave.local_amount !== values.local_amount) {
+        form.setFieldValue("local_amount", valuesForSave.local_amount);
+      }
+    }
+
     if (hasAdjustments) {
-      const partyLocalTotal =
-        (values.details ?? []).reduce(
-          (sum, d) =>
-            sum +
-            (d.local_amount != null && Number.isFinite(d.local_amount)
-              ? d.local_amount
-              : 0),
-          0,
-        ) ?? 0;
-      const adjLocalTotal =
-        (values.adjustments ?? []).reduce(
-          (sum, a) =>
-            sum +
-            (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-              ? a.adj_local_amount
-              : 0),
-          0,
-        ) ?? 0;
+      const partyLocalTotal = sumDetailLocalAmounts(syncedDetails);
+      const adjLocalTotal = sumAdjustmentLocalAmounts(adjustments);
       if (partyLocalTotal < adjLocalTotal) {
         ToastNotification({
           type: "error",
@@ -1901,12 +2056,12 @@ export default function ReceiptCreate({
           reverseReceiptSaveResponse.id > 0;
         const detailsForPayload =
           loadedDetails &&
-          loadedDetails.length === (values.details ?? []).length
+          loadedDetails.length === (valuesForSave.details ?? []).length
             ? loadedDetails
-            : (values.details ?? []);
+            : (valuesForSave.details ?? []);
 
         if (isReversalUpdate) {
-          const payload = buildReversalPayload(values, {
+          const payload = buildReversalPayload(valuesForSave, {
             reversalId: reverseReceiptSaveResponse.id,
             receiptNo: reverseReceiptSaveResponse.receipt_no ?? "",
             status: "UNPOSTED",
@@ -1945,7 +2100,7 @@ export default function ReceiptCreate({
             });
           }
         } else {
-          const payload = buildReversalPayload(values, {
+          const payload = buildReversalPayload(valuesForSave, {
             detailsOverride: detailsForPayload,
           });
           payload.is_agent = false;
@@ -2006,8 +2161,8 @@ export default function ReceiptCreate({
 
       const isUpdate = saveResponse?.id != null && saveResponse.id > 0;
       const payload = isUpdate
-        ? buildReceiptPayload(values, { status: "UNPOSTED" })
-        : buildReceiptPayload(values);
+        ? buildReceiptPayload(valuesForSave, { status: "UNPOSTED" })
+        : buildReceiptPayload(valuesForSave);
       payload.is_agent = false;
       if (isUpdate) {
         const fd = buildReceiptFormData(payload);
@@ -2103,8 +2258,7 @@ export default function ReceiptCreate({
     const parseNum = (v: unknown): number | null => {
       if (v == null) return null;
       if (typeof v === "number") return Number.isFinite(v) ? v : null;
-      const n = parseFloat(String(v));
-      return Number.isFinite(n) ? n : null;
+      return parseApiMoneyAmount(String(v));
     };
 
     const nextHeaderRoe = parseNum(data.roe);
@@ -2130,8 +2284,27 @@ export default function ReceiptCreate({
       dr_cr: p.dr_cr === "Dr" ? "Dr" : "Cr",
     }));
 
-    setLoadedDetails(details);
-    form.setFieldValue("details", details);
+    const normalizedAdjustments = normalizeAdjustmentAmounts(
+      form.values.adjustments ?? [],
+    );
+    const syncedDetails = computeDetailsSyncedFromAllocations(
+      details,
+      normalizedAdjustments,
+    );
+    setLoadedDetails(syncedDetails);
+    form.setFieldValue("adjustments", normalizedAdjustments);
+    form.setFieldValue("details", syncedDetails);
+
+    const headerAmounts = computeHeaderAmountsFromDetails(
+      syncedDetails,
+      _isReversal,
+    );
+    if (headerAmounts.amount !== form.values.amount) {
+      form.setFieldValue("amount", headerAmounts.amount);
+    }
+    if (headerAmounts.local_amount !== form.values.local_amount) {
+      form.setFieldValue("local_amount", headerAmounts.local_amount);
+    }
   };
 
   const handlePostReverseReceipt = async () => {
@@ -2673,7 +2846,7 @@ export default function ReceiptCreate({
                 onChange={(v) =>
                   form.setFieldValue(
                     "amount",
-                    clampAmount(typeof v === "string" ? parseFloat(v) : v) ??
+                    clampAmount(parseMoneyInputValue(v)) ??
                       null,
                   )
                 }
@@ -3086,10 +3259,16 @@ export default function ReceiptCreate({
                             hideControls
                             value={form.values.details[idx].amount ?? undefined}
                             onChange={(v) => {
+                              const matchingAllocations = getMatchingAllocations(
+                                form.values.details[idx],
+                                form.values.adjustments ?? [],
+                              );
                               const newAmount =
-                                clampAmount(
-                                  typeof v === "string" ? parseFloat(v) : v,
-                                ) ?? null;
+                                clampAmount(parseMoneyInputValue(v)) ?? null;
+                              if (matchingAllocations.length > 0) {
+                                syncPartyDetailsFromAllocations();
+                                return;
+                              }
                               form.setFieldValue(
                                 `details.${idx}.amount`,
                                 newAmount,
@@ -3365,37 +3544,19 @@ export default function ReceiptCreate({
                           }
                           onChange={(v) => {
                             const newCurr =
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null;
-                            form.setFieldValue(
-                              `adjustments.${idx}.adj_curr_amount`,
-                              newCurr,
-                            );
-                            const rowRoe = form.values.adjustments[idx]?.roe;
-                            let newLocal: number | null = null;
-                            if (
-                              newCurr != null &&
-                              rowRoe != null &&
-                              Number.isFinite(rowRoe)
-                            ) {
-                              newLocal = clampLocalAmount(newCurr * rowRoe);
-                              form.setFieldValue(
-                                `adjustments.${idx}.adj_local_amount`,
-                                newLocal,
-                              );
-                            }
+                              clampAmount(parseMoneyInputValue(v)) ?? null;
                             const effectiveAdjustments =
-                              form.values.adjustments.map((a, i) =>
-                                i === idx
-                                  ? {
-                                      ...a,
-                                      adj_curr_amount: newCurr,
-                                      adj_local_amount:
-                                        newLocal ?? a.adj_local_amount,
-                                    }
-                                  : a,
+                              normalizeAdjustmentAmounts(
+                                form.values.adjustments.map((a, i) =>
+                                  i === idx
+                                    ? { ...a, adj_curr_amount: newCurr }
+                                    : a,
+                                ),
                               );
+                            form.setFieldValue(
+                              "adjustments",
+                              effectiveAdjustments,
+                            );
                             syncPartyDetailsFromAllocations(
                               effectiveAdjustments,
                             );

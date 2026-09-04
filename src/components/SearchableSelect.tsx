@@ -64,6 +64,17 @@ interface SearchableSelectProps {
   postBody?: (query: string) => unknown;
   /** With postBody, fetch even when the search box is empty (e.g. dropdown open). */
   allowEmptyQuery?: boolean;
+  /** Called when the user edits the visible search/display text. */
+  onSearchTextChange?: (text: string) => void;
+  /** Keep linked `value` when the user clears search text; do not call onChange(null). */
+  preserveLinkedValueOnClear?: boolean;
+  /** When display text is empty, show blank input instead of the raw `value`. */
+  hideValueInDisplay?: boolean;
+  /**
+   * When `value` is set, treat typing as free-text label edit only (no API search).
+   * Use for rows where the linked id must stay fixed while the label changes.
+   */
+  linkedLabelEditWithoutSearch?: boolean;
 }
 
 export default function SearchableSelect({
@@ -93,6 +104,10 @@ export default function SearchableSelect({
   hideEmptyResultsMessage = false,
   postBody,
   allowEmptyQuery = false,
+  onSearchTextChange,
+  preserveLinkedValueOnClear = false,
+  hideValueInDisplay = false,
+  linkedLabelEditWithoutSearch = false,
 }: SearchableSelectProps) {
   // Initialize selected state - if no value but displayValue exists, create temp value
   // Use a stable hash of displayValue to avoid recreating on every render
@@ -274,23 +289,29 @@ export default function SearchableSelect({
 
   // Update selected state when value prop changes
   useEffect(() => {
+    const displayLabel =
+      displayValue != null && String(displayValue).trim() !== ""
+        ? String(displayValue)
+        : "";
     if (value) {
       setSelected(value || null);
       // If we have a value, check if we need to update the display
       if (!selectedItem || selectedItem.value !== value) {
         // External value change - set up the display
-        if (displayValue) {
-          // We have a displayValue, so create a selectedItem for proper display
-          setSelectedItem({ value: value, label: displayValue });
-          setSearch(displayValue);
+        if (displayLabel) {
+          setSelectedItem({ value: value, label: displayLabel });
+          setSearch(displayLabel);
+          setData([{ value: value, label: displayLabel }]);
+        } else if (hideValueInDisplay) {
+          setSelectedItem({ value: value, label: "" });
+          setSearch("");
+          setData([{ value: value, label: "" }]);
         } else {
-          // No displayValue, just show the value
           setSelectedItem({ value: value, label: value });
           setSearch(value);
+          setData([{ value: value, label: value }]);
         }
         setIsSearchMode(false);
-        // Ensure the selected item is in the data array so it displays properly
-        setData([{ value: value, label: displayValue || value }]);
       }
     } else if (displayValue && displayValue.trim() !== "") {
       // No value but we have displayValue (edit mode scenario)
@@ -318,11 +339,25 @@ export default function SearchableSelect({
       setData([]);
       setOriginalData([]);
     }
-  }, [value, displayValue, selectedItem]);
+  }, [value, displayValue, selectedItem, hideValueInDisplay]);
+
+  const isLinkedLabelEdit =
+    linkedLabelEditWithoutSearch && Boolean(value && String(value).trim());
 
   const handleSearchChange = (val: string) => {
     searchRef.current = val;
     setSearch(val);
+    onSearchTextChange?.(val);
+
+    if (isLinkedLabelEdit) {
+      setSelected(value ?? null);
+      setSelectedItem({ value: String(value), label: val });
+      setIsSearchMode(false);
+      setData([{ value: String(value), label: val }]);
+      setOriginalData([]);
+      setActiveIndex(-1);
+      return;
+    }
 
     if (!val.trim()) {
       // Only treat this as a "user cleared the input" event when the user was
@@ -341,7 +376,9 @@ export default function SearchableSelect({
       setData([]); // keep this, do NOT clear cache
       setOriginalData([]); // keep this, do NOT clear cache
       setActiveIndex(-1);
-      onChange(null);
+      if (!preserveLinkedValueOnClear) {
+        onChange(null);
+      }
     } else {
       // User is typing - check if they're modifying a selected item or searching fresh
       if (selectedItem && val !== selectedItem.label) {
@@ -387,7 +424,10 @@ export default function SearchableSelect({
       setSearch("");
       setIsSearchMode(false);
       searchRef.current = "";
-      onChange(null); // Pass null
+      onSearchTextChange?.("");
+      if (!preserveLinkedValueOnClear) {
+        onChange(null);
+      }
     }
   };
 
@@ -435,6 +475,9 @@ export default function SearchableSelect({
         size={size}
         readOnly={readOnly}
         onKeyDown={(event) => {
+          if (isLinkedLabelEdit) {
+            return;
+          }
           if (event.key === "ArrowDown") {
             event.preventDefault();
             if (data.length > 0) {
@@ -534,6 +577,9 @@ export default function SearchableSelect({
           }
         }}
         onBlur={() => {
+          if (isLinkedLabelEdit) {
+            return;
+          }
           // If nothing selected after search, pick the active option if available, else first option
           if (!selectedItem && data.length > 0) {
             const idx = activeIndex > 0 ? activeIndex - 1 : 0;

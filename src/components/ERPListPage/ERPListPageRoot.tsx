@@ -21,7 +21,7 @@ export function ERPListPageRoot({
     <Box
       className={className}
       style={{
-        minHeight: "100vh",
+        height: "calc(100vh - 60px)",
         backgroundColor: theme.pageBg,
         display: "flex",
         flexDirection: "column",
