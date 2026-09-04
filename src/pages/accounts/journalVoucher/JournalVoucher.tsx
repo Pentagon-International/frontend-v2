@@ -184,18 +184,12 @@ const emptyRow = (): JVChargeRow => ({
 
 function clampAmt(v: number | null | undefined): number | null {
   if (v == null || !Number.isFinite(v)) return null;
-  const r = clampCurrencyMoneyAmountBound(v);
-  if (r == null) return null;
-  const MAX = 99999999.99;
-  return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
+  return clampCurrencyMoneyAmountBound(v);
 }
 
 function clampLocalAmt(v: number | null | undefined): number | null {
   if (v == null || !Number.isFinite(v)) return null;
-  const r = clampMoneyAmountBound(v);
-  if (r == null) return null;
-  const MAX = 99999999.99;
-  return Math.abs(r) > MAX ? (r > 0 ? MAX : -MAX) : r;
+  return clampMoneyAmountBound(v);
 }
 
 function toLocalAmount(value: number | string | null | undefined): number | null {

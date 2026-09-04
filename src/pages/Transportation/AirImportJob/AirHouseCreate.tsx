@@ -183,6 +183,10 @@ type HAWBDetailsForm = {
   origin_agent_name: string;
   origin_agent_address: string;
   origin_agent_email: string;
+  forwarder_id: number | null;
+  forwarder_name: string;
+  forwarder_address: string;
+  forwarder_email: string;
   /** internal select value; not sent in payload */
   cha_code: string;
   cha_name: string;
@@ -382,6 +386,9 @@ function HouseCreate() {
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string; email?: string }>>([]);
   const [originAgentAddressOptions, setOriginAgentAddressOptions] = useState<
+    Array<{ value: string; label: string; email?: string }>
+  >([]);
+  const [forwarderAddressOptions, setForwarderAddressOptions] = useState<
     Array<{ value: string; label: string; email?: string }>
   >([]);
 
@@ -653,6 +660,22 @@ function HouseCreate() {
       origin_agent_name: editData?.origin_agent_name || "",
       origin_agent_address: editData?.origin_agent_address || "",
       origin_agent_email: editData?.origin_agent_email || "",
+      forwarder_id:
+        (editData as { forwarder_id?: number | null } | undefined)
+          ?.forwarder_id != null
+          ? Number(
+              (editData as { forwarder_id?: number | null }).forwarder_id,
+            )
+          : null,
+      forwarder_name:
+        (editData as { forwarder_name?: string } | undefined)
+          ?.forwarder_name || "",
+      forwarder_address:
+        (editData as { forwarder_address?: string } | undefined)
+          ?.forwarder_address || "",
+      forwarder_email:
+        (editData as { forwarder_email?: string } | undefined)
+          ?.forwarder_email || "",
       cha_code: (editData as { cha_code?: string })?.cha_code ?? "",
       cha_name: (editData as { cha_name?: string })?.cha_name ?? "",
       cha_address: (editData as { cha_address?: string })?.cha_address ?? "",
@@ -1257,6 +1280,18 @@ function HouseCreate() {
         origin_agent_name: editData.origin_agent_name || "",
         origin_agent_address: editData.origin_agent_address || "",
         origin_agent_email: editData.origin_agent_email || "",
+        forwarder_id:
+          (editData as { forwarder_id?: number | null }).forwarder_id != null
+            ? Number(
+                (editData as { forwarder_id?: number | null }).forwarder_id,
+              )
+            : null,
+        forwarder_name:
+          (editData as { forwarder_name?: string }).forwarder_name || "",
+        forwarder_address:
+          (editData as { forwarder_address?: string }).forwarder_address || "",
+        forwarder_email:
+          (editData as { forwarder_email?: string }).forwarder_email || "",
         // Preserve party ids for shipment-party Select; name/address/email from API housing_details
         shipper_code:
           editData.shipper_id != null
@@ -1296,6 +1331,21 @@ function HouseCreate() {
         note: (editData as { note?: string }).note || "",
         ref_no: (editData as { ref_no?: string }).ref_no || "",
       });
+
+      const savedForwarderAddress = String(
+        (editData as { forwarder_address?: string }).forwarder_address || "",
+      );
+      if (savedForwarderAddress) {
+        setForwarderAddressOptions([
+          {
+            value: savedForwarderAddress,
+            label: savedForwarderAddress,
+            email: String(
+              (editData as { forwarder_email?: string }).forwarder_email || "",
+            ),
+          },
+        ]);
+      }
 
       // Sync search display and address options from housing_details (like booking edit load)
       const shipperName = String(editData.shipper_name || "");
@@ -2407,6 +2457,10 @@ function HouseCreate() {
       origin_agent_name: v.origin_agent_name,
       origin_agent_address: v.origin_agent_address,
       origin_agent_email: v.origin_agent_email,
+      forwarder_id: v.forwarder_id ?? null,
+      forwarder_name: v.forwarder_name || "",
+      forwarder_address: v.forwarder_address || "",
+      forwarder_email: v.forwarder_email || "",
       cha_name: v.cha_name,
       cha_address: v.cha_address,
       shipper_name: v.shipper_name,
@@ -2514,6 +2568,10 @@ function HouseCreate() {
       origin_agent_name: currentFormValues.origin_agent_name,
       origin_agent_address: currentFormValues.origin_agent_address,
       origin_agent_email: currentFormValues.origin_agent_email,
+      forwarder_id: currentFormValues.forwarder_id ?? null,
+      forwarder_name: currentFormValues.forwarder_name || "",
+      forwarder_address: currentFormValues.forwarder_address || "",
+      forwarder_email: currentFormValues.forwarder_email || "",
       cha_name: currentFormValues.cha_name,
       cha_address: currentFormValues.cha_address,
       shipper_code: currentFormValues.shipper_code,
@@ -2693,6 +2751,10 @@ function HouseCreate() {
         origin_agent_name: form.values.origin_agent_name,
         origin_agent_address: form.values.origin_agent_address,
         origin_agent_email: form.values.origin_agent_email,
+        forwarder_id: form.values.forwarder_id ?? null,
+        forwarder_name: form.values.forwarder_name || "",
+        forwarder_address: form.values.forwarder_address || "",
+        forwarder_email: form.values.forwarder_email || "",
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
@@ -4085,6 +4147,157 @@ function HouseCreate() {
                 )}
               </Grid.Col>
             </Grid>
+            {/* Forwarder Section */}
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+              Forwarder
+            </Text>
+            <Grid mb="xs">
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="Forwarder Name"
+                  placeholder="Type forwarder name"
+                  apiEndpoint={URL.forwarder}
+                  dropdownZIndex={10}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={(item: Record<string, unknown>) => ({
+                    value: String(item.id),
+                    label: String(item.customer_name),
+                  })}
+                  value={
+                    form.values.forwarder_id != null
+                      ? String(form.values.forwarder_id)
+                      : null
+                  }
+                  displayValue={form.values.forwarder_name}
+                  onChange={(value, selectedData, originalData) => {
+                    const id =
+                      originalData &&
+                      (originalData as Record<string, unknown>).id != null
+                        ? Number((originalData as Record<string, unknown>).id)
+                        : null;
+                    const newName =
+                      selectedData?.label ||
+                      String(
+                        (originalData as Record<string, unknown> | undefined)
+                          ?.customer_name || "",
+                      ) ||
+                      "";
+
+                    if (!value) {
+                      form.setFieldValue("forwarder_id", null);
+                      form.setFieldValue("forwarder_name", "");
+                      form.setFieldValue("forwarder_address", "");
+                      form.setFieldValue("forwarder_email", "");
+                      setForwarderAddressOptions([]);
+                      return;
+                    }
+
+                    form.setFieldValue("forwarder_id", id);
+                    form.setFieldValue("forwarder_name", newName);
+
+                    if (
+                      originalData &&
+                      (originalData as Record<string, unknown>).addresses_data
+                    ) {
+                      const addressesData = (
+                        originalData as Record<string, unknown>
+                      ).addresses_data as Array<{
+                        id: number;
+                        address: string;
+                        email?: string;
+                        address_type?: string;
+                      }>;
+
+                      const addressOptions = addressesData
+                        .filter((a) => a.address)
+                        .map((a) => {
+                          const addr = toTitleCase(String(a.address || ""));
+                          return {
+                            value: addr,
+                            label: addr,
+                            email: String(a.email || ""),
+                          };
+                        });
+                      setForwarderAddressOptions(addressOptions);
+
+                      const primaryAddr =
+                        pickPrimaryPartyAddress(addressesData);
+
+                      form.setFieldValue("forwarder_address", "");
+                      if (primaryAddr?.address) {
+                        form.setFieldValue(
+                          "forwarder_address",
+                          toTitleCase(String(primaryAddr.address)),
+                        );
+                      }
+                      form.setFieldValue(
+                        "forwarder_email",
+                        String(primaryAddr?.email || ""),
+                      );
+                    } else {
+                      setForwarderAddressOptions([]);
+                      form.setFieldValue("forwarder_address", "");
+                      form.setFieldValue("forwarder_email", "");
+                    }
+                  }}
+                  returnOriginalData={true}
+                  error={form.errors.forwarder_name as string}
+                  minSearchLength={2}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Forwarder Email"
+                  type="email"
+                  format="normal"
+                  placeholder="Enter Forwarder Email"
+                  {...form.getInputProps("forwarder_email")}
+                  error={form.errors.forwarder_email}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={4}>
+                {forwarderAddressOptions.length > 0 ? (
+                  <Dropdown
+                    label="Forwarder Address"
+                    placeholder="Select forwarder address"
+                    searchable
+                    data={forwarderAddressOptions}
+                    value={form.values.forwarder_address || ""}
+                    onChange={(value) => {
+                      form.setFieldValue("forwarder_address", value || "");
+                      if (value) {
+                        const selected = forwarderAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "forwarder_email",
+                          selected?.email || "",
+                        );
+                      }
+                    }}
+                    error={form.errors.forwarder_address}
+                  />
+                ) : (
+                  <FormTextArea
+                    label="Forwarder Address"
+                    placeholder="Enter Forwarder Address"
+                    minRows={2}
+                    size="sm"
+                    radius="sm"
+                    value={form.values.forwarder_address}
+                    onChange={(e) => {
+                      form.setFieldValue(
+                        "forwarder_address",
+                        e.currentTarget.value,
+                      );
+                    }}
+                    error={form.errors.forwarder_address}
+                  />
+                )}
+              </Grid.Col>
+            </Grid>
+
             {/* Origin Agent Section */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Origin Agent

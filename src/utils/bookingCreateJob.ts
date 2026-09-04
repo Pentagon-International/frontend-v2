@@ -632,6 +632,11 @@ function buildAirHousing(booking: Record<string, unknown>, trade: string) {
       booking.destination_agent_address || booking.agent_address || "",
     agent_email:
       booking.destination_agent_email || booking.agent_email || "",
+    forwarder_id:
+      booking.forwarder_id != null ? Number(booking.forwarder_id) : null,
+    forwarder_name: booking.forwarder_name || "",
+    forwarder_address: booking.forwarder_address || "",
+    forwarder_email: booking.forwarder_email || "",
     shipper_name: booking.shipper_name || booking.customer_name || "",
     shipper_address: booking.shipper_address || "",
     shipper_email: booking.shipper_email || "",
@@ -680,6 +685,11 @@ function buildOceanHousing(
       "",
     agent_address: booking.destination_agent_address || booking.agent_address || "",
     agent_email: booking.destination_agent_email || booking.agent_email || "",
+    forwarder_id:
+      booking.forwarder_id != null ? Number(booking.forwarder_id) : null,
+    forwarder_name: booking.forwarder_name || "",
+    forwarder_address: booking.forwarder_address || "",
+    forwarder_email: booking.forwarder_email || "",
     shipper_name: booking.shipper_name || booking.customer_name || "",
     shipper_address: booking.shipper_address || "",
     shipper_email: booking.shipper_email || "",

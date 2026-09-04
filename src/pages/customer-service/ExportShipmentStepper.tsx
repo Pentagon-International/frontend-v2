@@ -124,6 +124,7 @@ interface FormValues {
   consignee_email: string;
   forwarder_code: string;
   forwarder_address_id: number;
+  forwarder_address: string;
   forwarder_email: string;
   destination_agent_code: string;
   destination_agent_address_id: number;
@@ -361,7 +362,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
     Array<{ value: string; label: string }>
   >([]);
   const [forwarderAddressOptions, setForwarderAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [chaAddressOptions, setChaAddressOptions] = useState<
     Array<{ value: string; label: string }>
@@ -537,6 +538,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
       consignee_email: String(data.consignee_email || ""),
       forwarder_code: String(data.forwarder_code || ""),
       forwarder_address_id: Number(data.forwarder_address_id) || 0,
+      forwarder_address: String(data.forwarder_address || ""),
       forwarder_email: String(data.forwarder_email || ""),
       destination_agent_code: String(data.destination_agent_code || ""),
       destination_agent_address_id:
@@ -672,6 +674,7 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
       consignee_email: "",
       forwarder_code: "",
       forwarder_address_id: 0,
+      forwarder_address: "",
       forwarder_email: "",
       destination_agent_code: "",
       destination_agent_address_id: 0,
@@ -775,6 +778,15 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
       }
       if (initialData.forwarder_name) {
         setForwarderDisplayName(String(initialData.forwarder_name));
+      }
+      if (initialData.forwarder_address_id && initialData.forwarder_address) {
+        setForwarderAddressOptions([
+          {
+            value: String(initialData.forwarder_address_id),
+            label: String(initialData.forwarder_address),
+            email: String(initialData.forwarder_email || ""),
+          },
+        ]);
       }
       if (initialData.destination_agent_name) {
         setDestinationAgentDisplayName(
@@ -1083,7 +1095,9 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
         consignee_email: form.values.consignee_email,
 
         forwarder_code: form.values.forwarder_code,
+        forwarder_name: forwarderDisplayName || "",
         forwarder_address_id: form.values.forwarder_address_id,
+        forwarder_address: form.values.forwarder_address || "",
         forwarder_email: form.values.forwarder_email,
 
         destination_agent_code: form.values.destination_agent_code,
@@ -2139,19 +2153,29 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                           .addresses_data as Array<{
                           id: number;
                           address: string;
+                          email?: string;
                         }>
-                      ).map((addr: { id: number; address: string }) => ({
-                        value: String(addr.id),
-                        label: addr.address,
-                      }));
+                      ).map(
+                        (addr: {
+                          id: number;
+                          address: string;
+                          email?: string;
+                        }) => ({
+                          value: String(addr.id),
+                          label: addr.address,
+                          email: addr.email ?? "",
+                        }),
+                      );
 
                       setForwarderAddressOptions(addressOptions);
 
                       // Reset address selection when forwarder changes
                       form.setFieldValue("forwarder_address_id", 0);
+                      form.setFieldValue("forwarder_address", "");
                     } else {
                       setForwarderAddressOptions([]);
                       form.setFieldValue("forwarder_address_id", 0);
+                      form.setFieldValue("forwarder_address", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -2175,6 +2199,16 @@ const ExportShipmentStepper: React.FC<ExportShipmentStepperProps> = ({
                       "forwarder_address_id",
                       value ? parseInt(value) : 0,
                     );
+                    const selected = forwarderAddressOptions.find(
+                      (o) => o.value === value,
+                    );
+                    form.setFieldValue(
+                      "forwarder_address",
+                      selected?.label ?? "",
+                    );
+                    if (selected?.email) {
+                      form.setFieldValue("forwarder_email", selected.email);
+                    }
                   }}
                   error={form.errors.forwarder_address_id}
                   disabled={forwarderAddressOptions.length === 0}

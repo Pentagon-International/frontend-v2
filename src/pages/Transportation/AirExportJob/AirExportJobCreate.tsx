@@ -262,6 +262,10 @@ type HAWBDetail = HouseDocumentFields & {
   agent_name: string;
   agent_address: string;
   agent_email: string;
+  forwarder_id?: number | null;
+  forwarder_name?: string;
+  forwarder_address?: string;
+  forwarder_email?: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -1192,6 +1196,19 @@ function AirExportJobCreate() {
                 ? String(house.agent_address)
                 : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
+              forwarder_id:
+                house.forwarder_id != null && house.forwarder_id !== undefined
+                  ? Number(house.forwarder_id)
+                  : null,
+              forwarder_name: house.forwarder_name
+                ? String(house.forwarder_name)
+                : "",
+              forwarder_address: house.forwarder_address
+                ? String(house.forwarder_address)
+                : "",
+              forwarder_email: house.forwarder_email
+                ? String(house.forwarder_email)
+                : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
               shipper_code: house.shipper_code
@@ -3023,6 +3040,10 @@ function AirExportJobCreate() {
             agent_name: hawb.agent_name,
             agent_address: hawb.agent_address || "",
             agent_email: hawb.agent_email || "",
+            forwarder_id: hawb.forwarder_id ?? null,
+            forwarder_name: hawb.forwarder_name || "",
+            forwarder_address: hawb.forwarder_address || "",
+            forwarder_email: hawb.forwarder_email || "",
             cha_name: (hawb as { cha_name?: string }).cha_name || null,
             cha_address: (hawb as { cha_address?: string }).cha_address || null,
             shipper_code: hawb.shipper_code,
