@@ -80,6 +80,7 @@ import {
   unwrapApiStatusBody,
 } from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import {
   collectPartyGstOptions,
@@ -830,6 +831,9 @@ function PaymentRequest() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: requestId } = useParams<{ id: string }>();
+  const handlePaymentRequestBack = useCallback(() => {
+    navigateFinanceReturn(navigate, location.state);
+  }, [navigate, location.state]);
   const user = useAuthStore((state) => state.user);
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -2153,7 +2157,7 @@ function PaymentRequest() {
             type: "success",
           });
           if (isApproveAction || isRejectAction) {
-            navigate(-1);
+            handlePaymentRequestBack();
           }
         }
       } else {
@@ -2420,7 +2424,7 @@ function PaymentRequest() {
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(-1)}
+              onClick={handlePaymentRequestBack}
             >
               Back
             </Button>
@@ -4423,7 +4427,7 @@ function PaymentRequest() {
             <Button
               variant="outline"
               color="#105476"
-              onClick={() => navigate(-1)}
+              onClick={handlePaymentRequestBack}
             >
               Cancel
             </Button>

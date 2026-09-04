@@ -187,6 +187,8 @@ export const URL = {
   reverseSupplierInvoiceFilter: "filter/reverse-supplier-invoice/",
   reverseSupplierInvoice: "reverse-supplier-invoice/",
   invoiceCombined: "invoice/combined/",
+  /** Job Accounts tab: invoices, supplier invoices, PRQs (+ nested reverses). */
+  jobFinanceDocumentsFilter: "filter/job-finance-documents/",
   paymentRequest: "payment-request/",
   paymentRequestFilter: "filter/payment-request/",
   journalVoucher: "journal_voucher/",

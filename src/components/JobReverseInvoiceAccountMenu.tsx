@@ -40,12 +40,13 @@ type JobReverseInvoiceRow = Record<string, unknown> & {
   document_date?: string;
   reverse_document_no?: string;
   document_no?: string;
-  day_book_name?: string;
+  day_book_name?: string | null;
   day_book_type?: string;
   Dr_Cr?: string;
   dr_cr?: string;
   document_type?: string;
   total?: string | number;
+  local_total?: string | number;
 };
 
 type JobInvoiceParentRow = Record<string, unknown> & {
@@ -53,12 +54,13 @@ type JobInvoiceParentRow = Record<string, unknown> & {
   reverse_invoice_id?: number;
   document_date?: string;
   status?: string;
-  day_book_name?: string;
+  day_book_name?: string | null;
   day_book_type?: string;
   Dr_Cr?: string;
   dr_cr?: string;
   document_type?: string;
   total?: string | number;
+  local_total?: string | number;
 };
 
 type JobReverseInvoiceAccountMenuProps = {
@@ -70,6 +72,7 @@ type JobReverseInvoiceAccountMenuProps = {
   deletingReverseId: number | null;
   onRequestDeleteReverseInvoice: (reverseInvoiceId: number) => void;
   readOnly?: boolean;
+  navigationStateExtras?: Record<string, unknown>;
   resolveDocumentSegment?: (
     rev: JobReverseInvoiceRow,
     parentRow: JobInvoiceParentRow,
@@ -109,6 +112,7 @@ export function JobReverseInvoiceAccountMenu({
   deletingReverseId,
   onRequestDeleteReverseInvoice,
   resolveDocumentSegment,
+  navigationStateExtras,
   readOnly = false,
 }: JobReverseInvoiceAccountMenuProps) {
   const reverseInvoiceId = Number(
@@ -132,12 +136,17 @@ export function JobReverseInvoiceAccountMenu({
           ...mergedRecord,
           document_no: getInvoiceDocumentNo(rev, parentRow.document_no),
           document_date: rev.document_date ?? parentRow.document_date,
-          total: rev.total ?? parentRow.total,
+          total:
+            rev.total ??
+            rev.local_total ??
+            parentRow.total ??
+            parentRow.local_total,
           status: rev.status ?? parentRow.status,
           day_book_name: rev.day_book_name ?? parentRow.day_book_name,
         },
         fromJobLevel: true,
         ...(job ? { job } : {}),
+        ...(navigationStateExtras ?? {}),
       },
     });
   };
@@ -150,6 +159,7 @@ export function JobReverseInvoiceAccountMenu({
         reverse_document_no: getInvoiceDocumentNo(rev, parentRow.document_no),
         invoice_document_no: parentRow.document_no ?? "",
         ...(job ? { job } : {}),
+        ...(navigationStateExtras ?? {}),
       },
     });
   };
