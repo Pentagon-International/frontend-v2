@@ -5776,10 +5776,14 @@ function InvoiceCreate({
                         }
                         apiEndpoint={URL.chargeMaster}
                         searchFields={["charge_name", "charge_code"]}
-                        displayFormat={(item: Record<string, unknown>) => ({
-                          value: String(item.id ?? ""),
-                          label: String(item.charge_name ?? ""),
-                        })}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const name = String(item.charge_name ?? "");
+                          const code = String(item.charge_code ?? "").trim();
+                          return {
+                            value: String(item.id ?? ""),
+                            label: code ? `${name} (${code})` : name,
+                          };
+                        }}
                         value={
                           charge.charge_id != null
                             ? String(charge.charge_id)
