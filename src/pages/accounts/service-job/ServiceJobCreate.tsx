@@ -1,12 +1,10 @@
 import {
-  Fragment,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import {
   ActionIcon,
@@ -19,9 +17,7 @@ import {
   Loader,
   Menu,
   Modal,
-  ScrollArea,
   Stack,
-  Table,
   Tabs,
   Text,
 } from "@mantine/core";
@@ -29,18 +25,13 @@ import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
   IconArrowLeft,
   IconCheck,
-  IconChevronDown,
   IconChevronRight,
-  IconChevronUp,
   IconDotsVertical,
   IconDownload,
-  IconEdit,
-  IconEye,
   IconFileAnalytics,
   IconFileInvoice,
   IconPaperclip,
   IconPlus,
-  IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -61,9 +52,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
-import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
-import { JobInvoiceDeleteMenuItem } from "../../../components/JobInvoiceDeleteMenuItem";
-import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvoiceAccountMenu";
+import { JobAccountsDocumentsTable } from "../../../components/JobAccountsDocumentsTable";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useJobDocuments } from "../../../hooks/useJobDocuments";
 import { buildDocumentIdsPayloadField } from "../../../utils/jobDocuments";
@@ -86,6 +75,7 @@ import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useExchangeRateRoe } from "../../../hooks/useExchangeRateRoe";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
+import { readJobFormActiveTabFromLocation } from "../../../utils/jobFinanceDocuments";
 import useAuthStore from "../../../store/authStore";
 import {
   ROE_DECIMAL_PLACES,
@@ -106,8 +96,6 @@ import {
   resolveAutoUnitForNewCharge,
 } from "../../../utils/chargeCalculationTypeUnit";
 import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
-import { formatInvoiceDocumentNo } from "../../../utils/invoiceDocumentNumber";
-import { getInvoiceStatusBadgeColor } from "../../../utils/invoiceStatus";
 import dayjs from "dayjs";
 import {
   formatLocalDateTime,
@@ -205,28 +193,6 @@ const EMPTY_PARTY_DETAILS: JobMasterPartyDetailsValues = {
   carrier_agent_email: "",
   carrier_agent_address_id: "",
   carrier_agent_address: "",
-};
-
-type ReverseInvoiceItem = {
-  id?: number;
-  reverse_invoice_id?: number;
-  reverse_document_no?: string;
-  document_no?: string;
-  document_date?: string;
-  total?: string | number;
-  status?: string;
-  day_book_name?: string;
-};
-
-type InvoiceListItem = {
-  id: number;
-  invoice_id?: number;
-  day_book_name?: string;
-  document_no?: string;
-  document_date?: string;
-  status?: string;
-  total?: string | number;
-  reverse_invoices?: ReverseInvoiceItem[];
 };
 
 // ---------------------------------------------------------------------------
@@ -1302,49 +1268,6 @@ function ServiceJobChargesSection({
 // Accounts section
 // ---------------------------------------------------------------------------
 
-const serviceJobInvoiceMenuItemStyles = {
-  item: {
-    fontFamily: "Inter",
-    fontSize: "13px",
-    fontWeight: 500,
-    borderRadius: "6px",
-    padding: "10px 12px",
-    marginBottom: "4px",
-    "&:hover": {
-      backgroundColor: "#F8F9FA",
-    },
-  },
-  itemLabel: {
-    fontFamily: "Inter",
-    fontSize: "13px",
-    fontWeight: 500,
-    color: "#424242",
-  },
-};
-
-function ServiceJobInvoiceMenuIcon({
-  backgroundColor,
-  children,
-}: {
-  backgroundColor: string;
-  children: ReactNode;
-}) {
-  return (
-    <Box
-      style={{
-        backgroundColor,
-        borderRadius: "6px",
-        padding: "6px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
-
 function ServiceJobAccountsSection({
   activeTab,
   accountsTabIndex,
@@ -1358,277 +1281,53 @@ function ServiceJobAccountsSection({
   editPath: string;
   isReadOnly?: boolean;
 }) {
-  const navigate = useNavigate();
-  const shipmentNo = jobData?.job_id ? String(jobData.job_id) : null;
   const {
     invoiceList,
     invoiceListLoading,
+    invoiceListTotal,
+    pageIndex,
+    setPageIndex,
+    pageSize,
+    searchFilters,
+    setSearchFilter,
     invoiceDeletingId,
     expandedInvoiceRowId,
     setExpandedInvoiceRowId,
     requestDeleteInvoice,
     requestDeleteReverseInvoice,
     deleteConfirmProps,
-  } = useJobAccountInvoices<InvoiceListItem>({
+  } = useJobAccountInvoices({
     activeTab,
     accountsTabIndex,
-    shipmentNo,
-    isAgent: false,
+    jobId: jobData?.job_id ? String(jobData.job_id) : null,
     enabled: !!jobData?.id,
   });
 
   return (
-    <Box mt="md">
-      <Text size="md" fw={600} c="#105476" mb="md">
-        Accounts
-      </Text>
-      {invoiceListLoading ? (
-        <Center py="xl">
-          <Loader color="#105476" size="lg" />
-        </Center>
-      ) : (
-        <ScrollArea>
-          <Table
-            withTableBorder
-            withColumnBorders
-            striped
-            highlightOnHover
-            style={{ minWidth: 700 }}
-            styles={{ th: { padding: "8px" }, td: { padding: "8px" } }}
-          >
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Daybook</Table.Th>
-                <Table.Th>Document Number</Table.Th>
-                <Table.Th>Invoice Date</Table.Th>
-                <Table.Th>Invoice Total</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {invoiceList.length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={6}>
-                    <Center py="xl">
-                      <Text c="dimmed">No invoices to display</Text>
-                    </Center>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                invoiceList.map((row, idx) => {
-                  const statusUpper = (row.status ?? "").toUpperCase();
-                  const isPosted =
-                    statusUpper === "POSTED" || row.status === "posted";
-                  const isUnposted =
-                    statusUpper === "UNPOSTED" || row.status === "unpost";
-                  const rowKey = `${row.id}-${idx}`;
-                  const isExpanded = expandedInvoiceRowId === rowKey;
-                  const reverseInvoices = row.reverse_invoices ?? [];
-                  const hasReverseInvoices = reverseInvoices.length > 0;
-                  const invoiceViewId = row.invoice_id ?? row.id;
-                  return (
-                    <Fragment key={rowKey}>
-                      <Table.Tr
-                        style={
-                          hasReverseInvoices ? { cursor: "pointer" } : undefined
-                        }
-                        onClick={() => {
-                          if (!hasReverseInvoices) {
-                            setExpandedInvoiceRowId(null);
-                            return;
-                          }
-                          setExpandedInvoiceRowId((prev) =>
-                            prev === rowKey ? null : rowKey,
-                          );
-                        }}
-                      >
-                        <Table.Td>
-                          <Group gap="xs" wrap="nowrap">
-                            {hasReverseInvoices &&
-                              (isExpanded ? (
-                                <IconChevronUp size={14} color="#105476" />
-                              ) : (
-                                <IconChevronDown size={14} color="#105476" />
-                              ))}
-                            {row.day_book_name ?? "-"}
-                          </Group>
-                        </Table.Td>
-                        <Table.Td>{formatInvoiceDocumentNo(row)}</Table.Td>
-                        <Table.Td>{row.document_date ?? "-"}</Table.Td>
-                        <Table.Td>{row.total ?? "-"}</Table.Td>
-                        <Table.Td>
-                          <Badge
-                            size="sm"
-                            variant="light"
-                            color={getInvoiceStatusBadgeColor(row.status)}
-                          >
-                            {row.status ?? "-"}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td onClick={(e) => e.stopPropagation()}>
-                          <Menu
-                            shadow="md"
-                            width={200}
-                            position="bottom-end"
-                            styles={{
-                              dropdown: {
-                                border: "1px solid #E9ECEF",
-                                borderRadius: "8px",
-                                padding: "8px",
-                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                              },
-                            }}
-                          >
-                            <Menu.Target>
-                              <ActionIcon
-                                variant="subtle"
-                                color="#105476"
-                                size="sm"
-                              >
-                                <IconDotsVertical size={16} />
-                              </ActionIcon>
-                            </Menu.Target>
-                            <Menu.Dropdown>
-                              <Menu.Item
-                                leftSection={
-                                  <ServiceJobInvoiceMenuIcon backgroundColor="#E7F5FF">
-                                    <IconEye size={16} color="#105476" />
-                                  </ServiceJobInvoiceMenuIcon>
-                                }
-                                styles={serviceJobInvoiceMenuItemStyles}
-                                onClick={() =>
-                                  navigate(
-                                    `/service-job/invoice/view/${invoiceViewId}`,
-                                    {
-                                      state: {
-                                        invoiceData: row,
-                                        fromJobLevel: true,
-                                        returnTo: editPath,
-                                        returnToState: { job: jobData },
-                                        ...(jobData && { job: jobData }),
-                                      },
-                                    },
-                                  )
-                                }
-                              >
-                                View
-                              </Menu.Item>
-                              {isUnposted && !isReadOnly && (
-                                <>
-                                  <Menu.Item
-                                    leftSection={
-                                      <ServiceJobInvoiceMenuIcon backgroundColor="#E7F5FF">
-                                        <IconEdit size={16} color="#105476" />
-                                      </ServiceJobInvoiceMenuIcon>
-                                    }
-                                    styles={serviceJobInvoiceMenuItemStyles}
-                                    onClick={() =>
-                                      navigate(
-                                        `/service-job/invoice/edit/${row.invoice_id}`,
-                                        {
-                                          state: {
-                                            invoiceData: row,
-                                            fromJobLevel: true,
-                                            returnTo: editPath,
-                                            returnToState: { job: jobData },
-                                            ...(jobData && { job: jobData }),
-                                          },
-                                        },
-                                      )
-                                    }
-                                  >
-                                    Edit
-                                  </Menu.Item>
-                                  <JobInvoiceDeleteMenuItem
-                                    disabled={
-                                      invoiceDeletingId === invoiceViewId
-                                    }
-                                    onDelete={() =>
-                                      requestDeleteInvoice(
-                                        invoiceViewId as number,
-                                      )
-                                    }
-                                  />
-                                </>
-                              )}
-                              {isPosted && !isReadOnly && (
-                                <Menu.Item
-                                  leftSection={
-                                    <ServiceJobInvoiceMenuIcon backgroundColor="#E7F5FF">
-                                      <IconRefresh size={16} color="#105476" />
-                                    </ServiceJobInvoiceMenuIcon>
-                                  }
-                                  styles={serviceJobInvoiceMenuItemStyles}
-                                  onClick={() =>
-                                    navigate("/service-job/invoice/reverse", {
-                                      state: {
-                                        document_no: row.document_no ?? "",
-                                        document_type: String(
-                                          (
-                                            row as {
-                                              document_type?: unknown;
-                                            }
-                                          ).document_type ?? "",
-                                        ),
-                                        returnTo: editPath,
-                                        returnToState: { job: jobData },
-                                        ...(jobData && { job: jobData }),
-                                      },
-                                    })
-                                  }
-                                >
-                                  Invoice Reversal
-                                </Menu.Item>
-                              )}
-                            </Menu.Dropdown>
-                          </Menu>
-                        </Table.Td>
-                      </Table.Tr>
-                      {isExpanded &&
-                        reverseInvoices.map((rev, revIdx) => (
-                          <Table.Tr key={`${rowKey}-rev-${revIdx}`} bg="gray.0">
-                            <Table.Td pl="xl">
-                              {rev.day_book_name ?? "Reverse"}
-                            </Table.Td>
-                            <Table.Td>
-                              {rev.reverse_document_no ??
-                                rev.document_no ??
-                                "-"}
-                            </Table.Td>
-                            <Table.Td>{rev.document_date ?? "-"}</Table.Td>
-                            <Table.Td>{rev.total ?? "-"}</Table.Td>
-                            <Table.Td>
-                              <Badge size="sm" variant="light">
-                                {rev.status ?? "-"}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td onClick={(e) => e.stopPropagation()}>
-                              <JobReverseInvoiceAccountMenu
-                                rev={rev}
-                                readOnly={isReadOnly}
-                                parentRow={row}
-                                jobBasePath="/service-job"
-                                navigate={navigate}
-                                job={jobData}
-                                deletingReverseId={invoiceDeletingId}
-                                onRequestDeleteReverseInvoice={
-                                  requestDeleteReverseInvoice
-                                }
-                              />
-                            </Table.Td>
-                          </Table.Tr>
-                        ))}
-                    </Fragment>
-                  );
-                })
-              )}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      )}
-      <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
-    </Box>
+    <JobAccountsDocumentsTable
+      documents={invoiceList}
+      loading={invoiceListLoading}
+      jobBasePath="/service-job"
+      accountsTabIndex={accountsTabIndex}
+      isReadOnly={isReadOnly}
+      job={jobData}
+      deletingId={invoiceDeletingId}
+      expandedRowId={expandedInvoiceRowId}
+      setExpandedRowId={setExpandedInvoiceRowId}
+      onRequestDeleteInvoice={requestDeleteInvoice}
+      onRequestDeleteReverseInvoice={requestDeleteReverseInvoice}
+      deleteConfirmProps={deleteConfirmProps}
+      total={invoiceListTotal}
+      pageIndex={pageIndex}
+      pageSize={pageSize}
+      onPageChange={setPageIndex}
+      searchFilters={searchFilters}
+      onSearchFilterChange={setSearchFilter}
+      navigationStateExtras={{
+        returnTo: editPath,
+        returnToState: { job: jobData },
+      }}
+    />
   );
 }
 
@@ -1686,7 +1385,9 @@ export default function ServiceJobCreate() {
   const { getBranchCurrencyDefaults } = useExchangeRateRoe();
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
 
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() =>
+    readJobFormActiveTabFromLocation(location.state),
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingJob, setIsLoadingJob] = useState(
     isEditMode && !stateJobFromNav,
