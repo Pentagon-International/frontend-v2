@@ -422,6 +422,10 @@ type HousingDetail = HouseDocumentFields & {
   agent_name: string;
   agent_address: string;
   agent_email: string;
+  forwarder_id?: number | null;
+  forwarder_name?: string;
+  forwarder_address?: string;
+  forwarder_email?: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
@@ -1237,6 +1241,19 @@ function ExportJobCreate() {
                 ? String(house.agent_address)
                 : "",
               agent_email: house.agent_email ? String(house.agent_email) : "",
+              forwarder_id:
+                house.forwarder_id != null && house.forwarder_id !== undefined
+                  ? Number(house.forwarder_id)
+                  : null,
+              forwarder_name: house.forwarder_name
+                ? String(house.forwarder_name)
+                : "",
+              forwarder_address: house.forwarder_address
+                ? String(house.forwarder_address)
+                : "",
+              forwarder_email: house.forwarder_email
+                ? String(house.forwarder_email)
+                : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
               agent_code: house.agent_code ? String(house.agent_code) : "",
@@ -3476,6 +3493,10 @@ function ExportJobCreate() {
           agent_name: house.agent_name,
           agent_address: house.agent_address || "",
           agent_email: house.agent_email || "",
+          forwarder_id: house.forwarder_id ?? null,
+          forwarder_name: house.forwarder_name || "",
+          forwarder_address: house.forwarder_address || "",
+          forwarder_email: house.forwarder_email || "",
           cha_name: (house as { cha_name?: string }).cha_name || null,
           cha_address: (house as { cha_address?: string }).cha_address || null,
           shipper_name: house.shipper_name,

@@ -248,6 +248,10 @@ type HAWBDetail = HouseDocumentFields & {
   origin_agent_name: string;
   origin_agent_address: string;
   origin_agent_email: string;
+  forwarder_id?: number | null;
+  forwarder_name?: string;
+  forwarder_address?: string;
+  forwarder_email?: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -1271,6 +1275,19 @@ function AirImportJobCreate() {
                   (house.agent_email ?? house.origin_agent_email)
                     ? String(house.agent_email ?? house.origin_agent_email)
                     : "",
+                forwarder_id:
+                  house.forwarder_id != null && house.forwarder_id !== undefined
+                    ? Number(house.forwarder_id)
+                    : null,
+                forwarder_name: house.forwarder_name
+                  ? String(house.forwarder_name)
+                  : "",
+                forwarder_address: house.forwarder_address
+                  ? String(house.forwarder_address)
+                  : "",
+                forwarder_email: house.forwarder_email
+                  ? String(house.forwarder_email)
+                  : "",
                 cha_name: house.cha_name ? String(house.cha_name) : "",
                 cha_address: house.cha_address ? String(house.cha_address) : "",
                 shipper_code: house.shipper_code
@@ -3013,6 +3030,10 @@ function AirImportJobCreate() {
           agent_name: hawb.origin_agent_name || "",
           agent_address: hawb.origin_agent_address || "",
           agent_email: hawb.origin_agent_email || "",
+          forwarder_id: hawb.forwarder_id ?? null,
+          forwarder_name: hawb.forwarder_name || "",
+          forwarder_address: hawb.forwarder_address || "",
+          forwarder_email: hawb.forwarder_email || "",
           cha_name: (hawb as { cha_name?: string }).cha_name || null,
           cha_address: (hawb as { cha_address?: string }).cha_address || null,
           shipper_name: hawb.shipper_name,

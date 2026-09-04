@@ -207,6 +207,7 @@ interface FormValues {
   consignee_email: string;
   forwarder_code: string;
   forwarder_address_id: number;
+  forwarder_address: string;
   forwarder_email: string;
   destination_agent_code: string;
   destination_agent_address_id: number;
@@ -696,7 +697,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     Array<{ value: string; label: string }>
   >([]);
   const [forwarderAddressOptions, setForwarderAddressOptions] = useState<
-    Array<{ value: string; label: string }>
+    Array<{ value: string; label: string; email?: string }>
   >([]);
   const [billingCustomerAddressOptions, setBillingCustomerAddressOptions] =
     useState<Array<{ value: string; label: string }>>([]);
@@ -1135,6 +1136,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         data.forwarder_code_read || data.forwarder_code || "",
       ),
       forwarder_address_id: Number(data.forwarder_address_id) || 0,
+      forwarder_address: String(data.forwarder_address || ""),
       forwarder_email: String(data.forwarder_email || ""),
       destination_agent_code: String(
         data.destination_agent_code_read || data.destination_agent_code || "",
@@ -1363,6 +1365,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       consignee_email: "",
       forwarder_code: "",
       forwarder_address_id: 0,
+      forwarder_address: "",
       forwarder_email: "",
       destination_agent_code: "",
       destination_agent_address_id: 0,
@@ -2010,6 +2013,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         {
           value: String(jobData.forwarder_address_id),
           label: String(jobData.forwarder_address),
+          email: String(jobData.forwarder_email || ""),
         },
       ]);
     }
@@ -2278,6 +2282,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         {
           value: String(initialData.forwarder_address_id),
           label: String(initialData.forwarder_address),
+          email: String(initialData.forwarder_email || ""),
         },
       ]);
     }
@@ -2772,11 +2777,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         consignee_address: form.values.consignee_address,
         consignee_email: form.values.consignee_email,
         forwarder_code: form.values.forwarder_code,
+        forwarder_name: forwarderDisplayName || "",
         forwarder_address_id:
           form.values.forwarder_address_id &&
           form.values.forwarder_address_id > 0
             ? Number(form.values.forwarder_address_id)
             : null,
+        forwarder_address: form.values.forwarder_address || "",
         forwarder_email: form.values.forwarder_email,
         destination_agent_code: form.values.destination_agent_code,
         destination_agent_address_id:
@@ -4567,6 +4574,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setForwarderDisplayName(null);
                         setForwarderAddressOptions([]);
                         form.setFieldValue("forwarder_address_id", 0);
+                        form.setFieldValue("forwarder_address", "");
                         form.setFieldValue("forwarder_email", "");
                         return;
                       }
@@ -4590,6 +4598,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         const addressOptions = addressesData.map((addr) => ({
                           value: String(addr.id),
                           label: addr.address,
+                          email: addr.email ?? "",
                         }));
                         setForwarderAddressOptions(addressOptions);
 
@@ -4604,11 +4613,16 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                             primary.id,
                           );
                           form.setFieldValue(
+                            "forwarder_address",
+                            primary.address ?? "",
+                          );
+                          form.setFieldValue(
                             "forwarder_email",
                             primary.email ?? "",
                           );
                         } else {
                           form.setFieldValue("forwarder_address_id", 0);
+                          form.setFieldValue("forwarder_address", "");
                           form.setFieldValue("forwarder_email", "");
                         }
                       }
@@ -4650,6 +4664,16 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         "forwarder_address_id",
                         value ? parseInt(value) : 0,
                       );
+                      const selected = forwarderAddressOptions.find(
+                        (o) => o.value === value,
+                      );
+                      form.setFieldValue(
+                        "forwarder_address",
+                        selected?.label ?? "",
+                      );
+                      if (selected?.email) {
+                        form.setFieldValue("forwarder_email", selected.email);
+                      }
                     }}
                     error={form.errors.forwarder_address_id}
                     disabled={forwarderAddressOptions.length === 0}

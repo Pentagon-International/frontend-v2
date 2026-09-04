@@ -78,6 +78,7 @@ function ExportShipmentCreate() {
       consignee_email: "",
       forwarder_code: "",
       forwarder_address_id: 0,
+      forwarder_address: "",
       forwarder_email: "",
       destination_agent_code: "",
       destination_agent_address_id: 0,

@@ -73,6 +73,7 @@ function ImportShipmentCreate() {
       forwarder_code: "",
       forwarder_name: "",
       forwarder_address_id: 0,
+      forwarder_address: "",
       forwarder_email: "",
       destination_agent_code: "",
       destination_agent_name: "",
