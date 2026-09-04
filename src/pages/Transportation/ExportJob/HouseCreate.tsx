@@ -412,6 +412,7 @@ function HouseCreate() {
     Array<{ value: string; label: string; email?: string }>
   >([]);
   const shipperTypedNameRef = useRef("");
+  const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   // Consignee (shipment-party) search state
   const [consigneeSearch, setConsigneeSearch] = useState("");
@@ -3881,6 +3882,10 @@ function HouseCreate() {
                         "shipper_name",
                         toTitleCase(searchTerm),
                       );
+                      setShipperAddressOptions([]);
+                      form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_email", "");
+                      form.setFieldValue("shipper_state_id", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -3900,45 +3905,56 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {shipperAddressOptions.length > 0 ? (
-                  <Dropdown
-                    key={`shipper-address-${form.values.shipper_code || "none"}`}
-                    label="Shipper Address"
-                    placeholder="Select shipper address"
-                    searchable
-                    data={shipperAddressOptions}
-                    value={form.values.shipper_address || ""}
-                    onChange={(value) => {
-                      form.setFieldValue("shipper_address", value || "");
-                      if (value) {
-                        const selected = shipperAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "shipper_email",
-                          selected?.email || "",
-                        );
-                      }
-                    }}
-                    error={form.errors.shipper_address}
-                  />
-                ) : (
-                  <FormTextArea
-                    label="Shipper Address"
-                    placeholder="Enter shipper address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.shipper_address || ""}
-                    onChange={(e) => {
-                      form.setFieldValue(
-                        "shipper_address",
-                        e.currentTarget.value,
-                      );
-                    }}
-                    error={form.errors.shipper_address}
-                  />
-                )}
+                {(() => {
+                  const hasForwarder =
+                    form.values.forwarder_id != null ||
+                    Boolean(form.values.forwarder_name?.trim());
+                  const shipperTyped =
+                    hasForwarder &&
+                    !String(form.values.shipper_code || "").trim();
+                  if (shipperTyped || shipperAddressOptions.length === 0) {
+                    return (
+                      <FormTextArea
+                        label="Shipper Address"
+                        placeholder="Enter shipper address"
+                        minRows={2}
+                        size="sm"
+                        radius="sm"
+                        value={form.values.shipper_address || ""}
+                        onChange={(e) => {
+                          form.setFieldValue(
+                            "shipper_address",
+                            e.currentTarget.value,
+                          );
+                        }}
+                        error={form.errors.shipper_address}
+                      />
+                    );
+                  }
+                  return (
+                    <Dropdown
+                      key={`shipper-address-${form.values.shipper_code || "none"}`}
+                      label="Shipper Address"
+                      placeholder="Select shipper address"
+                      searchable
+                      data={shipperAddressOptions}
+                      value={form.values.shipper_address || ""}
+                      onChange={(value) => {
+                        form.setFieldValue("shipper_address", value || "");
+                        if (value) {
+                          const selected = shipperAddressOptions.find(
+                            (item) => item.value === value,
+                          );
+                          form.setFieldValue(
+                            "shipper_email",
+                            selected?.email || "",
+                          );
+                        }
+                      }}
+                      error={form.errors.shipper_address}
+                    />
+                  );
+                })()}
               </Grid.Col>
             </Grid>
 
@@ -4584,6 +4600,10 @@ function HouseCreate() {
                       form.setFieldValue("forwarder_address", "");
                       form.setFieldValue("forwarder_email", "");
                     }
+
+                    requestAnimationFrame(() => {
+                      forwarderEmailRef.current?.focus({ preventScroll: true });
+                    });
                   }}
                   returnOriginalData={true}
                   error={form.errors.forwarder_name as string}
@@ -4592,6 +4612,7 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
+                  ref={forwarderEmailRef}
                   label="Forwarder Email"
                   type="email"
                   format="normal"
@@ -4853,7 +4874,10 @@ function HouseCreate() {
                 <FormTextArea
                   label="Commodity Description"
                   placeholder="Enter Commodity Description"
-                  minRows={3}
+                  minRows={4}
+                  maxRows={10}
+                  autosize
+                  resize="vertical"
                   size="sm"
                   radius="sm"
                   value={form.values.commodity_description}
@@ -4870,7 +4894,10 @@ function HouseCreate() {
                 <FormTextArea
                   label="Marks No"
                   placeholder="Enter Marks No"
-                  minRows={3}
+                  minRows={4}
+                  maxRows={10}
+                  autosize
+                  resize="vertical"
                   size="sm"
                   radius="sm"
                   {...form.getInputProps("marks_no")}

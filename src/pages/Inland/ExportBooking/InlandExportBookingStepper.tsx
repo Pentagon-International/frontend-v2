@@ -741,6 +741,7 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [shipperAddressOptions, setShipperAddressOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
+  const shipperTypedNameRef = useRef("");
   const [forwarderAddressOptions, setForwarderAddressOptions] = useState<
     Array<{ value: string; label: string; email?: string }>
   >([]);
@@ -817,6 +818,7 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const notify1TextRef = useRef<HTMLInputElement | null>(null);
   const notify2SelectRef = useRef<HTMLInputElement | null>(null);
   const notify2TextRef = useRef<HTMLInputElement | null>(null);
+  const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   const consigneeUseTextInput =
     consigneeHasResults === false && consigneeSearch.trim().length >= 2;
@@ -4299,6 +4301,17 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     displayValue={shipperDisplayName}
                     onChange={(value, selectedData, originalData) => {
                       const newValue = value || "";
+                      const hasForwarder =
+                        Boolean(
+                          String(form.values.forwarder_code || "").trim(),
+                        ) ||
+                        Boolean(forwarderDisplayName?.trim()) ||
+                        Boolean(
+                          String(
+                            (form.values as { forwarder_name?: string })
+                              .forwarder_name || "",
+                          ).trim(),
+                        );
                       form.setFieldValue("shipper_code", newValue);
 
                       if (!newValue) {
@@ -4312,11 +4325,15 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         return; // Early return to avoid running the rest
                       }
 
-                      // Only runs when there IS a value
-                      if (selectedData) {
-                        setShipperDisplayName(selectedData.label);
-                        form.setFieldValue("shipper_name", selectedData.label);
-                      }
+                      const shipperName =
+                        selectedData?.label ||
+                        (hasForwarder
+                          ? toTitleCase(
+                              shipperTypedNameRef.current || value || "",
+                            )
+                          : "");
+                      setShipperDisplayName(shipperName || null);
+                      form.setFieldValue("shipper_name", shipperName);
 
                       if (
                         originalData &&
@@ -4360,6 +4377,51 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         }
                       }
                     }}
+                    onSearchTextChange={(text) => {
+                      if (
+                        Boolean(
+                          String(form.values.forwarder_code || "").trim(),
+                        ) ||
+                        Boolean(forwarderDisplayName?.trim()) ||
+                        Boolean(
+                          String(
+                            (form.values as { forwarder_name?: string })
+                              .forwarder_name || "",
+                          ).trim(),
+                        )
+                      ) {
+                        shipperTypedNameRef.current = text;
+                      }
+                    }}
+                    onSearchComplete={({ searchTerm, hasResults }) => {
+                      const hasForwarder =
+                        Boolean(
+                          String(form.values.forwarder_code || "").trim(),
+                        ) ||
+                        Boolean(forwarderDisplayName?.trim()) ||
+                        Boolean(
+                          String(
+                            (form.values as { forwarder_name?: string })
+                              .forwarder_name || "",
+                          ).trim(),
+                        );
+                      if (
+                        hasForwarder &&
+                        !hasResults &&
+                        searchTerm.length >= 2
+                      ) {
+                        form.setFieldValue("shipper_code", "");
+                        form.setFieldValue(
+                          "shipper_name",
+                          toTitleCase(searchTerm),
+                        );
+                        setShipperDisplayName(toTitleCase(searchTerm));
+                        setShipperAddressOptions([]);
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_address_id", 0);
+                        form.setFieldValue("shipper_email", "");
+                      }
+                    }}
                     returnOriginalData={true}
                     error={form.errors.shipper_code as string}
                     minSearchLength={2}
@@ -4375,32 +4437,68 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <Dropdown
-                    label="Shipper Address"
-                    placeholder="Select shipper address"
-                    searchable
-                    clearable
-                    data={shipperAddressOptions}
-                    value={
-                      shipperAddressOptions.length > 0 &&
-                      form.values.shipper_address_id !== 0
-                        ? String(form.values.shipper_address_id)
-                        : ""
+                  {(() => {
+                    const hasForwarder =
+                      Boolean(
+                        String(form.values.forwarder_code || "").trim(),
+                      ) ||
+                      Boolean(forwarderDisplayName?.trim()) ||
+                      Boolean(
+                        String(
+                          (form.values as { forwarder_name?: string })
+                            .forwarder_name || "",
+                        ).trim(),
+                      );
+                    const shipperAddressEditable =
+                      (hasForwarder &&
+                        !String(form.values.shipper_code || "").trim()) ||
+                      shipperAddressOptions.length === 0;
+                    if (shipperAddressEditable) {
+                      return (
+                        <FormTextInput
+                          label="Shipper Address"
+                          placeholder="Enter shipper address"
+                          value={form.values.shipper_address || ""}
+                          onChange={(e) => {
+                            form.setFieldValue(
+                              "shipper_address",
+                              toTitleCase(e.currentTarget.value),
+                            );
+                            form.setFieldValue("shipper_address_id", 0);
+                          }}
+                        />
+                      );
                     }
-                    key={`shipper-${form.values.shipper_address_id}`}
-                    onChange={(value) => {
-                      form.setFieldValue(
-                        "shipper_address_id",
-                        value ? parseInt(value) || 0 : 0,
-                      );
-                      const opt = shipperAddressOptions.find(
-                        (o) => o.value === value,
-                      );
-                      form.setFieldValue("shipper_address", opt?.label ?? "");
-                    }}
-                    error={form.errors.shipper_address_id}
-                    disabled={shipperAddressOptions.length === 0}
-                  />
+                    return (
+                      <Dropdown
+                        label="Shipper Address"
+                        placeholder="Select shipper address"
+                        searchable
+                        clearable
+                        data={shipperAddressOptions}
+                        value={
+                          form.values.shipper_address_id !== 0
+                            ? String(form.values.shipper_address_id)
+                            : ""
+                        }
+                        key={`shipper-${form.values.shipper_address_id}`}
+                        onChange={(value) => {
+                          form.setFieldValue(
+                            "shipper_address_id",
+                            value ? parseInt(value) || 0 : 0,
+                          );
+                          const opt = shipperAddressOptions.find(
+                            (o) => o.value === value,
+                          );
+                          form.setFieldValue(
+                            "shipper_address",
+                            opt?.label ?? "",
+                          );
+                        }}
+                        error={form.errors.shipper_address_id}
+                      />
+                    );
+                  })()}
                 </Grid.Col>
               </Grid>
 
@@ -4665,6 +4763,12 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           form.setFieldValue("forwarder_email", "");
                         }
                       }
+
+                      requestAnimationFrame(() => {
+                        forwarderEmailRef.current?.focus({
+                          preventScroll: true,
+                        });
+                      });
                     }}
                     returnOriginalData={true}
                     error={form.errors.forwarder_code as string}
@@ -4673,6 +4777,7 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
+                    ref={forwarderEmailRef}
                     label="Forwarder Email Id"
                     placeholder="Enter email address"
                     format="normal"
@@ -5410,12 +5515,14 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             <Box>
               {/* Common Fields */}
               <Grid mb="xl">
-                <Grid.Col span={12}>
+                <Grid.Col span={6}>
                   <FormTextArea
                     label="Commodity Description"
                     placeholder="Enter commodity description"
                     minRows={3}
-                    maxRows={6}
+                    maxRows={10}
+                    autosize
+                    resize="vertical"
                     value={form.values.commodity_description}
                     onChange={(e) => {
                       form.setFieldValue(
@@ -5427,11 +5534,18 @@ const InlandExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>
-                  <FormTextInput
-                    format="normal"
+                  <FormTextArea
                     label="Marks No"
                     placeholder="Enter marks and numbers"
-                    {...form.getInputProps("marks_no")}
+                    minRows={3}
+                    maxRows={10}
+                    autosize
+                    resize="vertical"
+                    value={form.values.marks_no}
+                    onChange={(e) => {
+                      form.setFieldValue("marks_no", e.currentTarget.value);
+                    }}
+                    error={form.errors.marks_no}
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>

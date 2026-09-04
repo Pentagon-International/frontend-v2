@@ -366,6 +366,7 @@ function HouseCreate() {
     Array<{ value: string; label: string; email?: string }>
   >([]);
   const shipperTypedNameRef = useRef("");
+  const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   // Consignee (shipment-party) search state
   const [consigneeSearch, setConsigneeSearch] = useState("");
@@ -3363,6 +3364,10 @@ function HouseCreate() {
                         "shipper_name",
                         toTitleCase(searchTerm),
                       );
+                      setShipperAddressOptions([]);
+                      form.setFieldValue("shipper_address", "");
+                      form.setFieldValue("shipper_email", "");
+                      form.setFieldValue("shipper_state_id", "");
                     }
                   }}
                   returnOriginalData={true}
@@ -3382,39 +3387,53 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {shipperAddressOptions.length > 0 ? (
-                  <Dropdown
-                    label="Shipper Address"
-                    placeholder="Select shipper address"
-                    searchable
-                    data={shipperAddressOptions}
-                    value={form.values.shipper_address || ""}
-                    onChange={(value) => {
-                      form.setFieldValue("shipper_address", value || "");
-                      if (value) {
-                        const selected = shipperAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "shipper_email",
-                          selected?.email || "",
-                        );
-                      }
-                    }}
-                    error={form.errors.shipper_address}
-                  />
-                ) : (
-                  <FormTextInput
-                    label="Shipper Address"
-                    placeholder="Enter shipper address"
-                    value={form.values.shipper_address || ""}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      form.setFieldValue("shipper_address", formattedValue);
-                    }}
-                    error={form.errors.shipper_address}
-                  />
-                )}
+                {(() => {
+                  const hasForwarder =
+                    form.values.forwarder_id != null ||
+                    Boolean(form.values.forwarder_name?.trim());
+                  const shipperTyped =
+                    hasForwarder &&
+                    !String(form.values.shipper_code || "").trim();
+                  if (shipperTyped || shipperAddressOptions.length === 0) {
+                    return (
+                      <FormTextInput
+                        label="Shipper Address"
+                        placeholder="Enter shipper address"
+                        value={form.values.shipper_address || ""}
+                        onChange={(e) => {
+                          const formattedValue = toTitleCase(e.target.value);
+                          form.setFieldValue(
+                            "shipper_address",
+                            formattedValue,
+                          );
+                        }}
+                        error={form.errors.shipper_address}
+                      />
+                    );
+                  }
+                  return (
+                    <Dropdown
+                      label="Shipper Address"
+                      placeholder="Select shipper address"
+                      searchable
+                      data={shipperAddressOptions}
+                      value={form.values.shipper_address || ""}
+                      onChange={(value) => {
+                        form.setFieldValue("shipper_address", value || "");
+                        if (value) {
+                          const selected = shipperAddressOptions.find(
+                            (item) => item.value === value,
+                          );
+                          form.setFieldValue(
+                            "shipper_email",
+                            selected?.email || "",
+                          );
+                        }
+                      }}
+                      error={form.errors.shipper_address}
+                    />
+                  );
+                })()}
               </Grid.Col>
             </Grid>
 
@@ -4059,6 +4078,10 @@ function HouseCreate() {
                       form.setFieldValue("forwarder_address", "");
                       form.setFieldValue("forwarder_email", "");
                     }
+
+                    requestAnimationFrame(() => {
+                      forwarderEmailRef.current?.focus({ preventScroll: true });
+                    });
                   }}
                   returnOriginalData={true}
                   error={form.errors.forwarder_name as string}
@@ -4067,6 +4090,7 @@ function HouseCreate() {
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
+                  ref={forwarderEmailRef}
                   label="Forwarder Email"
                   type="email"
                   format="normal"
@@ -4322,7 +4346,10 @@ function HouseCreate() {
                 <FormTextArea
                   label="Commodity Description"
                   placeholder="Enter Commodity Description"
-                  minRows={3}
+                  minRows={4}
+                  maxRows={10}
+                  autosize
+                  resize="vertical"
                   value={form.values.commodity_description}
                   onChange={(e) => {
                     form.setFieldValue(
@@ -4337,7 +4364,10 @@ function HouseCreate() {
                 <FormTextArea
                   label="Marks No"
                   placeholder="Enter Marks No"
-                  minRows={3}
+                  minRows={4}
+                  maxRows={10}
+                  autosize
+                  resize="vertical"
                   value={form.values.marks_no}
                   onChange={(e) => {
                     form.setFieldValue("marks_no", e.currentTarget.value);

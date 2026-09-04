@@ -4669,7 +4669,10 @@ function AirExportJobCreate() {
                 <FormTextArea
                   label="Commodity Description"
                   placeholder="Enter commodity description"
-                  minRows={3}
+                  minRows={4}
+                  maxRows={10}
+                  autosize
+                  resize="vertical"
                   value={cargoDetailsForm.values.commodity_description}
                   onChange={(e) => {
                     cargoDetailsForm.setFieldValue(

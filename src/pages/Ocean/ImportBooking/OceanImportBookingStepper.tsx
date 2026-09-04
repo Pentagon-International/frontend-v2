@@ -911,21 +911,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const [shipperIsSearching, setShipperIsSearching] = useState(false);
   const shipperSelectRef = useRef<HTMLInputElement | null>(null);
   const shipperTextRef = useRef<HTMLInputElement | null>(null);
-
-  const shipperUseTextInput =
-    shipperHasResults === false && shipperSearch.trim().length >= 2;
+  const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   const focusSoon = (el: HTMLInputElement | null) => {
     if (!el) return;
     setTimeout(() => el.focus(), 0);
   };
-
-  useEffect(() => {
-    focusSoon(
-      shipperUseTextInput ? shipperTextRef.current : shipperSelectRef.current,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shipperUseTextInput]);
 
   const defaultCurrency = (() => {
     const userData = localStorage.getItem("user");
@@ -1558,6 +1549,24 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       ...(initialData ? mapInitialDataToFormValues(initialData) : {}),
     },
   });
+
+  const hasForwarder =
+    Boolean(String(form.values.forwarder_code || "").trim()) ||
+    Boolean(forwarderDisplayName?.trim()) ||
+    Boolean(String(form.values.forwarder_name || "").trim());
+
+  const shipperManualFromSearch =
+    shipperHasResults === false && shipperSearch.trim().length >= 2;
+  const shipperUseTextInput = shipperManualFromSearch;
+
+  // Only auto-focus when search finds no shipper — not when forwarder selection
+  // switches shipper to editable text (avoids jumping focus away from forwarder).
+  useEffect(() => {
+    if (shipperManualFromSearch) {
+      focusSoon(shipperTextRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipperManualFromSearch]);
 
   const bookingDocuments = useBookingPageDocuments((state) => {
     form.setFieldValue("document_ids", state.document_ids);
@@ -4582,8 +4591,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
               </Text>
               <Grid mb="md">
                 <Grid.Col span={6}>
-                  {shipperHasResults === false &&
-                  shipperSearch.trim().length >= 2 ? (
+                  {shipperUseTextInput ? (
                     <FormTextInput
                       ref={shipperTextRef}
                       label="Shipper Name"
@@ -4594,6 +4602,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setShipperSearch(v);
                         form.setFieldValue("shipper_name", v);
                         form.setFieldValue("shipper_code", "");
+                        setShipperAddressOptions([]);
+                        setShipperAddressCustom(true);
                         if (!v.trim()) {
                           form.setFieldValue("shipper_address", "");
                           form.setFieldValue("shipper_address_id", 0);
@@ -4618,6 +4628,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         setShipperSearch(v);
                         setShipperHasResults(null);
                         debouncedShipperSearch(v);
+                        if (hasForwarder && v.trim().length >= 2) {
+                          form.setFieldValue("shipper_name", v);
+                        }
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Tab" && shipperIsSearching) {
@@ -4693,7 +4706,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {shouldUseCustomShipmentPartyAddress(
+                  {(hasForwarder &&
+                    !String(form.values.shipper_code || "").trim()) ||
+                  shouldUseCustomShipmentPartyAddress(
                     shipperAddressCustom,
                     form.values.shipper_address || "",
                     shipperAddressOptions,
@@ -4966,6 +4981,12 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                           form.setFieldValue("forwarder_email", "");
                         }
                       }
+
+                      requestAnimationFrame(() => {
+                        forwarderEmailRef.current?.focus({
+                          preventScroll: true,
+                        });
+                      });
                     }}
                     returnOriginalData={true}
                     error={form.errors.forwarder_code as string}
@@ -4974,6 +4995,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 </Grid.Col>
                 <Grid.Col span={6}>
                   <FormTextInput
+                    ref={forwarderEmailRef}
                     label="Forwarder Email Id"
                     placeholder="Enter email address"
                     format="normal"
@@ -5617,12 +5639,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
             <Box>
               {/* Common Fields */}
               <Grid mb="xl">
-                <Grid.Col span={12}>
+                <Grid.Col span={6}>
                   <FormTextArea
                     label="Commodity Description"
                     placeholder="Enter commodity description"
                     minRows={3}
-                    maxRows={6}
+                    maxRows={10}
+                    autosize
+                    resize="vertical"
                     value={form.values.commodity_description}
                     onChange={(e) => {
                       form.setFieldValue(
@@ -5648,10 +5672,18 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>
-                  <FormTextInput
+                  <FormTextArea
                     label="Marks No"
                     placeholder="Enter marks and numbers"
-                    {...form.getInputProps("marks_no")}
+                    minRows={3}
+                    maxRows={10}
+                    autosize
+                    resize="vertical"
+                    value={form.values.marks_no}
+                    onChange={(e) => {
+                      form.setFieldValue("marks_no", e.currentTarget.value);
+                    }}
+                    error={form.errors.marks_no}
                   />
                 </Grid.Col>
                 <Grid.Col span={6}>
