@@ -1814,30 +1814,27 @@ import {
       });
 
       if (hasAdjustments) {
-        const partyLocalTotal =
+        const partyAmountTotal =
           (values.details ?? []).reduce(
             (sum, d) =>
               sum +
-              (d.local_amount != null && Number.isFinite(d.local_amount)
-                ? d.local_amount
-                : 0),
+              (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
             0,
           ) ?? 0;
-        const adjLocalTotal =
+        const adjAmountTotal =
           (values.adjustments ?? []).reduce(
             (sum, a) =>
               sum +
-              (a.adj_local_amount != null &&
-              Number.isFinite(a.adj_local_amount)
-                ? a.adj_local_amount
+              (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+                ? a.adj_curr_amount
                 : 0),
             0,
           ) ?? 0;
-        if (partyLocalTotal < adjLocalTotal) {
+        if (partyAmountTotal < adjAmountTotal) {
           ToastNotification({
             type: "error",
             message:
-              "The total Local Amount of Receipt cannot be less than the total Local Amount of Invoice.",
+              "The total Amount of Receipt cannot be less than the total Amount of Invoice.",
           });
           return;
         }
