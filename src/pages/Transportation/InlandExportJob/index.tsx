@@ -16,7 +16,6 @@ import {
   Tooltip,
   Center,
   Loader,
-  Flex,
 } from "@mantine/core";
 import {
   IconDotsVertical,
@@ -27,8 +26,6 @@ import {
   IconPackage,
   IconCircleCheck,
   IconClock,
-  IconStack2,
-  IconBriefcase,
   IconCalendar,
   IconArrowRight,
 } from "@tabler/icons-react";
@@ -658,50 +655,21 @@ function InlandExportJobMaster() {
                 />
               </>
             ),
-            secondary: (
-              <Flex gap={8} align="flex-start" direction={"column"} wrap="nowrap">
-                <Group>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <IconStack2
-                      size={16}
-                      color={muted}
-                      style={{ flexShrink: 0 }}
-                    />
-                    <Text fw={600} size="sm" c={fg} component="span">
-                      {exportJobData.length}
-                    </Text>
-                  </Group>
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <IconBriefcase
-                      size={16}
-                      color={muted}
-                      style={{ flexShrink: 0 }}
-                    />
-                    <Text fw={600} size="sm" c={fg} component="span">
-                      {totalRecords.toLocaleString()}
-                    </Text>
-                    <Text size="xs" c={muted} component="span">
-                      total
-                    </Text>
-                  </Group>
-                </Group>
-                {appliedJobDateFilterLabel ? (
-                  <Group gap={8} wrap="nowrap" align="center">
-                    <IconCalendar
-                      size={16}
-                      color={muted}
-                      style={{ flexShrink: 0 }}
-                    />
-                    <Text size="xs" c={muted} component="span">
-                      Job Date
-                    </Text>
-                    <Text fw={600} size="xs" c={fg} component="span">
-                      {appliedJobDateFilterLabel}
-                    </Text>
-                  </Group>
-                ) : null}
-              </Flex>
-            ),
+            secondary: appliedJobDateFilterLabel ? (
+              <Group gap={8} wrap="nowrap" align="center">
+                <IconCalendar
+                  size={16}
+                  color={muted}
+                  style={{ flexShrink: 0 }}
+                />
+                <Text size="xs" c={muted} component="span">
+                  Job Date
+                </Text>
+                <Text fw={600} size="xs" c={fg} component="span">
+                  {appliedJobDateFilterLabel}
+                </Text>
+              </Group>
+            ) : undefined,
             actions: (
               <>
                 <TextInput

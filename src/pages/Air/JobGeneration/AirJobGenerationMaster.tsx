@@ -22,7 +22,6 @@ import {
   IconEye,
   IconSearch,
   IconX,
-  IconBriefcase,
   IconCircleCheck,
   IconClock,
   IconStack2,
@@ -559,26 +558,6 @@ function AirJobGenerationMaster() {
                   value={stats.inactive}
                   label="Inactive"
                 />
-              </>
-            ),
-            secondary: (
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {displayData.length}
-                  </Text>
-
-                </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {totalRecords.toLocaleString()}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    total
-                  </Text>
-                </Group>
               </>
             ),
             actions: (

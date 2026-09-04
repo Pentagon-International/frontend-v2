@@ -23,7 +23,6 @@ import {
   IconBriefcase,
   IconCircleCheck,
   IconClock,
-  IconStack2,
   IconArrowRight,
 } from "@tabler/icons-react";
 import { useLocation } from "react-router-dom";
@@ -605,25 +604,6 @@ function JobClosure() {
                   value={stats.cancel}
                   label="Cancel"
                 />
-              </>
-            ),
-            secondary: (
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {importJobData.length}
-                  </Text>
-                </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {totalRecords.toLocaleString()}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    total
-                  </Text>
-                </Group>
               </>
             ),
             actions: (

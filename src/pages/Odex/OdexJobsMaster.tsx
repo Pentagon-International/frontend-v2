@@ -21,7 +21,6 @@ import {
 import {
   IconArrowRight,
   IconAutomation,
-  IconBriefcase,
   IconCircleCheck,
   IconClock,
   IconDotsVertical,
@@ -29,7 +28,6 @@ import {
   IconPlus,
   IconRefresh,
   IconSearch,
-  IconStack2,
   IconX,
 } from "@tabler/icons-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -239,25 +237,6 @@ export default function OdexJobsMaster() {
                   value={stats.failed}
                   label="Failed"
                 />
-              </>
-            ),
-            secondary: (
-              <>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconStack2 size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {rows.length}
-                  </Text>
-                </Group>
-                <Group gap={8} wrap="nowrap" align="center">
-                  <IconBriefcase size={16} color={muted} style={{ flexShrink: 0 }} />
-                  <Text fw={600} size="sm" c={fg} component="span">
-                    {totalRecords.toLocaleString()}
-                  </Text>
-                  <Text size="xs" c={muted} component="span">
-                    total
-                  </Text>
-                </Group>
               </>
             ),
             actions: (
