@@ -5033,7 +5033,14 @@ function HouseCreate() {
                                 }
                               : null,
                           job_reference_1: String(
-                            location.state?.job?.job_id ??
+                            (fullDetail as { shipment_id?: unknown })
+                              ?.shipment_id ??
+                              (
+                                location.state?.job as {
+                                  shipment_id?: unknown;
+                                } | null
+                              )?.shipment_id ??
+                              location.state?.job?.job_id ??
                               location.state?.job?.id ??
                               "",
                           ),
