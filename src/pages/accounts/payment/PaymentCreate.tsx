@@ -204,6 +204,8 @@ type AdjustmentRow = {
   roe: number | null;
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
+  /** Outstanding allocation side; used for party/header net (Cr − Dr). */
+  Dr_Cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -225,8 +227,74 @@ type InvoiceCombinedItem = {
   roe?: number | string;
   amount?: number | string;
   amount_in_local?: number | string;
+  Dr_Cr?: string | null;
   [key: string]: unknown;
 };
+
+function normalizeAllocationDrCr(
+  value: unknown,
+): "Cr" | "Dr" | null {
+  const v = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (v === "CR" || v === "CREDIT" || v === "C") return "Cr";
+  if (v === "DR" || v === "DEBIT" || v === "D") return "Dr";
+  return null;
+}
+
+/** When API omits Dr_Cr (saved allocations), infer from document type. */
+function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
+  const t = String(type ?? "")
+    .trim()
+    .toUpperCase();
+  if (!t) return null;
+  if (
+    t === "INV" ||
+    t === "INVOICE" ||
+    t === "DBN" ||
+    t === "DN" ||
+    t === "DEBIT" ||
+    t.startsWith("DEBIT")
+  ) {
+    return "Dr";
+  }
+  if (
+    t === "CRN" ||
+    t === "CN" ||
+    t === "CDN" ||
+    t === "CREDIT" ||
+    t.startsWith("CREDIT")
+  ) {
+    return "Cr";
+  }
+  return null;
+}
+
+function resolveAllocationDrCr(a: {
+  Dr_Cr?: "Cr" | "Dr" | null;
+  type?: string;
+}): "Cr" | "Dr" | null {
+  return (
+    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
+  );
+}
+
+/** Payment allocation net = Cr − Dr. Missing Dr_Cr (and type) counts as Cr. */
+function paymentAllocationNetSign(
+  drCr: "Cr" | "Dr" | null | undefined,
+): 1 | -1 {
+  return drCr === "Dr" ? -1 : 1;
+}
+
+function sumPaymentAllocationNetLocal(adjustments: AdjustmentRow[]): number {
+  return adjustments.reduce((s, a) => {
+    const amt =
+      a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+        ? a.adj_local_amount
+        : 0;
+    return s + paymentAllocationNetSign(resolveAllocationDrCr(a)) * amt;
+  }, 0);
+}
 
 function parseAllocationDocumentRoe(roe: unknown): number | null {
   if (roe == null || roe === "") return null;
@@ -427,6 +495,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   adj_curr_amount: null,
   adj_local_amount: null,
   invoice_id: null,
+  Dr_Cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -890,6 +959,8 @@ export default function PaymentCreate({
               currency_code?: string;
               adj_curr_amount?: string | number;
               adj_local_amount?: string | number;
+              Dr_Cr?: string | null;
+              dr_cr?: string | null;
             };
             const roeFromApi = aAny.invoice_roe ?? aAny.roe;
             return {
@@ -916,6 +987,9 @@ export default function PaymentCreate({
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: toLocalAmount(aAny.adj_local_amount),
+              Dr_Cr:
+                normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
+                inferAllocationDrCrFromType(aAny.type ?? aAny.type_name),
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
@@ -1194,14 +1268,8 @@ export default function PaymentCreate({
     allocationRows: AdjustmentRow[],
   ) => {
     if (allocationRows.length === 0) return;
-    const sum = allocationRows.reduce(
-      (s, a) =>
-        s +
-        (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-          ? a.adj_local_amount
-          : 0),
-      0,
-    );
+    // Party local from allocations: Cr − Dr when Dr_Cr is present.
+    const sum = sumPaymentAllocationNetLocal(allocationRows);
     const local = clampLocalAmount(sum);
     const roeVal =
       row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
@@ -1221,7 +1289,7 @@ export default function PaymentCreate({
     }
   };
 
-  /** Sync party details from allocation totals: party local = Σ adj local; party amount = local / party ROE. */
+  /** Sync party details from allocation totals: party local = net adj local (Cr − Dr); party amount = local / party ROE. */
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
     options?: { detailIndex?: number; allocationsForDetail?: AdjustmentRow[] },
@@ -1522,6 +1590,11 @@ export default function PaymentCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : toLocalAmount(totalNum),
         invoice_id: inv.id != null ? Number(inv.id) : null,
+        Dr_Cr:
+          normalizeAllocationDrCr(inv.Dr_Cr) ??
+          inferAllocationDrCrFromType(
+            inv.day_book_document_type ?? inv.day_book_type,
+          ),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1930,17 +2003,11 @@ export default function PaymentCreate({
             : 0),
         0,
       ) ?? 0;
-    const adjLocalTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
-          sum +
-          (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-            ? a.adj_local_amount
-            : 0),
-        0,
-      ) ?? 0;
+    const adjLocalTotal = sumPaymentAllocationNetLocal(
+      values.adjustments ?? [],
+    );
     // Validation aligned with Receipt: when adjustments exist, Party total
-    // should not be less than total allocation amount.
+    // should not be less than net allocation amount (Cr − Dr).
     if (hasAdjustments && partyLocalTotal < adjLocalTotal) {
       ToastNotification({
         type: "error",

@@ -195,6 +195,8 @@ type DetailRow = {
   amount: number | null;
   local_amount: number | null;
   dr_cr: "Cr" | "Dr";
+  /** Backend-appended TDS line; must not be overwritten by allocation sync. */
+  is_tds_calculated_record?: boolean;
 };
 
 type AdjustmentRow = {
@@ -211,6 +213,8 @@ type AdjustmentRow = {
   roe: number | null; // invoice ROE for recalculating adj_local_amount when user edits adj_curr_amount
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
+  /** Outstanding allocation side; used for party/header net (Dr − Cr). */
+  Dr_Cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -232,8 +236,69 @@ type InvoiceCombinedItem = {
   roe?: number | string;
   amount?: number | string;
   amount_in_local?: number | string;
+  Dr_Cr?: string | null;
   [key: string]: unknown;
 };
+
+function normalizeAllocationDrCr(
+  value: unknown,
+): "Cr" | "Dr" | null {
+  const v = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (v === "CR" || v === "CREDIT" || v === "C") return "Cr";
+  if (v === "DR" || v === "DEBIT" || v === "D") return "Dr";
+  return null;
+}
+
+/** When API omits Dr_Cr (saved allocations), infer from document type. */
+function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
+  const t = String(type ?? "")
+    .trim()
+    .toUpperCase();
+  if (!t) return null;
+  if (
+    t === "INV" ||
+    t === "INVOICE" ||
+    t === "DBN" ||
+    t === "DN" ||
+    t === "DEBIT" ||
+    t.startsWith("DEBIT")
+  ) {
+    return "Dr";
+  }
+  if (
+    t === "CRN" ||
+    t === "CN" ||
+    t === "CDN" ||
+    t === "CREDIT" ||
+    t.startsWith("CREDIT")
+  ) {
+    return "Cr";
+  }
+  return null;
+}
+
+function resolveAllocationDrCr(a: {
+  Dr_Cr?: "Cr" | "Dr" | null;
+  type?: string;
+}): "Cr" | "Dr" | null {
+  return (
+    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
+  );
+}
+
+/** Receipt allocation net = Dr − Cr. Missing Dr_Cr (and type) counts as Dr. */
+function receiptAllocationNetSign(
+  drCr: "Cr" | "Dr" | null | undefined,
+): 1 | -1 {
+  return drCr === "Cr" ? -1 : 1;
+}
+
+function isDetailTdsRow(row: DetailRow): boolean {
+  if (row.is_tds_calculated_record) return true;
+  return /^TDS\s*@/i.test(String(row.narration ?? "").trim());
+}
 
 const fetchOutstandingAllocations = async (payload: {
   account_code: string;
@@ -322,6 +387,8 @@ type ReceiptListItem = {
     currency_code?: string;
     currency_id?: number;
     roe?: string | number;
+    Dr_Cr?: string | null;
+    dr_cr?: string | null;
   }>;
   [key: string]: unknown;
 };
@@ -369,6 +436,7 @@ const getDefaultDetailRow = (
   amount: null,
   local_amount: null,
   dr_cr: forReversal ? "Dr" : "Cr",
+  is_tds_calculated_record: false,
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -384,6 +452,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   adj_curr_amount: null,
   adj_local_amount: null,
   invoice_id: null,
+  Dr_Cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -591,16 +660,12 @@ function computeSyncedDetailRow(
   row: DetailRow,
   adjustments: AdjustmentRow[],
 ): DetailRow {
+  // TDS / system party lines keep their saved amounts.
+  if (isDetailTdsRow(row)) return row;
   const matching = getMatchingAllocationsForParty(row, adjustments);
   if (matching.length === 0) return row;
-  const sum = matching.reduce(
-    (s, a) =>
-      s +
-      (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-        ? a.adj_local_amount
-        : 0),
-    0,
-  );
+  // Party local from allocations: Dr − Cr when Dr_Cr (or type) is present.
+  const sum = sumAdjustmentLocalAmounts(matching);
   const local = clampLocalAmount(sum);
   const roeVal =
     row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
@@ -635,14 +700,13 @@ function sumDetailLocalAmounts(details: DetailRow[]): number {
 }
 
 function sumAdjustmentLocalAmounts(adjustments: AdjustmentRow[]): number {
-  const sum = (adjustments ?? []).reduce(
-    (total, a) =>
-      total +
-      (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+  const sum = (adjustments ?? []).reduce((total, a) => {
+    const amt =
+      a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
         ? a.adj_local_amount
-        : 0),
-    0,
-  );
+        : 0;
+    return total + receiptAllocationNetSign(resolveAllocationDrCr(a)) * amt;
+  }, 0);
   return clampLocalAmount(sum) ?? sum;
 }
 
@@ -991,6 +1055,7 @@ export default function ReceiptCreate({
               _isReversal && !isReversalEditOrView
                 ? invertPartyDrCrForReversalCreate(p)
                 : receiptPartyDrCrToSide(p.dr_cr),
+            is_tds_calculated_record: isPartyTdsCalculatedRecord(p),
           }))
         : [getDefaultDetailRow(localCurrency, _isReversal)];
 
@@ -999,11 +1064,12 @@ export default function ReceiptCreate({
       Array.isArray(allocations) && allocations.length > 0
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
+            const typeVal = (a.type_name ?? a.type ?? "").toString();
             return {
               id: a.id ?? null,
               invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
               location: (a.location ?? "").toString(),
-              type: (a.type_name ?? a.type ?? "").toString(),
+              type: typeVal,
               subledger: (a.subledger_code ?? "").toString(),
               subledger_display: (a.subledger_name ?? "").toString(),
               daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
@@ -1013,21 +1079,20 @@ export default function ReceiptCreate({
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
+              Dr_Cr:
+                normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
+                inferAllocationDrCrFromType(typeVal),
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
 
-    const normalizedAdjustments = normalizeAdjustmentAmounts(adjustments);
-    const syncedDetailsFromAllocations = computeDetailsSyncedFromAllocations(
-      details,
-      normalizedAdjustments,
-    );
+    // Keep saved party amounts (incl. TDS). Header = Σ(Cr) − Σ(Dr) from party lines.
     const loadedHeaderAmounts = computeHeaderAmountsFromDetails(
-      syncedDetailsFromAllocations,
+      details,
       _isReversal,
     );
 
-    setLoadedDetails(syncedDetailsFromAllocations);
+    setLoadedDetails(details);
     form.setValues({
       daybook_id: isReversalCreate
         ? ""
@@ -1050,12 +1115,12 @@ export default function ReceiptCreate({
       cheque_no: (receiptFromState.cheque_no ?? "").toString(),
       cheque_date: chequeDateVal,
       chq_clrd_date: chqClrdDateVal,
-      details: syncedDetailsFromAllocations,
-      adjustments: normalizedAdjustments,
+      details,
+      adjustments: normalizeAdjustmentAmounts(adjustments),
     });
     // Force details to apply (ensures all parties from list are shown, e.g. when navigating from Receipt Reversal)
-    if (syncedDetailsFromAllocations.length > 0) {
-      form.setFieldValue("details", syncedDetailsFromAllocations);
+    if (details.length > 0) {
+      form.setFieldValue("details", details);
     }
 
     if (_isReversal) {
@@ -1243,7 +1308,7 @@ export default function ReceiptCreate({
     }
   };
 
-  /** Sync party details from allocation totals: party local = Σ adj local; party amount = local / party ROE. */
+  /** Sync party details from allocation totals: party local = net adj local (Dr − Cr); party amount = local / party ROE. */
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
     options?: { detailIndex?: number; allocationsForDetail?: AdjustmentRow[] },
@@ -1575,6 +1640,11 @@ export default function ReceiptCreate({
             : inv.id != null
               ? Number(inv.id)
               : null,
+        Dr_Cr:
+          normalizeAllocationDrCr(inv.Dr_Cr) ??
+          inferAllocationDrCrFromType(
+            inv.day_book_document_type ?? inv.day_book_type,
+          ),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -2205,17 +2275,6 @@ export default function ReceiptCreate({
           });
           // After create, reflect the exact API response (can include extra party rows like TDS)
           applyCreatedReceiptToUI(data);
-          if (
-            data.allocations &&
-            Array.isArray(data.allocations) &&
-            data.allocations.length === form.values.adjustments.length
-          ) {
-            const updatedAdjustments = form.values.adjustments.map((a, i) => ({
-              ...a,
-              id: data.allocations![i]?.id ?? a.id,
-            }));
-            form.setFieldValue("adjustments", updatedAdjustments);
-          }
           await queryClient.invalidateQueries({ queryKey: ["receipt"] });
           ToastNotification({
             type: "success",
@@ -2250,6 +2309,27 @@ export default function ReceiptCreate({
         amount?: number | string | null;
         local_amount?: number | string | null;
         dr_cr?: "Cr" | "Dr" | string;
+        is_tds_calcualted_record?: boolean;
+        is_tds_calculated_record?: boolean;
+      }>;
+      allocations?: Array<{
+        id?: number;
+        type?: string;
+        type_name?: string;
+        Dr_Cr?: string | null;
+        dr_cr?: string | null;
+        adj_curr_amount?: string | number;
+        adj_local_amount?: string | number;
+        invoice_roe?: string | number;
+        roe?: string | number;
+        location?: string;
+        subledger_code?: string;
+        subledger_name?: string;
+        day_book_id?: number;
+        document_no?: string;
+        document_date?: string;
+        currency_code?: string;
+        invoice_id?: number;
       }>;
     };
 
@@ -2282,23 +2362,61 @@ export default function ReceiptCreate({
       amount: parseNum(p.amount),
       local_amount: toLocalAmount(p.local_amount),
       dr_cr: p.dr_cr === "Dr" ? "Dr" : "Cr",
+      is_tds_calculated_record: isPartyTdsCalculatedRecord(p),
     }));
 
-    const normalizedAdjustments = normalizeAdjustmentAmounts(
-      form.values.adjustments ?? [],
-    );
-    const syncedDetails = computeDetailsSyncedFromAllocations(
-      details,
-      normalizedAdjustments,
-    );
-    setLoadedDetails(syncedDetails);
-    form.setFieldValue("adjustments", normalizedAdjustments);
-    form.setFieldValue("details", syncedDetails);
+    // Preserve API party amounts (incl. TDS). Recalculate header from party Dr/Cr.
+    setLoadedDetails(details);
+    form.setFieldValue("details", details);
 
-    const headerAmounts = computeHeaderAmountsFromDetails(
-      syncedDetails,
-      _isReversal,
-    );
+    if (Array.isArray(data.allocations) && data.allocations.length > 0) {
+      const nextAdjustments: AdjustmentRow[] = data.allocations.map((a, i) => {
+        const prev = form.values.adjustments[i];
+        const typeVal = (a.type_name ?? a.type ?? prev?.type ?? "").toString();
+        const roeFromApi = a.invoice_roe ?? a.roe ?? prev?.roe;
+        return {
+          id: a.id ?? prev?.id ?? null,
+          invoice_id:
+            a.invoice_id != null
+              ? Number(a.invoice_id)
+              : (prev?.invoice_id ?? null),
+          location: (a.location ?? prev?.location ?? "").toString(),
+          type: typeVal,
+          subledger: (a.subledger_code ?? prev?.subledger ?? "").toString(),
+          subledger_display: (
+            a.subledger_name ??
+            prev?.subledger_display ??
+            ""
+          ).toString(),
+          daybook_id:
+            a.day_book_id != null
+              ? String(a.day_book_id)
+              : (prev?.daybook_id ?? ""),
+          document_no: (a.document_no ?? prev?.document_no ?? "").toString(),
+          doc_date:
+            parseDocumentDate(a.document_date) ?? prev?.doc_date ?? null,
+          currency: (a.currency_code ?? prev?.currency ?? localCurrency)
+            .toString()
+            .trim(),
+          roe: parseNum(roeFromApi),
+          adj_curr_amount:
+            parseNum(a.adj_curr_amount) ?? prev?.adj_curr_amount ?? null,
+          adj_local_amount:
+            toLocalAmount(a.adj_local_amount) ?? prev?.adj_local_amount ?? null,
+          Dr_Cr:
+            normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
+            inferAllocationDrCrFromType(typeVal) ??
+            prev?.Dr_Cr ??
+            null,
+        };
+      });
+      form.setFieldValue(
+        "adjustments",
+        normalizeAdjustmentAmounts(nextAdjustments),
+      );
+    }
+
+    const headerAmounts = computeHeaderAmountsFromDetails(details, _isReversal);
     if (headerAmounts.amount !== form.values.amount) {
       form.setFieldValue("amount", headerAmounts.amount);
     }

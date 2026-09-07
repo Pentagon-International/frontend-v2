@@ -449,7 +449,7 @@ export function JobAccountsDocumentsTable({
             styles={menuItemStyles}
             onClick={() =>
               navigate(`/payment-request/view/${docId}`, {
-                state: withNavState({ ...row }),
+                state: withNavState({ ...row, fromJobAccounts: true }),
               })
             }
           >
@@ -465,7 +465,7 @@ export function JobAccountsDocumentsTable({
               styles={menuItemStyles}
               onClick={() =>
                 navigate(`/payment-request/edit/${docId}`, {
-                  state: withNavState({ ...row }),
+                  state: withNavState({ ...row, fromJobAccounts: true }),
                 })
               }
             >

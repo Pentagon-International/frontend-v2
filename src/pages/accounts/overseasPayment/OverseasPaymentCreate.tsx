@@ -205,6 +205,8 @@ type AdjustmentRow = {
   roe: number | null;
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
+  /** Outstanding allocation side; used for party/header net (Cr − Dr). */
+  Dr_Cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -225,8 +227,74 @@ type InvoiceCombinedItem = {
   roe?: number | string;
   amount?: number | string;
   amount_in_local?: number | string;
+  Dr_Cr?: string | null;
   [key: string]: unknown;
 };
+
+function normalizeAllocationDrCr(
+  value: unknown,
+): "Cr" | "Dr" | null {
+  const v = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (v === "CR" || v === "CREDIT" || v === "C") return "Cr";
+  if (v === "DR" || v === "DEBIT" || v === "D") return "Dr";
+  return null;
+}
+
+/** When API omits Dr_Cr (saved allocations), infer from document type. */
+function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
+  const t = String(type ?? "")
+    .trim()
+    .toUpperCase();
+  if (!t) return null;
+  if (
+    t === "INV" ||
+    t === "INVOICE" ||
+    t === "DBN" ||
+    t === "DN" ||
+    t === "DEBIT" ||
+    t.startsWith("DEBIT")
+  ) {
+    return "Dr";
+  }
+  if (
+    t === "CRN" ||
+    t === "CN" ||
+    t === "CDN" ||
+    t === "CREDIT" ||
+    t.startsWith("CREDIT")
+  ) {
+    return "Cr";
+  }
+  return null;
+}
+
+function resolveAllocationDrCr(a: {
+  Dr_Cr?: "Cr" | "Dr" | null;
+  type?: string;
+}): "Cr" | "Dr" | null {
+  return (
+    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
+  );
+}
+
+/** Payment allocation net = Cr − Dr. Missing Dr_Cr (and type) counts as Cr. */
+function paymentAllocationNetSign(
+  drCr: "Cr" | "Dr" | null | undefined,
+): 1 | -1 {
+  return drCr === "Dr" ? -1 : 1;
+}
+
+function sumPaymentAllocationNetCurr(adjustments: AdjustmentRow[]): number {
+  return adjustments.reduce((s, a) => {
+    const amt =
+      a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+        ? a.adj_curr_amount
+        : 0;
+    return s + paymentAllocationNetSign(resolveAllocationDrCr(a)) * amt;
+  }, 0);
+}
 
 function parseAllocationDocumentRoe(roe: unknown): number | null {
   if (roe == null || roe === "") return null;
@@ -445,6 +513,7 @@ const getDefaultAdjustmentRow = (
   adj_curr_amount: null,
   adj_local_amount: null,
   invoice_id: null,
+  Dr_Cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -914,6 +983,8 @@ export default function OverseasPaymentCreate({
               currency_code?: string;
               adj_curr_amount?: string | number;
               adj_local_amount?: string | number;
+              Dr_Cr?: string | null;
+              dr_cr?: string | null;
             };
             const roeFromApi = aAny.invoice_roe ?? aAny.roe;
             return {
@@ -942,6 +1013,9 @@ export default function OverseasPaymentCreate({
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: toLocalAmount(aAny.adj_local_amount),
+              Dr_Cr:
+                normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
+                inferAllocationDrCrFromType(aAny.type ?? aAny.type_name),
             };
           })
         : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
@@ -1260,15 +1334,8 @@ export default function OverseasPaymentCreate({
         }
       }
       if (!shouldSyncAmounts) return;
-      // Adj Curr Amount (sum) → party Amount; Local Amount = Amount * ROE (master).
-      const currSum = matchingAllocations.reduce(
-        (s, a) =>
-          s +
-          (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-            ? a.adj_curr_amount
-            : 0),
-        0,
-      );
+      // Adj Curr Amount net (Cr − Dr) → party Amount; Local Amount = Amount * ROE (master).
+      const currSum = sumPaymentAllocationNetCurr(matchingAllocations);
       const amount = clampAmount(currSum);
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
@@ -1589,6 +1656,11 @@ export default function OverseasPaymentCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : toLocalAmount(totalNum),
         invoice_id: resolveSupplierInvoiceId(inv),
+        Dr_Cr:
+          normalizeAllocationDrCr(inv.Dr_Cr) ??
+          inferAllocationDrCrFromType(
+            inv.day_book_document_type ?? inv.day_book_type,
+          ),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -2009,15 +2081,7 @@ export default function OverseasPaymentCreate({
           sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
         0,
       ) ?? 0;
-    const adjCurrTotal =
-      (values.adjustments ?? []).reduce(
-        (sum, a) =>
-          sum +
-          (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-            ? a.adj_curr_amount
-            : 0),
-        0,
-      ) ?? 0;
+    const adjCurrTotal = sumPaymentAllocationNetCurr(values.adjustments ?? []);
     if (hasAdjustments && partyAmountTotal < adjCurrTotal) {
       ToastNotification({
         type: "error",

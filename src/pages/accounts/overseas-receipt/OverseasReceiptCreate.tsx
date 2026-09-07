@@ -191,6 +191,8 @@ type DetailRow = {
   amount: number | null;
   local_amount: number | null;
   dr_cr: "Cr" | "Dr";
+  /** Backend-appended TDS line; must not be overwritten by allocation sync. */
+  is_tds_calculated_record?: boolean;
 };
 
 type AdjustmentRow = {
@@ -207,6 +209,8 @@ type AdjustmentRow = {
   roe: number | null; // invoice ROE for recalculating adj_local_amount when user edits adj_curr_amount
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
+  /** Outstanding allocation side; used for party/header net (Dr − Cr). */
+  Dr_Cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -228,8 +232,82 @@ type InvoiceCombinedItem = {
   currency_id?: number | string;
   currency_code?: string;
   roe?: number | string;
+  Dr_Cr?: string | null;
   [key: string]: unknown;
 };
+
+function normalizeAllocationDrCr(
+  value: unknown,
+): "Cr" | "Dr" | null {
+  const v = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (v === "CR" || v === "CREDIT" || v === "C") return "Cr";
+  if (v === "DR" || v === "DEBIT" || v === "D") return "Dr";
+  return null;
+}
+
+/** When API omits Dr_Cr (saved allocations), infer from document type. */
+function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
+  const t = String(type ?? "")
+    .trim()
+    .toUpperCase();
+  if (!t) return null;
+  if (
+    t === "INV" ||
+    t === "INVOICE" ||
+    t === "DBN" ||
+    t === "DN" ||
+    t === "DEBIT" ||
+    t.startsWith("DEBIT")
+  ) {
+    return "Dr";
+  }
+  if (
+    t === "CRN" ||
+    t === "CN" ||
+    t === "CDN" ||
+    t === "CREDIT" ||
+    t.startsWith("CREDIT")
+  ) {
+    return "Cr";
+  }
+  return null;
+}
+
+function resolveAllocationDrCr(a: {
+  Dr_Cr?: "Cr" | "Dr" | null;
+  type?: string;
+}): "Cr" | "Dr" | null {
+  return (
+    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
+  );
+}
+
+/** Receipt allocation net = Dr − Cr. Missing Dr_Cr (and type) counts as Dr. */
+function receiptAllocationNetSign(
+  drCr: "Cr" | "Dr" | null | undefined,
+): 1 | -1 {
+  return drCr === "Cr" ? -1 : 1;
+}
+
+function sumReceiptAllocationNetCurr(adjustments: AdjustmentRow[]): number {
+  return adjustments.reduce((s, a) => {
+    const amt =
+      a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+        ? a.adj_curr_amount
+        : 0;
+    return s + receiptAllocationNetSign(resolveAllocationDrCr(a)) * amt;
+  }, 0);
+}
+
+function isDetailTdsRow(row: {
+  is_tds_calculated_record?: boolean;
+  narration?: string;
+}): boolean {
+  if (row.is_tds_calculated_record) return true;
+  return /^TDS\s*@/i.test(String(row.narration ?? "").trim());
+}
 
 const fetchOutstandingAllocations = async (payload: {
   account_code: string;
@@ -312,6 +390,8 @@ type ReceiptListItem = {
     currency_code?: string;
     currency_id?: number;
     roe?: string | number;
+    Dr_Cr?: string | null;
+    dr_cr?: string | null;
   }>;
   [key: string]: unknown;
 };
@@ -361,6 +441,7 @@ const getDefaultDetailRow = (
   amount: null,
   local_amount: null,
   dr_cr: forReversal ? "Dr" : "Cr",
+  is_tds_calculated_record: false,
 });
 
 const getDefaultAdjustmentRow = (
@@ -378,6 +459,7 @@ const getDefaultAdjustmentRow = (
   adj_curr_amount: null,
   adj_local_amount: null,
   invoice_id: null,
+  Dr_Cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -851,6 +933,7 @@ export default function OverseasReceiptCreate({
               _isReversal && !isReversalEditOrView
                 ? invertPartyDrCrForReversalCreate(p)
                 : receiptPartyDrCrToSide(p.dr_cr),
+            is_tds_calculated_record: isPartyTdsCalculatedRecord(p),
           }))
         : [getDefaultDetailRow(OVERSEAS_DEFAULT_CURRENCY, _isReversal)];
 
@@ -859,11 +942,12 @@ export default function OverseasReceiptCreate({
       Array.isArray(allocations) && allocations.length > 0
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
+            const typeVal = (a.type_name ?? a.type ?? "").toString();
             return {
               id: a.id ?? null,
               invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
               location: (a.location ?? "").toString(),
-              type: (a.type_name ?? a.type ?? "").toString(),
+              type: typeVal,
               subledger: (a.subledger_code ?? "").toString(),
               subledger_display: (a.subledger_name ?? "").toString(),
               daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
@@ -875,6 +959,9 @@ export default function OverseasReceiptCreate({
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
+              Dr_Cr:
+                normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
+                inferAllocationDrCrFromType(typeVal),
             };
           })
         : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
@@ -1066,6 +1153,7 @@ export default function OverseasReceiptCreate({
       options?.forceAmountSync === true || !userOverrodePartyAmountsRef.current;
     let headerCurrency: string | null = null;
     form.values.details.forEach((row, idx) => {
+      if (isDetailTdsRow(row)) return;
       const partyCode = (row.customer_code ?? "").toString().trim();
       const partyDisplay = (row.customer_display ?? "").toString().trim();
       const matchingAllocations = adjustments.filter(
@@ -1089,15 +1177,8 @@ export default function OverseasReceiptCreate({
         }
       }
       if (!shouldSyncAmounts) return;
-      // Adj Curr Amount (sum) → party Amount; Local Amount = Amount * ROE (master).
-      const currSum = matchingAllocations.reduce(
-        (s, a) =>
-          s +
-          (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-            ? a.adj_curr_amount
-            : 0),
-        0,
-      );
+      // Adj Curr Amount net (Dr − Cr) → party Amount; Local Amount = Amount * ROE (master).
+      const currSum = sumReceiptAllocationNetCurr(matchingAllocations);
       const amount = clampAmount(currSum);
       const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
       const local =
@@ -1314,6 +1395,11 @@ export default function OverseasReceiptCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : totalNum,
         invoice_id: inv.id != null ? Number(inv.id) : null,
+        Dr_Cr:
+          normalizeAllocationDrCr(inv.Dr_Cr) ??
+          inferAllocationDrCrFromType(
+            inv.day_book_document_type ?? inv.day_book_type,
+          ),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1750,15 +1836,9 @@ export default function OverseasReceiptCreate({
             (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
           0,
         ) ?? 0;
-      const adjAmountTotal =
-        (values.adjustments ?? []).reduce(
-          (sum, a) =>
-            sum +
-            (a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-              ? a.adj_curr_amount
-              : 0),
-          0,
-        ) ?? 0;
+      const adjAmountTotal = sumReceiptAllocationNetCurr(
+        values.adjustments ?? [],
+      );
       if (partyAmountTotal < adjAmountTotal) {
         ToastNotification({
           type: "error",

@@ -1055,7 +1055,12 @@ function PaymentRequestApproval() {
                         setStoreFilters(LIST_KEY, buildFilterPayload);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate(`/payment-request/edit/${row.original.id}`);
+                        navigate(`/payment-request/edit/${row.original.id}`, {
+                          state: {
+                            fromPaymentRequestApproval: true,
+                            returnTo: "/payment-request-approval",
+                          },
+                        });
                       }}
                     >
                       <Group gap="sm">
@@ -1076,7 +1081,12 @@ function PaymentRequestApproval() {
                     setStoreFilters(LIST_KEY, buildFilterPayload);
                     setStoreSearch(LIST_KEY, search);
                     setShouldRestore(LIST_KEY, true);
-                    navigate(`/payment-request/view/${row.original.id}`);
+                    navigate(`/payment-request/view/${row.original.id}`, {
+                      state: {
+                        fromPaymentRequestApproval: true,
+                        returnTo: "/payment-request-approval",
+                      },
+                    });
                   }}
                 >
                   <Group gap="sm">

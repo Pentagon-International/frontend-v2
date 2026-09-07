@@ -863,6 +863,14 @@ function PaymentRequest() {
   const isEditOrViewMode = Boolean(requestId && (isViewMode || isEditMode));
   const isReadOnly = isViewMode;
 
+  // Approve/Reject only for the Payment Request Approval list flow — not when
+  // opened from a job Accounts documents table (fromJobAccounts).
+  const showApprovalActions =
+    (location.state as { fromPaymentRequestApproval?: boolean } | null)
+      ?.fromPaymentRequestApproval === true &&
+    (location.state as { fromJobAccounts?: boolean } | null)
+      ?.fromJobAccounts !== true;
+
   // service_id for get-effective-sac API (available when navigating from a job page)
   const jobServiceId =
     (location.state as { job?: { service_id?: number } } | null)?.job
@@ -4458,7 +4466,7 @@ function PaymentRequest() {
               </Button>
               {!isReadOnly && !isApprovedStatus && (
                 <>
-                  {isEditMode && saveResponse?.id && (
+                  {showApprovalActions && isEditMode && saveResponse?.id && (
                     <>
                       <Button
                         color="red"
@@ -4479,7 +4487,9 @@ function PaymentRequest() {
                     </>
                   )}
                   {/* Keep this as a route-based fallback for existing edit flows. */}
-                  {!saveResponse?.id && isEditMode && (
+                  {showApprovalActions &&
+                    !saveResponse?.id &&
+                    isEditMode && (
                     <Button
                       color="green"
                       leftSection={<IconCheck size={16} />}
