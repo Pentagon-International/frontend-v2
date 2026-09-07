@@ -137,6 +137,10 @@ const BolPdfEditor = lazy(() =>
 );
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
+import {
+  persistJobHousingDetails,
+  resolveHouseJobIdFromLocationState,
+} from "../../../utils/persistJobHousingDetails";
 import { JobAccountsDocumentsTable } from "../../../components/JobAccountsDocumentsTable";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
@@ -857,8 +861,28 @@ function HouseCreate() {
     refetchOnWindowFocus: false,
   });
 
+  // One-shot hydrate from editData (do not re-run when unit/currency masters load)
+  const formInitializedFromEditDataRef = useRef(false);
+  const lastEditKeyRef = useRef<string>("");
+  const chargesIdsResolvedRef = useRef(false);
+
   // Load cargo_details and charges from editData when in edit mode
   useEffect(() => {
+    if (!isEditMode || !editData) {
+      return;
+    }
+
+    const editKey = `${editIndex}-${(editData as { id?: number })?.id ?? "new"}`;
+    if (lastEditKeyRef.current !== editKey) {
+      formInitializedFromEditDataRef.current = false;
+      chargesIdsResolvedRef.current = false;
+      lastEditKeyRef.current = editKey;
+    }
+    if (formInitializedFromEditDataRef.current) {
+      return;
+    }
+    formInitializedFromEditDataRef.current = true;
+
     if (isEditMode && editData) {
       // Load cargo details
       if (
@@ -909,12 +933,11 @@ function HouseCreate() {
               chargeable_weight: importHouseCargoWeightFromApi(
                 cargo.chargeable_weight,
               ),
-              haz:
-                cargo.haz !== null && cargo.haz !== undefined
-                  ? typeof cargo.haz === "boolean"
-                    ? cargo.haz
-                    : cargo.haz === "Yes" || cargo.haz === true
-                  : null,
+              haz: cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
+                          ? true
+                          : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
+                            ? false
+                            : null,
             };
           },
         );
@@ -1019,7 +1042,9 @@ function HouseCreate() {
               supplier_name: charge.supplier_name
                 ? String(charge.supplier_name)
                 : "",
-              pp_cc: normalizePpCc(charge.pp_cc),
+              pp_cc: normalizeFreightPpCc(
+                charge.pp_cc ?? charge.freight,
+              ),
               unit_id,
               unit_code: unitCode,
               no_of_unit: toNum(charge.no_of_unit),
@@ -1027,71 +1052,20 @@ function HouseCreate() {
               currency: currencyCode,
               roe: toNum(charge.roe),
               amount_per_unit: toNum(charge.amount_per_unit),
-              amount: (() => {
-                const noOfUnit = toNum(charge.no_of_unit);
-                const amountPerUnit = toNum(charge.amount_per_unit);
-                return resolveSellAmount(
-                  toNum(charge.amount),
-                  noOfUnit,
-                  amountPerUnit,
-                );
-              })(),
-              sell_local_amount: (() => {
-                const noOfUnit = toNum(charge.no_of_unit);
-                const amountPerUnit = toNum(charge.amount_per_unit);
-                const roe = toNum(charge.roe);
-                const amount = resolveSellAmount(
-                  toNum(charge.amount),
-                  noOfUnit,
-                  amountPerUnit,
-                );
-                const existing = toNum(charge.sell_local_amount);
-                if (existing != null && existing > 0) return existing;
-                return calcSellLocalAmount(
-                  amount,
-                  roe,
-                  noOfUnit,
-                  amountPerUnit,
-                );
-              })(),
-              unit_cost: toNum(charge.unit_cost),
+              amount: toNum(charge.amount),
+              sell_local_amount: toNum(
+                charge.sell_local_amount ?? charge.local_amount,
+              ),
+              unit_cost: toNum(charge.unit_cost ?? charge.cost_per_unit),
               total_cost: toNum(charge.total_cost),
-              cost_local_amount: (() => {
-                const roe = toNum(charge.roe);
-                const totalCost = toNum(charge.total_cost);
-                const existing = toNum(charge.cost_local_amount);
-                if (existing != null && existing > 0) return existing;
-                return calcCostLocalAmount(totalCost, roe);
-              })(),
+              cost_local_amount: toNum(charge.cost_local_amount),
             };
           },
         );
-        const editCargoForCharges = toBookingCargoForNoOfUnits(
-          (
-            (editData.cargo_details as Array<Record<string, unknown>>) ?? []
-          ).map((cargo) => ({
-            gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
-            volume: importHouseCargoWeightFromApi(cargo.volume),
-            chargeable_weight: importHouseCargoWeightFromApi(
-              cargo.chargeable_weight,
-            ),
-            no_of_packages: cargo.no_of_packages as number | string | null,
-          })),
-        );
-        const editService = String(
-          (editData as { service?: string }).service ??
-            location.state?.mblDetails?.service ??
-            jobService,
-        ).toUpperCase();
-        chargesForm.setValues({
-          charges:
-            mapJobChargesWithUnits(
-              mappedCharges,
-              editService,
-              editCargoForCharges,
-              buildJobUnitOptions(unitArr),
-            ) ?? mappedCharges,
-        });
+        chargesForm.setValues({ charges: mappedCharges });
+        if (unitArr.length > 0 && currArr.length > 0) {
+          chargesIdsResolvedRef.current = true;
+        }
       }
 
       // Set shipper_code and consignee_code if available in editData
@@ -1240,7 +1214,58 @@ function HouseCreate() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, editData, editIndex, unitDataRaw, currencyData]);
+  }, [isEditMode, editData, editIndex]);
+
+  // Resolve charge unit_id/currency_id once masters are available (patch only; do not reload editData)
+  useEffect(() => {
+    const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];
+    const currArr = Array.isArray(currencyData) ? currencyData : [];
+    if (
+      !isEditMode ||
+      unitArr.length === 0 ||
+      currArr.length === 0 ||
+      chargesIdsResolvedRef.current
+    ) {
+      return;
+    }
+    const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
+    const currencyDataArr = currArr as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
+    let changed = false;
+    const updated = chargesForm.values.charges.map((charge) => {
+      let unit_id = charge.unit_id ?? "";
+      let currency_id = charge.currency_id ?? "";
+      if (!unit_id && charge.unit_code) {
+        const match = unitDataArr.find(
+          (u) => (u.unit_code ?? "") === charge.unit_code,
+        );
+        if (match?.id != null) {
+          unit_id = String(match.id);
+          changed = true;
+        }
+      }
+      if (!currency_id && charge.currency) {
+        const match = currencyDataArr.find(
+          (c) => (c.currency_code ?? c.code ?? "") === charge.currency,
+        );
+        if (match?.id != null) {
+          currency_id = String(match.id);
+          changed = true;
+        }
+      }
+      return unit_id !== charge.unit_id || currency_id !== charge.currency_id
+        ? { ...charge, unit_id, currency_id }
+        : charge;
+    });
+    if (changed) {
+      chargesForm.setValues({ charges: updated });
+    }
+    chargesIdsResolvedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, unitDataRaw, currencyData]);
 
   // Helper function to normalize routed value (handle backwards compatibility)
   const normalizeRoutedValue = (value: unknown): string => {
@@ -1831,18 +1856,9 @@ function HouseCreate() {
 
       console.log("💡 updateTradeField calculated value:", newTradeValue);
 
-      // Always update to ensure dropdown re-renders
-      console.log("✏️ updateTradeField updating Trade to:", newTradeValue);
-      form.setFieldValue("trade", newTradeValue);
-      // Force form state update by setting values directly
-      form.setValues({
-        ...form.values,
-        trade: newTradeValue,
-      });
-      console.log(
-        "📊 updateTradeField after update, form.values.trade:",
-        form.values.trade,
-      );
+      if (form.values.trade !== newTradeValue) {
+        form.setFieldValue("trade", newTradeValue);
+      }
     } else if (!hblDestinationCode && form.values.trade) {
       // Clear trade if HBL destination is cleared
       console.log("🧹 updateTradeField clearing Trade");
@@ -2187,10 +2203,22 @@ function HouseCreate() {
           type: "error",
           message: result.roeToastMessage,
         });
+      } else {
+        ToastNotification({
+          type: "error",
+          message: "Please fill all mandatory fields.",
+        });
       }
       return false;
     }
     return true;
+  };
+
+  const notifyMandatoryFieldsMissing = () => {
+    ToastNotification({
+      type: "error",
+      message: "Please fill all mandatory fields.",
+    });
   };
 
   // Handle next step
@@ -2253,13 +2281,7 @@ function HouseCreate() {
       );
 
       // Build base payload common to create/edit
-      // Convert haz to boolean: true for "Yes", false for "No", null otherwise
-      const hazValue =
-        haz === true || haz === "Yes" || String(haz).toLowerCase() === "yes"
-          ? true
-          : haz === false || haz === "No" || String(haz).toLowerCase() === "no"
-            ? false
-            : null;
+      const hazValue = typeof haz === "boolean" ? haz : null;
 
       const basePayload: Record<string, unknown> = {
         no_of_packages: no_of_packages ?? null,
@@ -2493,9 +2515,99 @@ function HouseCreate() {
     });
   };
 
-  const handleSave = () => {
+  const [isSavingHouse, setIsSavingHouse] = useState(false);
+
+  const validateAllStepsBeforeSave = (): boolean => {
+    if (!validateStep1()) {
+      notifyMandatoryFieldsMissing();
+      setActive(0);
+      return false;
+    }
+    if (!validateStep2()) {
+      notifyMandatoryFieldsMissing();
+      setActive(1);
+      return false;
+    }
+    if (!validateStep3()) {
+      notifyMandatoryFieldsMissing();
+      setActive(2);
+      return false;
+    }
+    if (!validateStep4()) {
+      setActive(3);
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = async () => {
     if (isViewOnly) return;
-    navigateToJobWithHousingList(buildUpdatedHousingDetailsFromForm());
+    if (!validateAllStepsBeforeSave()) return;
+    const updatedHousingDetails = buildUpdatedHousingDetailsFromForm();
+    const jobId = resolveHouseJobIdFromLocationState(location.state);
+
+    // Job not persisted yet — keep prior in-memory handoff to job create/edit
+    if (!jobId) {
+      navigateToJobWithHousingList(updatedHousingDetails);
+      return;
+    }
+
+    setIsSavingHouse(true);
+    try {
+      const { message, job: savedJob } = await persistJobHousingDetails(
+        jobId,
+        updatedHousingDetails,
+        location.state,
+      );
+      ToastNotification({ type: "success", message });
+
+      const houses = Array.isArray(savedJob?.housing_details)
+        ? (savedJob.housing_details as typeof updatedHousingDetails)
+        : updatedHousingDetails;
+
+      let nextEditIndex = editIndex;
+      let nextEditData: (typeof houses)[number] | undefined =
+        nextEditIndex != null ? houses[nextEditIndex] : undefined;
+
+      if (isEditMode && editData?.id != null) {
+        const found = houses.findIndex(
+          (h) =>
+            h &&
+            typeof h === "object" &&
+            Number((h as { id?: unknown }).id) === Number(editData.id),
+        );
+        if (found >= 0) {
+          nextEditIndex = found;
+          nextEditData = houses[found];
+        }
+      } else if (!isEditMode) {
+        nextEditIndex = Math.max(0, houses.length - 1);
+        nextEditData = houses[nextEditIndex];
+      }
+
+      navigate(location.pathname, {
+        replace: true,
+        state: {
+          ...location.state,
+          job: savedJob ?? {
+            ...(location.state?.job ?? {}),
+            id: jobId,
+            housing_details: houses,
+          },
+          housingDetails: houses,
+          editIndex: nextEditIndex,
+          editData: nextEditData,
+        },
+      });
+    } catch (err) {
+      ToastNotification({
+        type: "error",
+        message:
+          err instanceof Error ? err.message : "Failed to save house details",
+      });
+    } finally {
+      setIsSavingHouse(false);
+    }
   };
 
   // Build current form as housing detail (for Create Invoice and PDF)
@@ -2676,7 +2788,7 @@ function HouseCreate() {
             c.volume,
             "ocean",
           ),
-          haz: c.haz === true || String(c.haz) === "Yes",
+          haz: c.haz,
           container_no: c.container_number || "",
           container_id: c.container_id,
           actual_seal_no:
@@ -2962,14 +3074,20 @@ function HouseCreate() {
           <Button
             color="#105476"
             variant="outline"
+            loading={isSavingHouse}
             onClick={() => {
               if (active === 0) {
-                if (!validateStep1()) return;
+                if (!validateStep1()) {
+                  notifyMandatoryFieldsMissing();
+                  return;
+                }
                 if (!validateStep2()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(1);
                   return;
                 }
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(2);
                   return;
                 }
@@ -2979,8 +3097,12 @@ function HouseCreate() {
                 }
                 handleSave();
               } else if (active === 1) {
-                if (!validateStep2()) return;
+                if (!validateStep2()) {
+                  notifyMandatoryFieldsMissing();
+                  return;
+                }
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(2);
                   return;
                 }
@@ -2990,7 +3112,10 @@ function HouseCreate() {
                 }
                 handleSave();
               } else if (active === 2) {
-                if (!validateStep3()) return;
+                if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
+                  return;
+                }
                 if (!validateStep4()) {
                   setActive(3);
                   return;
@@ -3001,14 +3126,17 @@ function HouseCreate() {
                 handleSave();
               } else if (active === 4) {
                 if (!validateStep1()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(0);
                   return;
                 }
                 if (!validateStep2()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(1);
                   return;
                 }
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(2);
                   return;
                 }
@@ -3020,8 +3148,8 @@ function HouseCreate() {
               }
             }}
           >
-            Save HBL
-          </Button>
+              Update
+            </Button>
           )}
           <Menu
             shadow="md"
@@ -6122,24 +6250,32 @@ function HouseCreate() {
       />
 
       <Group justify="space-between" mt="xl">
-        <Button
-          variant="outline"
-          color="#105476"
-          leftSection={<IconArrowLeft size={16} />}
-          onClick={() => {
-            if (isViewOnly) {
-              navigateToJobWithHousingList(existingHousingDetails);
-            } else if (isEditMode && editIndex !== undefined) {
-              navigateToJobWithHousingList(
-                buildUpdatedHousingDetailsFromForm(),
-              );
-            } else {
-              navigateToJobWithHousingList(existingHousingDetails);
-            }
-          }}
-        >
-          Back to Export Job
-        </Button>
+        <Group gap="sm">
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => navigate(jobModuleBasePath)}
+          >
+            Back to List
+          </Button>
+          <Button
+            variant="subtle"
+            color="#105476"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => {
+              if (isViewOnly) {
+                navigateToJobWithHousingList(existingHousingDetails);
+              } else {
+                navigateToJobWithHousingList(
+                  buildUpdatedHousingDetailsFromForm(),
+                );
+              }
+            }}
+          >
+            Back to Export Job
+          </Button>
+        </Group>
 
         <Group>
           <HousePageDocumentsButton
@@ -6169,9 +6305,10 @@ function HouseCreate() {
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
+              loading={isSavingHouse}
               onClick={handleNext}
             >
-              Save HBL
+              Update
             </Button>
           )}
         </Group>

@@ -42,6 +42,10 @@ import { ERPListJobStatusPill } from "../../../components";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import {
+  parseJobSaveResponse,
+  resolveSavedJobId,
+} from "../../../utils/jobSaveResponse";
+import {
   Dropdown,
   SearchableSelect,
   ToastNotification,
@@ -2271,20 +2275,31 @@ export default function ServiceJobCreate() {
     setIsSubmitting(true);
     try {
       const payload = buildPayload();
+      let saveResponse: unknown;
       if (isEditMode && jobData?.id) {
-        await putAPICall(
+        saveResponse = await putAPICall(
           URL.jobCreate,
           { ...payload, id: jobData.id },
           API_HEADER,
         );
       } else {
-        await postAPICall(URL.jobCreate, payload, API_HEADER);
+        saveResponse = await postAPICall(URL.jobCreate, payload, API_HEADER);
       }
-      ToastNotification({
-        type: "success",
-        message: `Service job ${isEditMode ? "updated" : "created"} successfully`,
-      });
-      navigate("/service-job", { state: { refreshData: true } });
+      const { message, job: savedJob } = parseJobSaveResponse(
+        saveResponse,
+        `Service job ${isEditMode ? "updated" : "created"} successfully`,
+      );
+      ToastNotification({ type: "success", message });
+
+      const savedId = resolveSavedJobId(savedJob, jobData?.id);
+      if (savedId) {
+        navigate(`/service-job/edit/${savedId}`, {
+          replace: true,
+          state: {
+            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+          },
+        });
+      }
     } catch (err) {
       ToastNotification({
         type: "error",

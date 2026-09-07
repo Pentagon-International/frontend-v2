@@ -148,6 +148,10 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  parseJobSaveResponse,
+  resolveSavedJobId,
+} from "../../../utils/jobSaveResponse";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -509,6 +513,8 @@ function AirImportJobCreate() {
   const lastRestoredMawbDetailsRef = useRef<string | null>(null);
   // Track the last restored carrierDetails snapshot (restored independently of MAWB)
   const lastRestoredCarrierDetailsRef = useRef<string | null>(null);
+  // One-shot form restore per navigation (location.key); tab switches must not re-apply snapshots
+  const lastFormRestoreNavKeyRef = useRef<string | null>(null);
 
   // PDF Preview state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -922,6 +928,7 @@ function AirImportJobCreate() {
     { defaultPpCc: "Collect" },
   );
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
+  const jobHydratedKeyRef = useRef<string | null>(null);
   console.log("🧾 [AIR_IMPORT_JOB] estimatesForm initialized", {
     fromLocationState: Array.isArray(location.state?.estimates),
     estimatesCount: estimatesForm.values.estimates?.length ?? 0,
@@ -944,6 +951,16 @@ function AirImportJobCreate() {
   useEffect(() => {
     // Only proceed if we have jobData and are in edit/view mode
     if (jobData && (mode === "edit" || mode === "view")) {
+      const jobId = String(jobData.id ?? jobData.job_id ?? "");
+      const fromHouse = location.state?.fromHouseCreate === true;
+      // location.key changes on navigate (return from house / save replace) but NOT on tab switch
+      const hydrateKey = fromHouse
+        ? `fh:${location.key}:${jobId}`
+        : `job:${jobId}:${mode}:${location.key}`;
+      if (jobHydratedKeyRef.current === hydrateKey) {
+        return;
+      }
+      jobHydratedKeyRef.current = hydrateKey;
       try {
         console.log("🔧 [EDIT MODE] Initializing forms from jobData:", {
           jobData,
@@ -1367,13 +1384,11 @@ function AirImportJobCreate() {
                             cargo.chargeable_weight,
                           );
                           const hazVal =
-                            cargo.haz === true || cargo.haz === "true"
+                            cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
                               ? "Yes"
-                              : cargo.haz === false || cargo.haz === "false"
+                              : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
                                 ? "No"
-                                : cargo.haz
-                                  ? String(cargo.haz)
-                                  : "";
+                                : "";
                           return {
                             ...(cargo.id != null && { id: Number(cargo.id) }),
                             package_type: pickPackageTypeCodeFromCargo(cargo),
@@ -1682,6 +1697,15 @@ function AirImportJobCreate() {
       (mode === "edit" || mode === "view") &&
       !formsInitializedFromJobDataRef.current
     ) {
+      const jobId = String(jobData.id ?? jobData.job_id ?? "");
+      const fromHouse = location.state?.fromHouseCreate === true;
+      const hydrateKey = fromHouse
+        ? `fh:${location.key}:${jobId}`
+        : `job:${jobId}:${mode}:${location.key}`;
+      if (jobHydratedKeyRef.current === hydrateKey) {
+        return;
+      }
+      jobHydratedKeyRef.current = hydrateKey;
       // Small delay to ensure component is fully mounted
       const timer = setTimeout(() => {
         if (!formsInitializedFromJobDataRef.current && jobData) {
@@ -2049,6 +2073,33 @@ function AirImportJobCreate() {
       return;
     }
 
+    const hasNavSnapshot =
+      !!location.state?.mawbDetails ||
+      location.state?.fromHouseCreate === true;
+
+    // Same navigation entry: do not re-apply location.state snapshots (tab switch / dep churn)
+    if (
+      hasNavSnapshot &&
+      lastFormRestoreNavKeyRef.current === location.key
+    ) {
+      if (
+        location.state?.hawbDetails &&
+        Array.isArray(location.state.hawbDetails) &&
+        location.state.hawbDetails.length > 0 &&
+        !hawbDetailsLoadedRef.current
+      ) {
+        setHawbDetails(location.state.hawbDetails);
+      } else if (
+        location.state?.housingDetails &&
+        Array.isArray(location.state.housingDetails) &&
+        location.state.housingDetails.length > 0 &&
+        !hawbDetailsLoadedRef.current
+      ) {
+        setHawbDetails(location.state.housingDetails);
+      }
+      return;
+    }
+
     try {
       // Detect if we're coming back from HouseCreate by checking if we have mawbDetails in state
       // This works for both CREATE and EDIT modes
@@ -2263,21 +2314,25 @@ function AirImportJobCreate() {
         location.state.routings.length > 0
       ) {
         routingsForm.setValues({ routings: location.state.routings });
-        // Reset routingStateInitializedRef to allow restoration on next navigation back from HAWB
-        routingStateInitializedRef.current = false;
+        routingStateInitializedRef.current = true;
+      }
+
+      if (hasNavSnapshot) {
+        lastFormRestoreNavKeyRef.current = location.key;
       }
     } catch (error) {
       console.error("Error restoring form state:", error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    location.key,
     location.state?.hawbDetails,
     location.state?.housingDetails,
     location.state?.mawbDetails,
     location.state?.carrierDetails,
     location.state?.routings,
-    active, // Add active to dependencies to restore when navigating back to step 0
-    mode, // Add mode to dependencies
+    location.state?.fromHouseCreate,
+    mode,
   ]);
 
   useEffect(() => {
@@ -2352,6 +2407,7 @@ function AirImportJobCreate() {
       formStateRestoredRef.current = false;
       // Reset last restored ref to allow restoration when coming back from HAWB
       lastRestoredMawbDetailsRef.current = null;
+      lastFormRestoreNavKeyRef.current = null;
       routingStateInitializedRef.current = false;
 
       // Prepare MAWB details with ALL current form values including origin_name and destination_name
@@ -3100,7 +3156,7 @@ function AirImportJobCreate() {
                 c.volume,
                 "air",
               ) ?? "",
-            haz: c.haz === "Yes" || String(c.haz).toLowerCase() === "true",
+            haz: c.haz === "Yes",
           })),
           mawb_charges: (() => {
             const src =
@@ -3251,8 +3307,9 @@ function AirImportJobCreate() {
           : payload;
 
       // API call to create or update air import job
+      let saveResponse: unknown;
       if (mode === "edit" && jobData?.id) {
-        await putAPICall(
+        saveResponse = await putAPICall(
           `${URL.base}${URL.jobCreate}`,
           {
             ...finalPayload,
@@ -3261,19 +3318,38 @@ function AirImportJobCreate() {
           API_HEADER,
         );
       } else {
-        await postAPICall(`${URL.base}${URL.jobCreate}`, finalPayload, API_HEADER);
+        saveResponse = await postAPICall(
+          `${URL.base}${URL.jobCreate}`,
+          finalPayload,
+          API_HEADER,
+        );
       }
 
-      // Clear hawb details from state when navigating and trigger refetch
-      navigate(jobModuleBasePath, {
-        state: { hawbDetails: [], refreshData: true },
-      });
-      ToastNotification({
-        type: "success",
-        message: isChaMode && chaConfig
+      const fallbackMsg =
+        isChaMode && chaConfig
           ? `${chaConfig.pageTitle} ${mode === "edit" ? "updated" : "created"} successfully`
-          : `Air Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
-      });
+          : `Air Import Job ${mode === "edit" ? "updated" : "created"} successfully`;
+      const { message, job: savedJob } = parseJobSaveResponse(
+        saveResponse,
+        fallbackMsg,
+      );
+      ToastNotification({ type: "success", message });
+
+      const savedId = resolveSavedJobId(savedJob, jobData?.id);
+      if (savedId) {
+        navigate(`${jobModuleBasePath}/edit`, {
+          replace: true,
+          state: {
+            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            ...(location.state?.returnTo
+              ? { returnTo: location.state.returnTo }
+              : {}),
+            ...(location.state?.fromGlobalSearch
+              ? { fromGlobalSearch: location.state.fromGlobalSearch }
+              : {}),
+          },
+        });
+      }
     } catch (err) {
       console.error("Error submitting form:", err);
       ToastNotification({

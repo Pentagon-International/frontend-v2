@@ -122,6 +122,10 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import { postAPICall } from "../../../service/postApiCall";
+import {
+  persistJobHousingDetails,
+  resolveHouseJobIdFromLocationState,
+} from "../../../utils/persistJobHousingDetails";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobAccountsDocumentsTable } from "../../../components/JobAccountsDocumentsTable";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
@@ -235,6 +239,7 @@ type ChargeDetail = {
   charge_name: string;
   pp_cc: string;
   unit_id: string;
+  unit_code?: string;
   no_of_unit: number | null;
   currency_id: string;
   currency: string;
@@ -1053,9 +1058,13 @@ function HouseCreate() {
     // Cargo details - from cargo_details array OR top-level fields
     const cargoDetailsData = rb.cargo_details as
       Array<Record<string, unknown>> | undefined;
-    const isHazardous = (rb as { is_hazardous?: boolean }).is_hazardous;
+    const rawHaz = (rb as { haz?: unknown; is_hazardous?: unknown }).haz ?? (rb as { is_hazardous?: unknown }).is_hazardous;
     const haz =
-      isHazardous === true ? "Yes" : isHazardous === false ? "No" : "";
+      rawHaz === true || rawHaz === "Yes"
+        ? "Yes"
+        : rawHaz === false || rawHaz === "No"
+          ? "No"
+          : "";
 
     const toNum = (v: unknown): number | null => {
       if (v == null) return null;
@@ -1211,6 +1220,7 @@ function HouseCreate() {
   // Track if form has been initialized from editData to prevent overwriting user changes (reset when editData id/index changes)
   const formInitializedFromEditDataRef = useRef(false);
   const lastEditKeyRef = useRef<string>("");
+  const chargesIdsResolvedRef = useRef(false);
 
   // Initialize form values from editData when in edit mode (re-run when editData/editIndex changes so different house loads)
   useEffect(() => {
@@ -1229,6 +1239,7 @@ function HouseCreate() {
     const editKey = `${editIndex}-${(editData as { id?: number })?.id ?? "new"}`;
     if (lastEditKeyRef.current !== editKey) {
       formInitializedFromEditDataRef.current = false;
+      chargesIdsResolvedRef.current = false;
       lastEditKeyRef.current = editKey;
       console.log(
         "[AirHouseCreate] EDIT LOAD new house detected, reset init ref",
@@ -1364,9 +1375,8 @@ function HouseCreate() {
         form.setFieldValue("consignee_address", addrStr);
         setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
       }
-    }
 
-    // Always load cargo_details and charges when editData has them (run every time so data is set even if init ref was already true)
+    // Load cargo_details and charges once per house (inside one-shot init)
     // Load cargo details (support both cargo_details from mapped object and raw API)
     const cargoDetailsSource =
       editData.cargo_details ??
@@ -1401,13 +1411,11 @@ function HouseCreate() {
             cargo.chargeable_weight,
           );
           const haz =
-            cargo.haz === true || cargo.haz === "true"
+            cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
               ? "Yes"
-              : cargo.haz === false || cargo.haz === "false"
+              : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
                 ? "No"
-                : cargo.haz
-                  ? String(cargo.haz)
-                  : "";
+                : "";
           const row = {
             package_type: pickPackageTypeCodeFromCargo(
               cargo as Record<string, unknown>,
@@ -1575,8 +1583,10 @@ function HouseCreate() {
               : "",
             pp_cc,
             unit_id,
+            unit_code: unitCode,
             no_of_unit: toNum(charge.no_of_unit),
             currency_id,
+            currency: currencyCode,
             roe: toNum(charge.roe),
             amount_per_unit: toNum(charge.amount_per_unit),
             amount: toNum(charge.amount),
@@ -1644,6 +1654,7 @@ function HouseCreate() {
     }
 
     formInitializedFromEditDataRef.current = true;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, editData, editIndex]);
 
@@ -1911,141 +1922,58 @@ function HouseCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrenciesKey, currencyData]);
 
-  // When in edit mode and unit/currency masters load, resolve charge unit_id/currency_id from unit_code/currency
-  const chargesIdsResolvedRef = useRef(false);
+  // Resolve charge unit_id/currency_id once masters are available (patch only; do not reload editData)
   useEffect(() => {
     const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];
     const currArr = Array.isArray(currencyData) ? currencyData : [];
     if (
       !isEditMode ||
-      !editData ||
       unitArr.length === 0 ||
       currArr.length === 0 ||
       chargesIdsResolvedRef.current
     ) {
       return;
     }
-    const rawCharges = (editData as { charges?: unknown }).charges;
-    const rawMawbCharges = (editData as { mawb_charges?: unknown })
-      .mawb_charges;
-    const chargesArr = Array.isArray(rawCharges) ? rawCharges : null;
-    const mawbArr = Array.isArray(rawMawbCharges) ? rawMawbCharges : null;
-    const chargesToLoad =
-      chargesArr && chargesArr.length > 0
-        ? chargesArr
-        : mawbArr && mawbArr.length > 0
-          ? mawbArr
-          : null;
-    if (!chargesToLoad) return;
     const unitDataArr = unitArr as { id?: number; unit_code?: string }[];
     const currencyDataArr = currArr as {
       id?: number;
       code?: string;
       currency_code?: string;
     }[];
-    const loadedCharges = chargesToLoad.map(
-      (charge: Record<string, unknown>) => {
-        const unitDetails = charge.unit_details as
-          { unit_id?: number; unit_code?: string } | undefined;
-        const currencyDetails = charge.currency_details as
-          { currency_id?: number; currency_code?: string } | undefined;
-        const unitCode = String(
-          charge.unit_code ?? charge.unit_input ?? unitDetails?.unit_code ?? "",
-        ).trim();
-        const currencyCode = String(
-          currencyDetails?.currency_code ?? charge.currency_code ?? "",
-        ).trim();
-        const pp_cc = normalizePpCc(charge.pp_cc);
-        const toNum = (v: unknown): number | null => {
-          if (v == null) return null;
-          if (typeof v === "number" && !Number.isNaN(v)) return v;
-          const n = parseFloat(String(v));
-          return Number.isNaN(n) ? null : n;
-        };
-        const chargeId =
-          charge.charge_id != null
-            ? Number(charge.charge_id)
-            : charge.id != null
-              ? Number(charge.id)
-              : null;
-        const unitIdFromApi =
-          charge.unit_id != null
-            ? String(charge.unit_id)
-            : charge.unit != null
-              ? String(charge.unit)
-              : unitDetails?.unit_id != null
-                ? String(unitDetails.unit_id)
-                : null;
-        const currencyIdFromApi =
-          charge.currency_id != null
-            ? String(charge.currency_id)
-            : charge.currency != null
-              ? String(charge.currency)
-              : currencyDetails?.currency_id != null
-                ? String(currencyDetails.currency_id)
-                : null;
-        const unitByCode = unitCode
-          ? unitDataArr.find((u) => (u.unit_code ?? "") === unitCode)
-          : null;
-        const currByCode = currencyCode
-          ? currencyDataArr.find(
-              (c) => (c.currency_code ?? c.code ?? "") === currencyCode,
-            )
-          : null;
-        const unit_id =
-          unitIdFromApi ??
-          (unitByCode?.id != null ? String(unitByCode.id) : "");
-        const currency_id =
-          currencyIdFromApi ??
-          (currByCode?.id != null ? String(currByCode.id) : "");
-        return {
-          id: charge.id != null ? Number(charge.id) : undefined,
-          charge_id: chargeId,
-          charge_name: charge.charge_name ? String(charge.charge_name) : "",
-          pp_cc,
-          unit_id,
-          no_of_unit: toNum(charge.no_of_unit),
-          currency_id,
-          roe: toNum(charge.roe),
-          amount_per_unit: toNum(charge.amount_per_unit),
-          amount: toNum(charge.amount),
-          local_amount: toNum(charge.sell_local_amount ?? charge.local_amount),
-          cost_per_unit: toNum(charge.unit_cost ?? charge.cost_per_unit),
-          total_cost: toNum(charge.total_cost),
-          cost_local_amount: toNum(charge.cost_local_amount),
-        };
-      },
-    );
-    if (loadedCharges.length > 0) {
-      const editCargoForCharges = toBookingCargoForNoOfUnits(
-        ((editData.cargo_details as Array<Record<string, unknown>>) ?? []).map(
-          (cargo) => ({
-            gross_weight: importHouseCargoWeightFromApi(cargo.gross_weight),
-            volume: importHouseCargoWeightFromApi(
-              cargo.volume ?? cargo.volume_weight,
-            ),
-            volume_weight: importHouseCargoWeightFromApi(
-              cargo.volume_weight ?? cargo.volume,
-            ),
-            chargeable_weight: importHouseCargoWeightFromApi(
-              cargo.chargeable_weight,
-            ),
-          }),
-        ),
-      );
-      chargesForm.setValues({
-        charges:
-          mapJobChargesWithUnits(
-            loadedCharges,
-            jobService,
-            editCargoForCharges,
-            buildJobUnitOptions(unitArr),
-          ) ?? loadedCharges,
-      });
-      chargesIdsResolvedRef.current = true;
+    let changed = false;
+    const updated = chargesForm.values.charges.map((charge) => {
+      let unit_id = charge.unit_id ?? "";
+      let currency_id = charge.currency_id ?? "";
+      const unitCode = (charge as { unit_code?: string }).unit_code;
+      if (!unit_id && unitCode) {
+        const match = unitDataArr.find(
+          (u) => (u.unit_code ?? "") === unitCode,
+        );
+        if (match?.id != null) {
+          unit_id = String(match.id);
+          changed = true;
+        }
+      }
+      if (!currency_id && charge.currency) {
+        const match = currencyDataArr.find(
+          (c) => (c.currency_code ?? c.code ?? "") === charge.currency,
+        );
+        if (match?.id != null) {
+          currency_id = String(match.id);
+          changed = true;
+        }
+      }
+      return unit_id !== charge.unit_id || currency_id !== charge.currency_id
+        ? { ...charge, unit_id, currency_id }
+        : charge;
+    });
+    if (changed) {
+      chargesForm.setValues({ charges: updated });
     }
+    chargesIdsResolvedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditMode, editData, unitDataRaw, currencyData]);
+  }, [isEditMode, unitDataRaw, currencyData]);
+
 
   // Note: Container numbers removed for Air HAWB - no containerNumberOptions needed
 
@@ -2103,18 +2031,9 @@ function HouseCreate() {
 
       console.log("💡 updateTradeField calculated value:", newTradeValue);
 
-      // Always update to ensure dropdown re-renders
-      console.log("✏️ updateTradeField updating Trade to:", newTradeValue);
-      form.setFieldValue("trade", newTradeValue);
-      // Force form state update by setting values directly
-      form.setValues({
-        ...form.values,
-        trade: newTradeValue,
-      });
-      console.log(
-        "📊 updateTradeField after update, form.values.trade:",
-        form.values.trade,
-      );
+      if (form.values.trade !== newTradeValue) {
+        form.setFieldValue("trade", newTradeValue);
+      }
     } else if (!hawbDestinationCode && form.values.trade) {
       // Clear trade if HAWB destination is cleared
       console.log("🧹 updateTradeField clearing Trade");
@@ -2401,10 +2320,22 @@ function HouseCreate() {
           type: "error",
           message: result.roeToastMessage,
         });
+      } else {
+        ToastNotification({
+          type: "error",
+          message: "Please fill all mandatory fields.",
+        });
       }
       return false;
     }
     return true;
+  };
+
+  const notifyMandatoryFieldsMissing = () => {
+    ToastNotification({
+      type: "error",
+      message: "Please fill all mandatory fields.",
+    });
   };
 
   // Handle next step
@@ -2666,9 +2597,98 @@ function HouseCreate() {
     });
   };
 
-  const handleSave = () => {
+  const [isSavingHouse, setIsSavingHouse] = useState(false);
+
+  const validateAllStepsBeforeSave = (): boolean => {
+    if (!validateStep1()) {
+      notifyMandatoryFieldsMissing();
+      setActive(0);
+      return false;
+    }
+    if (!validateStep2()) {
+      notifyMandatoryFieldsMissing();
+      setActive(1);
+      return false;
+    }
+    if (!validateStep3()) {
+      notifyMandatoryFieldsMissing();
+      setActive(2);
+      return false;
+    }
+    if (!validateStep4()) {
+      setActive(3);
+      return false;
+    }
+    return true;
+  };
+
+  const handleSave = async () => {
     if (isViewOnly) return;
-    navigateToJobWithHousingList(buildUpdatedHousingDetailsFromForm());
+    if (!validateAllStepsBeforeSave()) return;
+    const updatedHousingDetails = buildUpdatedHousingDetailsFromForm();
+    const jobId = resolveHouseJobIdFromLocationState(location.state);
+
+    if (!jobId) {
+      navigateToJobWithHousingList(updatedHousingDetails);
+      return;
+    }
+
+    setIsSavingHouse(true);
+    try {
+      const { message, job: savedJob } = await persistJobHousingDetails(
+        jobId,
+        updatedHousingDetails,
+        location.state,
+      );
+      ToastNotification({ type: "success", message });
+
+      const houses = Array.isArray(savedJob?.housing_details)
+        ? (savedJob.housing_details as typeof updatedHousingDetails)
+        : updatedHousingDetails;
+
+      let nextEditIndex = editIndex;
+      let nextEditData: (typeof houses)[number] | undefined =
+        nextEditIndex != null ? houses[nextEditIndex] : undefined;
+
+      if (isEditMode && editData?.id != null) {
+        const found = houses.findIndex(
+          (h) =>
+            h &&
+            typeof h === "object" &&
+            Number((h as { id?: unknown }).id) === Number(editData.id),
+        );
+        if (found >= 0) {
+          nextEditIndex = found;
+          nextEditData = houses[found];
+        }
+      } else if (!isEditMode) {
+        nextEditIndex = Math.max(0, houses.length - 1);
+        nextEditData = houses[nextEditIndex];
+      }
+
+      navigate(location.pathname, {
+        replace: true,
+        state: {
+          ...location.state,
+          job: savedJob ?? {
+            ...(location.state?.job ?? {}),
+            id: jobId,
+            housing_details: houses,
+          },
+          housingDetails: houses,
+          editIndex: nextEditIndex,
+          editData: nextEditData,
+        },
+      });
+    } catch (err) {
+      ToastNotification({
+        type: "error",
+        message:
+          err instanceof Error ? err.message : "Failed to save house details",
+      });
+    } finally {
+      setIsSavingHouse(false);
+    }
   };
 
   const housingAlreadyHasEventType = (
@@ -2933,21 +2953,24 @@ function HouseCreate() {
           <Button
             color="#105476"
             variant="outline"
+            loading={isSavingHouse}
             onClick={() => {
-              // Save HBL button: Validate all steps before saving
+              // Update button: Validate all steps before saving
               // If on step 0, 1, or 2, validate current step and show errors
               // If on step 3, validate all steps (1, 2, 3, 4) before saving
               if (active === 0) {
                 if (!validateStep1()) {
-                  // Errors are already set, just return
+                  notifyMandatoryFieldsMissing();
                   return;
                 }
                 // If step 1 is valid, continue to validate all steps
                 if (!validateStep2()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(1); // Navigate to step 2 to show errors
                   return;
                 }
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(2); // Navigate to step 3 to show errors
                   return;
                 }
@@ -2959,9 +2982,11 @@ function HouseCreate() {
                 handleSave();
               } else if (active === 1) {
                 if (!validateStep2()) {
+                  notifyMandatoryFieldsMissing();
                   return;
                 }
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(2);
                   return;
                 }
@@ -2972,6 +2997,7 @@ function HouseCreate() {
                 handleSave();
               } else if (active === 2) {
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   return;
                 }
                 if (!validateStep4()) {
@@ -2986,14 +3012,17 @@ function HouseCreate() {
                 handleSave();
               } else if (active === 4) {
                 if (!validateStep1()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(0);
                   return;
                 }
                 if (!validateStep2()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(1);
                   return;
                 }
                 if (!validateStep3()) {
+                  notifyMandatoryFieldsMissing();
                   setActive(2);
                   return;
                 }
@@ -3005,7 +3034,7 @@ function HouseCreate() {
               }
             }}
           >
-            Save HBL
+            Update
           </Button>
           )}
           <Menu
@@ -5754,24 +5783,32 @@ function HouseCreate() {
       />
 
       <Group justify="space-between" mt="xl">
-        <Button
-          variant="outline"
-          color="#105476"
-          leftSection={<IconArrowLeft size={16} />}
-          onClick={() => {
-            if (isViewOnly) {
-              navigateToJobWithHousingList(existingHousingDetails);
-            } else if (isEditMode && editIndex !== undefined) {
-              navigateToJobWithHousingList(
-                buildUpdatedHousingDetailsFromForm(),
-              );
-            } else {
-              navigateToJobWithHousingList(existingHousingDetails);
-            }
-          }}
-        >
-          Back to Import Job
-        </Button>
+        <Group gap="sm">
+          <Button
+            variant="outline"
+            color="#105476"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => navigate(jobModuleBasePath)}
+          >
+            Back to List
+          </Button>
+          <Button
+            variant="subtle"
+            color="#105476"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => {
+              if (isViewOnly) {
+                navigateToJobWithHousingList(existingHousingDetails);
+              } else {
+                navigateToJobWithHousingList(
+                  buildUpdatedHousingDetailsFromForm(),
+                );
+              }
+            }}
+          >
+            Back to Import Job
+          </Button>
+        </Group>
 
         <Group>
           <HousePageDocumentsButton
@@ -5801,9 +5838,10 @@ function HouseCreate() {
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
+              loading={isSavingHouse}
               onClick={handleNext}
             >
-              Save HBL
+              Update
             </Button>
           )}
         </Group>

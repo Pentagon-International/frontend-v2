@@ -166,6 +166,11 @@ import {
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import {
+  parseJobSaveResponse,
+  resolveSavedJobId,
+} from "../../../utils/jobSaveResponse";
+import { resolveJobAgentAddress } from "../../../utils/resolveJobAgentAddress";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -931,10 +936,25 @@ function ImportJobCreate() {
 
   const estimatesForm = useEstimatesForm(undefined, { defaultPpCc: "Collect" });
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
+  const jobHydratedKeyRef = useRef<string | null>(null);
+  // One-shot location.state restore per navigation; tab switches must not re-apply snapshots
+  const lastFormRestoreNavKeyRef = useRef<string | null>(null);
 
   // Load job data if in edit or view mode
   useEffect(() => {
     if (jobData && (mode === "edit" || mode === "view")) {
+      const jobId = String(jobData.id ?? jobData.job_id ?? "");
+      const fromHouse = location.state?.fromHouseCreate === true;
+      // location.key changes on navigate (return from house / save replace) but NOT on tab switch
+      // Include location.key so stay-on-page after save rehydrates from response
+      // (tab switches do not change location.key)
+      const hydrateKey = fromHouse
+        ? `fh:${location.key}:${jobId}`
+        : `job:${jobId}:${mode}:${location.key}`;
+      if (jobHydratedKeyRef.current === hydrateKey) {
+        return;
+      }
+      jobHydratedKeyRef.current = hydrateKey;
       try {
         let mblData, carrierData, housingData, containerData, routingData;
         if (location.state?.fromHouseCreate) {
@@ -956,27 +976,6 @@ function ImportJobCreate() {
               : [];
         }
         // Populate MBL Details
-        // Extract origin_agent_address from origin_agent_data if available
-        let originAgentAddress = "";
-        if (mblData.origin_agent_data) {
-          const originAgentData = mblData.origin_agent_data as Record<
-            string,
-            unknown
-          >;
-          if (
-            originAgentData.addresses_data &&
-            Array.isArray(originAgentData.addresses_data)
-          ) {
-            const addressesData = originAgentData.addresses_data as Array<{
-              id: number;
-              address: string;
-            }>;
-            if (addressesData.length > 0 && addressesData[0].address) {
-              originAgentAddress = addressesData[0].address;
-            }
-          }
-        }
-
         const mblFlat = mblData as Record<string, unknown>;
         const stateMbl = (location.state?.mblDetails ?? {}) as Record<
           string,
@@ -1013,7 +1012,10 @@ function ImportJobCreate() {
             mblData.agent_name ||
             mblData.origin_agent_name ||
             "",
-          agent_address: originAgentAddress,
+          agent_address: resolveJobAgentAddress(mblFlat, [
+            stateMbl,
+            jobData as Record<string, unknown>,
+          ]),
           origin_code: mblData.origin_code || "",
           origin_name: mblData.origin_name || "",
           destination_code: mblData.destination_code || "",
@@ -1369,13 +1371,10 @@ function ImportJobCreate() {
                         chargeable_weight: importHouseCargoWeightFromApi(
                           cargo.chargeable_weight,
                         ),
-                        haz:
-                          cargo.haz !== null && cargo.haz !== undefined
-                            ? typeof cargo.haz === "boolean"
-                              ? cargo.haz
-                              : cargo.haz === "Yes" ||
-                                cargo.haz === true ||
-                                String(cargo.haz).toLowerCase() === "yes"
+                        haz: cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
+                          ? true
+                          : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
+                            ? false
                             : null,
                         package_type: pickPackageTypeCodeFromCargo(
                           cargo as Record<string, unknown>,
@@ -1992,6 +1991,13 @@ function ImportJobCreate() {
       isNavigatingBackFromHouseCreate ||
       (mode === "create" && hasStateToRestore);
 
+    if (
+      shouldRestore &&
+      lastFormRestoreNavKeyRef.current === location.key
+    ) {
+      return;
+    }
+
     if (shouldRestore) {
       // Restore MBL Details
       if (location.state?.mblDetails) {
@@ -2123,9 +2129,12 @@ function ImportJobCreate() {
       if (isNavigatingBackFromHouseCreate) {
         setActive(3);
       }
+
+      lastFormRestoreNavKeyRef.current = location.key;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    location.key,
     location.state?.mblDetails,
     location.state?.carrierDetails,
     location.state?.routings,
@@ -2572,6 +2581,8 @@ function ImportJobCreate() {
       const containerNumbers = containerDetailsForm.values.containers
         .map((container) => container.container_no)
         .filter((no) => no && no.trim() !== "");
+
+      lastFormRestoreNavKeyRef.current = null;
 
       navigate(`${jobModuleBasePath}/house-create`, {
         state: {
@@ -3394,16 +3405,107 @@ function ImportJobCreate() {
     openSendEmail();
   };
 
-  const handleSubmit = async () => {
-    // Ensure we're using the latest form values by constructing payload right before API call
-    setIsSubmitting(true);
-
-    // Validate: At least one HBL detail is required
+  // Validate HBL details - check mandatory fields (aligned with HouseCreate steps)
+  const validateHousingDetails = () => {
     if (housingDetails.length === 0) {
       ToastNotification({
         type: "error",
         message: "At least one HBL detail is required before creating MBL",
       });
+      return false;
+    }
+
+    for (let i = 0; i < housingDetails.length; i++) {
+      const house = housingDetails[i];
+      const missingFields: string[] = [];
+
+      if (!house.hbl_number?.trim()) {
+        missingFields.push("HBL Number");
+      }
+      if (!house.origin_code?.trim()) {
+        missingFields.push("Origin");
+      }
+      if (!house.destination_code?.trim()) {
+        missingFields.push("Destination");
+      }
+      if (!house.trade?.trim()) {
+        missingFields.push("Trade");
+      }
+      if (!String(house.shipment_terms_code ?? "").trim()) {
+        missingFields.push("Shipment Terms");
+      }
+      if (!house.routed?.trim()) {
+        missingFields.push("Routed");
+      }
+      if (!String(house.routed_by ?? "").trim()) {
+        missingFields.push("Routed By");
+      }
+      if (!house.shipper_name?.trim()) {
+        missingFields.push("Shipper Name");
+      }
+      if (!house.consignee_name?.trim()) {
+        missingFields.push("Consignee Name");
+      }
+
+      const cargos = house.cargo_details ?? [];
+      if (cargos.length === 0) {
+        missingFields.push("At least one Cargo Detail");
+      } else {
+        for (let j = 0; j < cargos.length; j++) {
+          const cargo = cargos[j] as {
+            container_no?: unknown;
+            container_number?: unknown;
+            no_of_packages?: number | null;
+            gross_weight?: unknown;
+            volume?: unknown;
+          };
+          const containerNo = String(
+            cargo.container_no ?? cargo.container_number ?? "",
+          ).trim();
+          if (!containerNo) {
+            missingFields.push(`Cargo ${j + 1}: Container Number`);
+          }
+          if (
+            cargo.no_of_packages === null ||
+            cargo.no_of_packages === undefined
+          ) {
+            missingFields.push(`Cargo ${j + 1}: Number of Packages`);
+          }
+          if (
+            cargo.gross_weight === null ||
+            cargo.gross_weight === undefined ||
+            cargo.gross_weight === ""
+          ) {
+            missingFields.push(`Cargo ${j + 1}: Gross Weight`);
+          }
+          if (
+            cargo.volume === null ||
+            cargo.volume === undefined ||
+            cargo.volume === ""
+          ) {
+            missingFields.push(`Cargo ${j + 1}: Volume`);
+          }
+        }
+      }
+
+      if (missingFields.length > 0) {
+        ToastNotification({
+          type: "error",
+          message: `HBL ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
+        });
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    // Ensure we're using the latest form values by constructing payload right before API call
+    setIsSubmitting(true);
+
+    // Validate HBL details first
+    if (!validateHousingDetails()) {
       setIsSubmitting(false);
       return;
     }
@@ -3676,14 +3778,7 @@ function ImportJobCreate() {
               cargo.volume,
               "ocean",
             ),
-            haz:
-              cargo.haz !== null && cargo.haz !== undefined
-                ? typeof cargo.haz === "boolean"
-                  ? cargo.haz
-                  : cargo.haz === "Yes" ||
-                    cargo.haz === true ||
-                    String(cargo.haz).toLowerCase() === "yes"
-                : null,
+            haz: cargo.haz,
             package_type_code:
               pickPackageTypeCodeFromCargo(cargo as Record<string, unknown>) ||
               null,
@@ -3835,15 +3930,16 @@ function ImportJobCreate() {
           : payload;
 
       // API call to create or update import job
+      let saveResponse: unknown;
       if (mode === "edit" && jobData?.id) {
         if (isChaMode) {
-          await putAPICall(
+          saveResponse = await putAPICall(
             `${URL.base}${URL.jobCreate}`,
             { ...finalPayload, id: jobData.id },
             API_HEADER,
           );
         } else {
-          await putAPICall(
+          saveResponse = await putAPICall(
             URL.importJob,
             { ...finalPayload, id: jobData.id },
             API_HEADER,
@@ -3851,27 +3947,45 @@ function ImportJobCreate() {
         }
       } else {
         if (isChaMode) {
-          await postAPICall(
+          saveResponse = await postAPICall(
             `${URL.base}${URL.jobCreate}`,
             finalPayload,
             API_HEADER,
           );
         } else {
-          await postAPICall(URL.importJob, finalPayload, API_HEADER);
+          saveResponse = await postAPICall(
+            URL.importJob,
+            finalPayload,
+            API_HEADER,
+          );
         }
       }
 
-      ToastNotification({
-        type: "success",
-        message: isChaMode && chaConfig
+      const fallbackMsg =
+        isChaMode && chaConfig
           ? `${chaConfig.pageTitle} ${mode === "edit" ? "updated" : "created"} successfully`
-          : `Import Job ${mode === "edit" ? "updated" : "created"} successfully`,
-      });
+          : `Import Job ${mode === "edit" ? "updated" : "created"} successfully`;
+      const { message, job: savedJob } = parseJobSaveResponse(
+        saveResponse,
+        fallbackMsg,
+      );
+      ToastNotification({ type: "success", message });
 
-      // Clear housing details from state when navigating and trigger refetch
-      navigate(jobModuleBasePath, {
-        state: { housingDetails: [], refreshData: true },
-      });
+      const savedId = resolveSavedJobId(savedJob, jobData?.id);
+      if (savedId) {
+        navigate(`${jobModuleBasePath}/edit`, {
+          replace: true,
+          state: {
+            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            ...(location.state?.returnTo
+              ? { returnTo: location.state.returnTo }
+              : {}),
+            ...(location.state?.fromGlobalSearch
+              ? { fromGlobalSearch: location.state.fromGlobalSearch }
+              : {}),
+          },
+        });
+      }
     } catch (err) {
       console.error("Error submitting form:", err);
       ToastNotification({
