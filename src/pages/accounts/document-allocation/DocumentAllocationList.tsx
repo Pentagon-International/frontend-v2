@@ -37,6 +37,7 @@ import {
   useMantineReactTable,
 } from "mantine-react-table";
 import {
+  ERPListColumnHeaderFilter,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
@@ -59,7 +60,6 @@ import {
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
-import FormTextInput from "../../../components/FormTextInput";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
@@ -111,19 +111,30 @@ type FilterState = {
   account_id: string | null;
   account_code: string | null;
   account_name: string | null;
-  subledger_code: string | null;
-  allocation_date: Date | null;
+  allocation_no: string | null;
+  allocation_from_date: Date | null;
+  allocation_to_date: Date | null;
   document_status: string | null;
 };
+
+const defaultDateFrom = () => dayjs().startOf("month").toDate();
+const defaultDateTo = () => dayjs().toDate();
 
 const EMPTY_FILTERS: FilterState = {
   account_id: null,
   account_code: null,
   account_name: null,
-  subledger_code: null,
-  allocation_date: null,
+  allocation_no: null,
+  allocation_from_date: null,
+  allocation_to_date: null,
   document_status: null,
 };
+
+const getDefaultFilters = (): FilterState => ({
+  ...EMPTY_FILTERS,
+  allocation_from_date: defaultDateFrom(),
+  allocation_to_date: defaultDateTo(),
+});
 
 type DocAllocColumnKey =
   | "account_name"
@@ -147,8 +158,13 @@ const docAllocColumnLabels: Record<keyof DocumentAllocationColumnVisibility, str
   subledger_code: "Subledger Code",
   allocation_no: "Allocation No",
   allocation_date: "Allocation Date",
-  document_status: "Document Status",
+  document_status: "Status",
 };
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "POSTED", label: "POSTED" },
+  { value: "DRAFT", label: "DRAFT" },
+];
 
 function columnIdForDocAlloc<T extends Record<string, unknown>>(
   col: MRT_ColumnDef<T>,
@@ -194,8 +210,9 @@ const DocumentAllocationRowActions = memo(function DocumentAllocationRowActions(
       account_id: appliedFilters.account_id,
       account_code: appliedFilters.account_code,
       account_name: appliedFilters.account_name,
-      subledger_code: appliedFilters.subledger_code,
-      allocation_date: appliedFilters.allocation_date,
+      allocation_no: appliedFilters.allocation_no,
+      allocation_from_date: appliedFilters.allocation_from_date,
+      allocation_to_date: appliedFilters.allocation_to_date,
       document_status: appliedFilters.document_status,
     });
     setStoreSearch(LIST_KEY, search);
@@ -289,8 +306,8 @@ export default function DocumentAllocationList() {
   const [debouncedSearch] = useDebouncedValue(search, 500);
   const [showFilters, setShowFilters] = useState(false);
 
-  const [draftFilters, setDraftFilters] = useState<FilterState>({ ...EMPTY_FILTERS });
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>({ ...EMPTY_FILTERS });
+  const [draftFilters, setDraftFilters] = useState<FilterState>(() => getDefaultFilters());
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(() => getDefaultFilters());
 
   const [isRestoring, setIsRestoring] = useState(true);
   const [pendingReverse, setPendingReverse] =
@@ -306,6 +323,26 @@ export default function DocumentAllocationList() {
 
   const [visibleColumns, setVisibleColumns] =
     useState<DocumentAllocationColumnVisibility>(() => ({ ...docAllocColumnDefault }));
+
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((cur) => (cur === id ? null : cur));
+  }, []);
+  const commitHeaderFilters = useCallback(
+    (updater: (prev: FilterState) => FilterState) => {
+      setDraftFilters((prev) => {
+        const next = updater(prev);
+        setAppliedFilters(next);
+        setStoreFilters(LIST_KEY, next);
+        return next;
+      });
+      setPagination((p) => ({ ...p, pageIndex: 0 }));
+    },
+    [setStoreFilters],
+  );
 
   useEffect(() => {
     if (isRestoring) return;
@@ -325,14 +362,20 @@ export default function DocumentAllocationList() {
     }
     if (stored?.filters && typeof stored.filters === "object") {
       const raw = stored.filters as Record<string, unknown>;
+      const legacyAllocationDate = raw.allocation_date
+        ? new Date(String(raw.allocation_date))
+        : null;
       const next: FilterState = {
         account_id: raw.account_id != null ? String(raw.account_id) : null,
         account_code: raw.account_code != null ? String(raw.account_code) : null,
         account_name: raw.account_name != null ? String(raw.account_name) : null,
-        subledger_code: raw.subledger_code != null ? String(raw.subledger_code) : null,
-        allocation_date: raw.allocation_date
-          ? new Date(String(raw.allocation_date))
-          : null,
+        allocation_no: raw.allocation_no != null ? String(raw.allocation_no) : null,
+        allocation_from_date: raw.allocation_from_date
+          ? new Date(String(raw.allocation_from_date))
+          : legacyAllocationDate,
+        allocation_to_date: raw.allocation_to_date
+          ? new Date(String(raw.allocation_to_date))
+          : legacyAllocationDate,
         document_status: raw.document_status != null ? String(raw.document_status) : null,
       };
       setDraftFilters(next);
@@ -348,9 +391,12 @@ export default function DocumentAllocationList() {
     (f: FilterState, searchValue: string) => {
       const payload: Record<string, string> = {};
       if (f.account_code) payload.account_code = f.account_code;
-      if (f.subledger_code) payload.subledger_code = f.subledger_code;
-      if (f.allocation_date) {
-        payload.allocation_date = dayjs(f.allocation_date).format("YYYY-MM-DD");
+      if (f.allocation_no?.trim()) payload.allocation_no = f.allocation_no.trim();
+      if (f.allocation_from_date) {
+        payload.allocation_from_date = dayjs(f.allocation_from_date).format("YYYY-MM-DD");
+      }
+      if (f.allocation_to_date) {
+        payload.allocation_to_date = dayjs(f.allocation_to_date).format("YYYY-MM-DD");
       }
       if (f.document_status) payload.document_status = f.document_status;
       if (searchValue.trim()) payload.search = searchValue.trim();
@@ -543,8 +589,9 @@ export default function DocumentAllocationList() {
   };
 
   const clearAllFilters = () => {
-    setDraftFilters({ ...EMPTY_FILTERS });
-    setAppliedFilters({ ...EMPTY_FILTERS });
+    const next = getDefaultFilters();
+    setDraftFilters(next);
+    setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
     clearAllStore(LIST_KEY);
   };
@@ -554,6 +601,70 @@ export default function DocumentAllocationList() {
       {
         accessorKey: "account_name",
         header: "Account Name",
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Account Name"
+            value={appliedFilters.account_id || ""}
+            displayValue={
+              appliedFilters.account_name
+                ? appliedFilters.account_code
+                  ? `${appliedFilters.account_name} (${appliedFilters.account_code})`
+                  : appliedFilters.account_name
+                : undefined
+            }
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "account_name"}
+            onStartEdit={() => openHeaderEditor("account_name")}
+            onStopEdit={() => collapseHeaderEditor("account_name")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <SearchableSelect
+                autoFocus={autoFocus}
+                placeholder="Search account..."
+                apiEndpoint={URL.chartOfAccounts}
+                value={appliedFilters.account_id}
+                displayValue={
+                  appliedFilters.account_name
+                    ? appliedFilters.account_code
+                      ? `${appliedFilters.account_name} (${appliedFilters.account_code})`
+                      : appliedFilters.account_name
+                    : undefined
+                }
+                onChange={(val, _option, originalData) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    account_id: val || null,
+                    account_code:
+                      originalData?.gl_account_code != null
+                        ? String(originalData.gl_account_code)
+                        : null,
+                    account_name:
+                      originalData?.account_name != null
+                        ? String(originalData.account_name)
+                        : null,
+                  }));
+                  if (val) onClose();
+                }}
+                dropdownZIndex={1000}
+                minSearchLength={1}
+                size="xs"
+                searchFields={["gl_account_code", "account_name", "id"]}
+                displayFormat={(item: Record<string, unknown>) => {
+                  const id = String(item.id ?? "").trim();
+                  const code = String(item.gl_account_code ?? "").trim();
+                  const name = String(item.account_name ?? "").trim();
+                  return {
+                    value: id,
+                    label: name ? `${name} (${code})` : code || id,
+                  };
+                }}
+                returnOriginalData
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() ?? "—"}
@@ -572,6 +683,24 @@ export default function DocumentAllocationList() {
       {
         accessorKey: "allocation_no",
         header: "Allocation No",
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Allocation No"
+            value={appliedFilters.allocation_no || ""}
+            displayValue={appliedFilters.allocation_no || undefined}
+            theme={erpTheme}
+            placeholder="Filter Allocation No"
+            isEditing={editingHeaderId === "allocation_no"}
+            onStartEdit={() => openHeaderEditor("allocation_no")}
+            onStopEdit={() => collapseHeaderEditor("allocation_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                allocation_no: next.trim() ? next : null,
+              }))
+            }
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() ?? "—"}
@@ -592,7 +721,40 @@ export default function DocumentAllocationList() {
       },
       {
         accessorKey: "document_status",
-        header: "Document Status",
+        header: "Status",
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Status"
+            value={appliedFilters.document_status || ""}
+            displayValue={appliedFilters.document_status || undefined}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "document_status"}
+            onStartEdit={() => openHeaderEditor("document_status")}
+            onStopEdit={() => collapseHeaderEditor("document_status")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select status"
+                searchable
+                clearable
+                size="xs"
+                data={STATUS_FILTER_OPTIONS}
+                value={appliedFilters.document_status}
+                onChange={(value) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    document_status: value || null,
+                  }));
+                  if (value) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => (
           <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
             {cell.getValue<string>() ?? "—"}
@@ -619,7 +781,23 @@ export default function DocumentAllocationList() {
         ),
       },
     ],
-    [navigate, search, appliedFilters, erpTheme, primary, dateFormat, setStoreFilters, setStoreSearch, setShouldRestore, setPendingReverse],
+    [
+      navigate,
+      search,
+      appliedFilters,
+      erpTheme,
+      primary,
+      dateFormat,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+      setPendingReverse,
+      editingHeaderId,
+      openHeaderEditor,
+      collapseHeaderEditor,
+      commitHeaderFilters,
+      filterFieldStyles,
+    ],
   );
 
   const columns = useMemo(
@@ -857,7 +1035,7 @@ export default function DocumentAllocationList() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Account, subledger, allocation date, and document status",
+            subtitle: "Account, allocation date range, and status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -919,32 +1097,37 @@ export default function DocumentAllocationList() {
                 </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
-                    <FormTextInput
-                      format="capital"
-                      label="Subledger Code"
-                      placeholder="Enter subledger code"
+                    <SingleDateInput
+                      label="Allocation From Date"
+                      placeholder="YYYY-MM-DD"
                       size="xs"
-                      value={draftFilters.subledger_code || ""}
-                      onChange={(e) =>
+                      value={draftFilters.allocation_from_date}
+                      onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          subledger_code: e.currentTarget.value || null,
+                          allocation_from_date: date,
                         }))
                       }
-                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                      styles={formTextFilterStyles}
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
                     />
                   </Box>
                 </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="Allocation Date"
+                      label="Allocation To Date"
                       placeholder="YYYY-MM-DD"
                       size="xs"
-                      value={draftFilters.allocation_date}
+                      value={draftFilters.allocation_to_date}
                       onChange={(date) =>
-                        setDraftFilters((prev) => ({ ...prev, allocation_date: date }))
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          allocation_to_date: date,
+                        }))
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={{
@@ -957,18 +1140,18 @@ export default function DocumentAllocationList() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <Select
-                      label="Document Status"
+                      label="Status"
                       placeholder="Select status"
                       searchable
                       clearable
                       size="xs"
-                      data={[
-                        { value: "POSTED", label: "POSTED" },
-                        { value: "DRAFT", label: "DRAFT" },
-                      ]}
+                      data={STATUS_FILTER_OPTIONS}
                       value={draftFilters.document_status}
                       onChange={(value) =>
-                        setDraftFilters((prev) => ({ ...prev, document_status: value || null }))
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          document_status: value || null,
+                        }))
                       }
                       classNames={erpListGeistSelectClassNames}
                       styles={filterFieldStyles}

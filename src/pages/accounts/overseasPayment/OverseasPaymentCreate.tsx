@@ -663,6 +663,7 @@ export default function OverseasPaymentCreate({
     payment_no?: string;
     document_no?: string;
     status?: string;
+    jv_no?: string | null;
   } | null>(null);
   const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
     null,
@@ -1001,6 +1002,10 @@ export default function OverseasPaymentCreate({
         payment_no: docNo,
         document_no: docNo,
         status: (paymentFromState.status ?? "UNPOSTED").toString(),
+        jv_no:
+          paymentFromState.jv_no != null && String(paymentFromState.jv_no).trim()
+            ? String(paymentFromState.jv_no).trim()
+            : null,
       });
     }
 
@@ -2182,6 +2187,10 @@ export default function OverseasPaymentCreate({
             payment_no: res.payment_no ?? saveResponse.payment_no ?? "",
             document_no: saveResponse.document_no ?? "",
             status: res.status != null ? String(res.status) : "UNPOSTED",
+            jv_no:
+              res.jv_no != null && String(res.jv_no).trim()
+                ? String(res.jv_no).trim()
+                : saveResponse.jv_no ?? null,
           });
           setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
           if (Array.isArray(res.documents) && res.documents.length > 0) {
@@ -2222,6 +2231,10 @@ export default function OverseasPaymentCreate({
             payment_no: data.payment_no ?? "",
             document_no: data.payment_no ?? "",
             status: data.status != null ? String(data.status) : "UNPOSTED",
+            jv_no:
+              data.jv_no != null && String(data.jv_no).trim()
+                ? String(data.jv_no).trim()
+                : null,
           });
           if (
             data.parties &&
@@ -2383,6 +2396,10 @@ export default function OverseasPaymentCreate({
           payment_no: res.payment_no ?? prev?.payment_no ?? "",
           document_no: prev?.document_no ?? "",
           status: res.status != null ? String(res.status) : "POSTED",
+          jv_no:
+            res.jv_no != null && String(res.jv_no).trim()
+              ? String(res.jv_no).trim()
+              : prev?.jv_no ?? null,
         }));
         setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
 
@@ -2426,6 +2443,8 @@ export default function OverseasPaymentCreate({
   const reversalStatusUpper = String(
     reversePaymentSaveResponse?.status ?? "",
   ).toUpperCase();
+  const foreignExchangeJvNo = String(saveResponse?.jv_no ?? "").trim();
+  const showForeignExchangeGainLossButton = Boolean(foreignExchangeJvNo);
   const isViewRoute = pathname.includes("/view");
   const isReadOnly =
     isViewRoute ||
@@ -4016,6 +4035,16 @@ export default function OverseasPaymentCreate({
           </Modal>
 
           <Group justify="flex-end" mt="xl">
+            {showForeignExchangeGainLossButton ? (
+              <Button
+                size="sm"
+                variant="outline"
+                color="#105476"
+                onClick={() => void onDocumentNoClick(foreignExchangeJvNo)}
+              >
+                Foreign exchange gain/loss
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"

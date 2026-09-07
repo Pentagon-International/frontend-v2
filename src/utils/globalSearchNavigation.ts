@@ -72,11 +72,21 @@ export const fetchGlobalSearchModuleRecord = async (
       ? Number(recordId)
       : recordId;
 
-  const payload = {
-    filters: {
-      [filterIdKey]: normalizedFilterValue,
-    },
+  const moduleLower = module.toLowerCase();
+  const filters: Record<string, unknown> = {
+    [filterIdKey]: normalizedFilterValue,
   };
+  // Payment/receipt list APIs scope domestic vs overseas with is_agent.
+  if (
+    moduleLower === "overseas_payment" ||
+    moduleLower === "overseas_receipt"
+  ) {
+    filters.is_agent = true;
+  } else if (moduleLower === "payment" || moduleLower === "receipt") {
+    filters.is_agent = false;
+  }
+
+  const payload = { filters };
 
   const res = await apiCallProtected.post(apiEndpoint, payload, API_HEADER);
   const raw = (res as { data?: unknown })?.data ?? res;
@@ -343,7 +353,8 @@ export const navigateFromGlobalSearchDocumentNo = async (
     }
 
     return "multiple";
-  } catch {
+  } catch (err) {
+    console.error("Global search document navigation failed:", err);
     return "error";
   }
 };

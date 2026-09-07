@@ -111,6 +111,7 @@ import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvo
 import {
   buildJobCreatePayloadFromBooking,
   fetchJobRecordByDetailsId,
+  prepareHouseDocumentIdsFromBooking,
 } from "../../../utils/bookingCreateJob";
 import {  } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
@@ -2448,7 +2449,8 @@ function AirExportJobCreate() {
       const newHouses: Record<string, unknown>[] = [];
       const linkedBookingIds: number[] = [];
 
-      bookingResponses.forEach((bookingRes, index) => {
+      for (let index = 0; index < bookingResponses.length; index += 1) {
+        const bookingRes = bookingResponses[index];
         const bookingId = selectedIds[index];
         const bookingDetail =
           (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
@@ -2456,20 +2458,23 @@ function AirExportJobCreate() {
           Array.isArray(bookingDetail) ? bookingDetail[0] : bookingDetail
         ) as Record<string, unknown>;
 
+        const houseDocumentIds =
+          await prepareHouseDocumentIdsFromBooking(bookingRecord);
         const payload = buildJobCreatePayloadFromBooking(
           bookingRecord,
           "air-export",
+          { houseDocumentIds },
         );
         const mappedHousing = Array.isArray(payload.housing_details)
           ? payload.housing_details[0]
           : null;
         if (!mappedHousing || typeof mappedHousing !== "object") {
-          return;
+          continue;
         }
 
         newHouses.push(mappedHousing as Record<string, unknown>);
         linkedBookingIds.push(bookingId);
-      });
+      }
 
       if (newHouses.length === 0) {
         ToastNotification({

@@ -150,7 +150,11 @@ import {
   extractHouseDocumentFields,
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
-import { buildJobCreatePayloadFromBooking, fetchJobRecordByDetailsId } from "../../../utils/bookingCreateJob";
+import {
+  buildJobCreatePayloadFromBooking,
+  fetchJobRecordByDetailsId,
+  prepareHouseDocumentIdsFromBooking,
+} from "../../../utils/bookingCreateJob";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
@@ -3077,7 +3081,8 @@ function ExportJobCreate() {
       const newHouses: Record<string, unknown>[] = [];
       const linkedBookingIds: number[] = [];
 
-      bookingResponses.forEach((bookingRes, index) => {
+      for (let index = 0; index < bookingResponses.length; index += 1) {
+        const bookingRes = bookingResponses[index];
         const bookingId = selectedIds[index];
         const bookingDetail =
           (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
@@ -3086,15 +3091,18 @@ function ExportJobCreate() {
             ? bookingDetail[0]
             : bookingDetail) as Record<string, unknown>;
 
+        const houseDocumentIds =
+          await prepareHouseDocumentIdsFromBooking(bookingRecord);
         const payload = buildJobCreatePayloadFromBooking(
           bookingRecord,
           "ocean-export",
+          { houseDocumentIds },
         );
         const mappedHousing = Array.isArray(payload.housing_details)
           ? payload.housing_details[0]
           : null;
         if (!mappedHousing || typeof mappedHousing !== "object") {
-          return;
+          continue;
         }
 
         const oceanHousing = {
@@ -3131,7 +3139,7 @@ function ExportJobCreate() {
 
         newHouses.push(oceanHousing);
         linkedBookingIds.push(bookingId);
-      });
+      }
 
       if (newHouses.length === 0) {
         ToastNotification({

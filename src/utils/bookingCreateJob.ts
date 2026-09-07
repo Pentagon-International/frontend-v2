@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import { apiCallProtected } from "../api/axios";
 import { URL } from "../api/serverUrls";
 import { getAPICall } from "../service/getApiCall";
+import { postAPICall } from "../service/postApiCall";
 import { API_HEADER } from "../store/storeKeys";
 import useAuthStore from "../store/authStore";
 import { ToastNotification } from "../components";
@@ -11,7 +12,10 @@ import {
   sellLocalAmountForPayload,
 } from "./houseChargeAmounts";
 import {
-  parseJobDocumentsFromApi,
+  extractUploadDocumentsFromApiBody,
+  isDocumentUploadSuccessful,
+  mapUploadDocumentsToDisplayList,
+  unwrapPostApiResponseBody,
 } from "./jobDocuments";
 import {
   bindMoneyWholeNumberMode,
@@ -570,20 +574,103 @@ function getBookingIdsFromBooking(booking: Record<string, unknown>): number[] {
   return Number.isFinite(n) && n > 0 ? [n] : [];
 }
 
-/** Booking documents belong on the single housing row in job create payload. */
+type JobCreateFromBookingDocOptions = {
+  /** Fresh job-upload document ids (cloned from booking attachments). */
+  houseDocumentIds?: number[];
+};
+
+/**
+ * House `document_ids` for job create — ids returned from
+ * `prepareHouseDocumentIdsFromBooking` (booking source ids are already attached).
+ */
 function mapBookingDocumentsForHousingPayload(
-  booking: Record<string, unknown>,
+  _booking: Record<string, unknown>,
+  houseDocumentIds?: number[],
 ): { document_ids: number[] } | Record<string, never> {
-  const { document_ids } = parseJobDocumentsFromApi(booking);
-  // Only attach when booking already has documents (omit empty on job create-from-booking)
-  if (document_ids.length === 0) return {};
-  return { document_ids };
+  if (!houseDocumentIds || houseDocumentIds.length === 0) return {};
+  return {
+    document_ids: houseDocumentIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0),
+  };
+}
+
+function getBookingDocumentRows(
+  booking: Record<string, unknown>,
+): Array<Record<string, unknown>> {
+  return Array.isArray(booking.documents)
+    ? (booking.documents as Array<Record<string, unknown>>).filter(
+        (doc) => doc.id != null,
+      )
+    : [];
+}
+
+/**
+ * Copy booking attachments into the job document store the same way PRQ docs
+ * are carried into supplier invoice: reference existing `document_id`s on the
+ * upload FormData (no file GET / re-download). Backend returns ids that can be
+ * attached on the house row.
+ */
+export async function prepareHouseDocumentIdsFromBooking(
+  booking: Record<string, unknown>,
+): Promise<number[]> {
+  const documents = getBookingDocumentRows(booking);
+  if (documents.length === 0) return [];
+
+  const formData = new FormData();
+  let index = 0;
+  for (const doc of documents) {
+    const sourceId = Number(doc.id);
+    if (!Number.isFinite(sourceId) || sourceId <= 0) continue;
+
+    const documentName =
+      String(doc.document_name ?? doc.doc_name ?? doc.user_file_name ?? "")
+        .trim() || `document-${sourceId}`;
+    const docCode = String(doc.doc_code ?? "").trim();
+
+    // Same multipart shape as JobDocumentsModal / PRQ→SIN: names + document_id,
+    // without downloading the file via GET.
+    formData.append(`document_names[${index}]`, documentName);
+    formData.append(`doc_code[${index}]`, docCode);
+    formData.append(`document_id[${index}]`, String(sourceId));
+    index += 1;
+  }
+
+  if (index === 0) return [];
+
+  const rawResponse = await postAPICall(URL.jobCreateUploadDocument, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...API_HEADER.headers,
+    },
+  });
+  const body = unwrapPostApiResponseBody(rawResponse);
+  if (!isDocumentUploadSuccessful(body)) {
+    throw new Error(
+      String(body.message ?? "").trim() ||
+        "Failed to attach booking documents for job create",
+    );
+  }
+
+  const uploadedIds = mapUploadDocumentsToDisplayList(
+    extractUploadDocumentsFromApiBody(body),
+  )
+    .map((d) => d.id)
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (uploadedIds.length === 0) {
+    throw new Error(
+      "Booking documents were uploaded but no document ids were returned for job attach.",
+    );
+  }
+
+  return uploadedIds;
 }
 
 export async function resolveBookingRecordForJobCreate(
   booking: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (parseJobDocumentsFromApi(booking).document_ids.length > 0) {
+  if (getBookingDocumentRows(booking).length > 0) {
     return booking;
   }
 
@@ -616,7 +703,11 @@ export async function resolveBookingRecordForJobCreate(
   }
 }
 
-function buildAirHousing(booking: Record<string, unknown>, trade: string) {
+function buildAirHousing(
+  booking: Record<string, unknown>,
+  trade: string,
+  houseDocumentIds?: number[],
+) {
   return {
     hawb_no: resolveBookingHouseNumber(booking),
     origin_code: booking.origin_code || booking.origin_code_read || "",
@@ -660,7 +751,7 @@ function buildAirHousing(booking: Record<string, unknown>, trade: string) {
       ? mapHouseChargesFromBooking(booking, true)
       : [],
     events: mapBookingEventsForJob(booking),
-    ...mapBookingDocumentsForHousingPayload(booking),
+    ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
   };
 }
 
@@ -668,6 +759,7 @@ function buildOceanHousing(
   booking: Record<string, unknown>,
   trade: string,
   mode: BookingCreateJobMode,
+  houseDocumentIds?: number[],
 ) {
   const housing: Record<string, unknown> = {
     hbl_number: resolveBookingHouseNumber(booking),
@@ -710,7 +802,7 @@ function buildOceanHousing(
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
     cargo_details: mapCargoDetails(booking),
     events: mapBookingEventsForJob(booking),
-    ...mapBookingDocumentsForHousingPayload(booking),
+    ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
   };
 
   const profile = getOceanBookingChargeProfile(mode, booking);
@@ -725,8 +817,10 @@ function buildOceanHousing(
 export function buildJobCreatePayloadFromBooking(
   booking: Record<string, unknown>,
   mode: BookingCreateJobMode,
+  options?: JobCreateFromBookingDocOptions,
 ): Record<string, unknown> {
   syncBookingJobMoneyMode();
+  const houseDocumentIds = options?.houseDocumentIds;
   const isInlandExport = mode === "inland-export";
   const isInlandImport = mode === "inland-import";
   const isInland = isInlandExport || isInlandImport;
@@ -782,11 +876,13 @@ export function buildJobCreatePayloadFromBooking(
             mode === "air-export" || mode === "inland-export"
               ? "Re Export"
               : "Import",
+            houseDocumentIds,
           )
         : buildOceanHousing(
             booking,
             mode === "ocean-export" ? "Export" : "Import",
             mode,
+            houseDocumentIds,
           ),
     ],
   };
@@ -882,7 +978,11 @@ export async function createJobFromBooking(
   onStart?.();
   try {
     const bookingForPayload = await resolveBookingRecordForJobCreate(booking);
-    const payload = buildJobCreatePayloadFromBooking(bookingForPayload, mode);
+    const houseDocumentIds =
+      await prepareHouseDocumentIdsFromBooking(bookingForPayload);
+    const payload = buildJobCreatePayloadFromBooking(bookingForPayload, mode, {
+      houseDocumentIds,
+    });
     const response = (await apiCallProtected.post(
       URL.jobCreate,
       payload,

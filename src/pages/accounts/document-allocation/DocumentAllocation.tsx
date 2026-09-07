@@ -38,7 +38,10 @@ import {
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
-import { useGlobalSearchDocumentNavigation } from "../../../hooks/useGlobalSearchDocumentNavigation";
+import {
+  clickableAdjustmentDocumentNoStyles,
+  useGlobalSearchDocumentNavigation,
+} from "../../../hooks/useGlobalSearchDocumentNavigation";
 import dayjs from "dayjs";
 
 type CoaItem = {
@@ -1095,7 +1098,20 @@ export default function DocumentAllocation() {
                   <FormTextInput
                     value={row.document_no ?? ""}
                     readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
+                    title={
+                      String(row.document_no ?? "").trim()
+                        ? "Open document"
+                        : undefined
+                    }
+                    onClick={() => {
+                      const documentNo = String(row.document_no ?? "").trim();
+                      if (documentNo) void onDocumentNoClick(documentNo);
+                    }}
+                    styles={
+                      String(row.document_no ?? "").trim()
+                        ? clickableAdjustmentDocumentNoStyles
+                        : { input: readOnlyInputStyles.input }
+                    }
                     format="normal"
                   />
                 </Grid.Col>
@@ -1560,9 +1576,26 @@ export default function DocumentAllocation() {
                                       placeholder="Document Number"
                                       value={row.document_no ?? ""}
                                       readOnly
-                                      styles={{
-                                        input: readOnlyInputStyles.input,
+                                      title={
+                                        String(row.document_no ?? "").trim()
+                                          ? "Open document"
+                                          : undefined
+                                      }
+                                      onClick={() => {
+                                        const documentNo = String(
+                                          row.document_no ?? "",
+                                        ).trim();
+                                        if (documentNo) {
+                                          void onDocumentNoClick(documentNo);
+                                        }
                                       }}
+                                      styles={
+                                        String(row.document_no ?? "").trim()
+                                          ? clickableAdjustmentDocumentNoStyles
+                                          : {
+                                              input: readOnlyInputStyles.input,
+                                            }
+                                      }
                                       format="normal"
                                     />
                                   </Grid.Col>
