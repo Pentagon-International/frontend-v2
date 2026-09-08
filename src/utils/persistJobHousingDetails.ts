@@ -236,25 +236,69 @@ function mapHouseChargeForPayload(
   };
 }
 
+type HouseChargePayloadKey = "mawb_charges" | "mbl_charges";
+
+function pickRawHouseCharges(
+  house: Record<string, unknown>,
+  chargeKey: HouseChargePayloadKey,
+): unknown[] | null {
+  const charges = house.charges;
+  const mawbCharges = house.mawb_charges;
+  const mblCharges = house.mbl_charges;
+
+  // Form state writes the latest lines onto `charges`. Prefer that, then the
+  // API alias for this mode, then the other alias.
+  if (chargeKey === "mawb_charges") {
+    if (Array.isArray(charges)) return charges;
+    if (Array.isArray(mawbCharges)) return mawbCharges;
+    if (Array.isArray(mblCharges)) return mblCharges;
+    return null;
+  }
+
+  if (Array.isArray(mblCharges)) return mblCharges;
+  if (Array.isArray(charges)) return charges;
+  return null;
+}
+
+function omitHouseChargeAliases(
+  house: Record<string, unknown>,
+): Record<string, unknown> {
+  const {
+    charges: _charges,
+    mbl_charges: _mblCharges,
+    mawb_charges: _mawbCharges,
+    ...rest
+  } = house;
+  return rest;
+}
+
+function mapHouseChargeRows(rawCharges: unknown[]): Record<string, unknown>[] {
+  return (rawCharges as Record<string, unknown>[])
+    .map(mapHouseChargeForPayload)
+    .filter((row): row is Record<string, unknown> => row != null);
+}
+
 function sanitizeHousingDetailsForPayload(
   housingDetails: unknown[],
+  chargeKey: HouseChargePayloadKey = "mbl_charges",
 ): unknown[] {
   return housingDetails.map((house) => {
     if (!house || typeof house !== "object" || Array.isArray(house)) {
       return house;
     }
     const h = house as Record<string, unknown>;
-    const rawCharges = Array.isArray(h.mbl_charges)
-      ? h.mbl_charges
-      : Array.isArray(h.charges)
-        ? h.charges
-        : null;
+    const rawCharges = pickRawHouseCharges(h, chargeKey);
+
+    // Air jobs accept house charges only on `mawb_charges`.
+    if (chargeKey === "mawb_charges") {
+      const rest = omitHouseChargeAliases(h);
+      if (!rawCharges) return rest;
+      return { ...rest, mawb_charges: mapHouseChargeRows(rawCharges) };
+    }
+
     if (!rawCharges) return house;
 
-    const mapped = (rawCharges as Record<string, unknown>[])
-      .map(mapHouseChargeForPayload)
-      .filter((row): row is Record<string, unknown> => row != null);
-
+    const mapped = mapHouseChargeRows(rawCharges);
     return {
       ...h,
       mbl_charges: mapped,
@@ -361,7 +405,10 @@ export function buildFullJobUpdatePayloadFromHouseNav(
         : (job.igm_no ?? null),
     igm_date: formatDateYmd(mbl.igm_date ?? job.igm_date),
     ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
-    housing_details: sanitizeHousingDetailsForPayload(updatedHousingDetails),
+    housing_details: sanitizeHousingDetailsForPayload(
+      updatedHousingDetails,
+      isAir ? "mawb_charges" : "mbl_charges",
+    ),
   };
 
   const routings = Array.isArray(state.routings)

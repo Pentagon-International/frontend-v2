@@ -3197,7 +3197,14 @@ function AirExportJobCreate() {
               haz: c.haz === "Yes",
             })),
             mawb_charges: (() => {
-              const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
+              const chargeSource =
+                hawb.charges ??
+                (hawb.mawb_charges as typeof hawb.charges | undefined) ??
+                (
+                  hawb as { mbl_charges?: typeof hawb.charges }
+                ).mbl_charges ??
+                [];
+              const meaningful = getMeaningfulHouseCharges(chargeSource);
               if (meaningful.length === 0) return [];
               return meaningful.map((charge) => ({
                 ...(charge.id != null &&

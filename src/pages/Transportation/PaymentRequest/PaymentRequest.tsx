@@ -24,9 +24,7 @@ import { Dropzone } from "@mantine/dropzone";
 import {
   IconArrowLeft,
   IconCheck,
-  IconChevronDown,
   IconChevronRight,
-  IconChevronUp,
   IconDotsVertical,
   IconDownload,
   IconFileInvoice,
@@ -56,7 +54,6 @@ import {
   mapJobCreateDropdownOptions,
 } from "../../../utils/jobCreateDropdown";
 import useAuthStore from "../../../store/authStore";
-import useDateFormat from "../../../hooks/useDateFormat";
 import {
   getBranchGstNo,
   getDefaultBranchCountryCode,
@@ -81,7 +78,10 @@ import {
 } from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
-import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import {
+  appendEditPageAuditPatch,
+  mergeEditPageAuditSources,
+} from "../../../utils/editPageAuditInfo";
 import {
   collectPartyGstOptions,
   extractPartyTdsSectionsFromRecord,
@@ -422,6 +422,12 @@ type SaveResponse = {
 type PaymentRequestFromApi = {
   id?: number;
   request_no?: string;
+  created_by?: string;
+  created_by_name?: string;
+  created_at?: string | null;
+  updated_by?: string;
+  updated_by_name?: string;
+  updated_at?: string | null;
   job_reference?: string;
   crj_number?: string;
   approved_by?: string;
@@ -571,13 +577,24 @@ const buildPaymentRequestFormData = (
 };
 
 const PAYMENT_TYPE_OPTIONS = [
-  { value: "Bank", label: "BANK" },
-  { value: "CASH", label: "CASH" },
-  { value: "PDC", label: "PDC" },
-  { value: "ONLINE TRANSFER", label: "ONLINE TRANSFER" },
-  { value: "DD/PO", label: "DD/PO" },
-  { value: "TT", label: "TT" },
+  { value: "Bank", label: "Bank" },
+  { value: "CASH", label: "Cash" },
+  { value: "PDC", label: "Pdc" },
+  { value: "ONLINE TRANSFER", label: "Online Transfer" },
+  { value: "DD/PO", label: "Dd/Po" },
+  { value: "TT", label: "Tt" },
 ];
+
+function normalizePaymentTypeValue(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const match = PAYMENT_TYPE_OPTIONS.find(
+    (option) =>
+      option.value.toLowerCase() === raw.toLowerCase() ||
+      option.label.toLowerCase() === raw.toLowerCase(),
+  );
+  return match?.value ?? raw;
+}
 
 const VOUCHER_TYPE_OPTIONS = [
   { value: "SEA EXPORTS", label: "Sea Exports" },
@@ -864,7 +881,6 @@ function PaymentRequest() {
     navigateFinanceReturn(navigate, location.state);
   }, [navigate, location.state]);
   const user = useAuthStore((state) => state.user);
-  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -913,6 +929,9 @@ function PaymentRequest() {
     Record<number, boolean>
   >({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [chargesTabActive, setChargesTabActive] = useState("charges");
   const [gstBreakup, setGstBreakup] = useState<PaymentRequestTaxBreakup | null>(
     null,
@@ -952,7 +971,6 @@ function PaymentRequest() {
     null,
   );
   const [partyAddresses, setPartyAddresses] = useState<PartyAddressLike[]>([]);
-  const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
   const isUpdate =
@@ -2169,6 +2187,7 @@ function PaymentRequest() {
             request_no: d.request_no ?? prev?.request_no ?? "",
             status: d.status ?? prev?.status,
           }));
+          setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
 
           if (d.request_no) {
             form.setFieldValue("request_no", d.request_no);
@@ -2224,6 +2243,8 @@ function PaymentRequest() {
               request_no: d.request_no ?? "",
               status: d.status,
             });
+            setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
+            setPaymentRequestDataFromApi(d);
             setAccountNameDisplay(
               ((d as any).account_name ?? d.account_code ?? "").toString() ||
                 null,
@@ -2245,7 +2266,7 @@ function PaymentRequest() {
               proforma_invoice_no_1: d.proforma_inv_no ?? "",
               proforma_invoice_no_2: form.values.proforma_invoice_no_2,
               proforma_invoice_date: normalizeDate(d.proforma_inv_date),
-              payment_type: d.payment_type ?? "",
+              payment_type: normalizePaymentTypeValue(d.payment_type),
               voucher_type: d.vouchar_type ?? "",
               cinv: d.CINV ?? false,
               actual_invoice_no: d.actual_inv_no ?? "",
@@ -2330,7 +2351,7 @@ function PaymentRequest() {
       proforma_invoice_no_1: d.proforma_inv_no ?? "",
       proforma_invoice_no_2: "",
       proforma_invoice_date: normalizeDate(d.proforma_inv_date),
-      payment_type: d.payment_type ?? "",
+      payment_type: normalizePaymentTypeValue(d.payment_type),
       voucher_type: d.vouchar_type ?? "",
       cinv: d.CINV ?? false,
       actual_invoice_no: d.actual_inv_no ?? "",
@@ -2366,13 +2387,16 @@ function PaymentRequest() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId, isEditOrViewMode, paymentRequestDataFromApi]);
 
+  const showAuditInfo =
+    isEditOrViewMode || Boolean(saveResponse?.id) || Boolean(auditPatch);
   const paymentRequestAuditSource = useMemo(
     () =>
       mergeEditPageAuditSources(
         paymentRequestDataFromApi as Record<string, unknown> | null,
         saveResponse as Record<string, unknown> | null,
+        auditPatch,
       ),
-    [paymentRequestDataFromApi, saveResponse],
+    [paymentRequestDataFromApi, saveResponse, auditPatch],
   );
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -2407,11 +2431,12 @@ function PaymentRequest() {
         {/* ── Page header ── */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <EditPageHeadingRow
-            visible={isEditOrViewMode && Boolean(paymentRequestAuditSource)}
+            visible={showAuditInfo && Boolean(paymentRequestAuditSource)}
             auditSource={paymentRequestAuditSource}
             animateKey={
               (paymentRequestAuditSource as { id?: number })?.id ?? requestId
             }
+            ariaLabel="Payment request audit info"
           >
             <Text size="xl" fw={600} c="#105476">
               Payment Request
@@ -2708,143 +2733,6 @@ function PaymentRequest() {
               : undefined
           }
         >
-          {/* ── Reference Information Panel ── */}
-          <Box
-            mb="lg"
-            style={{
-              borderRadius: 8,
-              border: "1px solid #cce4f0",
-              overflow: "hidden",
-            }}
-          >
-            {/* Header bar */}
-            <Box px="md" py="xs" style={{ backgroundColor: "#105476" }}>
-              <Group justify="space-between" align="center" wrap="nowrap">
-                <Text
-                  size="xs"
-                  fw={600}
-                  c="white"
-                  style={{
-                    fontFamily: "Inter",
-                    letterSpacing: "0.8px",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Reference Information
-                </Text>
-                <Button
-                  variant="subtle"
-                  color="white"
-                  size="compact-xs"
-                  px={4}
-                  onClick={() => setIsReferenceInfoOpen((prev) => !prev)}
-                  styles={{
-                    root: { minWidth: 24, height: 24 },
-                  }}
-                >
-                  {isReferenceInfoOpen ? (
-                    <IconChevronUp size={16} />
-                  ) : (
-                    <IconChevronDown size={16} />
-                  )}
-                </Button>
-              </Group>
-            </Box>
-
-            {/* Fields grid */}
-            {isReferenceInfoOpen && (
-              <Box p="md" style={{ backgroundColor: "#f8fcff" }}>
-                <Grid columns={12} gutter="sm">
-                  {(
-                    [
-                      {
-                        label: "Reference No:",
-                        value: form.values.job_reference_1,
-                      },
-                      {
-                        label: "Payment / CRJ DID",
-                        value: form.values.payment_crj_did,
-                      },
-                      {
-                        label: "Rejected Request No",
-                        value: form.values.rejected_request_no,
-                      },
-                      {
-                        label: "Approved By",
-                        value: form.values.approved_by_1,
-                      },
-                      {
-                        label: "Approved Date",
-                        value: form.values.approved_date
-                          ? (() => {
-                              const d = normalizeDate(
-                                form.values.approved_date,
-                              );
-                              return d ? dayjs(d).format(dateFormat) : "—";
-                            })()
-                          : "—",
-                      },
-                      {
-                        label: "Prepared By",
-                        value: form.values.prepared_by_1,
-                      },
-                    ] as {
-                      label: string;
-                      value: string;
-                      alwaysShow?: boolean;
-                    }[]
-                  )
-                    .filter(
-                      ({ value, alwaysShow }) =>
-                        alwaysShow ||
-                        (value != null &&
-                          String(value).trim() !== "" &&
-                          String(value) !== "—"),
-                    )
-                    .map(({ label, value }) => (
-                      <Grid.Col key={label} span={4}>
-                        <Box
-                          p="sm"
-                          style={{
-                            display: "flex",
-                            flexDirection: "row",
-                            backgroundColor: "white",
-                            borderRadius: 6,
-                            border: "1px solid #e3f2fc",
-                            gap: "10px",
-                          }}
-                        >
-                          <Text
-                            size="xs"
-                            c="dimmed"
-                            fw={500}
-                            mb={4}
-                            style={{
-                              fontFamily: "Inter",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {label}
-                            {" : "}
-                          </Text>
-                          <Text
-                            size="sm"
-                            fw={value && value !== "—" ? 600 : 400}
-                            c={value && value !== "—" ? "#105476" : "dimmed"}
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            {value || "—"}
-                          </Text>
-                        </Box>
-                      </Grid.Col>
-                    ))}
-                </Grid>
-              </Box>
-            )}
-          </Box>
-
           <Grid columns={12} gutter="md">
             {/* ── Row 1 (3+3+3+3): Date | Payment Type | Voucher Type | CINV ── */}
             <Grid.Col span={2}>
@@ -2985,10 +2873,10 @@ function PaymentRequest() {
 
             <Grid.Col span={2}>
               <SearchableSelect
-                label="Account Name"
+                label="Party Name"
                 placeholder={
                   form.values.paid_to_type
-                    ? "Type to search account name"
+                    ? "Type to search party name"
                     : "Select paid to type first"
                 }
                 apiEndpoint={
@@ -3073,6 +2961,41 @@ function PaymentRequest() {
 
             <Grid.Col span={2}>
               <Dropdown
+                label="State"
+                placeholder={isStateLoading ? "Loading..." : "Select state"}
+                data={stateOptions}
+                value={form.values.state_code_1 || null}
+                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
+                searchable
+                disabled={isStateLoading || isReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            {isIndiaUser ? (
+              <Grid.Col span={2}>
+                <Dropdown
+                  label="TDS Section Code"
+                  placeholder={
+                    isTdsSectionLoading ? "Loading..." : "Select TDS section"
+                  }
+                  data={tdsSectionOptions}
+                  value={form.values.tds_section_code || null}
+                  onChange={(v) =>
+                    form.setFieldValue("tds_section_code", v ?? "")
+                  }
+                  searchable
+                  clearable
+                  disabled={
+                    isTdsSectionLoading || isReadOnly || !isPaidToSelected
+                  }
+                  styles={inputStyles}
+                />
+              </Grid.Col>
+            ) : null}
+
+            <Grid.Col span={1}>
+              <Dropdown
                 key={`currency-${form.values.currency}`}
                 label="Currency"
                 placeholder="Select currency"
@@ -3130,23 +3053,6 @@ function PaymentRequest() {
               />
             </Grid.Col>
 
-            <Grid.Col span={2}>
-              <Dropdown
-                label="CINV"
-                placeholder="Select"
-                data={[
-                  { value: "Yes", label: "Yes" },
-                  { value: "No", label: "No" },
-                ]}
-                value={form.values.cinv ? "Yes" : "No"}
-                onChange={(value) =>
-                  form.setFieldValue("cinv", value === "Yes")
-                }
-                readOnly={isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
-
             {/* ── Row 4 (2+4+2+2+2): Paid To Type | Paid To | Not Over | Approved | (spacer) ── */}
 
             <Grid.Col span={2}>
@@ -3182,43 +3088,7 @@ function PaymentRequest() {
               />
             </Grid.Col> */}
 
-            {/* ── Row 5 (6+6): State Code | TDS Section Code ── */}
-            <Grid.Col span={2}>
-              <Dropdown
-                label="State"
-                placeholder={isStateLoading ? "Loading..." : "Select state"}
-                data={stateOptions}
-                value={form.values.state_code_1 || null}
-                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
-                searchable
-                disabled={isStateLoading || isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
-
-            {isIndiaUser ? (
-              <Grid.Col span={2}>
-                <Dropdown
-                  label="TDS Section Code"
-                  placeholder={
-                    isTdsSectionLoading ? "Loading..." : "Select TDS section"
-                  }
-                  data={tdsSectionOptions}
-                  value={form.values.tds_section_code || null}
-                  onChange={(v) =>
-                    form.setFieldValue("tds_section_code", v ?? "")
-                  }
-                  searchable
-                  clearable
-                  disabled={
-                    isTdsSectionLoading || isReadOnly || !isPaidToSelected
-                  }
-                  styles={inputStyles}
-                />
-              </Grid.Col>
-            ) : null}
-
-            {/* ── Row 6 (3+3+3+3): Notes ── */}
+            {/* ── Notes ── */}
             <Grid.Col span={2}>
               <Textarea
                 label="Accountant Note"
@@ -3419,7 +3289,7 @@ function PaymentRequest() {
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
-                    <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={isReadOnly ? 1.76 : 1.48} style={{ fontSize: "13px" }}>
                       Job Id
                     </Grid.Col>
                     {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
@@ -3437,19 +3307,19 @@ function PaymentRequest() {
                     <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
                       Subledger
                     </Grid.Col>
-                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                       ROE
                     </Grid.Col>
-                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
                       Unit
                     </Grid.Col>
-                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       No of Unit
                     </Grid.Col>
-                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Amt/Unit
                     </Grid.Col>
                     <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
@@ -3458,14 +3328,23 @@ function PaymentRequest() {
                     <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
                       Local Amt
                     </Grid.Col>
-                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       SAC Code
                     </Grid.Col>
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
               </Grid.Col> */}
                     {!isReadOnly && (
-                      <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                      <Grid.Col
+                        span={0.77}
+                        style={{
+                          fontSize: "13px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-start",
+                          paddingLeft: 2,
+                        }}
+                      >
                         Actions
                       </Grid.Col>
                     )}
@@ -3520,7 +3399,7 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Job No */}
-                      <Grid.Col span={0.98}>
+                      <Grid.Col span={isReadOnly ? 1.76 : 1.48}>
                         {isJobChargesPrefillFlow ? (
                           <Dropdown
                             placeholder="Select job id"
@@ -3860,7 +3739,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Currency */}
-                      <Grid.Col span={0.9}>
+                      <Grid.Col span={0.7}>
                         <Dropdown
                           placeholder="Curr."
                           searchable
@@ -3916,7 +3795,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* ROE */}
-                      <Grid.Col span={0.5}>
+                      <Grid.Col span={0.6}>
                         <NumberInput
                           placeholder="ROE"
                           min={0}
@@ -3952,7 +3831,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Unit */}
-                      <Grid.Col span={0.9}>
+                      <Grid.Col span={0.7}>
                         <Dropdown
                           placeholder="Unit"
                           searchable
@@ -3980,7 +3859,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* No of Unit */}
-                      <Grid.Col span={0.65}>
+                      <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Units"
                           min={0}
@@ -4027,7 +3906,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Amount per Unit */}
-                      <Grid.Col span={0.85}>
+                      <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Amt/Unit"
                           min={0}
@@ -4180,7 +4059,14 @@ function PaymentRequest() {
 
                       {/* Actions */}
                       {!isReadOnly && (
-                        <Grid.Col span={0.7}>
+                        <Grid.Col
+                          span={0.77}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-start",
+                          }}
+                        >
                           <Group gap={4} wrap="nowrap">
                             {form.values.charges.length > 1 && (
                               <Button
@@ -4233,8 +4119,17 @@ function PaymentRequest() {
                                         (newChargeCurrency || "").toUpperCase(),
                                     )?.value ??
                                       "");
+                                  const defaultJobNo =
+                                    String(charge.job_no ?? "").trim() ||
+                                    String(
+                                      form.values.charges.find((row) =>
+                                        String(row.job_no ?? "").trim(),
+                                      )?.job_no ?? "",
+                                    ).trim() ||
+                                    prefillJobId;
                                   form.insertListItem("charges", {
                                     ...emptyCharge(),
+                                    job_no: defaultJobNo,
                                     currency: newChargeCurrency,
                                     currency_id: newChargeCurrencyId,
                                     roe,

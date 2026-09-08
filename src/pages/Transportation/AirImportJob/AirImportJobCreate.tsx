@@ -3168,8 +3168,9 @@ function AirImportJobCreate() {
           })),
           mawb_charges: (() => {
             const src =
-              (hawb as { mawb_charges?: unknown }).mawb_charges ??
               (hawb as { charges?: unknown }).charges ??
+              (hawb as { mawb_charges?: unknown }).mawb_charges ??
+              (hawb as { mbl_charges?: unknown }).mbl_charges ??
               [];
             const arr = Array.isArray(src) ? src : [];
             const meaningful = arr.filter((charge) =>
