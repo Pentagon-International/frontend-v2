@@ -3323,41 +3323,44 @@ export default function OverseasReceiptCreate({
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                       Location
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Daybook
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Type
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Account Name
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Document no
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
                       Document date
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                       Adj Curr Amount
                     </Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       Adj local amount
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                      Dr/Cr
+                    </Grid.Col>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Actions
                     </Grid.Col>
                   </Grid>
 
                   {form.values.adjustments.map((_, idx) => (
                     <Grid key={idx} w="100%" gutter="sm" mt="sm">
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <TextInput
                           placeholder="Location"
                           readOnly
@@ -3365,7 +3368,7 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <Dropdown
                           placeholder="Daybook"
                           data={daybookAdjustmentOptions}
@@ -3377,7 +3380,7 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <TextInput
                           placeholder="Type"
                           readOnly
@@ -3385,7 +3388,7 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <TextInput
                           placeholder="Account Name"
                           readOnly
@@ -3396,7 +3399,7 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <TextInput
                           placeholder="Document no"
                           readOnly
@@ -3404,7 +3407,7 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.3}>
                         {/* <Box style={reversalReadOnlyWrapperStyle}> */}
                         <SingleDateInput
                           placeholder="Document date"
@@ -3417,7 +3420,7 @@ export default function OverseasReceiptCreate({
                         />
                         {/* </Box> */}
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <Dropdown
                           placeholder="Currency"
                           data={currencyOptions}
@@ -3427,7 +3430,7 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <NumberInput
                           placeholder="Adj Curr Amount"
                           min={0}
@@ -3503,7 +3506,19 @@ export default function OverseasReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.7}>
+                        <TextInput
+                          placeholder="Dr/Cr"
+                          readOnly
+                          value={
+                            resolveAllocationDrCr(
+                              form.values.adjustments[idx],
+                            ) ?? ""
+                          }
+                          styles={adjustmentFieldStyles}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.4}>
                         <Group gap={4} wrap="nowrap">
                           {!_isReversal && (
                             <Button
