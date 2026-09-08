@@ -81,6 +81,7 @@ type SupplierInvoiceRow = Record<string, unknown> & {
   sno?: number;
   crj_number?: string;
   Inv_Crn_no?: string;
+  inv_crn_no?: string;
   agent_name?: string;
   job_id?: string;
   service_code?: string;
@@ -142,6 +143,7 @@ const LIST_KEY = "SUPPLIER_INVOICE_MASTER";
 
 type SupplierInvoiceFilters = {
   invoice_no: string;
+  Inv_Crn_no: string;
   agent_name: string;
   job_id: string;
   shipment_id: string;
@@ -153,6 +155,7 @@ type SupplierInvoiceFilters = {
 type SupplierInvoiceColumnVisibility = {
   sno: boolean;
   invoice_no: boolean;
+  Inv_Crn_no: boolean;
   agent_name: boolean;
   job_id: boolean;
   shipment_ids: boolean;
@@ -166,6 +169,7 @@ type SupplierInvoiceColumnVisibility = {
 const supplierInvoiceColumnDefault: SupplierInvoiceColumnVisibility = {
   sno: true,
   invoice_no: true,
+  Inv_Crn_no: true,
   agent_name: true,
   job_id: true,
   shipment_ids: true,
@@ -178,7 +182,8 @@ const supplierInvoiceColumnDefault: SupplierInvoiceColumnVisibility = {
 
 const supplierInvoiceColumnLabels: Record<keyof SupplierInvoiceColumnVisibility, string> = {
   sno: "S.No",
-  invoice_no: "Invoice No",
+  invoice_no: "CRJ No",
+  Inv_Crn_no: "Supplier Doc no",
   agent_name: "Agent / Supplier",
   job_id: "Job Id",
   shipment_ids: "Shipment Id",
@@ -188,6 +193,12 @@ const supplierInvoiceColumnLabels: Record<keyof SupplierInvoiceColumnVisibility,
   Inv_crn_amount: "Local Amount",
   status: "Status",
 };
+
+function getSupplierDocNo(row: SupplierInvoiceRow): string {
+  const value = row.Inv_Crn_no ?? row.inv_crn_no;
+  const text = value == null ? "" : String(value).trim();
+  return text;
+}
 
 function supplierInvoiceColumnId<T extends Record<string, unknown>>(
   col: MRT_ColumnDef<T>,
@@ -217,6 +228,7 @@ function SupplierInvoiceMaster() {
 
   const DEFAULT_FILTERS: SupplierInvoiceFilters = {
     invoice_no: "",
+    Inv_Crn_no: "",
     agent_name: "",
     job_id: "",
     shipment_id: "",
@@ -362,6 +374,8 @@ function SupplierInvoiceMaster() {
         cleaned.date_to = dayjs(value as Date).format("YYYY-MM-DD");
       } else if (key === "invoice_no" && typeof value === "string" && value.trim() !== "") {
         cleaned.crj_number = value;
+      } else if (key === "Inv_Crn_no" && typeof value === "string" && value.trim() !== "") {
+        cleaned.Inv_Crn_no = value.trim();
       } else if (typeof value === "string" && value.trim() !== "") {
         cleaned[key] = value;
       }
@@ -525,16 +539,16 @@ function SupplierInvoiceMaster() {
       },
       {
         id: "invoice_no",
-        header: "Invoice No",
+        header: "CRJ No",
         size: 160,
         accessorFn: (row) => (row.crj_number ?? "") as string,
         Header: () => (
           <ERPListColumnHeaderFilter
-            label="Invoice No"
+            label="CRJ No"
             value={appliedFilters.invoice_no}
             displayValue={appliedFilters.invoice_no}
             theme={erpTheme}
-            placeholder="Filter Invoice No"
+            placeholder="Filter CRJ No"
             isEditing={editingHeaderId === "invoice_no"}
             onStartEdit={() => openHeaderEditor("invoice_no")}
             onStopEdit={() => collapseHeaderEditor("invoice_no")}
@@ -543,6 +557,35 @@ function SupplierInvoiceMaster() {
             }
           />
         ),
+      },
+      {
+        id: "Inv_Crn_no",
+        header: "Supplier Doc no",
+        size: 170,
+        accessorFn: (row) => getSupplierDocNo(row),
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Supplier Doc no"
+            value={appliedFilters.Inv_Crn_no}
+            displayValue={appliedFilters.Inv_Crn_no}
+            theme={erpTheme}
+            placeholder="Filter Supplier Doc no"
+            isEditing={editingHeaderId === "Inv_Crn_no"}
+            onStartEdit={() => openHeaderEditor("Inv_Crn_no")}
+            onStopEdit={() => collapseHeaderEditor("Inv_Crn_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({ ...prev, Inv_Crn_no: next }))
+            }
+          />
+        ),
+        Cell: ({ row }) => {
+          const docNo = getSupplierDocNo(row.original);
+          return (
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              {docNo || "-"}
+            </Text>
+          );
+        },
       },
       {
         accessorKey: "agent_name",
@@ -1157,7 +1200,7 @@ function SupplierInvoiceMaster() {
             opened: showFilters,
             title: "Filters",
             subtitle:
-              "Refine by invoice no., agent, job id, shipment id, date range, or status",
+              "Refine by CRJ no., supplier doc no., agent, job id, shipment id, date range, or status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1174,13 +1217,32 @@ function SupplierInvoiceMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
                       format="capital"
-                      label="Invoice No"
-                      placeholder="Type Invoice No"
+                      label="CRJ No"
+                      placeholder="Type CRJ No"
                       value={draftFilters.invoice_no}
                       onChange={(e) =>
                         setDraftFilters((prev) => ({
                           ...prev,
                           invoice_no: e.currentTarget.value,
+                        }))
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      format="capital"
+                      label="Supplier Doc no"
+                      placeholder="Type Supplier Doc no"
+                      value={draftFilters.Inv_Crn_no}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          Inv_Crn_no: e.currentTarget.value,
                         }))
                       }
                       size="xs"

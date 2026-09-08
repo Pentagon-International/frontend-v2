@@ -2084,8 +2084,9 @@ export default function SupplierInvoiceCreate({
   ]);
 
   // Charges footer totals — same layout as invoice / payment request.
-  // Local total excludes GST and TDS rows. India GST uses calculated rows when
-  // present, otherwise the header CGST/SGST/IGST amounts.
+  // Local Amount Total includes GST charge rows (and header GST when those
+  // rows are absent). TDS rows stay excluded. India GST uses calculated rows
+  // when present, otherwise the header CGST/SGST/IGST amounts.
   const chargesSectionTotals = useMemo(() => {
     const netDirection = isReversal ? "crMinusDr" : "drMinusCr";
     const charges = form.values.charges_data ?? [];
@@ -2106,6 +2107,7 @@ export default function SupplierInvoiceCreate({
           row.Dr_Cr,
           netDirection,
         );
+        local += signed;
         if (gstKind === "IGST") igst += signed;
         else if (gstKind === "CGST") cgst += signed;
         else sgst += signed;
@@ -2134,6 +2136,7 @@ export default function SupplierInvoiceCreate({
         cgst = -cgst;
         sgst = -sgst;
       }
+      local += igst + cgst + sgst;
     }
 
     const vatTotal = hasChargeVat
