@@ -368,12 +368,6 @@ function parsePrqChargeLocalAmount(
   );
 }
 
-function parsePrqChargeForeignAmount(
-  charge: Record<string, unknown>,
-): number | null {
-  return parsePrqChargeAmount(charge.amount);
-}
-
 export type PrqAgentInvAmountSplit = {
   taxable_amount: number | null;
   non_taxable_amount: number | null;
@@ -387,9 +381,10 @@ export type PrqAgentInvAmountSplit = {
  * Derive the Agent INV/CRN header amounts from PRQ charges so the supplier
  * invoice mirrors the payment request without a manual GST calculation.
  *
- * GST charge rows feed the CGST/SGST/IGST fields and the remaining ("actual")
- * charges feed Taxable Amount. With no GST rows at all, the actual charge total
- * becomes the Non Taxable Amount instead. Charge rows are carried over as-is.
+ * GST charge local amounts feed the CGST/SGST/IGST fields and the remaining
+ * ("actual") charge local amounts feed Taxable Amount. With no GST rows at
+ * all, that local-amount total becomes the Non Taxable Amount instead.
+ * Charge rows are carried over as-is.
  */
 export function splitPrqChargesForSupplierInvoiceAgentInv(
   charges: unknown[],
@@ -409,25 +404,25 @@ export function splitPrqChargesForSupplierInvoiceAgentInv(
     carriedCharges.push(charge);
 
     const nameUpper = String(charge.charge_name ?? "").trim().toUpperCase();
+    const localAmount = parsePrqChargeLocalAmount(charge);
 
     if (nameUpper === PRQ_GST_CHARGE_NAME.CGST) {
-      cgst_amount = parsePrqChargeLocalAmount(charge);
+      cgst_amount = localAmount;
       continue;
     }
     if (nameUpper === PRQ_GST_CHARGE_NAME.SGST) {
-      sgst_amount = parsePrqChargeLocalAmount(charge);
+      sgst_amount = localAmount;
       continue;
     }
     if (nameUpper === PRQ_GST_CHARGE_NAME.IGST) {
-      igst_amount = parsePrqChargeLocalAmount(charge);
+      igst_amount = localAmount;
       continue;
     }
 
     if (isPrqTdsChargeRow(charge)) continue;
 
-    const amount = parsePrqChargeForeignAmount(charge);
-    if (amount != null) {
-      actualSum += amount;
+    if (localAmount != null) {
+      actualSum += localAmount;
       hasActualRow = true;
     }
   }

@@ -2378,11 +2378,16 @@ export default function SupplierInvoiceCreate({
       prData.amount != null && prData.amount !== ""
         ? parseFloat(String(prData.amount)) || null
         : null;
+    const localAmountNum =
+      prData.local_amount != null && prData.local_amount !== ""
+        ? parseFloat(String(prData.local_amount)) || null
+        : null;
 
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
+    // Taxable / non-taxable come from PRQ local amounts (GST rows still feed CGST/SGST/IGST).
     const agentInvSplit = splitPrqChargesForSupplierInvoiceAgentInv(
       charges,
-      amountNum,
+      localAmountNum ?? amountNum,
     );
     const mappedCharges: ChargeRow[] = agentInvSplit.charges.map((c) =>
       mapPaymentRequestChargeToSupplierRow(c),
@@ -2425,10 +2430,25 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("due_date", prDate);
     }
 
-    // Invoice amount
-    if (amountNum != null) {
-      form.setFieldValue("Inv_crn_amount", amountNum);
-      form.setFieldValue("approved_amount", amountNum);
+    // Invoice amount — prefer the PRQ local split (taxable/non-taxable + GST).
+    const localInvoiceAmount =
+      (agentInvSplit.taxable_amount ?? 0) +
+      (agentInvSplit.non_taxable_amount ?? 0) +
+      (agentInvSplit.cgst_amount ?? 0) +
+      (agentInvSplit.sgst_amount ?? 0) +
+      (agentInvSplit.igst_amount ?? 0);
+    const hasLocalInvoiceAmount =
+      agentInvSplit.taxable_amount != null ||
+      agentInvSplit.non_taxable_amount != null ||
+      agentInvSplit.cgst_amount != null ||
+      agentInvSplit.sgst_amount != null ||
+      agentInvSplit.igst_amount != null;
+    const invoiceAmount = hasLocalInvoiceAmount
+      ? localInvoiceAmount
+      : amountNum;
+    if (invoiceAmount != null) {
+      form.setFieldValue("Inv_crn_amount", invoiceAmount);
+      form.setFieldValue("approved_amount", invoiceAmount);
     }
 
     if (agentInvSplit.taxable_amount != null) {
