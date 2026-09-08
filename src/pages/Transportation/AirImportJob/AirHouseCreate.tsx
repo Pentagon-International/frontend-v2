@@ -589,6 +589,17 @@ function HouseCreate() {
     isJobClosed(
       (location.state?.job as { status?: string | null } | undefined)?.status,
     );
+  const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const pendingLeaveActionRef = useRef<(() => void) | null>(null);
+  const handleBackToListClick = () => {
+    const leave = () => navigate(jobModuleBasePath);
+    if (!isReadOnly) {
+      pendingLeaveActionRef.current = leave;
+      setConfirmBackToListOpen(true);
+      return;
+    }
+    leave();
+  };
 
   useEffect(() => {
     if (!isEditMode && active === 4) setActive(0);
@@ -2354,9 +2365,9 @@ function HouseCreate() {
         setActive(3);
       }
     } else if (active === 3) {
-      // Step 4: Validate charges before saving
-      if (validateStep4()) {
-        handleSave();
+      // Navigate to Accounts in edit mode; save stays on top Update
+      if (isEditMode && validateStep4()) {
+        setActive(4);
       }
     }
   };
@@ -5782,13 +5793,45 @@ function HouseCreate() {
         readOnly={isViewOnly}
       />
 
+      <Modal
+        opened={confirmBackToListOpen}
+        onClose={() => setConfirmBackToListOpen(false)}
+        title="Unsaved Changes"
+        centered
+      >
+        <Text size="sm" mb="md">
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
+        </Text>
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setConfirmBackToListOpen(false);
+              const action = pendingLeaveActionRef.current;
+              pendingLeaveActionRef.current = null;
+              if (action) action();
+              else navigate(jobModuleBasePath);
+            }}
+          >
+            Yes, close
+          </Button>
+        </Group>
+      </Modal>
+
       <Group justify="space-between" mt="xl">
         <Group gap="sm">
           <Button
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate(jobModuleBasePath)}
+            onClick={handleBackToListClick}
           >
             Back to List
           </Button>
@@ -5797,13 +5840,21 @@ function HouseCreate() {
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => {
-              if (isViewOnly) {
-                navigateToJobWithHousingList(existingHousingDetails);
-              } else {
-                navigateToJobWithHousingList(
-                  buildUpdatedHousingDetailsFromForm(),
-                );
+              const leave = () => {
+                if (isViewOnly) {
+                  navigateToJobWithHousingList(existingHousingDetails);
+                } else {
+                  navigateToJobWithHousingList(
+                    buildUpdatedHousingDetailsFromForm(),
+                  );
+                }
+              };
+              if (!isReadOnly) {
+                pendingLeaveActionRef.current = leave;
+                setConfirmBackToListOpen(true);
+                return;
               }
+              leave();
             }}
           >
             Back to Import Job
@@ -5825,23 +5876,13 @@ function HouseCreate() {
             </Button>
           )}
 
-          {active < 3 && (
+          {(active < 3 || (active === 3 && isEditMode)) && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
             >
               Next
-            </Button>
-          )}
-          {active === 3 && !isViewOnly && (
-            <Button
-              rightSection={<IconChevronRight size={16} />}
-              color="#105476"
-              loading={isSavingHouse}
-              onClick={handleNext}
-            >
-              Update
             </Button>
           )}
         </Group>

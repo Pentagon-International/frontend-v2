@@ -452,8 +452,13 @@ function AirImportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 4,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
@@ -579,8 +584,8 @@ function AirImportJobCreate() {
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Confirm before leaving so unsaved edits are not discarded silently.
+    if (!isReadOnly) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -1991,7 +1996,7 @@ function AirImportJobCreate() {
         setActive(3);
       }
     } else if (active === 3) {
-      // Save ALL current form values before submitting
+      // Save ALL current form values before navigating
       navigate(location.pathname, {
         replace: true,
         state: {
@@ -2009,7 +2014,10 @@ function AirImportJobCreate() {
           ...(location.state?.job && { job: location.state.job }),
         },
       });
-      handleSubmit();
+      // Navigate to Accounts when available; save stays on top Create/Update
+      if (jobData?.id != null) {
+        setActive(4);
+      }
     }
   };
 
@@ -3340,7 +3348,7 @@ function AirImportJobCreate() {
         navigate(`${jobModuleBasePath}/edit`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -5425,7 +5433,11 @@ function AirImportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2 || active === 3) && !isReadOnly && (
+          {(active === 1 ||
+            active === 2 ||
+            active === 3 ||
+            (active === 4 && jobData?.id != null)) &&
+            !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -5484,14 +5496,13 @@ function AirImportJobCreate() {
               Next
             </Button>
           )}
-          {active === 3 && !isReadOnly && (
+          {active === 3 && jobData?.id != null && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
-              loading={isSubmitting}
             >
-              Submit
+              Next
             </Button>
           )}
         </Group>
@@ -5500,11 +5511,12 @@ function AirImportJobCreate() {
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button

@@ -469,8 +469,13 @@ function AirExportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 5,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -608,8 +613,8 @@ function AirExportJobCreate() {
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Confirm before leaving so unsaved edits are not discarded silently.
+    if (!isReadOnly) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -1889,7 +1894,10 @@ function AirExportJobCreate() {
           ...(location.state?.job && { job: location.state.job }),
         },
       });
-      handleSubmit();
+      // Navigate to Accounts when available; save stays on top Create/Update
+      if (jobData?.id != null) {
+        setActive(5);
+      }
     }
   };
 
@@ -3304,7 +3312,7 @@ function AirExportJobCreate() {
         navigate(`${jobModuleBasePath}/edit`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -5239,7 +5247,11 @@ function AirExportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2 || active === 3 || active === 4) &&
+          {(active === 1 ||
+            active === 2 ||
+            active === 3 ||
+            active === 4 ||
+            (active === 5 && jobData?.id != null)) &&
             !isReadOnly && (
               <Button
                 leftSection={<IconChevronLeft size={16} />}
@@ -5320,15 +5332,13 @@ function AirExportJobCreate() {
               Next
             </Button>
           )}
-
-          {active === 4 && !isReadOnly && (
+          {active === 4 && jobData?.id != null && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
-              loading={isSubmitting}
             >
-              Submit
+              Next
             </Button>
           )}
         </Group>
@@ -5337,11 +5347,12 @@ function AirExportJobCreate() {
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
