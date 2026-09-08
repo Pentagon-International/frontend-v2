@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, FC, useMemo } from "react";
 import axios from "axios";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import { FilePreviewModal, isViewableFileUrl } from "./automationFilePreview";
+import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import type { VendorInvoiceRecord } from "../../../utils/vendorInvoiceAutomation";
 
 const invoiceApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}ai-workflow`,
@@ -719,6 +721,17 @@ const PayloadModal: FC<{ record: InvoiceRecord; onClose: () => void; showToast: 
   );
 };
 
+const LIST_IN_PROGRESS_STATUSES = new Set([
+  "PENDING",
+  "EXTRACTING",
+  "PROCESSING",
+  "INVOICE_CREATION_IN_PROGRESS",
+]);
+
+function isVendorInvoiceListInProgress(status?: string | null) {
+  return LIST_IN_PROGRESS_STATUSES.has(String(status ?? "").trim().toUpperCase());
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const Invoice: FC = () => {
@@ -733,7 +746,6 @@ const Invoice: FC = () => {
   const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((msg: string, type: ToastState["type"] = "info") => {
@@ -774,12 +786,28 @@ const Invoice: FC = () => {
 
   useEffect(() => { loadFiles(); }, [loadFiles]);
 
+  const hasInProgressRecord = useMemo(
+    () => allFiles.some((file) => isVendorInvoiceListInProgress(file.status)),
+    [allFiles],
+  );
+
   useEffect(() => {
-    if (!pollRef.current) {
-      pollRef.current = setInterval(loadFiles, 5000);
-    }
-    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
-  }, [loadFiles]);
+    if (!hasInProgressRecord) return;
+
+    const refreshIfVisible = () => {
+      if (document.hidden) return;
+      loadFiles();
+    };
+    const timer = setInterval(refreshIfVisible, 5000);
+    const onVisibility = () => {
+      if (!document.hidden) loadFiles();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [hasInProgressRecord, loadFiles]);
 
   const filtered = allFiles
     .filter(f => {
@@ -832,26 +860,25 @@ const Invoice: FC = () => {
     } catch { showToast("Delete failed", "error"); }
   };
 
-  const [jobLoading, setJobLoading] = useState(false);
+  const [reviewRecord, setReviewRecord] = useState<InvoiceRecord | null>(null);
 
-  const startJobs = async () => {
-    if (!selected.size) return;
-    const ids = Array.from(selected);
-    setJobLoading(true);
-    try {
-      await invoiceApi.post(
-        ALL_URL.start_job,
-        { record_ids: ids },
-        { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}` } }
-      );
-      showToast(`✅ Job started for ${ids.length} invoice(s)`, "success");
-      setSelected(new Set());
-      loadFiles();
-    } catch {
-      showToast("❌ Failed to start job", "error");
-    } finally {
-      setJobLoading(false);
+  const openReview = (record: InvoiceRecord) => {
+    const extracted = record.extracted_data ?? {};
+    if (!Object.keys(extracted).length) {
+      showToast("No extracted invoice data to review.", "error");
+      return;
     }
+    setReviewRecord(record);
+  };
+
+  const startJobs = () => {
+    if (selected.size !== 1) {
+      showToast("Select one invoice to review and start.", "error");
+      return;
+    }
+    const record = allFiles.find((file) => selected.has(file.id));
+    if (!record) return;
+    openReview(record);
   };
 
   const statuses: Array<FileStatus | ""> = ["", "pending", "processing", "done", "failed"];
@@ -892,13 +919,9 @@ const Invoice: FC = () => {
           <button
             className="btn btn-outline"
             onClick={startJobs}
-            disabled={jobLoading}
             style={{ borderColor: "var(--green)", color: "var(--green)", background: "var(--green-bg)" }}
           >
-            {jobLoading
-              ? <><span style={{ width: 13, height: 13, border: "2px solid rgba(45,122,79,.3)", borderTopColor: "var(--green)", borderRadius: "50%", animation: "inv-spin .7s linear infinite", display: "inline-block" }} /> Starting…</>
-              : <>▶ Start Job ({selected.size})</>
-            }
+            ▶ Review & Start ({selected.size})
           </button>
         )}
         <button className="btn btn-primary" onClick={() => setModal({ type: "upload" })}>＋ Upload PDFs</button>
@@ -948,7 +971,7 @@ const Invoice: FC = () => {
               const p = f.extracted_data ?? {};
               return (
                 <tr key={f.id} className={selected.has(f.id) ? "selected" : ""}
-                  onClick={() => p && Object.keys(p).length && setModal({ type: "payload", record: f })}>
+                  onClick={() => openReview(f)}>
                   <td onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(f.id)}
                       onChange={e => toggleRow(f.id, e.target.checked)} />
@@ -975,7 +998,7 @@ const Invoice: FC = () => {
                     <div className="act-row">
                       {p && Object.keys(p).length > 0 && (
                         <button className="act-btn view"
-                          onClick={() => setModal({ type: "payload", record: f })}>
+                          onClick={() => openReview(f)}>
                           ⊞ View
                         </button>
                       )}
@@ -1049,10 +1072,9 @@ const Invoice: FC = () => {
         <button
           className="bar-btn"
           onClick={startJobs}
-          disabled={jobLoading}
           style={{ background: "var(--green-bg)", color: "var(--green)", borderColor: "rgba(45,122,79,.25)" }}
         >
-          {jobLoading ? "Starting…" : "▶ Start Job"}
+          ▶ Review & Start
         </button>
         <button className="bar-btn outline" onClick={() => setSelected(new Set())}>✕ Clear</button>
       </div>
@@ -1062,9 +1084,16 @@ const Invoice: FC = () => {
       {modal?.type === "upload" && (
         <UploadModal onClose={() => setModal(null)} onUploaded={loadFiles} showToast={showToast} />
       )}
-      {modal?.type === "payload" && (
-        <PayloadModal record={modal.record} onClose={() => setModal(null)} showToast={showToast} />
-      )}
+      <VendorInvoiceAutomationModal
+        opened={reviewRecord != null}
+        shipmentNo=""
+        reviewRecord={reviewRecord as VendorInvoiceRecord | null}
+        onClose={() => setReviewRecord(null)}
+        onStarted={() => {
+          setSelected(new Set());
+          loadFiles();
+        }}
+      />
       {modal?.type === "filePreview" && (
         <FilePreviewModal
           url={modal.url}
