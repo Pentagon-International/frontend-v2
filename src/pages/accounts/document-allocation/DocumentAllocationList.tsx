@@ -162,9 +162,16 @@ const docAllocColumnLabels: Record<keyof DocumentAllocationColumnVisibility, str
 };
 
 const STATUS_FILTER_OPTIONS = [
+  { value: "UNPOSTED", label: "UNPOSTED" },
   { value: "POSTED", label: "POSTED" },
-  { value: "DRAFT", label: "DRAFT" },
+  { value: "REVERSED", label: "REVERSED" },
 ];
+
+const ACCOUNT_NAME_SEARCH_ENDPOINT = `${URL.chartOfAccountsFilter}?index=0&limit=50`;
+
+const searchAccountByNameBody = (query: string) => ({
+  filters: { account_name: query.trim() },
+});
 
 function columnIdForDocAlloc<T extends Record<string, unknown>>(
   col: MRT_ColumnDef<T>,
@@ -390,7 +397,7 @@ export default function DocumentAllocationList() {
   const buildFilterPayload = useCallback(
     (f: FilterState, searchValue: string) => {
       const payload: Record<string, string> = {};
-      if (f.account_code) payload.account_code = f.account_code;
+      if (f.account_name) payload.account_name = f.account_name;
       if (f.allocation_no?.trim()) payload.allocation_no = f.allocation_no.trim();
       if (f.allocation_from_date) {
         payload.allocation_from_date = dayjs(f.allocation_from_date).format("YYYY-MM-DD");
@@ -620,8 +627,9 @@ export default function DocumentAllocationList() {
             renderEditor={({ autoFocus, onClose }) => (
               <SearchableSelect
                 autoFocus={autoFocus}
-                placeholder="Search account..."
-                apiEndpoint={URL.chartOfAccounts}
+                placeholder="Search by account name..."
+                apiEndpoint={ACCOUNT_NAME_SEARCH_ENDPOINT}
+                postBody={searchAccountByNameBody}
                 value={appliedFilters.account_id}
                 displayValue={
                   appliedFilters.account_name
@@ -648,14 +656,14 @@ export default function DocumentAllocationList() {
                 dropdownZIndex={1000}
                 minSearchLength={1}
                 size="xs"
-                searchFields={["gl_account_code", "account_name", "id"]}
+                searchFields={["account_name"]}
                 displayFormat={(item: Record<string, unknown>) => {
                   const id = String(item.id ?? "").trim();
                   const code = String(item.gl_account_code ?? "").trim();
                   const name = String(item.account_name ?? "").trim();
                   return {
                     value: id,
-                    label: name ? `${name} (${code})` : code || id,
+                    label: name ? `${name} (${code})` : id,
                   };
                 }}
                 returnOriginalData
@@ -1035,7 +1043,7 @@ export default function DocumentAllocationList() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Account, allocation date range, and status",
+            subtitle: "Account, allocation no, allocation date range, and status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1052,8 +1060,9 @@ export default function DocumentAllocationList() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
                       label="Account"
-                      placeholder="Search account..."
-                      apiEndpoint={URL.chartOfAccounts}
+                      placeholder="Search by account name..."
+                      apiEndpoint={ACCOUNT_NAME_SEARCH_ENDPOINT}
+                      postBody={searchAccountByNameBody}
                       value={draftFilters.account_id}
                       displayValue={
                         draftFilters.account_name
@@ -1079,17 +1088,35 @@ export default function DocumentAllocationList() {
                       dropdownZIndex={1100}
                       minSearchLength={1}
                       size="xs"
-                      searchFields={["gl_account_code", "account_name", "id"]}
+                      searchFields={["account_name"]}
                       displayFormat={(item: Record<string, unknown>) => {
                         const id = String(item.id ?? "").trim();
                         const code = String(item.gl_account_code ?? "").trim();
                         const name = String(item.account_name ?? "").trim();
                         return {
                           value: id,
-                          label: name ? `${name} (${code})` : code || id,
+                          label: name ? `${name} (${code})` : id,
                         };
                       }}
                       returnOriginalData
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      label="Allocation No"
+                      placeholder="Type Allocation No"
+                      size="xs"
+                      value={draftFilters.allocation_no ?? ""}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          allocation_no: e.currentTarget.value || null,
+                        }))
+                      }
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={formTextFilterStyles}
                     />
