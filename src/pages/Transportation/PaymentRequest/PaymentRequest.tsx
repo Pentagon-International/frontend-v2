@@ -134,6 +134,7 @@ type PaymentRequestTaxBreakup = {
   sac_wise_totals?: Array<{
     sac_code?: string;
     charge_name?: string;
+    charge_code?: string;
     total_amount?: number | string;
     charge_names?: string[];
     charge_count?: number;
@@ -341,6 +342,7 @@ const fetchGetEffectiveSac = async (
 type ChargeItem = {
   id?: number | null;
   charge_id: number | null;
+  charge_code?: string;
   charge_name: string;
   account_id?: number | null;
   account_code?: string;
@@ -458,6 +460,7 @@ type PaymentRequestFromApi = {
   charges?: Array<{
     id?: number;
     charge_id?: number;
+    charge_code?: string;
     charge_name?: string;
     account_id?: number;
     account_code?: string;
@@ -590,9 +593,20 @@ const VOUCHER_TYPE_OPTIONS = [
 const PAID_TO_TYPE_OPTIONS = [
   { value: "supplier", label: "Supplier" },
   { value: "agent", label: "Agent" },
-  { value: "customer", label: "Customer" },
-  // { value: "staff", label: "Staff" },
 ];
+
+const SUPPLIER_ACCOUNT_NAME_ACCOUNT_CODES = ["1203010002", "1203010007"];
+
+function supplierAccountNameSearchBody(query: string) {
+  return {
+    filters: {
+      search: query.trim(),
+      customer_type: "Supplier",
+      term_code: "CASH",
+      account_code: SUPPLIER_ACCOUNT_NAME_ACCOUNT_CODES,
+    },
+  };
+}
 
 const APPROVED_OPTIONS = [
   { value: "yes", label: "Yes" },
@@ -608,10 +622,10 @@ const CN_R_OPTIONS = [
 
 function resolveAccountNameEndpointByPaidToType(paidToType: string): string {
   const type = (paidToType ?? "").trim().toLowerCase();
-  if (type === "supplier") return URL.supplierByType;
+  // Supplier account-name search uses the customer-master filter, not the
+  // by-type supplier endpoint.
+  if (type === "supplier") return URL.customerFilter;
   if (type === "agent") return URL.agent;
-  if (type === "customer") return URL.customer;
-  if (type === "staff") return URL.customer;
   return "";
 }
 
@@ -659,8 +673,20 @@ function resolveVoucherTypeFromSourceState(state: unknown): string {
   return resolveVoucherTypeFromServiceType(serviceType);
 }
 
+function formatChargeNameWithCode(
+  name?: string | null,
+  code?: string | null,
+): string {
+  const chargeName = String(name ?? "").trim();
+  const chargeCode = String(code ?? "").trim();
+  if (!chargeName) return chargeCode;
+  if (!chargeCode || chargeName.includes(`(${chargeCode})`)) return chargeName;
+  return `${chargeName} (${chargeCode})`;
+}
+
 const emptyCharge = (): ChargeItem => ({
   charge_id: null,
+  charge_code: "",
   charge_name: "",
   account_id: null,
   account_code: "",
@@ -699,6 +725,7 @@ function mapPaymentRequestChargeToPayload(
   return {
     ...(c.id != null ? { id: c.id } : {}),
     charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+    charge_name: c.charge_name ?? "",
     ...(c.account_id != null ? { account_id: Number(c.account_id) } : {}),
     account_code: c.account_code || undefined,
     account_name: c.account_name || c.charge_name || undefined,
@@ -727,6 +754,7 @@ function mapApiChargeToChargeItem(
   return {
     id: c.id != null ? Number(c.id) : null,
     charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+    charge_code: c.charge_code ?? "",
     charge_name: c.charge_name ?? c.account_name ?? "",
     account_id: c.account_id != null ? Number(c.account_id) : null,
     account_code: c.account_code ?? "",
@@ -771,6 +799,7 @@ function mapChargesFromState(
     (c: Record<string, unknown>) => ({
       ...emptyCharge(),
       charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+      charge_code: String(c.charge_code ?? ""),
       charge_name: String(c.charge_name ?? ""),
       segment: String(c.segment ?? ""),
       job_no: String(c.job_no ?? "") || String(c.job_id ?? ""),
@@ -1449,7 +1478,7 @@ function PaymentRequest() {
     // Otherwise, fetch supplier details by supplier code/id, then apply PRIMARY address state.
     if (form.values.state_code_1?.trim()) return;
 
-    const supplierEndpoint = resolveAccountNameEndpointByPaidToType("supplier");
+    const supplierEndpoint = URL.supplierByType;
 
     if (!supplierEndpoint) return;
 
@@ -1747,6 +1776,7 @@ function PaymentRequest() {
               item.charge_id !== undefined && item.charge_id !== null
                 ? Number(item.charge_id)
                 : null,
+            charge_code: String(item.charge_code ?? ""),
             charge_name: String(item.charge_name ?? ""),
             job_no: String(item.job_id ?? ""),
             cn_r: String(item.Dr_Cr ?? ""),
@@ -2966,6 +2996,11 @@ function PaymentRequest() {
                     form.values.paid_to_type,
                   ) || undefined
                 }
+                postBody={
+                  form.values.paid_to_type?.trim().toLowerCase() === "supplier"
+                    ? supplierAccountNameSearchBody
+                    : undefined
+                }
                 searchFields={["customer_name", "customer_code", "id"]}
                 displayFormat={(item: Record<string, unknown>) => ({
                   value: String(item.id ?? item.customer_code ?? ""),
@@ -3583,22 +3618,37 @@ function PaymentRequest() {
                       {/* Charge */}
                       <Grid.Col span={1.2}>
                         <SearchableSelect
-                          placeholder="Type charge name"
+                          placeholder="Search charge"
                           apiEndpoint={(URL as any).chargeMaster}
                           searchFields={["charge_name", "charge_code"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.id ?? ""),
-                            label: String(item.charge_name ?? ""),
-                          })}
+                          displayFormat={(item: Record<string, unknown>) => {
+                            const name = String(item.charge_name ?? "");
+                            const code = String(item.charge_code ?? "").trim();
+                            return {
+                              value: String(item.id ?? ""),
+                              label: formatChargeNameWithCode(name, code) || name,
+                            };
+                          }}
                           value={
                             charge.charge_id != null
                               ? String(charge.charge_id)
                               : null
                           }
-                          displayValue={charge.charge_name || undefined}
-                          onChange={(value, selectedData) => {
+                          displayValue={
+                            formatChargeNameWithCode(
+                              charge.charge_name,
+                              charge.charge_code,
+                            ) || undefined
+                          }
+                          returnOriginalData
+                          onChange={(value, _selectedData, originalData) => {
                             const chargeId = value ? Number(value) : null;
-                            const chargeName = selectedData?.label ?? "";
+                            const chargeCode = String(
+                              originalData?.charge_code ?? "",
+                            ).trim();
+                            const chargeName = String(
+                              originalData?.charge_name ?? "",
+                            ).trim();
                             form.setFieldValue(
                               `charges.${index}.charge_id`,
                               chargeId,
@@ -3606,6 +3656,10 @@ function PaymentRequest() {
                             form.setFieldValue(
                               `charges.${index}.charge_name`,
                               chargeName,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.charge_code`,
+                              chargeId != null ? chargeCode : "",
                             );
                             form.setFieldValue(`charges.${index}.tax_code`, "");
                             if (chargeErrors[index]?.charge_name) {
@@ -4371,7 +4425,10 @@ function PaymentRequest() {
                                     {row.sac_code ?? "—"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
-                                    {row.charge_name ?? "—"}
+                                    {formatChargeNameWithCode(
+                                      row.charge_name,
+                                      row.charge_code,
+                                    ) || "—"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {formatGstBreakupRate(
