@@ -204,6 +204,8 @@ type AdjustmentRow = {
   roe: number | null;
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
+  /** Outstanding allocation serial; sent back on the payment allocation payload. */
+  obj_sno?: string | null;
   /** Outstanding allocation side; used for party/header net (Cr − Dr). */
   Dr_Cr?: "Cr" | "Dr" | null;
 };
@@ -227,6 +229,7 @@ type InvoiceCombinedItem = {
   roe?: number | string;
   amount?: number | string;
   amount_in_local?: number | string;
+  obj_sno?: string | number | null;
   Dr_Cr?: string | null;
   [key: string]: unknown;
 };
@@ -294,6 +297,89 @@ function sumPaymentAllocationNetLocal(adjustments: AdjustmentRow[]): number {
         : 0;
     return s + paymentAllocationNetSign(resolveAllocationDrCr(a)) * amt;
   }, 0);
+}
+
+function getMatchingAllocationsForParty(
+  row: DetailRow,
+  adjustments: AdjustmentRow[],
+): AdjustmentRow[] {
+  const partyCode = (row.customer_code ?? "").toString().trim();
+  const partyDisplay = (row.customer_display ?? "").toString().trim();
+  return adjustments.filter((a) => {
+    const matchesParty =
+      (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
+      (partyDisplay &&
+        (a.subledger_display ?? "").toString().trim() === partyDisplay);
+    if (!matchesParty) return false;
+    const hasDocument = (a.document_no ?? "").toString().trim() !== "";
+    const hasLocal =
+      a.adj_local_amount != null &&
+      Number.isFinite(a.adj_local_amount) &&
+      a.adj_local_amount !== 0;
+    const hasCurr =
+      a.adj_curr_amount != null &&
+      Number.isFinite(a.adj_curr_amount) &&
+      a.adj_curr_amount !== 0;
+    return hasDocument || hasLocal || hasCurr;
+  });
+}
+
+/** Party local from allocation Dr/Cr (Cr − Dr); party amount = local / party ROE. */
+function computeSyncedPaymentDetailRow(
+  row: DetailRow,
+  adjustments: AdjustmentRow[],
+): DetailRow {
+  const matching = getMatchingAllocationsForParty(row, adjustments);
+  if (matching.length === 0) return row;
+  const local = clampLocalAmount(sumPaymentAllocationNetLocal(matching));
+  const roeVal =
+    row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
+  const derivedAmount =
+    local != null && Number.isFinite(local)
+      ? clampAmount(local / roeVal)
+      : row.amount;
+  return {
+    ...row,
+    local_amount: local,
+    amount: derivedAmount,
+  };
+}
+
+function computePaymentDetailsSyncedFromAllocations(
+  details: DetailRow[],
+  adjustments: AdjustmentRow[],
+): DetailRow[] {
+  return details.map((row) => computeSyncedPaymentDetailRow(row, adjustments));
+}
+
+function computePaymentHeaderAmountsFromDetails(
+  details: DetailRow[],
+  isReversal: boolean,
+): { amount: number | null; local_amount: number | null } {
+  let netAmount = 0;
+  let netLocal = 0;
+  for (const d of details ?? []) {
+    const sign = paymentPartyHeaderNetSign(d.dr_cr, isReversal);
+    netAmount +=
+      sign * (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0);
+    netLocal +=
+      sign *
+      (d.local_amount != null && Number.isFinite(d.local_amount)
+        ? d.local_amount
+        : 0);
+  }
+  return {
+    amount: clampAmount(netAmount),
+    local_amount: clampLocalAmount(netLocal),
+  };
+}
+
+function normalizeObjSno(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function allocationDocumentKey(documentNo: unknown, objSno: unknown): string {
+  return `${String(documentNo ?? "").trim()}|${normalizeObjSno(objSno)}`;
 }
 
 function parseAllocationDocumentRoe(roe: unknown): number | null {
@@ -405,6 +491,9 @@ type PaymentListItem = {
     day_book_code?: string;
     document_no?: string;
     document_date?: string;
+    obj_sno?: string | number | null;
+    Dr_Cr?: string | null;
+    dr_cr?: string | null;
     adj_curr_amount?: string | number;
     adj_local_amount?: string | number;
     currency_code?: string;
@@ -495,6 +584,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   adj_curr_amount: null,
   adj_local_amount: null,
   invoice_id: null,
+  obj_sno: null,
   Dr_Cr: null,
 });
 
@@ -956,6 +1046,7 @@ export default function PaymentCreate({
               day_book_id?: number;
               document_no?: string;
               document_date?: string;
+              obj_sno?: string | number | null;
               currency_code?: string;
               adj_curr_amount?: string | number;
               adj_local_amount?: string | number;
@@ -982,6 +1073,7 @@ export default function PaymentCreate({
               daybook_id:
                 aAny.day_book_id != null ? String(aAny.day_book_id) : "",
               document_no: String(aAny.document_no ?? "").trim(),
+              obj_sno: normalizeObjSno(aAny.obj_sno) || null,
               doc_date: parseDocumentDate(aAny.document_date),
               currency: (aAny.currency_code ?? localCurrency).toString().trim(),
               roe: parseAllocationDocumentRoe(roeFromApi),
@@ -994,7 +1086,16 @@ export default function PaymentCreate({
           })
         : [getDefaultAdjustmentRow(localCurrency)];
 
-    setLoadedDetails(details);
+    // Edit: allocation Dr/Cr from the list drives party and header amounts.
+    // Reversal keeps the reversed payment values; backend handles Dr/Cr.
+    const detailsForForm = _isReversal
+      ? details
+      : computePaymentDetailsSyncedFromAllocations(details, adjustments);
+    const headerAmounts = _isReversal
+      ? { amount: amountVal, local_amount: localAmountVal }
+      : computePaymentHeaderAmountsFromDetails(detailsForForm, false);
+
+    setLoadedDetails(detailsForForm);
     form.setValues({
       daybook_id: isReversalCreate
         ? ""
@@ -1007,18 +1108,18 @@ export default function PaymentCreate({
         .toString()
         .trim(),
       roe: roeVal ?? 1,
-      amount: amountVal,
-      local_amount: localAmountVal,
+      amount: headerAmounts.amount,
+      local_amount: headerAmounts.local_amount,
       narration: (paymentFromState.narration ?? "").toString(),
       bank: (paymentFromState.bank ?? "").toString(),
       branch: (paymentFromState.branch ?? "").toString(),
       cheque_no: (paymentFromState.cheque_no ?? "").toString(),
       cheque_date: chequeDateVal,
       chq_clrd_date: chqClrdDateVal,
-      details,
+      details: detailsForForm,
       adjustments,
     });
-    if (details.length > 0) form.setFieldValue("details", details);
+    if (detailsForForm.length > 0) form.setFieldValue("details", detailsForForm);
 
     const docNo = (
       paymentFromState.payment_no ??
@@ -1182,6 +1283,14 @@ export default function PaymentCreate({
     const headerAmountRoeChanged =
       prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
 
+    // Reversal keeps the reversed payment header; backend handles Dr/Cr.
+    if (_isReversal) {
+      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+      prevPartyAmountsRef.current = partyAmountsSnapshot;
+      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+      return;
+    }
+
     const details = form.values.details ?? [];
     let amountForLocal = form.values.amount;
 
@@ -1240,27 +1349,7 @@ export default function PaymentCreate({
   const getMatchingAllocations = (
     row: DetailRow,
     adjustments: AdjustmentRow[],
-  ) => {
-    const partyCode = (row.customer_code ?? "").toString().trim();
-    const partyDisplay = (row.customer_display ?? "").toString().trim();
-    return adjustments.filter((a) => {
-      const matchesParty =
-        (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
-        (partyDisplay &&
-          (a.subledger_display ?? "").toString().trim() === partyDisplay);
-      if (!matchesParty) return false;
-      const hasDocument = (a.document_no ?? "").toString().trim() !== "";
-      const hasLocal =
-        a.adj_local_amount != null &&
-        Number.isFinite(a.adj_local_amount) &&
-        a.adj_local_amount !== 0;
-      const hasCurr =
-        a.adj_curr_amount != null &&
-        Number.isFinite(a.adj_curr_amount) &&
-        a.adj_curr_amount !== 0;
-      return hasDocument || hasLocal || hasCurr;
-    });
-  };
+  ) => getMatchingAllocationsForParty(row, adjustments);
 
   const applyAdjLocalToPartyDetail = (
     idx: number,
@@ -1294,6 +1383,8 @@ export default function PaymentCreate({
     adjustmentsToUse?: AdjustmentRow[],
     options?: { detailIndex?: number; allocationsForDetail?: AdjustmentRow[] },
   ) => {
+    // Reversal keeps the reversed payment amounts; do not recompute from allocations.
+    if (_isReversal) return;
     const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
     form.values.details.forEach((row, idx) => {
       const matchingAllocations = getMatchingAllocations(row, adjustments);
@@ -1321,6 +1412,8 @@ export default function PaymentCreate({
       skipPartyLocalFromAmountRef.current = false;
       return;
     }
+    // Reversal keeps the reversed party amounts; do not derive them from allocations.
+    if (_isReversal) return;
     form.values.details.forEach((row, idx) => {
       const roeVal =
         row.roe != null && Number.isFinite(row.roe) && row.roe !== 0
@@ -1354,7 +1447,7 @@ export default function PaymentCreate({
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
     });
-  }, [detailsSnapshotForLocal, localCurrency]);
+  }, [detailsSnapshotForLocal, localCurrency, _isReversal]);
 
   const showChequeSection = form.values.type !== "CASH";
 
@@ -1401,15 +1494,15 @@ export default function PaymentCreate({
     const list = filterInvoiceData;
     seedAllocationRoeMap(allocationRoeByDocumentRef.current, list);
     setInvoiceList(list);
-    const existingDocNos = new Set(
+    const existingDocKeys = new Set(
       form.values.adjustments
-        .map((a) => (a.document_no ?? "").toString().trim())
-        .filter(Boolean),
+        .map((a) => allocationDocumentKey(a.document_no, a.obj_sno))
+        .filter((key) => !key.startsWith("|")),
     );
     const alreadySelected = new Set<number>();
-    existingDocNos.forEach((docNo) => {
+    existingDocKeys.forEach((key) => {
       const idx = list.findIndex(
-        (inv) => (inv.document_no ?? "").toString().trim() === docNo,
+        (inv) => allocationDocumentKey(inv.document_no, inv.obj_sno) === key,
       );
       if (idx >= 0) alreadySelected.add(idx);
     });
@@ -1535,13 +1628,13 @@ export default function PaymentCreate({
       (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
       (partyDisplay &&
         (a.subledger_display ?? "").toString().trim() === partyDisplay);
-    const managedDocNos = new Set(
+    const managedDocKeys = new Set(
       invoiceList
-        .map((inv) => (inv.document_no ?? "").toString().trim())
-        .filter(Boolean),
+        .map((inv) => allocationDocumentKey(inv.document_no, inv.obj_sno))
+        .filter((key) => !key.startsWith("|")),
     );
     const isManagedRow = (a: AdjustmentRow) =>
-      managedDocNos.has((a.document_no ?? "").toString().trim());
+      managedDocKeys.has(allocationDocumentKey(a.document_no, a.obj_sno));
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
       const inv = invoiceList[listIdx];
       const docDate =
@@ -1579,6 +1672,7 @@ export default function PaymentCreate({
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
         document_no: (inv.document_no ?? "").toString(),
+        obj_sno: normalizeObjSno(inv.obj_sno) || null,
         doc_date: docDate,
         currency: (inv.currency_code ?? localCurrency).toString().trim(),
         roe: invRoe,
@@ -1686,6 +1780,7 @@ export default function PaymentCreate({
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
         document_no: a.document_no ?? "",
+        obj_sno: a.obj_sno ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
@@ -1767,6 +1862,7 @@ export default function PaymentCreate({
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
         document_no: a.document_no ?? "",
+        obj_sno: a.obj_sno ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
@@ -2008,7 +2104,8 @@ export default function PaymentCreate({
     );
     // Validation aligned with Receipt: when adjustments exist, Party total
     // should not be less than net allocation amount (Cr − Dr).
-    if (hasAdjustments && partyLocalTotal < adjLocalTotal) {
+    // Reversal skips this — the same payment is reversed and Dr/Cr is handled by the backend.
+    if (!_isReversal && hasAdjustments && partyLocalTotal < adjLocalTotal) {
       ToastNotification({
         type: "error",
         message:
@@ -3214,41 +3311,44 @@ export default function PaymentCreate({
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                       Location
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Daybook
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Type
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Account Name
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Document no
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
                       Document date
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                       Adj Curr Amount
                     </Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       Adj local amount
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                      Dr/Cr
+                    </Grid.Col>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Actions
                     </Grid.Col>
                   </Grid>
 
                   {form.values.adjustments.map((_, idx) => (
                     <Grid key={idx} w="100%" gutter="sm" mt="sm">
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <TextInput
                           placeholder="Location"
                           readOnly
@@ -3256,7 +3356,7 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <Dropdown
                           placeholder="Daybook"
                           data={daybookAdjustmentOptions}
@@ -3268,7 +3368,7 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <TextInput
                           placeholder="Type"
                           readOnly
@@ -3276,7 +3376,7 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <TextInput
                           placeholder="Account Name"
                           readOnly
@@ -3287,7 +3387,7 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <TextInput
                           placeholder="Document no"
                           readOnly
@@ -3310,7 +3410,7 @@ export default function PaymentCreate({
                           }
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.3}>
                         <SingleDateInput
                           placeholder="Document date"
                           value={normalizeDate(
@@ -3321,7 +3421,7 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <Dropdown
                           placeholder="Currency"
                           data={currencyOptions}
@@ -3331,7 +3431,7 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <NumberInput
                           placeholder="Adj Curr Amount"
                           min={0}
@@ -3412,7 +3512,19 @@ export default function PaymentCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.7}>
+                        <TextInput
+                          placeholder="Dr/Cr"
+                          readOnly
+                          value={
+                            resolveAllocationDrCr(
+                              form.values.adjustments[idx],
+                            ) ?? ""
+                          }
+                          styles={adjustmentFieldStyles}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.4}>
                         <Group gap={4} wrap="nowrap">
                           <Button
                             type="button"

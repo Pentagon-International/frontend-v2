@@ -60,7 +60,6 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   getDefaultBranchCountryCode,
-  getDefaultBranchCurrencyCode,
   isIndianOutstandingBranch,
   isIndianUserCountry,
 } from "../../../utils/userNumberFormat";
@@ -510,6 +509,40 @@ function isGstChargeRow(chargeName: unknown): boolean {
   return isPrqGstChargeName(chargeName);
 }
 
+type ChargeGstKind = "IGST" | "CGST" | "SGST";
+
+function resolveSupplierGstKind(chargeName: unknown): ChargeGstKind | null {
+  const name = String(chargeName ?? "").trim().toUpperCase();
+  if (!name) return null;
+  if (name === "IGST" || name.includes("INTEGRATED GOODS")) return "IGST";
+  if (name === "CGST" || name.includes("CENTRAL GOODS")) return "CGST";
+  if (name === "SGST" || name.includes("STATE GOODS")) return "SGST";
+  return null;
+}
+
+function isSupplierInvoiceTdsRow(
+  row: Pick<ChargeRow, "charge_id" | "account_code" | "charge_name">,
+): boolean {
+  const hasNoChargeId =
+    row.charge_id == null || String(row.charge_id).trim() === "";
+  return (
+    hasNoChargeId &&
+    String(row.account_code ?? "").trim() !== "" &&
+    resolveSupplierGstKind(row.charge_name) == null
+  );
+}
+
+function signedByDrCr(
+  amount: number,
+  drCr: "Dr" | "Cr" | null | undefined,
+  netDirection: "drMinusCr" | "crMinusDr",
+): number {
+  if (!Number.isFinite(amount)) return 0;
+  const isDr = drCr === "Dr";
+  if (netDirection === "drMinusCr") return isDr ? amount : -amount;
+  return isDr ? -amount : amount;
+}
+
 function resolveDaybookLabelFromPaidToType(paidToType: unknown): string {
   const type = String(paidToType ?? "")
     .trim()
@@ -954,8 +987,25 @@ export default function SupplierInvoiceCreate({
   } = useAccountsDocumentCurrencyRoe();
 
   const isIndiaUser = useMemo(() => {
-    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
-    const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
+    // Active working branch (is_default), not main_default — same as invoice/PRQ.
+    // Otherwise a foreign branch still shows GST/TDS when the home branch is India.
+    const activeBranch =
+      user?.branches?.find((b) => b.is_default) ?? user?.branches?.[0];
+    const branchCountryCode = String(
+      (activeBranch as { country?: { country_code?: string } } | undefined)
+        ?.country?.country_code ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    const branchCurrencyCode = String(
+      (
+        activeBranch as
+          | { currency?: { currency_code?: string } }
+          | undefined
+      )?.currency?.currency_code ?? "",
+    )
+      .trim()
+      .toUpperCase();
     if (branchCountryCode || branchCurrencyCode) {
       return isIndianOutstandingBranch(branchCountryCode, branchCurrencyCode);
     }
@@ -2033,6 +2083,82 @@ export default function SupplierInvoiceCreate({
     isIndiaUser,
   ]);
 
+  // Charges footer totals — same layout as invoice / payment request.
+  // Local Amount Total includes GST charge rows (and header GST when those
+  // rows are absent). TDS rows stay excluded. India GST uses calculated rows
+  // when present, otherwise the header CGST/SGST/IGST amounts.
+  const chargesSectionTotals = useMemo(() => {
+    const netDirection = isReversal ? "crMinusDr" : "drMinusCr";
+    const charges = form.values.charges_data ?? [];
+    let local = 0;
+    let igst = 0;
+    let cgst = 0;
+    let sgst = 0;
+    let vat = 0;
+    let hasGstRows = false;
+    let hasChargeVat = false;
+
+    for (const row of charges) {
+      const gstKind = resolveSupplierGstKind(row.charge_name);
+      if (gstKind) {
+        hasGstRows = true;
+        const signed = signedByDrCr(
+          parseNum(row.amount_in_local) ?? 0,
+          row.Dr_Cr,
+          netDirection,
+        );
+        local += signed;
+        if (gstKind === "IGST") igst += signed;
+        else if (gstKind === "CGST") cgst += signed;
+        else sgst += signed;
+        continue;
+      }
+      if (isSupplierInvoiceTdsRow(row)) continue;
+
+      local += signedByDrCr(
+        parseNum(row.amount_in_local) ?? 0,
+        row.Dr_Cr,
+        netDirection,
+      );
+      const vatAmount = parseNum(row.igst);
+      if (vatAmount != null) {
+        hasChargeVat = true;
+        vat += signedByDrCr(vatAmount, row.Dr_Cr, netDirection);
+      }
+    }
+
+    if (isIndiaUser && !hasGstRows) {
+      igst = parseNum(form.values.igst_amount) ?? 0;
+      cgst = parseNum(form.values.cgst_amount) ?? 0;
+      sgst = parseNum(form.values.sgst_amount) ?? 0;
+      if (netDirection === "crMinusDr") {
+        igst = -igst;
+        cgst = -cgst;
+        sgst = -sgst;
+      }
+      local += igst + cgst + sgst;
+    }
+
+    const vatTotal = hasChargeVat
+      ? vat
+      : (parseNum(form.values.igst_amount) ?? 0);
+
+    return {
+      local_total: clampLocalAmount(local) ?? 0,
+      igst_total: clampLocalAmount(igst) ?? 0,
+      cgst_total: clampLocalAmount(cgst) ?? 0,
+      sgst_total: clampLocalAmount(sgst) ?? 0,
+      vat_total: clampLocalAmount(vatTotal) ?? 0,
+    };
+  }, [
+    form.values.charges_data,
+    form.values.igst_amount,
+    form.values.cgst_amount,
+    form.values.sgst_amount,
+    isIndiaUser,
+    isReversal,
+  ]);
+
   // Map list page row data (location.state) to form for view/edit and reversal create (same flow as ReceiptCreate)
   useEffect(() => {
     const runForViewEdit = isViewMode || isEditMode;
@@ -2255,11 +2381,16 @@ export default function SupplierInvoiceCreate({
       prData.amount != null && prData.amount !== ""
         ? parseFloat(String(prData.amount)) || null
         : null;
+    const localAmountNum =
+      prData.local_amount != null && prData.local_amount !== ""
+        ? parseFloat(String(prData.local_amount)) || null
+        : null;
 
     const charges = Array.isArray(prData.charges) ? prData.charges : [];
+    // Taxable / non-taxable come from PRQ local amounts (GST rows still feed CGST/SGST/IGST).
     const agentInvSplit = splitPrqChargesForSupplierInvoiceAgentInv(
       charges,
-      amountNum,
+      localAmountNum ?? amountNum,
     );
     const mappedCharges: ChargeRow[] = agentInvSplit.charges.map((c) =>
       mapPaymentRequestChargeToSupplierRow(c),
@@ -2302,10 +2433,25 @@ export default function SupplierInvoiceCreate({
       form.setFieldValue("due_date", prDate);
     }
 
-    // Invoice amount
-    if (amountNum != null) {
-      form.setFieldValue("Inv_crn_amount", amountNum);
-      form.setFieldValue("approved_amount", amountNum);
+    // Invoice amount — prefer the PRQ local split (taxable/non-taxable + GST).
+    const localInvoiceAmount =
+      (agentInvSplit.taxable_amount ?? 0) +
+      (agentInvSplit.non_taxable_amount ?? 0) +
+      (agentInvSplit.cgst_amount ?? 0) +
+      (agentInvSplit.sgst_amount ?? 0) +
+      (agentInvSplit.igst_amount ?? 0);
+    const hasLocalInvoiceAmount =
+      agentInvSplit.taxable_amount != null ||
+      agentInvSplit.non_taxable_amount != null ||
+      agentInvSplit.cgst_amount != null ||
+      agentInvSplit.sgst_amount != null ||
+      agentInvSplit.igst_amount != null;
+    const invoiceAmount = hasLocalInvoiceAmount
+      ? localInvoiceAmount
+      : amountNum;
+    if (invoiceAmount != null) {
+      form.setFieldValue("Inv_crn_amount", invoiceAmount);
+      form.setFieldValue("approved_amount", invoiceAmount);
     }
 
     if (agentInvSplit.taxable_amount != null) {
@@ -5129,6 +5275,86 @@ export default function SupplierInvoiceCreate({
                     </Grid.Col>
                   </Grid>
                 ))}
+
+                {form.values.charges_data.length > 0 && (
+                  <Box
+                    mt="xl"
+                    p="md"
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRadius: 8,
+                      border: "1px solid #dee2e6",
+                    }}
+                  >
+                    <Grid gutter="md">
+                      <Grid.Col span={isIndiaUser ? 3 : 6}>
+                        <Box>
+                          <Text size="sm" fw={500} c="dimmed" mb={4}>
+                            Local Amount Total
+                          </Text>
+                          <Text size="lg" fw={600} c="#105476">
+                            {formatMoneyAmountForUi(
+                              chargesSectionTotals.local_total,
+                            )}
+                          </Text>
+                        </Box>
+                      </Grid.Col>
+                      {isIndiaUser ? (
+                        <>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                IGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {formatMoneyAmountForUi(
+                                  chargesSectionTotals.igst_total,
+                                )}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                CGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {formatMoneyAmountForUi(
+                                  chargesSectionTotals.cgst_total,
+                                )}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                          <Grid.Col span={3}>
+                            <Box>
+                              <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                SGST Total
+                              </Text>
+                              <Text size="lg" fw={600} c="#105476">
+                                {formatMoneyAmountForUi(
+                                  chargesSectionTotals.sgst_total,
+                                )}
+                              </Text>
+                            </Box>
+                          </Grid.Col>
+                        </>
+                      ) : (
+                        <Grid.Col span={6}>
+                          <Box>
+                            <Text size="sm" fw={500} c="dimmed" mb={4}>
+                              VAT Total
+                            </Text>
+                            <Text size="lg" fw={600} c="#105476">
+                              {formatMoneyAmountForUi(
+                                chargesSectionTotals.vat_total,
+                              )}
+                            </Text>
+                          </Box>
+                        </Grid.Col>
+                      )}
+                    </Grid>
+                  </Box>
+                )}
               </Box>
             </Grid.Col>
           </Grid>

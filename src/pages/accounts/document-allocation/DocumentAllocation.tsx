@@ -18,6 +18,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -43,6 +44,10 @@ import {
   useGlobalSearchDocumentNavigation,
 } from "../../../hooks/useGlobalSearchDocumentNavigation";
 import dayjs from "dayjs";
+import {
+  ALLOC_DOC_OPEN_QUERY,
+  stashOpenedDocumentState,
+} from "../../../utils/openAllocationDocumentTab";
 
 type CoaItem = {
   id?: number;
@@ -59,6 +64,9 @@ type DocumentAllocationRow = {
   day_book_name?: string | null; // fallback for older response
   document_type?: string | null;
   day_book_document_type?: string | null; // fallback for older response
+  day_book_type?: string | null;
+  /** Primary key of the source document (invoice / supplier invoice). */
+  doc_id?: number | string | null;
   document_no?: string | null;
   document_date?: string | null;
   currency_id?: number | null;
@@ -343,6 +351,153 @@ const formatDocumentDateDisplay = (
   return parsed.isValid() ? parsed.format(dateFormat) : trimmed;
 };
 
+type FetchedDocumentOpenTarget = {
+  endpoint: string;
+  buildPath: (
+    mode: string,
+    docId: number,
+    record: Record<string, unknown> | null,
+  ) => string;
+  missingMessage: string;
+  errorMessage: string;
+  openingLabel: string;
+  /** Pages that load from location.state rather than a route id. */
+  needsState?: boolean;
+  stateFromRecord?: (record: Record<string, unknown>) => unknown;
+};
+
+const isAgentDocument = (record: Record<string, unknown> | null): boolean =>
+  record?.is_agent === true ||
+  String(record?.is_agent ?? "").trim().toLowerCase() === "true";
+
+const isTradeNote = (record: Record<string, unknown> | null): boolean => {
+  const type = String(record?.type ?? record?.note_type ?? "")
+    .trim()
+    .toLowerCase();
+  return type === "trade";
+};
+
+/** Same new-tab open as Receipt select-document: fetch by doc_id, then view or edit. */
+function resolveFetchedDocumentOpenTarget(
+  row: DocumentAllocationRow,
+): FetchedDocumentOpenTarget | null {
+  const docType = String(
+    row.day_book_document_type ?? row.document_type ?? row.day_book_type ?? "",
+  )
+    .trim()
+    .toUpperCase();
+
+  if (
+    docType === "INV" ||
+    docType === "INVOICE" ||
+    docType === "CRN" ||
+    docType === "CN" ||
+    docType === "CDN"
+  ) {
+    return {
+      endpoint: URL.invoice,
+      buildPath: (mode, docId) => `/invoice/${mode}/${docId}`,
+      missingMessage: "Invoice not found",
+      errorMessage: "Unable to open invoice details.",
+      openingLabel: docType === "INV" || docType === "INVOICE"
+        ? "Opening invoice…"
+        : "Opening credit note…",
+    };
+  }
+
+  if (docType === "CRJ" || docType === "SI") {
+    return {
+      endpoint: URL.supplierInvoice,
+      buildPath: (mode, docId) => `/supplier-invoice/${mode}/${docId}`,
+      missingMessage: "Supplier invoice not found",
+      errorMessage: "Unable to open supplier invoice details.",
+      openingLabel: "Opening supplier invoice…",
+    };
+  }
+
+  if (docType === "GLJ" || docType === "JV" || docType === "JOURNAL") {
+    return {
+      endpoint: URL.journalVoucher,
+      buildPath: (mode, docId) => `/journal-voucher/${mode}/${docId}`,
+      missingMessage: "Journal voucher not found",
+      errorMessage: "Unable to open journal voucher details.",
+      openingLabel: "Opening journal voucher…",
+    };
+  }
+
+  if (docType === "RPT" || docType === "RCT" || docType === "RECEIPT") {
+    return {
+      endpoint: URL.receipt,
+      buildPath: (mode, _docId, record) =>
+        isAgentDocument(record)
+          ? `/overseas-receipt/${mode}`
+          : `/receipt/${mode}`,
+      missingMessage: "Receipt not found",
+      errorMessage: "Unable to open receipt details.",
+      openingLabel: "Opening receipt…",
+      needsState: true,
+    };
+  }
+
+  if (docType === "RPTREV" || docType === "RCTREV") {
+    return {
+      endpoint: URL.reverseReceipt,
+      buildPath: (mode) => `/receipt/reversal/${mode}`,
+      missingMessage: "Receipt reversal not found",
+      errorMessage: "Unable to open receipt reversal details.",
+      openingLabel: "Opening receipt reversal…",
+      needsState: true,
+    };
+  }
+
+  if (docType === "PMT" || docType === "PAYMENT") {
+    return {
+      endpoint: URL.payment,
+      buildPath: (mode, _docId, record) =>
+        isAgentDocument(record)
+          ? `/overseas-payment/${mode}`
+          : `/payment/${mode}`,
+      missingMessage: "Payment not found",
+      errorMessage: "Unable to open payment details.",
+      openingLabel: "Opening payment…",
+      needsState: true,
+    };
+  }
+
+  if (docType === "PMTREV") {
+    return {
+      endpoint: URL.reversePayment,
+      buildPath: (mode) => `/payment/reversal/${mode}`,
+      missingMessage: "Payment reversal not found",
+      errorMessage: "Unable to open payment reversal details.",
+      openingLabel: "Opening payment reversal…",
+      needsState: true,
+    };
+  }
+
+  if (
+    docType === "DBN" ||
+    docType === "DN" ||
+    docType === "DEBIT" ||
+    docType === "DCN"
+  ) {
+    return {
+      endpoint: URL.debitCreditNote,
+      buildPath: (mode, docId, record) =>
+        isTradeNote(record)
+          ? `/debit-credit-note-trade/${mode}/${docId}`
+          : `/debit-credit-note-non-trade/${mode}/${docId}`,
+      missingMessage: "Debit / credit note not found",
+      errorMessage: "Unable to open debit / credit note details.",
+      openingLabel: "Opening debit / credit note…",
+      needsState: true,
+      stateFromRecord: (record) => ({ data: record }),
+    };
+  }
+
+  return null;
+}
+
 const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRow => {
   const outAmt = r.outstanding_amount ?? r.amount ?? "";
   const outLocal =
@@ -519,6 +674,11 @@ export default function DocumentAllocation() {
   const [isPosting, setIsPosting] = useState(false);
   const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
     null,
+  );
+  const [isOpeningDocumentFromModal, setIsOpeningDocumentFromModal] =
+    useState(false);
+  const [openingDocumentLabel, setOpeningDocumentLabel] = useState(
+    "Opening document…",
   );
 
   const getDocumentNavigationOptions = useCallback(
@@ -977,6 +1137,98 @@ export default function DocumentAllocation() {
     }
   };
 
+  const openFetchedDocumentInNewTab = async (row: DocumentAllocationRow) => {
+    const target = resolveFetchedDocumentOpenTarget(row);
+    if (!target) return;
+
+    const docIdRaw = row.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: target.missingMessage,
+      });
+      return;
+    }
+
+    // Open the tab immediately (popup blockers allow this on user gesture).
+    // Never navigate away from the Document Allocation page.
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the document in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setOpeningDocumentLabel(target.openingLabel);
+      setIsOpeningDocumentFromModal(true);
+      const res = await apiCallProtected.get(
+        `${target.endpoint}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? record.document_status ?? "")
+            .trim()
+            .toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+      const recordObject =
+        record && typeof record === "object"
+          ? (record as Record<string, unknown>)
+          : null;
+
+      setIsOpeningDocumentFromModal(false);
+      let path = target.buildPath(mode, docId, recordObject);
+      if (target.needsState && recordObject) {
+        const key = stashOpenedDocumentState(
+          target.stateFromRecord
+            ? target.stateFromRecord(recordObject)
+            : recordObject,
+        );
+        const joiner = path.includes("?") ? "&" : "?";
+        path = `${path}${joiner}${ALLOC_DOC_OPEN_QUERY}=${encodeURIComponent(key)}`;
+      }
+      const documentUrl = new window.URL(
+        path,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = documentUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open document", e);
+      ToastNotification({
+        type: "error",
+        message: target.errorMessage,
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningDocumentFromModal(false);
+    }
+  };
+
   return (
     <Box
       style={{
@@ -988,14 +1240,38 @@ export default function DocumentAllocation() {
     >
       <Modal
         opened={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setIsOpeningDocumentFromModal(false);
+        }}
         title="Select Allocations"
         size="100%"
         centered
         styles={{
           content: { maxWidth: "95vw" },
+          body: { position: "relative" },
         }}
       >
+        {isOpeningDocumentFromModal && (
+          <Box
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(255,255,255,0.75)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10,
+            }}
+          >
+            <Group gap="sm">
+              <Loader size="sm" color="#105476" />
+              <Text size="sm" c="#105476" fw={600}>
+                {openingDocumentLabel}
+              </Text>
+            </Group>
+          </Box>
+        )}
         <Box>
           {/* Modal header */}
           <Grid
@@ -1055,6 +1331,7 @@ export default function DocumentAllocation() {
             const outstandingAmt = row.outstanding_amount ?? row.amount ?? "";
             const outstandingLocal =
               row.outstanding_local_amount ?? row.amount_in_local ?? "";
+            const canOpenDocument = resolveFetchedDocumentOpenTarget(row) != null;
             return (
               <Grid
                 key={key || idx}
@@ -1099,16 +1376,13 @@ export default function DocumentAllocation() {
                     value={row.document_no ?? ""}
                     readOnly
                     title={
-                      String(row.document_no ?? "").trim()
-                        ? "Open document"
-                        : undefined
+                      canOpenDocument ? "Open document in a new tab" : undefined
                     }
                     onClick={() => {
-                      const documentNo = String(row.document_no ?? "").trim();
-                      if (documentNo) void onDocumentNoClick(documentNo);
+                      if (canOpenDocument) void openFetchedDocumentInNewTab(row);
                     }}
                     styles={
-                      String(row.document_no ?? "").trim()
+                      canOpenDocument
                         ? clickableAdjustmentDocumentNoStyles
                         : { input: readOnlyInputStyles.input }
                     }
@@ -1322,7 +1596,10 @@ export default function DocumentAllocation() {
                   <SearchableSelect
                     label="Account Name"
                     placeholder="Search by account name"
-                    apiEndpoint={URL.chartOfAccounts}
+                    apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
+                    postBody={(query) => ({
+                      filters: { account_name: query.trim() },
+                    })}
                     value={
                       selectedAccount?.id != null
                         ? String(selectedAccount.id)
@@ -1330,7 +1607,7 @@ export default function DocumentAllocation() {
                     }
                     dropdownZIndex={1100}
                     minSearchLength={1}
-                    searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
+                    searchFields={["account_name"]}
                     disabled={isLocked}
                     readOnly={isLocked}
                     displayFormat={(item: Record<string, unknown>) => {

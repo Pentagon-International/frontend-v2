@@ -192,34 +192,38 @@ const buildReturnStateExtras = (
   return extras;
 };
 
-export const openGlobalSearchItem = async (
-  navigate: NavigateFunction,
+export type ResolvedDocumentLocation = {
+  path: string;
+  state: Record<string, unknown>;
+};
+
+export async function resolveGlobalSearchItemLocation(
   item: GlobalSearchItem,
   options?: GlobalSearchNavigateOptions,
-): Promise<boolean> => {
+): Promise<ResolvedDocumentLocation | null> {
   const module = String(item.module ?? "").trim().toLowerCase();
   const subRaw = item.sub_module ?? null;
   const sub =
     subRaw == null ? null : String(subRaw).trim().toLowerCase() || null;
   const id = String(item.id ?? "").trim();
-  if (!module || !id) return false;
+  if (!module || !id) return null;
 
   const target = globalSearchModuleToRoute(module, sub, id);
   if (!target) {
-    return false;
+    return null;
   }
 
   const returnExtras = buildReturnStateExtras(options);
 
   if (!target.needsState) {
-    navigate(target.path, {
+    return {
+      path: target.path,
       state: {
         actionType: "edit",
         fromGlobalSearch: true,
         ...returnExtras,
       },
-    });
-    return true;
+    };
   }
 
   const record = await fetchGlobalSearchModuleRecord(item);
@@ -228,7 +232,7 @@ export const openGlobalSearchItem = async (
       type: "warning",
       message: `No ${module} record found for this search result.`,
     });
-    return false;
+    return null;
   }
 
   const baseState = {
@@ -244,14 +248,14 @@ export const openGlobalSearchItem = async (
       id;
     // Closed jobs stay on /edit so Attach Documents can persist.
     // Job pages already lock all other fields when status is CLOSED.
-    navigate(target.path, {
+    return {
+      path: target.path,
       state: {
         ...baseState,
         job: record,
         jobId,
       },
-    });
-    return true;
+    };
   }
 
   if (module === "booking") {
@@ -259,19 +263,20 @@ export const openGlobalSearchItem = async (
       (record as Record<string, unknown>)?.id ??
       (record as Record<string, unknown>)?.booking_id ??
       id;
-    navigate(target.path, {
+    return {
+      path: target.path,
       state: {
         ...baseState,
         job: record,
         bookingId,
       },
-    });
-    return true;
+    };
   }
 
   if (module === "reverse_invoice") {
     const rec = record as Record<string, unknown>;
-    navigate(target.path, {
+    return {
+      path: target.path,
       state: {
         ...baseState,
         financeReverseRecord: record,
@@ -287,16 +292,26 @@ export const openGlobalSearchItem = async (
             "",
         ).trim(),
       },
-    });
-    return true;
+    };
   }
 
-  navigate(target.path, {
+  return {
+    path: target.path,
     state: {
       ...(record as Record<string, unknown>),
       ...baseState,
     },
-  });
+  };
+}
+
+export const openGlobalSearchItem = async (
+  navigate: NavigateFunction,
+  item: GlobalSearchItem,
+  options?: GlobalSearchNavigateOptions,
+): Promise<boolean> => {
+  const resolved = await resolveGlobalSearchItemLocation(item, options);
+  if (!resolved) return false;
+  navigate(resolved.path, { state: resolved.state });
   return true;
 };
 
