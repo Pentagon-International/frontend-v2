@@ -26,6 +26,7 @@ import {
   Select,
   Stack,
   TextInput,
+  Tooltip,
   MantineProvider,
 } from "@mantine/core";
 import {
@@ -837,12 +838,26 @@ function PaymentRequestApproval() {
             )}
           />
         ),
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>() || "-";
+          if (value === "-") return value;
+          return (
+            <Tooltip label={value} withArrow withinPortal>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: erpTheme.fontSans, maxWidth: "100%" }}
+              >
+                {value}
+              </Text>
+            </Tooltip>
+          );
+        },
       },
       {
         accessorKey: "service",
         header: "Service",
-        size: 160,
+        size: 96,
         grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
@@ -943,7 +958,21 @@ function PaymentRequestApproval() {
             onChange={(nextVal) => commitHeaderFilters({ paidTo: nextVal })}
           />
         ),
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>() || "-";
+          if (value === "-") return value;
+          return (
+            <Tooltip label={value} withArrow withinPortal>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: erpTheme.fontSans, maxWidth: "100%" }}
+              >
+                {value}
+              </Text>
+            </Tooltip>
+          );
+        },
       },
       {
         accessorKey: "job_id",
