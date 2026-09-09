@@ -872,6 +872,8 @@ function applyReversableDataToReverseForm(
     setBillToDisplayName: (v: string | null) => void;
     emptyDaybook: boolean;
     preserveChargeIds?: boolean;
+    /** When true (existing reverse), show IRN from API. New reverses leave blank until post. */
+    includeSourceIrn?: boolean;
   },
 ) {
   opts.setIsAgentInvoice(data.is_agent === true);
@@ -899,7 +901,8 @@ function applyReversableDataToReverseForm(
     currency: data.currency_code ?? "",
     roe: Number.isFinite(roeNum) ? roeNum : null,
     narration: data.narration ?? "",
-    irn_no: data.irn_no ?? "",
+    // Do not copy source invoice IRN into a new reverse; a new IRN is generated on post.
+    irn_no: opts.includeSourceIrn ? (data.irn_no ?? "") : "",
     fapiao_no: data.fapiao_no ?? "",
     Dr_Cr: resolveHeaderDrCr(sourceHeaderDrCr, "Cr"),
     charges:
@@ -1806,7 +1809,7 @@ function InvoiceReverse() {
             setBillToDisplayName,
             emptyDaybook: false,
             preserveChargeIds: true,
-            invertChargeDrCr: false,
+            includeSourceIrn: true,
           });
           setHasSez(Boolean(loaded.has_sez));
           setReversalRecordData(data as Record<string, unknown>);
@@ -2015,7 +2018,7 @@ function InvoiceReverse() {
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: isKenyaUser ? null : values.irn_no || null,
+        // IRN is server-generated on post; never send source/form IRN on reverse.
         fapiao_no: values.fapiao_no || null,
         status: "POSTED",
         total,
@@ -2359,7 +2362,7 @@ function InvoiceReverse() {
         currency_id: currencyId,
         roe: values.roe,
         narration: values.narration || null,
-        irn_no: isKenyaUser ? null : values.irn_no || null,
+        // IRN is server-generated on post; never send source/form IRN on reverse.
         fapiao_no: values.fapiao_no || null,
         status: "UNPOSTED",
         total,
@@ -2854,9 +2857,7 @@ function InvoiceReverse() {
                   label="IRN No"
                   placeholder="IRN No"
                   value={form.values.irn_no}
-                  onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
-                  readOnly={isReadOnly}
-                  error={form.errors.irn_no}
+                  readOnly
                 />
               </Grid.Col>
             )}

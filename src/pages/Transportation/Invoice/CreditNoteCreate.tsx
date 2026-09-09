@@ -5470,12 +5470,10 @@ function CreditNoteCreate() {
               <Grid.Col span={2}>
                 <FormTextInput
                   label="IRN No"
-                  placeholder="Enter IRN number"
+                  placeholder="IRN No"
                   format="capital"
                   value={form.values.irn_no}
-                  onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
-                  error={form.errors.irn_no}
-                  readOnly={isReadOnly}
+                  readOnly
                 />
               </Grid.Col>
             )}

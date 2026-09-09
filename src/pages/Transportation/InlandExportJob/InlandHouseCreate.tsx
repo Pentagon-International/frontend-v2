@@ -326,6 +326,7 @@ const normalizePpCc = (value: unknown): string => {
 function HouseCreate() {
   const navigate = useNavigate();
   const location = useLocation();
+  const jobModuleBasePath = "/inland/export-job";
   const [active, setActive] = useState(() =>
     readJobFormActiveTabFromLocation(location.state),
   );
@@ -519,9 +520,12 @@ function HouseCreate() {
     );
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const pendingLeaveActionRef = useRef<(() => void) | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
-    const leave = () => navigate("/inland/export-job");
-    if (!isReadOnly) {
+    const leave = () => navigate(jobModuleBasePath);
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       pendingLeaveActionRef.current = leave;
       setConfirmBackToListOpen(true);
       return;
@@ -755,6 +759,21 @@ function HouseCreate() {
       return {};
     },
   });
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [isEditMode, editIndex, editData?.id]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [form.values, chargesForm.values, isReadOnly]);
 
   const { data: eventMasterData = [] } = useQuery({
     queryKey: ["eventMaster"],
@@ -5594,8 +5613,8 @@ function HouseCreate() {
         centered
       >
         <Text size="sm" mb="md">
-          Your recent changes may be lost if you close this job. Are you sure
-          you want to continue?
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -5611,10 +5630,10 @@ function HouseCreate() {
               const action = pendingLeaveActionRef.current;
               pendingLeaveActionRef.current = null;
               if (action) action();
-              else navigate("/inland/export-job");
+              else navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
@@ -5643,7 +5662,7 @@ function HouseCreate() {
                   );
                 }
               };
-              if (!isReadOnly) {
+              if (!isReadOnly && hasUnsavedChanges) {
                 pendingLeaveActionRef.current = leave;
                 setConfirmBackToListOpen(true);
                 return;

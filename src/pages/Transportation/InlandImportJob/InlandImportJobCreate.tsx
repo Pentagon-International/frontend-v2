@@ -429,6 +429,7 @@ const parseBoolean = (value: unknown): boolean => {
 function InlandImportJobCreate() {
   const navigate = useNavigate();
   const location = useLocation();
+  const jobModuleBasePath = "/inland/import-job";
   const [active, setActive] = useState(() =>
     readJobFormActiveTabFromLocation(location.state),
   );
@@ -607,13 +608,15 @@ function InlandImportJobCreate() {
   });
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
-    // Confirm before leaving so unsaved edits are not discarded silently.
-    if (!isReadOnly) {
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate("/inland/import-job");
+    navigate(jobModuleBasePath);
   };
 
   // Fetch full job when only jobId is provided, or list row is missing service_code.
@@ -971,6 +974,28 @@ function InlandImportJobCreate() {
   );
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
   const jobHydratedKeyRef = useRef<string | null>(null);
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [mode, jobData?.id, location.key]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [
+    mawbDetailsForm.values,
+    carrierDetailsForm.values,
+    routingsForm.values,
+    estimatesForm.values,
+    hawbDetails,
+    isReadOnly,
+  ]);
 
   // Note: Container Details are not used for Inland Import Jobs
 
@@ -4694,8 +4719,8 @@ function InlandImportJobCreate() {
         centered
       >
         <Text size="sm" mb="md">
-          Your recent changes may be lost if you close this job. Are you sure
-          you want to continue?
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -4708,10 +4733,10 @@ function InlandImportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate("/inland/import-job");
+              navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
