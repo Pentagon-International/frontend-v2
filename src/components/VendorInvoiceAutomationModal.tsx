@@ -960,6 +960,14 @@ export function VendorInvoiceAutomationModal({
 
   useEffect(() => stopPoll, []);
 
+  // Job pages keep this modal mounted and only set shipmentNo when opened.
+  // useState(shipmentNo) does not pick that up, so upload would no-op.
+  // Review flow (reviewRecord) sets shipment itself — do not overwrite it.
+  useEffect(() => {
+    if (!opened || reviewRecord) return;
+    setActiveShipmentNo(shipmentNo);
+  }, [opened, shipmentNo, reviewRecord]);
+
   useEffect(() => {
     if (!opened || !reviewRecord?.id) return;
     const shipment = shipmentFromExtracted(reviewRecord, shipmentNo);
@@ -987,11 +995,15 @@ export function VendorInvoiceAutomationModal({
   };
 
   const handleUploadAndExtract = async () => {
-    if (!files.length || !activeShipmentNo.trim()) return;
+    const resolvedShipment = (activeShipmentNo || shipmentNo).trim();
+    if (!files.length || !resolvedShipment) return;
+    if (resolvedShipment !== activeShipmentNo.trim()) {
+      setActiveShipmentNo(resolvedShipment);
+    }
     setUploading(true);
     setStep("extracting");
     try {
-      const { recordId } = await uploadVendorInvoicePdf(files);
+      const { recordId } = await uploadVendorInvoicePdf(files, resolvedShipment);
       const extractedRecord = await pollVendorInvoiceRecord(
         recordId,
         isVendorInvoiceExtractionSettled,
@@ -1006,7 +1018,7 @@ export function VendorInvoiceAutomationModal({
       setOverride(
         buildVendorInvoiceOverrideDraft(
           extractedRecord.extracted_data,
-          activeShipmentNo,
+          resolvedShipment,
         ),
       );
       setStep("review");

@@ -216,9 +216,12 @@ export function getHouseShipmentNo(house: Record<string, unknown>): string {
 
 export async function uploadVendorInvoicePdf(
   files: File[],
+  shipmentNo?: string,
 ): Promise<{ recordId: number; filename: string }> {
   const fd = new FormData();
   files.forEach((f) => fd.append("invoice_attachments", f));
+  const shipment = String(shipmentNo ?? "").trim();
+  if (shipment) fd.append("shipment_no", shipment);
   const { data } = await invoiceApi.post<UploadResult>(
     VENDOR_INVOICE_AUTOMATION_URLS.upload,
     fd,
@@ -437,7 +440,7 @@ export function buildVendorInvoiceOverrideDraft(
   const charges =
     sourceCharges.length > 0
       ? sourceCharges.map((row) => ({
-          shipment_no: textValue(row.shipment_no) || headerShipment,
+          shipment_no: headerShipment || textValue(row.shipment_no),
           charge_id: idString(row.charge_id),
           charge_name: textValue(row.charge_name),
           currency_id: idString(row.currency_id) || idString(extracted?.currency_id),
