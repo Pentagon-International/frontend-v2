@@ -1120,34 +1120,6 @@ function PaymentRequestApproval() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              {row.original.status?.trim().toLowerCase() !== "approved" &&
-                row.original.status?.trim().toLowerCase() !== "rejected" && (
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() => {
-                        setStoreFilters(LIST_KEY, buildFilterPayload);
-                        setStoreSearch(LIST_KEY, search);
-                        setShouldRestore(LIST_KEY, true);
-                        navigate(`/payment-request/edit/${row.original.id}`, {
-                          state: {
-                            fromPaymentRequestApproval: true,
-                            returnTo: "/payment-request-approval",
-                          },
-                        });
-                      }}
-                    >
-                      <Group gap="sm">
-                        <IconEdit size={16} color={primary} />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: erpTheme.fontSans }}
-                        >
-                          Edit
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                )}
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() => {
@@ -1170,6 +1142,33 @@ function PaymentRequestApproval() {
                   </Group>
                 </UnstyledButton>
               </Box>
+              {row.original.status?.trim().toLowerCase() !== "rejected" && (
+                <Box px={10} py={5}>
+                  <UnstyledButton
+                    onClick={() => {
+                      setStoreFilters(LIST_KEY, buildFilterPayload);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
+                      navigate(`/payment-request/edit/${row.original.id}`, {
+                        state: {
+                          fromPaymentRequestApproval: true,
+                          returnTo: "/payment-request-approval",
+                        },
+                      });
+                    }}
+                  >
+                    <Group gap="sm">
+                      <IconEdit size={16} color={primary} />
+                      <Text
+                        size="sm"
+                        style={{ fontFamily: erpTheme.fontSans }}
+                      >
+                        Edit
+                      </Text>
+                    </Group>
+                  </UnstyledButton>
+                </Box>
+              )}
               {row.original.status?.trim().toLowerCase() === "approved" && (
                 <Box px={10} py={5}>
                   <UnstyledButton

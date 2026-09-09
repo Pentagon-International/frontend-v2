@@ -1310,7 +1310,9 @@ function PaymentRequest() {
       .toString()
       .trim()
       .toUpperCase() === "APPROVED";
-  const docsReadOnly = isReadOnly || isApprovedStatus;
+  /** Approved edit: all fields locked except one-shot actual inv (when allowed). */
+  const formFieldsReadOnly = isReadOnly || isApprovedStatus;
+  const docsReadOnly = formFieldsReadOnly;
   const hasProformaSet =
     Boolean(String(form.values.proforma_invoice_no_1 ?? "").trim()) &&
     form.values.proforma_invoice_date != null;
@@ -2689,7 +2691,7 @@ function PaymentRequest() {
                 }}
               >
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2727,7 +2729,7 @@ function PaymentRequest() {
                   Get OBL Charges
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2765,7 +2767,7 @@ function PaymentRequest() {
                   Get Carrier Rate
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2803,7 +2805,7 @@ function PaymentRequest() {
                   Get Default Cost
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2841,7 +2843,7 @@ function PaymentRequest() {
                   Get Cost From Tariff
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2886,7 +2888,7 @@ function PaymentRequest() {
         <Box
           component="form"
           onSubmit={
-            isReadOnly || isApprovedStatus
+            formFieldsReadOnly
               ? (e) => e.preventDefault()
               : form.onSubmit(handleSubmit)
           }
@@ -2910,7 +2912,7 @@ function PaymentRequest() {
                 value={normalizeDate(form.values.date)}
                 onChange={(date) => form.setFieldValue("date", date)}
                 withAsterisk
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 error={
                   form.errors.date
                     ? typeof form.errors.date === "string"
@@ -2931,7 +2933,7 @@ function PaymentRequest() {
                   form.setFieldValue("payment_type", value ?? "")
                 }
                 withAsterisk
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 error={form.errors.payment_type}
                 styles={inputStyles}
               />
@@ -2946,7 +2948,7 @@ function PaymentRequest() {
                 onChange={(value) =>
                   form.setFieldValue("voucher_type", value ?? "")
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2959,7 +2961,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("proforma_invoice_no_1", e.target.value)
                 }
-                readOnly={isReadOnly || isApprovedStatus}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2972,7 +2974,7 @@ function PaymentRequest() {
                 onChange={(date) =>
                   form.setFieldValue("proforma_invoice_date", date)
                 }
-                readOnly={isReadOnly || isApprovedStatus}
+                readOnly={formFieldsReadOnly}
               />
             </Grid.Col>
 
@@ -3014,7 +3016,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("proforma_invoice_no_1", e.target.value)
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col> */}
@@ -3039,7 +3041,7 @@ function PaymentRequest() {
                   setAccountNameDisplay(null);
                   setPartyAddresses([]);
                 }}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3126,8 +3128,8 @@ function PaymentRequest() {
                 }}
                 minSearchLength={3}
                 dropdownZIndex={chargesDropdownZIndex}
-                disabled={!form.values.paid_to_type || isReadOnly}
-                readOnly={isReadOnly}
+                disabled={!form.values.paid_to_type || formFieldsReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3140,7 +3142,7 @@ function PaymentRequest() {
                 value={form.values.state_code_1 || null}
                 onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
                 searchable
-                disabled={isStateLoading || isReadOnly}
+                disabled={isStateLoading || formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3160,7 +3162,7 @@ function PaymentRequest() {
                   searchable
                   clearable
                   disabled={
-                    isTdsSectionLoading || isReadOnly || !isPaidToSelected
+                    isTdsSectionLoading || formFieldsReadOnly || !isPaidToSelected
                   }
                   styles={inputStyles}
                 />
@@ -3178,7 +3180,7 @@ function PaymentRequest() {
                   form.setFieldValue("currency", value ?? "")
                 }
                 searchable
-                readOnly={isCurrencyLoading || isReadOnly}
+                readOnly={isCurrencyLoading || formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3194,7 +3196,7 @@ function PaymentRequest() {
                 min={0}
                 decimalScale={2}
                 hideControls
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col> */}
@@ -3205,7 +3207,7 @@ function PaymentRequest() {
                 placeholder="Select CRJ date"
                 value={normalizeDate(form.values.crj_date)}
                 onChange={(date) => form.setFieldValue("crj_date", date)}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -3218,7 +3220,7 @@ function PaymentRequest() {
                   form.setFieldValue("paid_to", e.target.value);
                   if (form.errors.paid_to) form.clearFieldError("paid_to");
                 }}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 error={
                   form.errors.paid_to ? String(form.errors.paid_to) : undefined
                 }
@@ -3242,7 +3244,7 @@ function PaymentRequest() {
                 onChange={(value) =>
                   form.setFieldValue("not_over", value ?? "")
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3256,7 +3258,7 @@ function PaymentRequest() {
                 onChange={(value) =>
                   form.setFieldValue("approved", value ?? "")
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col> */}
@@ -3270,7 +3272,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("accountant_note", e.target.value)
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 rows={3}
                 styles={textareaStyles}
               />
@@ -3282,7 +3284,7 @@ function PaymentRequest() {
                 placeholder="Enter note"
                 value={form.values.note}
                 onChange={(e) => form.setFieldValue("note", e.target.value)}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 rows={3}
                 styles={textareaStyles}
               />
@@ -3300,7 +3302,7 @@ function PaymentRequest() {
                     onChange={(e) =>
                       form.setFieldValue("rejected_note", e.target.value)
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     rows={3}
                     styles={textareaStyles}
                   />
@@ -3314,7 +3316,7 @@ function PaymentRequest() {
                     onChange={(e) =>
                       form.setFieldValue("on_hold_note", e.target.value)
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     rows={3}
                     styles={textareaStyles}
                   />
@@ -3355,7 +3357,7 @@ function PaymentRequest() {
                         findPartyAddressByGst(partyAddresses, gst),
                       );
                     }}
-                    disabled={isReadOnly}
+                    disabled={formFieldsReadOnly}
                     searchable
                     dropdownZIndex={chargesDropdownZIndex}
                     styles={{
@@ -3401,7 +3403,7 @@ function PaymentRequest() {
                 size="sm"
                 onClick={handleCalculateGst}
                 loading={isSubmitting}
-                disabled={isReadOnly}
+                disabled={formFieldsReadOnly}
               >
                 Calculate GST
               </Button>
@@ -3414,7 +3416,7 @@ function PaymentRequest() {
                   size="sm"
                   onClick={handleCalculateTds}
                   loading={isSubmitting}
-                  disabled={isReadOnly || !isPaidToSelected}
+                  disabled={formFieldsReadOnly || !isPaidToSelected}
                 >
                   Calculate TDS
                 </Button>
@@ -3462,7 +3464,7 @@ function PaymentRequest() {
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
-                    <Grid.Col span={isReadOnly ? 1.76 : 1.48} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={formFieldsReadOnly ? 1.76 : 1.48} style={{ fontSize: "13px" }}>
                       Job Id
                     </Grid.Col>
                     {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
@@ -3507,7 +3509,7 @@ function PaymentRequest() {
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
               </Grid.Col> */}
-                    {!isReadOnly && (
+                    {!formFieldsReadOnly && (
                       <Grid.Col
                         span={0.77}
                         style={{
@@ -3560,7 +3562,7 @@ function PaymentRequest() {
                         e.target.value,
                       )
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     styles={{
                       input: {
                         fontSize: "13px",
@@ -3572,7 +3574,7 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Job No */}
-                      <Grid.Col span={isReadOnly ? 1.76 : 1.48}>
+                      <Grid.Col span={formFieldsReadOnly ? 1.76 : 1.48}>
                         {isJobChargesPrefillFlow ? (
                           <Dropdown
                             placeholder="Select job id"
@@ -3585,7 +3587,7 @@ function PaymentRequest() {
                               )
                             }
                             searchable
-                            readOnly={isReadOnly}
+                            readOnly={formFieldsReadOnly}
                             styles={{
                               input: {
                                 fontSize: "13px",
@@ -3603,7 +3605,7 @@ function PaymentRequest() {
                             minSearchLength={1}
                             searchFields={["shipment_id", "job_id", "type"]}
                             displayFormat={jobCreateDropdownDisplayFormat}
-                            readOnly={isReadOnly}
+                            readOnly={formFieldsReadOnly}
                             dropdownZIndex={chargesDropdownZIndex}
                             onChange={(value) =>
                               form.setFieldValue(
@@ -3633,7 +3635,7 @@ function PaymentRequest() {
                         e.target.value,
                       )
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     styles={{
                       input: {
                         fontSize: "13px",
@@ -3650,7 +3652,7 @@ function PaymentRequest() {
                     placeholder="C/N/R"
                     data={CN_R_OPTIONS}
                     value={charge.cn_r || null}
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     onChange={(value) =>
                       form.setFieldValue(
                         `charges.${index}.cn_r`,
@@ -3759,7 +3761,7 @@ function PaymentRequest() {
                             }
                           }}
                           withAsterisk
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={chargesDropdownZIndex}
@@ -3876,7 +3878,7 @@ function PaymentRequest() {
                             );
                           }}
                           disabled={
-                            isReadOnly ||
+                            formFieldsReadOnly ||
                             (String(charge.job_no ?? "").trim() !== "" &&
                               charge.charge_id != null)
                           }
@@ -3897,7 +3899,7 @@ function PaymentRequest() {
                           value={charge.subledger_code ?? ""}
                           readOnly
                           disabled={
-                            isReadOnly ||
+                            formFieldsReadOnly ||
                             (String(charge.job_no ?? "").trim() !== "" &&
                               charge.charge_id != null)
                           }
@@ -3919,7 +3921,7 @@ function PaymentRequest() {
                           data={currencyOptions}
                           dropdownZIndex={chargesDropdownZIndex}
                           value={charge.currency_id || charge.currency || null}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(
@@ -3973,7 +3975,7 @@ function PaymentRequest() {
                           placeholder="ROE"
                           min={0}
                           hideControls
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.roe || undefined}
                           onChange={(value) => {
                             const roe = value as number | null;
@@ -4011,7 +4013,7 @@ function PaymentRequest() {
                           data={unitOptions}
                           dropdownZIndex={chargesDropdownZIndex}
                           value={charge.unit_id || charge.unit_code || null}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(`charges.${index}.unit_id`, v);
@@ -4037,7 +4039,7 @@ function PaymentRequest() {
                           placeholder="Units"
                           min={0}
                           hideControls
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.no_of_unit ?? undefined}
                           onChange={(value) => {
                             const noOfUnit = value as number | null;
@@ -4085,7 +4087,7 @@ function PaymentRequest() {
                           min={0}
                           hideControls
                           decimalScale={amountDecimalScale}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.amount_per_unit ?? undefined}
                           onChange={(value) => {
                             const amtPerUnit = value as number | null;
@@ -4133,7 +4135,7 @@ function PaymentRequest() {
                           min={0}
                           hideControls
                           decimalScale={amountDecimalScale}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.amount ?? undefined}
                           onChange={(value) => {
                             const amt = value as number | null;
@@ -4190,7 +4192,7 @@ function PaymentRequest() {
                               String(val ?? "").trim(),
                             )
                           }
-                          disabled={isReadOnly}
+                          disabled={formFieldsReadOnly}
                           dropdownZIndex={chargesDropdownZIndex}
                           styles={{
                             input: {
@@ -4221,7 +4223,7 @@ function PaymentRequest() {
                           e.currentTarget.checked ? "true" : "false",
                         )
                       }
-                      disabled={isReadOnly}
+                      disabled={formFieldsReadOnly}
                       color="#105476"
                       styles={{
                         label: { fontSize: "13px", fontFamily: "Inter" },
@@ -4231,7 +4233,7 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Actions */}
-                      {!isReadOnly && (
+                      {!formFieldsReadOnly && (
                         <Grid.Col
                           span={0.77}
                           style={{
@@ -4569,7 +4571,7 @@ function PaymentRequest() {
                 variant="outline"
                 color="#105476"
                 onClick={() => {
-                  const canAttach = !isReadOnly && !isApprovedStatus;
+                  const canAttach = !formFieldsReadOnly;
                   if (canAttach && supportingDocuments.length === 0) {
                     setSupportingDocuments([{ name: "", file: null }]);
                   }
@@ -4585,11 +4587,11 @@ function PaymentRequest() {
                 }}
                 disabled={isSubmitting}
               >
-                {!isReadOnly && !isApprovedStatus
+                {!formFieldsReadOnly
                   ? "Attach supporting document"
                   : "View supporting document(s)"}
               </Button>
-              {!isReadOnly && !isApprovedStatus && (
+              {!formFieldsReadOnly && (
                 <>
                   {showApprovalActions && isEditMode && saveResponse?.id && (
                     <>
