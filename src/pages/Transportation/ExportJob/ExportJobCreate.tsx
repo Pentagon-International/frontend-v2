@@ -152,6 +152,7 @@ import {
 } from "../../../utils/jobDocuments";
 import {
   buildJobCreatePayloadFromBooking,
+  collectLinkedBookingIds,
   fetchJobRecordByDetailsId,
   prepareHouseDocumentIdsFromBooking,
 } from "../../../utils/bookingCreateJob";
@@ -3176,28 +3177,19 @@ function ExportJobCreate() {
         })
         .filter((row): row is { id: number } => row != null);
 
-      const existingBookingIds = Array.from(
-        new Set(
-          [
-            ...(Array.isArray((jobData as { booking_ids?: unknown }).booking_ids)
-              ? ((jobData as { booking_ids?: unknown[] }).booking_ids ?? [])
-              : []),
-            ...housingDetails.map((h) => h.booking_id),
-            ...linkedBookingIds,
-          ]
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number =>
-                typeof n === "number" && !Number.isNaN(n) && n > 0,
-            ),
-        ),
+      const existingBookingIds = collectLinkedBookingIds(
+        housingDetails,
+        (jobData as { booking_ids?: unknown }).booking_ids,
+        linkedBookingIds,
       );
 
       await putAPICall(
         URL.importJob,
         {
           id: jobData.id,
-          booking_ids: existingBookingIds,
+          ...(existingBookingIds.length > 0
+            ? { booking_ids: existingBookingIds }
+            : {}),
           housing_details: [...existingHouseIds, ...newHouses],
         },
         API_HEADER,
@@ -3458,15 +3450,9 @@ function ExportJobCreate() {
       return;
     }
     try {
-      const bookingIds = Array.from(
-        new Set(
-          (housingDetails ?? [])
-            .map((h) => h.booking_id)
-            .map((v) => (v == null || v === ("" as unknown) ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        housingDetails,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3485,7 +3471,7 @@ function ExportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
         destination_code: mblDetailsForm.values.destination_code,

@@ -152,6 +152,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
+import { collectLinkedBookingIds } from "../../../utils/bookingCreateJob";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -2973,15 +2974,9 @@ function AirImportJobCreate() {
       return;
     }
     try {
-      const bookingIds = Array.from(
-        new Set(
-          (hawbDetails ?? [])
-            .map((h) => (h as { booking_id?: unknown }).booking_id)
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        hawbDetails as Array<{ booking_id?: unknown }>,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3027,7 +3022,7 @@ function AirImportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const toIso = (d: Date | null) =>
             d && dayjs(d).isValid()
