@@ -90,6 +90,7 @@ import {
   validateMeaningfulHouseCharges,
 } from "../../../utils/houseChargesPayload";
 import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
+import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
 import {  } from "../../../utils/invoiceDocumentNumber";
 import {
   calculateHouseChargeableWeight,
@@ -687,9 +688,12 @@ function HouseCreate() {
     );
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const pendingLeaveActionRef = useRef<(() => void) | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
     const leave = () => navigate(jobModuleBasePath);
-    if (!isReadOnly) {
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       pendingLeaveActionRef.current = leave;
       setConfirmBackToListOpen(true);
       return;
@@ -1217,6 +1221,21 @@ function HouseCreate() {
       setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
     }
   }, [isEditMode, editData, form]);
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [isEditMode, editIndex, editData?.id]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [form.values, chargesForm.values, isReadOnly]);
 
   const openEventsModalFromMenu = useCallback(() => {
     const existing =
@@ -5965,6 +5984,111 @@ function HouseCreate() {
                     variant="outline"
                     color="#105476"
                     onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const fullDetail = getCurrentHousingDetail();
+                      const houseShipmentNo = toStr(
+                        (fullDetail as { shipment_id?: unknown }).shipment_id ??
+                          (
+                            editData as { shipment_id?: unknown } | undefined
+                          )?.shipment_id,
+                      );
+                      if (!houseShipmentNo) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Shipment ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
+
+                      // Use current house charge rows only (not job/other houses).
+                      const houseCharges = Array.isArray(
+                        chargesForm.values.charges,
+                      )
+                        ? chargesForm.values.charges
+                        : [];
+
+                      const withChargeAndSupplier = houseCharges.filter(
+                        (c) =>
+                          c?.charge_id != null &&
+                          (toStr(c.supplier_code) || toStr(c.supplier_name)),
+                      );
+
+                      if (withChargeAndSupplier.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Select a supplier/vendor to create supplier invoice",
+                        });
+                        return;
+                      }
+
+                      const charges = withChargeAndSupplier
+                        .map((c) => ({
+                          shipment_no: houseShipmentNo,
+                          charge_id:
+                            c.charge_id != null ? Number(c.charge_id) : null,
+                          charge_name: toStr(c.charge_name),
+                          currency_id:
+                            (c as { currency_id?: unknown }).currency_id ??
+                            (c as { currency?: unknown }).currency ??
+                            null,
+                          roe: (c as { roe?: unknown }).roe ?? null,
+                          amount: resolveSupplierInvoiceHouseCostAmount(
+                            c as Record<string, unknown>,
+                          ),
+                          supplier_code: toStr(c.supplier_code),
+                          supplier_name: toStr(c.supplier_name),
+                        }))
+                        .filter(
+                          (x) =>
+                            x.charge_id != null &&
+                            x.amount != null &&
+                            String(x.amount).trim() !== "",
+                        );
+
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Fill cost values on the charge(s) to create supplier invoice",
+                        });
+                        return;
+                      }
+
+                      navigate("/supplier-invoice/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            // Prefer master job id for shipment options; charge rows
+                            // keep this house shipment_no only.
+                            job_id: toStr(
+                              (
+                                location.state?.job as {
+                                  job_id?: unknown;
+                                  shipment_id?: unknown;
+                                } | null
+                              )?.job_id ??
+                                (
+                                  location.state?.job as {
+                                    shipment_id?: unknown;
+                                  } | null
+                                )?.shipment_id ??
+                                location.state?.job?.id ??
+                                houseShipmentNo,
+                            ),
+                            charges,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier Invoice
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
                       const charges = Array.isArray(fullDetail.charges)
                         ? fullDetail.charges
@@ -6141,11 +6265,11 @@ function HouseCreate() {
               <Grid mb={2} gutter="sm" style={{ fontWeight: 700 }}>
                 <Grid.Col span={1.4} />
                 <Grid.Col span={0.9} />
+                <Grid.Col span={1.2} />
                 <Grid.Col span={0.8} />
-                <Grid.Col span={0.8} />
-                <Grid.Col span={0.7} />
-                <Grid.Col span={0.7} />
-                <Grid.Col span={2.55}>
+                <Grid.Col span={0.6} />
+                <Grid.Col span={0.6} />
+                <Grid.Col span={2.25}>
                   <Box
                     style={{
                       border: "1.5px solid #228be6",
@@ -6161,7 +6285,7 @@ function HouseCreate() {
                     SELL
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={3.65}>
+                <Grid.Col span={3.35}>
                   <Box
                     style={{
                       border: "1.5px solid #e67700",
@@ -6191,36 +6315,36 @@ function HouseCreate() {
                   <RequiredLabel label="Charge Name" required={true} />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <RequiredLabel label="Prepaid / Collect" required={true} />
+                  <RequiredLabel label="PP/CC" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.8}>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.8}>
                   <RequiredLabel label="Currency" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.6}>
                   <RequiredLabel label="ROE" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.6}>
                   <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Amount" required={true} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Sell Local Amt" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Cost/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Total Cost" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Cost Local Amt" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.1}>
@@ -6328,7 +6452,7 @@ function HouseCreate() {
                   </Grid.Col>
                   <Grid.Col span={0.75}>
                     <Dropdown
-                      placeholder="Prepaid/Collect"
+                      placeholder="PP/CC"
                       searchable
                       data={[
                         { value: "Prepaid", label: "Prepaid" },
@@ -6353,7 +6477,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.pp_cc}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={1.2}>
                     <Dropdown
                       placeholder="Unit"
                       searchable
@@ -6427,7 +6551,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.6}>
                     <FormNumberInput
                       placeholder="ROE"
                       min={0}
@@ -6489,7 +6613,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.roe}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.7}>
+                  <Grid.Col span={0.6}>
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
@@ -6539,7 +6663,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Amount/Unit"
                       min={0}
@@ -6579,7 +6703,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount_per_unit}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Amount"
                       min={0}
@@ -6604,7 +6728,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Sell Local Amt"
                       min={0}
@@ -6620,7 +6744,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Cost/Unit"
                       min={0}
@@ -6655,7 +6779,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Total Cost"
                       min={0}
@@ -6671,7 +6795,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Cost Local Amt"
                       min={0}
@@ -6843,8 +6967,8 @@ function HouseCreate() {
         centered
       >
         <Text size="sm" mb="md">
-          Your recent changes may be lost if you close this job. Are you sure
-          you want to continue?
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -6863,7 +6987,7 @@ function HouseCreate() {
               else navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
@@ -6883,21 +7007,13 @@ function HouseCreate() {
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => {
-              const leave = () => {
-                if (isViewOnly) {
-                  navigateToJobWithHousingList(existingHousingDetails);
-                } else {
-                  navigateToJobWithHousingList(
-                    buildUpdatedHousingDetailsFromForm(),
-                  );
-                }
-              };
-              if (!isReadOnly) {
-                pendingLeaveActionRef.current = leave;
-                setConfirmBackToListOpen(true);
-                return;
+              if (isViewOnly) {
+                navigateToJobWithHousingList(existingHousingDetails);
+              } else {
+                navigateToJobWithHousingList(
+                  buildUpdatedHousingDetailsFromForm(),
+                );
               }
-              leave();
             }}
           >
             Back to Import Job

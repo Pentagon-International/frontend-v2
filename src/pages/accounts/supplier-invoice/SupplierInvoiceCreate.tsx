@@ -1836,13 +1836,36 @@ export default function SupplierInvoiceCreate({
         if (prefillJobId && !opts.some((o) => o.value === prefillJobId)) {
           opts.unshift({ value: prefillJobId, label: prefillJobId });
         }
+        // Ensure house shipment nos from prefill charges are available.
+        const fromCharges = Array.from(
+          new Set(
+            (prefillFromJob?.charges ?? [])
+              .map((c) => String(c.shipment_no ?? "").trim())
+              .filter(Boolean),
+          ),
+        );
+        for (const shipmentNo of fromCharges) {
+          if (!opts.some((o) => o.value === shipmentNo)) {
+            opts.push({ value: shipmentNo, label: shipmentNo });
+          }
+        }
         setPrefillShipmentOptions(opts);
       })
-      .catch(() =>
-        setPrefillShipmentOptions(
-          prefillJobId ? [{ value: prefillJobId, label: prefillJobId }] : [],
-        ),
-      );
+      .catch(() => {
+        const fromCharges = Array.from(
+          new Set(
+            (prefillFromJob?.charges ?? [])
+              .map((c) => String(c.shipment_no ?? "").trim())
+              .filter(Boolean),
+          ),
+        );
+        const fallback = fromCharges.length
+          ? fromCharges.map((s) => ({ value: s, label: s }))
+          : prefillJobId
+            ? [{ value: prefillJobId, label: prefillJobId }]
+            : [];
+        setPrefillShipmentOptions(fallback);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isJobChargesPrefillFlow, isServiceJobPrefillFlow, prefillJobId]);
 
@@ -2552,7 +2575,7 @@ export default function SupplierInvoiceCreate({
       const mappedCharges: ChargeRow[] = filtered
         .map((c) => {
           // Service Job / estimates: shipment_no = job_id.
-          // Air Import House rows: shipment_no = house shipment_id.
+          // House rows: shipment_no = that house's shipment_id only.
           // If caller didn't send shipment_no for some row, fall back to job_id.
           const shipmentNo =
             String(c.shipment_no ?? "").trim() ||
@@ -2596,8 +2619,33 @@ export default function SupplierInvoiceCreate({
         })
         .filter(Boolean) as ChargeRow[];
 
+      // Always replace charges from the navigated prefill set (house-level
+      // navigations only include that house's charges in prefillFromJob.charges).
       if (mappedCharges.length > 0) {
         form.setFieldValue("charges_data", mappedCharges);
+      } else {
+        form.setFieldValue("charges_data", [
+          {
+            account_code: "",
+            account_name: "",
+            subledger_code: "",
+            CRN: "Cost",
+            narration: "",
+            shipment_no: "",
+            charge_id: null,
+            charge_name: "",
+            currency_id: defaultBranchCurrencyId
+              ? Number(defaultBranchCurrencyId)
+              : null,
+            roe: defaultBranchCurrencyId ? 1 : null,
+            amount: null,
+            amount_in_local: null,
+            tax_code: "",
+            igst_rate: null,
+            igst: null,
+            Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
+          },
+        ]);
       }
     },
     [
@@ -2607,6 +2655,7 @@ export default function SupplierInvoiceCreate({
       isReversal,
       form,
       getDrCrDefaultsByType,
+      defaultBranchCurrencyId,
     ],
   );
 

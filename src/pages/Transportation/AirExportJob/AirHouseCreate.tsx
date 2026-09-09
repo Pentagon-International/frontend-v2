@@ -5114,11 +5114,11 @@ function HouseCreate() {
               <Grid mb={2} gutter="sm" style={{ fontWeight: 700 }}>
                 <Grid.Col span={1.4} />
                 <Grid.Col span={0.9} />
+                <Grid.Col span={1.2} />
                 <Grid.Col span={0.8} />
-                <Grid.Col span={0.8} />
-                <Grid.Col span={0.7} />
-                <Grid.Col span={0.7} />
-                <Grid.Col span={2.55}>
+                <Grid.Col span={0.6} />
+                <Grid.Col span={0.6} />
+                <Grid.Col span={2.25}>
                   <Box
                     style={{
                       border: "1.5px solid #228be6",
@@ -5134,7 +5134,7 @@ function HouseCreate() {
                     SELL
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={3.65}>
+                <Grid.Col span={3.35}>
                   <Box
                     style={{
                       border: "1.5px solid #e67700",
@@ -5165,36 +5165,36 @@ function HouseCreate() {
                   <RequiredLabel label="Charge Name" required />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <RequiredLabel label="Prepaid / Collect" required />
+                  <RequiredLabel label="PP/CC" required />
                 </Grid.Col>
-                <Grid.Col span={0.8}>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.8}>
                   <RequiredLabel label="Currency" required />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.6}>
                   <RequiredLabel label="ROE" required />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.6}>
                   <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Amount" required />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Local Amount" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Cost/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Total Cost" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Local Amount" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.1}>
@@ -5304,7 +5304,7 @@ function HouseCreate() {
                   </Grid.Col>
                   <Grid.Col span={0.9}>
                     <Dropdown
-                      placeholder="Select Prepaid/Collect"
+                      placeholder="PP/CC"
                       searchable
                       data={[
                         { value: "Prepaid", label: "Prepaid" },
@@ -5330,7 +5330,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.pp_cc}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.8}>
+                  <Grid.Col span={1.2}>
                     <Dropdown
                       placeholder="Select Unit"
                       searchable
@@ -5403,7 +5403,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.7}>
+                  <Grid.Col span={0.6}>
                     <FormNumberInput
                       placeholder="ROE"
                       min={0}
@@ -5466,7 +5466,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.roe}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.7}>
+                  <Grid.Col span={0.6}>
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
@@ -5531,7 +5531,7 @@ function HouseCreate() {
                       })()}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Amount/Unit"
                       min={0}
@@ -5576,7 +5576,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount_per_unit}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Amount"
                       min={0}
@@ -5601,7 +5601,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Local Amount"
                       min={0}
@@ -5617,7 +5617,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Cost/Unit"
                       min={0}
@@ -5652,7 +5652,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Total Cost"
                       min={0}
@@ -5668,7 +5668,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Local Amount"
                       min={0}

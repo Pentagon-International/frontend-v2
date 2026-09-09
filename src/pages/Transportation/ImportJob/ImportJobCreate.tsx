@@ -735,9 +735,11 @@ function ImportJobCreate() {
   );
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
-    // Confirm before leaving so unsaved edits are not discarded silently.
-    if (!isReadOnly) {
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -944,6 +946,29 @@ function ImportJobCreate() {
   const jobHydratedKeyRef = useRef<string | null>(null);
   // One-shot location.state restore per navigation; tab switches must not re-apply snapshots
   const lastFormRestoreNavKeyRef = useRef<string | null>(null);
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [mode, jobData?.id, location.key]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [
+    mblDetailsForm.values,
+    carrierDetailsForm.values,
+    routingsForm.values,
+    containerDetailsForm.values,
+    estimatesForm.values,
+    housingDetails,
+    isReadOnly,
+  ]);
 
   // Load job data if in edit or view mode
   useEffect(() => {
@@ -6321,7 +6346,7 @@ function ImportJobCreate() {
                         ToastNotification({
                           type: "error",
                           message:
-                            "No charges found in Estimates/House charges to prefill.",
+                            "Select a supplier/vendor to create supplier invoice",
                         });
                         return;
                       }
@@ -6419,7 +6444,7 @@ function ImportJobCreate() {
               )}
             </Group>
             <EstimatesSection
-              serviceType="SEA"
+              serviceType={["FCL", "LCL"]}
               form={estimatesForm}
               readOnly={isReadOnly}
               defaultPpCc="Collect"
@@ -6613,8 +6638,8 @@ function ImportJobCreate() {
         centered
       >
         <Text size="sm" mb="md">
-          Your recent changes may be lost if you close this job. Are you sure
-          you want to continue?
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -6630,7 +6655,7 @@ function ImportJobCreate() {
               navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
