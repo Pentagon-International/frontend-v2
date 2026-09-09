@@ -170,6 +170,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
+import { collectLinkedBookingIds } from "../../../utils/bookingCreateJob";
 import { resolveJobAgentAddress } from "../../../utils/resolveJobAgentAddress";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
@@ -3577,15 +3578,9 @@ function ImportJobCreate() {
     try {
       // Backend rejects numeric fields with more than 2 decimals.
       // Round right before we build the final create/edit payload.
-      const bookingIds = Array.from(
-        new Set(
-          (housingDetails ?? [])
-            .map((h) => (h as { booking_id?: unknown }).booking_id)
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        housingDetails as Array<{ booking_id?: unknown }>,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3648,7 +3643,7 @@ function ImportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         ocean_routings: routingsForm.values.routings.map((routing) => {
           // New format: all fields are nullable
           const routingPayload: Record<string, unknown> = {

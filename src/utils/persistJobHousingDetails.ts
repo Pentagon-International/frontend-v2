@@ -7,6 +7,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "./jobSaveResponse";
+import { collectLinkedBookingIds } from "./bookingCreateJob";
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 import {
   hasMeaningfulHouseChargeData,
@@ -338,15 +339,9 @@ export function buildFullJobUpdatePayloadFromHouseNav(
   const jobDateSrc =
     mbl.job_date ?? (isImport ? etaSrc : etdSrc) ?? job.job_date;
 
-  const bookingIds = Array.from(
-    new Set(
-      (updatedHousingDetails as Array<{ booking_id?: unknown }>)
-        .map((h) => h?.booking_id)
-        .map((v) => (v == null || v === "" ? null : Number(v)))
-        .filter(
-          (n): n is number => typeof n === "number" && !Number.isNaN(n),
-        ),
-    ),
+  const bookingIds = collectLinkedBookingIds(
+    updatedHousingDetails as Array<{ booking_id?: unknown }>,
+    job.booking_ids,
   );
 
   const payload: Record<string, unknown> = {

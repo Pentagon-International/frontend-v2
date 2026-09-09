@@ -110,6 +110,7 @@ import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestC
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   buildJobCreatePayloadFromBooking,
+  collectLinkedBookingIds,
   fetchJobRecordByDetailsId,
   prepareHouseDocumentIdsFromBooking,
 } from "../../../utils/bookingCreateJob";
@@ -2560,30 +2561,19 @@ function AirExportJobCreate() {
         .filter((id) => id > 0)
         .map((id) => ({ id }));
 
-      const existingBookingIds = Array.from(
-        new Set(
-          [
-            ...(Array.isArray(
-              (jobData as { booking_ids?: unknown }).booking_ids,
-            )
-              ? ((jobData as { booking_ids?: unknown[] }).booking_ids ?? [])
-              : []),
-            ...hawbDetails.map((h) => h.booking_id),
-            ...linkedBookingIds,
-          ]
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number =>
-                typeof n === "number" && !Number.isNaN(n) && n > 0,
-            ),
-        ),
+      const existingBookingIds = collectLinkedBookingIds(
+        hawbDetails,
+        (jobData as { booking_ids?: unknown }).booking_ids,
+        linkedBookingIds,
       );
 
       await putAPICall(
         `${URL.base}${URL.jobCreate}`,
         {
           id: jobData.id,
-          booking_ids: existingBookingIds,
+          ...(existingBookingIds.length > 0
+            ? { booking_ids: existingBookingIds }
+            : {}),
           housing_details: [...existingHouseIds, ...newHouses],
         },
         API_HEADER,
@@ -2972,15 +2962,9 @@ function AirExportJobCreate() {
       return;
     }
     try {
-      const bookingIds = Array.from(
-        new Set(
-          (hawbDetails ?? [])
-            .map((h) => h.booking_id)
-            .map((v) => (v == null || v === ("" as unknown) ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        hawbDetails,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3022,7 +3006,7 @@ function AirExportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         commodity_description:
           cargoDetailsForm.values.commodity_description || null,
         handling_information:

@@ -574,6 +574,38 @@ function getBookingIdsFromBooking(booking: Record<string, unknown>): number[] {
   return Number.isFinite(n) && n > 0 ? [n] : [];
 }
 
+function toPositiveBookingId(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Unique booking PKs from houses, job.booking_ids, and extra ids (link-booking). */
+export function collectLinkedBookingIds(
+  housing?: Array<{ booking_id?: unknown }> | null,
+  jobBookingIds?: unknown,
+  extraIds?: unknown[],
+): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  const push = (value: unknown) => {
+    const n = toPositiveBookingId(value);
+    if (n == null || seen.has(n)) return;
+    seen.add(n);
+    out.push(n);
+  };
+  for (const row of housing ?? []) {
+    push(row?.booking_id);
+  }
+  if (Array.isArray(jobBookingIds)) {
+    for (const value of jobBookingIds) push(value);
+  } else {
+    push(jobBookingIds);
+  }
+  for (const value of extraIds ?? []) push(value);
+  return out;
+}
+
 type JobCreateFromBookingDocOptions = {
   /** Fresh job-upload document ids (cloned from booking attachments). */
   houseDocumentIds?: number[];
