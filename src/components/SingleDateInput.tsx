@@ -21,6 +21,8 @@ export interface SingleDateInputProps {
   maxDate?: Date;
   error?: string;
   withAsterisk?: boolean;
+  /** Native title on the input — useful when the date is truncated in tight layouts. */
+  title?: string;
   /** Forwarded to Mantine `DateInput` (e.g. `dropdown` for portaled calendar). */
   classNames?: Record<string, string>;
   /** Shallow-merge over default date field styles (e.g. `fontFamily`). */
@@ -40,6 +42,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   maxDate,
   error,
   withAsterisk,
+  title,
   classNames,
   styles: stylesOverride,
 }) => {
@@ -159,7 +162,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       onChange={handleDateChange}
       valueFormat={dateFormat}
       dateParser={(input) => parseTypedDate(input, dateFormat)}
-      leftSection={<IconCalendar size={18} />}
+      leftSection={<IconCalendar size={16} />}
       leftSectionPointerEvents="none"
       radius="sm"
       size={size}
@@ -173,6 +176,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       maxDate={maxDate}
       error={error}
       withAsterisk={withAsterisk}
+      title={title}
       classNames={classNames}
       getDayProps={(date) => {
         const isSelected = isDateSelected(date, value);

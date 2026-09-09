@@ -179,15 +179,6 @@ function parsePaymentRequestGstBreakupResponse(
   return statusBody as PaymentRequestTaxBreakup;
 }
 
-const fetchPaymentRequestGstBreakup = async (paymentRequestId: number) => {
-  const response = await postAPICall(
-    URL.invoiceCalculateGstBreakup,
-    { payment_request_id: paymentRequestId },
-    API_HEADER,
-  );
-  return parsePaymentRequestGstBreakupResponse(response);
-};
-
 function formatGstBreakupRate(
   rate: number | string | null | undefined,
   rateType: string | null | undefined,
@@ -937,6 +928,11 @@ function PaymentRequest() {
     null,
   );
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
+  /**
+   * Once Actual Invoice No + Date exist on an approved PRQ (from load or after
+   * one-time update), they cannot be changed again (supplier-invoice fapiao style).
+   */
+  const [actualInvAlreadySet, setActualInvAlreadySet] = useState(false);
   const showTaxTab = isIndiaUser;
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -1315,6 +1311,22 @@ function PaymentRequest() {
       .trim()
       .toUpperCase() === "APPROVED";
   const docsReadOnly = isReadOnly || isApprovedStatus;
+  const hasProformaSet =
+    Boolean(String(form.values.proforma_invoice_no_1 ?? "").trim()) &&
+    form.values.proforma_invoice_date != null;
+  /**
+   * Approved + proforma set + actual inv not yet saved: allow one-time insert
+   * of Actual Invoice No + Date (same pattern as supplier-invoice Inv/Crn after post).
+   */
+  const canEditActualInvAfterApproved =
+    !isViewMode &&
+    isApprovedStatus &&
+    hasProformaSet &&
+    !actualInvAlreadySet &&
+    saveResponse?.id != null &&
+    saveResponse.id > 0;
+  const actualInvFieldReadOnly =
+    isViewMode || (isApprovedStatus && !canEditActualInvAfterApproved);
 
   const isPaidToSelected =
     !!String(form.values.paid_to ?? "").trim() ||
@@ -1337,28 +1349,6 @@ function PaymentRequest() {
     }),
     [gstBreakup],
   );
-
-  useEffect(() => {
-    if (!saveResponse?.id || !showTaxTab) {
-      return;
-    }
-    let cancelled = false;
-    setGstBreakupLoading(true);
-    setGstBreakup(null);
-    fetchPaymentRequestGstBreakup(saveResponse.id)
-      .then((data) => {
-        if (!cancelled) setGstBreakup(data);
-      })
-      .catch(() => {
-        if (!cancelled) setGstBreakup(null);
-      })
-      .finally(() => {
-        if (!cancelled) setGstBreakupLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [saveResponse?.id, showTaxTab]);
 
   useEffect(() => {
     // In create flow, if voucher type is empty, auto-fill from source screen.
@@ -1644,6 +1634,152 @@ function PaymentRequest() {
     await handleSubmit(form.values);
   };
 
+  /**
+   * Approved PRQ one-shot: insert Actual Invoice No + Date once (fapiao-style),
+   * then lock those fields.
+   */
+  const handleUpdateActualInvAfterApproved = async () => {
+    if (!canEditActualInvAfterApproved || !saveResponse?.id) {
+      ToastNotification({
+        message: "Actual invoice details cannot be updated.",
+        type: "error",
+      });
+      return;
+    }
+
+    const actualInvNo = String(form.values.actual_invoice_no ?? "").trim();
+    const actualInvDate = form.values.actual_invoice_date;
+    if (!actualInvNo || actualInvDate == null) {
+      ToastNotification({
+        message:
+          "Both Actual Invoice No and Actual Invoice Date are required.",
+        type: "error",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const values = form.values;
+      const formatDate = (d: Date | null) => {
+        if (!d) return null;
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${year}-${month}-${day}`;
+      };
+
+      const currencyList = currencyData as Array<{
+        id?: number;
+        currency_code?: string;
+        code?: string;
+      }>;
+      const mainCurrencyId = currencyList?.find(
+        (item) =>
+          (item.currency_code ?? item.code ?? "")
+            .toString()
+            .trim()
+            .toUpperCase() ===
+          (values.currency ?? "").toString().trim().toUpperCase(),
+      )?.id;
+
+      const stateIdNum = values.state_code_1
+        ? Number(values.state_code_1)
+        : undefined;
+
+      const payload: Record<string, unknown> = {
+        id: saveResponse.id,
+        job_reference: "",
+        crj_number: values.payment_crj_did ?? "",
+        approved_by: values.approved_by_1 ?? "",
+        approved_date: formatDate(values.approved_date),
+        ...resolvePaymentRequestGstPayloadValues(values, branchLocationGstNo),
+        date: formatDate(values.date),
+        payment_type: values.payment_type ?? "",
+        vouchar_type: values.voucher_type ?? "",
+        CINV: values.cinv ?? false,
+        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        proforma_inv_date: formatDate(values.proforma_invoice_date),
+        actual_inv_no: actualInvNo,
+        actual_inv_date: formatDate(actualInvDate),
+        account_id:
+          values.account_id && Number.isFinite(Number(values.account_id))
+            ? Number(values.account_id)
+            : undefined,
+        ...(values.account_code ? { account_code: values.account_code } : {}),
+        amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
+        crj_date: formatDate(values.crj_date),
+        paid_to_type: values.paid_to_type ?? "",
+        paid_to: values.paid_to ?? "",
+        not_over: values.not_over ?? "",
+        tds_section_code: values.tds_section_code ?? "",
+        account_note: values.accountant_note ?? "",
+        note: values.note ?? "",
+        rejected_note: values.rejected_note || null,
+        on_hold_note: values.on_hold_note || null,
+        status: "Approved",
+        charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
+      };
+      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+        payload.currency_id = mainCurrencyId;
+      }
+      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+        payload.state_id = stateIdNum;
+      }
+
+      const rawPut = (await apiCallProtected.put(
+        `${(URL as any).paymentRequest}${saveResponse.id}/`,
+        buildPaymentRequestFormData(
+          payload as Record<string, unknown>,
+          supportingDocuments,
+        ),
+        {
+          headers: {
+            ...FORM_DATA_HEADERS,
+            ...API_HEADER.headers,
+          },
+        },
+      )) as any;
+
+      const d: PaymentRequestFromApi =
+        rawPut?.data?.data ?? rawPut?.data ?? rawPut;
+
+      if (d?.actual_inv_no != null) {
+        form.setFieldValue("actual_invoice_no", String(d.actual_inv_no));
+      }
+      if (d?.actual_inv_date != null) {
+        form.setFieldValue(
+          "actual_invoice_date",
+          normalizeDate(d.actual_inv_date),
+        );
+      }
+      setActualInvAlreadySet(true);
+      setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
+      setSaveResponse((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: d.status ?? prev.status ?? "Approved",
+            }
+          : prev,
+      );
+
+      ToastNotification({
+        message: "Actual invoice details updated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      ToastNotification({
+        message:
+          (error as { message?: string })?.message ??
+          "Failed to update actual invoice details",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCalculateGst = async () => {
     const validation = form.validate();
     if (validation.hasErrors) return;
@@ -1678,7 +1814,7 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: values.job_reference_1 ?? "",
+        job_reference: "",
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -1756,6 +1892,15 @@ function PaymentRequest() {
         throw new Error("Payment request id not found in response.");
       }
 
+      setSaveResponse({
+        id: paymentRequestId,
+        request_no: saveData.request_no ?? saveResponse?.request_no ?? "",
+        status: saveData.status ?? saveResponse?.status,
+      });
+      if (saveData.request_no) {
+        form.setFieldValue("request_no", saveData.request_no);
+      }
+
       const gstBreakupResponse = parsePaymentRequestGstBreakupResponse(
         await postAPICall(
           URL.invoiceCalculateGstBreakup,
@@ -1808,7 +1953,10 @@ function PaymentRequest() {
             is_tax_row: true,
           };
         });
-        form.setFieldValue("charges", [...form.values.charges, ...gstCharges]);
+        const chargesWithoutTax = form.values.charges.filter(
+          (c) => c.is_tax_row !== true,
+        );
+        form.setFieldValue("charges", [...chargesWithoutTax, ...gstCharges]);
       }
 
       setGstBreakup(gstBreakupResponse);
@@ -1862,7 +2010,7 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: values.job_reference_1 ?? "",
+        job_reference: "",
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -2114,7 +2262,7 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: values.job_reference_1 ?? "",
+        job_reference: "",
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -2209,6 +2357,13 @@ function PaymentRequest() {
               })),
             );
           }
+          setActualInvAlreadySet(
+            Boolean(
+              String(d.actual_inv_no ?? values.actual_invoice_no ?? "").trim() &&
+                (normalizeDate(d.actual_inv_date) ??
+                  values.actual_invoice_date),
+            ),
+          );
           ToastNotification({
             message: "Payment request updated successfully",
             type: "success",
@@ -2300,6 +2455,12 @@ function PaymentRequest() {
                   ? d.charges.map(mapApiChargeToChargeItem)
                   : values.charges,
             });
+            setActualInvAlreadySet(
+              Boolean(
+                String(d.actual_inv_no ?? "").trim() &&
+                  normalizeDate(d.actual_inv_date),
+              ),
+            );
           }
 
           ToastNotification({
@@ -2331,6 +2492,11 @@ function PaymentRequest() {
       request_no: d.request_no ?? "",
       status: d.status,
     });
+    setGstBreakup(null);
+    setGstBreakupLoading(false);
+    const loadedActualNo = String(d.actual_inv_no ?? "").trim();
+    const loadedActualDate = normalizeDate(d.actual_inv_date);
+    setActualInvAlreadySet(Boolean(loadedActualNo && loadedActualDate));
 
     setAccountNameDisplay(
       ((d as any).account_name ?? d.account_code ?? "").toString() || null,
@@ -2720,7 +2886,9 @@ function PaymentRequest() {
         <Box
           component="form"
           onSubmit={
-            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+            isReadOnly || isApprovedStatus
+              ? (e) => e.preventDefault()
+              : form.onSubmit(handleSubmit)
           }
           style={
             isReadOnly
@@ -2791,7 +2959,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("proforma_invoice_no_1", e.target.value)
                 }
-                readOnly={isReadOnly}
+                readOnly={isReadOnly || isApprovedStatus}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2804,7 +2972,7 @@ function PaymentRequest() {
                 onChange={(date) =>
                   form.setFieldValue("proforma_invoice_date", date)
                 }
-                readOnly={isReadOnly}
+                readOnly={isReadOnly || isApprovedStatus}
               />
             </Grid.Col>
 
@@ -2816,8 +2984,10 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("actual_invoice_no", e.target.value)
                 }
-                readOnly={isReadOnly}
-                styles={inputStyles}
+                readOnly={actualInvFieldReadOnly}
+                styles={
+                  canEditActualInvAfterApproved ? inputStyles : undefined
+                }
               />
             </Grid.Col>
 
@@ -2829,7 +2999,10 @@ function PaymentRequest() {
                 onChange={(date) =>
                   form.setFieldValue("actual_invoice_date", date)
                 }
-                readOnly={isReadOnly}
+                readOnly={actualInvFieldReadOnly}
+                styles={
+                  canEditActualInvAfterApproved ? inputStyles : undefined
+                }
               />
             </Grid.Col>
             {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
@@ -4227,7 +4400,7 @@ function PaymentRequest() {
                     chargesTabActive === "tax" &&
                     saveResponse?.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        No GST breakup data.
+                        Click Calculate GST to load tax breakup.
                       </Text>
                     )}
                   {!gstBreakupLoading && gstBreakup && (
@@ -4374,7 +4547,7 @@ function PaymentRequest() {
                     saveResponse &&
                     !saveResponse.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        Save the payment request to load tax breakup.
+                        Click Calculate GST to save and load tax breakup.
                       </Text>
                     )}
                 </Tabs.Panel>
@@ -4460,6 +4633,17 @@ function PaymentRequest() {
                     {saveResponse?.id ? "Update" : "Save"}
                   </Button>
                 </>
+              )}
+              {canEditActualInvAfterApproved && (
+                <Button
+                  type="button"
+                  color="#105476"
+                  rightSection={<IconChevronRight size={16} />}
+                  loading={isSubmitting}
+                  onClick={handleUpdateActualInvAfterApproved}
+                >
+                  Update Actual Invoice
+                </Button>
               )}
             </Group>
           </Group>

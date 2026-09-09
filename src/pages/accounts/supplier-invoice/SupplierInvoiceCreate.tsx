@@ -14,6 +14,7 @@ import {
   Text,
   Textarea,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -75,6 +76,8 @@ import {
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
+import { formatDateForUi } from "../../../utils/dateFormat";
+import useDateFormat from "../../../hooks/useDateFormat";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import {
   mergeEditPageAuditSources,
@@ -250,6 +253,8 @@ type SupplierInvoiceFormValues = {
   customer_gst_no: string;
   location_gst_no: string;
   type: "INV" | "CRN";
+  proforma_no: string;
+  proforma_date: Date | null;
   Inv_Crn_note: Date | null;
   Inv_Crn_no: string;
   roe: number | null;
@@ -806,6 +811,7 @@ export default function SupplierInvoiceCreate({
   const location = useLocation();
   const { id: supplierInvoiceIdFromRoute } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
+  const dateFormat = useDateFormat();
   const canPostDocuments = useCanPostDocuments();
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
@@ -837,6 +843,7 @@ export default function SupplierInvoiceCreate({
 
   useEffect(() => {
     setAuditPatch(null);
+    setActualInvAlreadySet(false);
   }, [location.key]);
 
   useEffect(() => {
@@ -926,6 +933,11 @@ export default function SupplierInvoiceCreate({
   const reversalIsAgentRef = useRef<boolean | null>(null);
   /** OVERSEAS daybook / agent vendor: State is optional. Ref so validate sees latest. */
   const isAgentVendorFlowRef = useRef(false);
+  /**
+   * Once Inv/Crn No + Date exist on a posted invoice (from load or after one-time PATCH),
+   * they cannot be inserted/changed again (fapiao-style one-shot fill).
+   */
+  const [actualInvAlreadySet, setActualInvAlreadySet] = useState(false);
   useEffect(() => {
     saveResponseRef.current = saveResponse;
   }, [saveResponse]);
@@ -1095,40 +1107,46 @@ export default function SupplierInvoiceCreate({
     };
   }, [isIndiaUser, isChinaUser]);
 
+  /** Spans must total 12 so Agent INV/CRN Detail stays on one row. */
   const agentColSpans = useMemo(
     () =>
       isIndiaUser
         ? {
-            type: 0.8,
-            invCrnNo: 0.95,
-            invCrnDate: 0.95,
-            currency: 0.9,
-            roe: 0.8,
-            taxable: 0.95,
-            nonTaxable: 0.95,
-            cgst: 0.95,
-            sgst: 0.95,
-            igst: 0.95,
-            invCrnAmount: 0.95,
-            approved: 0.95,
-            difference: 0.95,
+            type: 0.65,
+            proformaNo: 0.8,
+            proformaDate: 1,
+            invCrnNo: 0.8,
+            invCrnDate: 1,
+            currency: 0.75,
+            roe: 0.6,
+            taxable: 0.8,
+            nonTaxable: 0.8,
+            cgst: 0.8,
+            sgst: 0.8,
+            igst: 0.8,
+            invCrnAmount: 0.8,
+            approved: 0.8,
+            difference: 0.8,
           }
         : {
-            type: 1.05,
-            invCrnNo: 1.1,
+            type: 0.75,
+            proformaNo: 0.9,
+            proformaDate: 1.1,
+            invCrnNo: 0.9,
             invCrnDate: 1.1,
-            currency: 1.1,
-            roe: 1.05,
-            taxable: 1.1,
-            nonTaxable: 1.1,
-            vat: 1.1,
-            invCrnAmount: 1.1,
-            approved: 1.1,
-            difference: 1.1,
+            currency: 0.85,
+            roe: 0.7,
+            taxable: 0.9,
+            nonTaxable: 0.9,
+            vat: 0.9,
+            invCrnAmount: 1,
+            approved: 1,
+            difference: 1,
           },
     [isIndiaUser],
   );
 
+  /** Spans must total 12 so Charges header + rows stay on one line. */
   const chargeColSpans = useMemo(
     () =>
       isIndiaUser
@@ -1138,7 +1156,7 @@ export default function SupplierInvoiceCreate({
             crn: 0.8,
             account: 1,
             subledger: 1,
-            narration: 1.45,
+            narration: 1.5,
             currency: 0.75,
             roe: 0.65,
             amount: 0.8,
@@ -1147,15 +1165,15 @@ export default function SupplierInvoiceCreate({
             vatRate: 0,
             vatAmount: 0,
             drCr: 0.75,
-            actions: 0.5,
+            actions: 0.7,
           }
         : {
-            shipment: 1.15,
-            charge: 1.15,
+            shipment: 1.2,
+            charge: 1.2,
             crn: 0.7,
-            account: 0.9,
-            subledger: 0.9,
-            narration: 1.25,
+            account: 0.95,
+            subledger: 0.95,
+            narration: 1.3,
             currency: 0.7,
             roe: 0.6,
             amount: 0.75,
@@ -1164,7 +1182,7 @@ export default function SupplierInvoiceCreate({
             vatRate: 0.7,
             vatAmount: 0.8,
             drCr: 0.7,
-            actions: 0.45,
+            actions: 0.7,
           },
     [isIndiaUser],
   );
@@ -1186,6 +1204,8 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: "",
       location_gst_no: "",
       type: "INV",
+      proforma_no: "",
+      proforma_date: null,
       Inv_Crn_note: null,
       Inv_Crn_no: "",
       roe: null,
@@ -1253,9 +1273,32 @@ export default function SupplierInvoiceCreate({
         isIndiaUser && !isAgentVendorFlowRef.current && !v
           ? "State is required"
           : null,
-      Inv_Crn_no: (v) =>
-        !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
-      Inv_Crn_note: (v) => (!v ? "Inv/Crn Date is required" : null),
+      proforma_no: (v, values) => {
+        if (values.proforma_date != null && !String(v ?? "").trim()) {
+          return "Proforma No is required when Proforma Date is set";
+        }
+        return null;
+      },
+      proforma_date: (v, values) => {
+        if (String(values.proforma_no ?? "").trim() && v == null) {
+          return "Proforma Date is required when Proforma No is set";
+        }
+        return null;
+      },
+      Inv_Crn_no: (v, values) => {
+        const hasProforma =
+          Boolean(String(values.proforma_no ?? "").trim()) &&
+          values.proforma_date != null;
+        if (hasProforma) return null;
+        return !String(v ?? "").trim() ? "Inv/Crn No is required" : null;
+      },
+      Inv_Crn_note: (v, values) => {
+        const hasProforma =
+          Boolean(String(values.proforma_no ?? "").trim()) &&
+          values.proforma_date != null;
+        if (hasProforma) return null;
+        return !v ? "Inv/Crn Date is required" : null;
+      },
     },
   });
 
@@ -2299,6 +2342,10 @@ export default function SupplierInvoiceCreate({
       location_gst_no: (data.location_gst_no ?? "") as string,
       type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as
         "INV" | "CRN",
+      proforma_no: (data.proforma_no ?? "") as string,
+      proforma_date:
+        parseDateOnly((data.proforma_date as string) ?? undefined) ??
+        normalizeDate((data.proforma_date as string) ?? null),
       Inv_Crn_note:
         parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
@@ -2335,6 +2382,11 @@ export default function SupplierInvoiceCreate({
     // Force charges to apply (same as ReceiptCreate: setFieldValue after setValues so list array is always shown)
     form.setFieldValue("charges_data", mappedCharges);
     form.setFieldValue("supporting_documents", mappedSupportingDocuments);
+    const loadedInvNo = String(data.Inv_Crn_no ?? "").trim();
+    const loadedInvDate =
+      parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
+      normalizeDate((data.Inv_Crn_note as string) ?? null);
+    setActualInvAlreadySet(Boolean(loadedInvNo && loadedInvDate));
     if (isEditMode) {
       editAmountCalcBaselineRef.current = buildAmountCalcBaseline({
         taxable_amount:
@@ -2427,10 +2479,30 @@ export default function SupplierInvoiceCreate({
       parseDateOnly(
         String(prData.actual_inv_date ?? prData.actual_invoice_date ?? ""),
       ) ?? null;
+    const proformaNo = String(
+      prData.proforma_inv_no ??
+        prData.proforma_invoice_no ??
+        prData.proforma_no ??
+        "",
+    ).trim();
+    const proformaDate =
+      parseDateOnly(
+        String(
+          prData.proforma_inv_date ??
+            prData.proforma_invoice_date ??
+            prData.proforma_date ??
+            "",
+        ),
+      ) ?? null;
+    form.setFieldValue("proforma_no", proformaNo);
+    if (proformaDate) {
+      form.setFieldValue("proforma_date", proformaDate);
+    }
     form.setFieldValue("Inv_Crn_no", actualInvNo);
     if (actualInvDate) {
       form.setFieldValue("Inv_Crn_note", actualInvDate);
     }
+    setActualInvAlreadySet(Boolean(actualInvNo && actualInvDate));
     form.setFieldValue("creditor_agent", String(prData.paid_to ?? ""));
     form.setFieldValue("agent_code", String(prData.paid_to ?? ""));
     form.setFieldValue("customer_gst_no", String(prData.customer_gst_no ?? ""));
@@ -2713,10 +2785,14 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: values.customer_gst_no || "",
       location_gst_no: values.location_gst_no || "",
       type: values.type ?? "INV",
+      proforma_no: values.proforma_no || null,
+      proforma_date: values.proforma_date
+        ? formatDDMMYYYY(new Date(values.proforma_date))
+        : null,
       Inv_Crn_note: values.Inv_Crn_note
         ? formatDDMMYYYY(new Date(values.Inv_Crn_note))
-        : "",
-      Inv_Crn_no: values.Inv_Crn_no || "",
+        : null,
+      Inv_Crn_no: values.Inv_Crn_no?.trim() || null,
       roe: parseRoeForPayload(values.roe) ?? null,
       currency_id: values.currency_id ? Number(values.currency_id) : null,
       taxable_amount: formatAmountToTwoDecimals(values.taxable_amount ?? 0),
@@ -2854,6 +2930,10 @@ export default function SupplierInvoiceCreate({
       fapiao_no: (data.fapiao_no ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
+      proforma_no: (data.proforma_no ?? "") as string,
+      proforma_date:
+        parseDateOnly((data.proforma_date as string) ?? undefined) ??
+        normalizeDate((data.proforma_date as string) ?? null),
       Inv_Crn_note:
         parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
@@ -3050,6 +3130,35 @@ export default function SupplierInvoiceCreate({
           if (data.fapiao_no != null) {
             form.setFieldValue("fapiao_no", String(data.fapiao_no));
           }
+          if (data.proforma_no != null) {
+            form.setFieldValue("proforma_no", String(data.proforma_no));
+          }
+          if (data.proforma_date != null) {
+            form.setFieldValue(
+              "proforma_date",
+              parseDateOnly(String(data.proforma_date)) ??
+                normalizeDate(String(data.proforma_date)),
+            );
+          }
+          if (data.Inv_Crn_no != null || data.Inv_Crn_note != null) {
+            const invNo = String(
+              data.Inv_Crn_no ?? form.values.Inv_Crn_no ?? "",
+            ).trim();
+            const invDate =
+              data.Inv_Crn_note != null
+                ? (parseDateOnly(String(data.Inv_Crn_note)) ??
+                  normalizeDate(String(data.Inv_Crn_note)))
+                : form.values.Inv_Crn_note;
+            if (data.Inv_Crn_no != null) {
+              form.setFieldValue("Inv_Crn_no", String(data.Inv_Crn_no));
+            }
+            if (data.Inv_Crn_note != null) {
+              form.setFieldValue("Inv_Crn_note", invDate);
+            }
+            if (invNo && invDate) {
+              setActualInvAlreadySet(true);
+            }
+          }
 
           // Refresh supporting docs so downloads work in edit/view
           form.setFieldValue(
@@ -3117,6 +3226,35 @@ export default function SupplierInvoiceCreate({
           if (data.fapiao_no != null) {
             form.setFieldValue("fapiao_no", String(data.fapiao_no));
           }
+          if (data.proforma_no != null) {
+            form.setFieldValue("proforma_no", String(data.proforma_no));
+          }
+          if (data.proforma_date != null) {
+            form.setFieldValue(
+              "proforma_date",
+              parseDateOnly(String(data.proforma_date)) ??
+                normalizeDate(String(data.proforma_date)),
+            );
+          }
+          if (data.Inv_Crn_no != null) {
+            form.setFieldValue("Inv_Crn_no", String(data.Inv_Crn_no));
+          }
+          if (data.Inv_Crn_note != null) {
+            form.setFieldValue(
+              "Inv_Crn_note",
+              parseDateOnly(String(data.Inv_Crn_note)) ??
+                normalizeDate(String(data.Inv_Crn_note)),
+            );
+          }
+          const createdInvNo = String(
+            data.Inv_Crn_no ?? values.Inv_Crn_no ?? "",
+          ).trim();
+          const createdInvDate =
+            data.Inv_Crn_note != null
+              ? (parseDateOnly(String(data.Inv_Crn_note)) ??
+                normalizeDate(String(data.Inv_Crn_note)))
+              : values.Inv_Crn_note;
+          setActualInvAlreadySet(Boolean(createdInvNo && createdInvDate));
 
           form.setFieldValue(
             "supporting_documents",
@@ -3219,6 +3357,47 @@ export default function SupplierInvoiceCreate({
             String((data as { fapiao_no?: string | null }).fapiao_no),
           );
         }
+        if ((data as { proforma_no?: string | null }).proforma_no != null) {
+          form.setFieldValue(
+            "proforma_no",
+            String((data as { proforma_no?: string | null }).proforma_no),
+          );
+        }
+        if ((data as { proforma_date?: string | null }).proforma_date != null) {
+          form.setFieldValue(
+            "proforma_date",
+            parseDateOnly(
+              String((data as { proforma_date?: string | null }).proforma_date),
+            ) ??
+              normalizeDate(
+                String(
+                  (data as { proforma_date?: string | null }).proforma_date,
+                ),
+              ),
+          );
+        }
+        const postedInvNo = String(
+          (data as { Inv_Crn_no?: string | null }).Inv_Crn_no ??
+            form.values.Inv_Crn_no ??
+            "",
+        ).trim();
+        const postedInvDateRaw = (data as { Inv_Crn_note?: string | null })
+          .Inv_Crn_note;
+        const postedInvDate =
+          postedInvDateRaw != null
+            ? (parseDateOnly(String(postedInvDateRaw)) ??
+              normalizeDate(String(postedInvDateRaw)))
+            : form.values.Inv_Crn_note;
+        if ((data as { Inv_Crn_no?: string | null }).Inv_Crn_no != null) {
+          form.setFieldValue(
+            "Inv_Crn_no",
+            String((data as { Inv_Crn_no?: string | null }).Inv_Crn_no),
+          );
+        }
+        if (postedInvDateRaw != null) {
+          form.setFieldValue("Inv_Crn_note", postedInvDate);
+        }
+        setActualInvAlreadySet(Boolean(postedInvNo && postedInvDate));
         ToastNotification({
           message: "Supplier invoice posted successfully",
           type: "success",
@@ -3299,22 +3478,37 @@ export default function SupplierInvoiceCreate({
   const isReadOnly = isViewMode || isInvoicePosted;
   // Reversal create/edit: only daybook and date editable; rest non-editable. Once posted, full read-only.
   const reversalFormDisabled = isReversal;
-  // Posted + edit (all branches): allow attaching new supporting docs via PATCH; existing docs cannot be removed
-  // View mode stays fully read-only
-  const canAttachDocumentsAfterPost =
-    isEditMode &&
-    !isViewMode &&
+  /** Posted invoice with an id — same page after Post, or edit route (not view/reversal). */
+  const hasPostedInvoiceId =
     isInvoicePosted &&
+    !isViewMode &&
     !isReversal &&
     saveResponse?.id != null &&
     saveResponse.id > 0;
-  // China: fapiao_no remains editable after POSTED on edit; Update saves via PATCH
-  const canEditChinaFapiaoAfterPost =
-    isChinaUser && canAttachDocumentsAfterPost;
-  const canUpdatePostedInvoice = canAttachDocumentsAfterPost;
+  // Posted: allow attaching new supporting docs via PATCH (edit route or create page after post)
+  const canAttachDocumentsAfterPost = hasPostedInvoiceId;
+  // China: fapiao_no remains editable after POSTED; Update saves via PATCH
+  const canEditChinaFapiaoAfterPost = isChinaUser && hasPostedInvoiceId;
+  const hasProformaSet =
+    Boolean(String(form.values.proforma_no ?? "").trim()) &&
+    form.values.proforma_date != null;
+  /**
+   * Posted + proforma set + actual Inv/Crn not yet saved: allow one-time insert
+   * of Inv/Crn No + Date via the same PATCH Update path as China fapiao.
+   * Available immediately after Post (create page) and on edit — not view-only.
+   */
+  const canEditActualInvAfterPost =
+    hasPostedInvoiceId && hasProformaSet && !actualInvAlreadySet;
+  const canUpdatePostedInvoice =
+    canAttachDocumentsAfterPost ||
+    canEditActualInvAfterPost ||
+    canEditChinaFapiaoAfterPost;
   const canManageSupportingDocuments =
     !isReadOnly || canAttachDocumentsAfterPost;
   const fapiaoFieldDisabled = canEditChinaFapiaoAfterPost
+    ? false
+    : isReadOnly || reversalFormDisabled || !isVendorSelected;
+  const actualInvFieldDisabled = canEditActualInvAfterPost
     ? false
     : isReadOnly || reversalFormDisabled || !isVendorSelected;
   const effectiveInputStyles = isReadOnly
@@ -3325,9 +3519,13 @@ export default function SupplierInvoiceCreate({
   const fapiaoFieldStyles = canEditChinaFapiaoAfterPost
     ? inputStyles
     : effectiveInputStyles;
+  const actualInvFieldStyles = canEditActualInvAfterPost
+    ? inputStyles
+    : effectiveInputStyles;
 
   /**
-   * PATCH for posted invoices: China fapiao_no + new supporting documents (all branches).
+   * PATCH for posted invoices: China fapiao_no, one-time actual Inv/Crn (when
+   * proforma is set), + new supporting documents (all branches).
    * New files only — document_ids are not sent.
    */
   const handlePostedInvoiceUpdate = async () => {
@@ -3370,9 +3568,32 @@ export default function SupplierInvoiceCreate({
       }
     }
 
-    if (!canEditChinaFapiaoAfterPost && !hasNewFiles) {
+    const actualInvNoTrim = String(form.values.Inv_Crn_no ?? "").trim();
+    const actualInvDate = form.values.Inv_Crn_note;
+    const isFillingActualInv =
+      canEditActualInvAfterPost &&
+      (Boolean(actualInvNoTrim) || actualInvDate != null);
+
+    if (isFillingActualInv) {
+      if (!actualInvNoTrim || actualInvDate == null) {
+        ToastNotification({
+          message:
+            "Both Inv/Crn No and Inv/Crn Date are required when inserting actual invoice details.",
+          type: "error",
+        });
+        return;
+      }
+    }
+
+    if (
+      !canEditChinaFapiaoAfterPost &&
+      !isFillingActualInv &&
+      !hasNewFiles
+    ) {
       ToastNotification({
-        message: "Attach at least one new document before updating.",
+        message: canEditActualInvAfterPost
+          ? "Enter Inv/Crn No and Date, or attach at least one new document before updating."
+          : "Attach at least one new document before updating.",
         type: "error",
       });
       return;
@@ -3386,6 +3607,10 @@ export default function SupplierInvoiceCreate({
       };
       if (canEditChinaFapiaoAfterPost) {
         patchBody.fapiao_no = form.values.fapiao_no?.trim() || null;
+      }
+      if (isFillingActualInv) {
+        patchBody.Inv_Crn_no = actualInvNoTrim;
+        patchBody.Inv_Crn_note = formatDDMMYYYY(new Date(actualInvDate!));
       }
 
       const fd = new FormData();
@@ -3412,6 +3637,29 @@ export default function SupplierInvoiceCreate({
         if (data.fapiao_no != null) {
           form.setFieldValue("fapiao_no", String(data.fapiao_no));
         }
+        if (data.proforma_no != null) {
+          form.setFieldValue("proforma_no", String(data.proforma_no));
+        }
+        if (data.proforma_date != null) {
+          form.setFieldValue(
+            "proforma_date",
+            parseDateOnly(String(data.proforma_date)) ??
+              normalizeDate(String(data.proforma_date)),
+          );
+        }
+        if (data.Inv_Crn_no != null) {
+          form.setFieldValue("Inv_Crn_no", String(data.Inv_Crn_no));
+        }
+        if (data.Inv_Crn_note != null) {
+          form.setFieldValue(
+            "Inv_Crn_note",
+            parseDateOnly(String(data.Inv_Crn_note)) ??
+              normalizeDate(String(data.Inv_Crn_note)),
+          );
+        }
+        if (isFillingActualInv || (data.Inv_Crn_no && data.Inv_Crn_note)) {
+          setActualInvAlreadySet(true);
+        }
         if (Array.isArray((data as { documents?: unknown }).documents)) {
           form.setFieldValue(
             "supporting_documents",
@@ -3420,6 +3668,8 @@ export default function SupplierInvoiceCreate({
             ),
           );
         }
+      } else if (isFillingActualInv) {
+        setActualInvAlreadySet(true);
       }
 
       ToastNotification({
@@ -3937,6 +4187,7 @@ export default function SupplierInvoiceCreate({
           <Grid
             mb="md"
             columns={12}
+            gutter="xs"
             align="flex-end"
             pb={form.errors.roe ? 20 : 0}
           >
@@ -3967,41 +4218,147 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
-            <Grid.Col span={agentColSpans.invCrnNo}>
+            <Grid.Col span={agentColSpans.proformaNo}>
               <TextInput
-                label="Inv/Crn No"
-                placeholder="Inv/Crn No"
-                withAsterisk
-                value={form.values.Inv_Crn_no}
-                onChange={(e) =>
-                  form.setFieldValue("Inv_Crn_no", e.target.value)
-                }
-                error={form.errors.Inv_Crn_no}
+                label="Proforma No"
+                placeholder="Proforma No"
+                value={form.values.proforma_no}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  form.setFieldValue("proforma_no", next);
+                  if (String(next).trim() && form.values.proforma_date != null) {
+                    form.clearFieldError("Inv_Crn_no");
+                    form.clearFieldError("Inv_Crn_note");
+                  }
+                  if (form.values.proforma_date != null && String(next).trim()) {
+                    form.clearFieldError("proforma_no");
+                    form.clearFieldError("proforma_date");
+                  }
+                }}
+                error={form.errors.proforma_no}
                 styles={effectiveInputStyles}
                 disabled={
                   isReadOnly || reversalFormDisabled || !isVendorSelected
                 }
               />
             </Grid.Col>
-            <Grid.Col span={agentColSpans.invCrnDate}>
-              <SingleDateInput
-                label="Inv/Crn Date"
-                placeholder="Select Inv/Crn Date"
-                withAsterisk
-                value={normalizeDate(form.values.Inv_Crn_note)}
-                onChange={(d) => {
-                  form.setFieldValue("Inv_Crn_note", d);
-                  if (d) form.clearFieldError("Inv_Crn_note");
-                }}
-                error={
-                  form.errors.Inv_Crn_note
-                    ? String(form.errors.Inv_Crn_note)
-                    : undefined
+            <Grid.Col span={agentColSpans.proformaDate}>
+              <Tooltip
+                label={
+                  form.values.proforma_date
+                    ? formatDateForUi(form.values.proforma_date, dateFormat, "")
+                    : ""
                 }
-                disabled={
-                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                disabled={!form.values.proforma_date}
+                withArrow
+                openDelay={300}
+              >
+                <Box>
+                  <SingleDateInput
+                    label="Proforma Date"
+                    placeholder="Select Proforma Date"
+                    value={normalizeDate(form.values.proforma_date)}
+                    onChange={(d) => {
+                      form.setFieldValue("proforma_date", d);
+                      if (d && String(form.values.proforma_no ?? "").trim()) {
+                        form.clearFieldError("Inv_Crn_no");
+                        form.clearFieldError("Inv_Crn_note");
+                        form.clearFieldError("proforma_no");
+                        form.clearFieldError("proforma_date");
+                      }
+                    }}
+                    error={
+                      form.errors.proforma_date
+                        ? String(form.errors.proforma_date)
+                        : undefined
+                    }
+                    title={
+                      form.values.proforma_date
+                        ? formatDateForUi(
+                            form.values.proforma_date,
+                            dateFormat,
+                            "",
+                          )
+                        : undefined
+                    }
+                    styles={{
+                      ...effectiveInputStyles,
+                      input: {
+                        ...effectiveInputStyles.input,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      },
+                    }}
+                    disabled={
+                      isReadOnly || reversalFormDisabled || !isVendorSelected
+                    }
+                  />
+                </Box>
+              </Tooltip>
+            </Grid.Col>
+            <Grid.Col span={agentColSpans.invCrnNo}>
+              <TextInput
+                label="Inv/Crn No"
+                placeholder="Inv/Crn No"
+                withAsterisk={!hasProformaSet}
+                value={form.values.Inv_Crn_no}
+                onChange={(e) =>
+                  form.setFieldValue("Inv_Crn_no", e.target.value)
                 }
+                error={form.errors.Inv_Crn_no}
+                styles={actualInvFieldStyles}
+                disabled={actualInvFieldDisabled}
               />
+            </Grid.Col>
+            <Grid.Col span={agentColSpans.invCrnDate}>
+              <Tooltip
+                label={
+                  form.values.Inv_Crn_note
+                    ? formatDateForUi(form.values.Inv_Crn_note, dateFormat, "")
+                    : ""
+                }
+                disabled={!form.values.Inv_Crn_note}
+                withArrow
+                openDelay={300}
+              >
+                <Box>
+                  <SingleDateInput
+                    label="Inv/Crn Date"
+                    placeholder="Select Inv/Crn Date"
+                    withAsterisk={!hasProformaSet}
+                    value={normalizeDate(form.values.Inv_Crn_note)}
+                    onChange={(d) => {
+                      form.setFieldValue("Inv_Crn_note", d);
+                      if (d) form.clearFieldError("Inv_Crn_note");
+                    }}
+                    error={
+                      form.errors.Inv_Crn_note
+                        ? String(form.errors.Inv_Crn_note)
+                        : undefined
+                    }
+                    title={
+                      form.values.Inv_Crn_note
+                        ? formatDateForUi(
+                            form.values.Inv_Crn_note,
+                            dateFormat,
+                            "",
+                          )
+                        : undefined
+                    }
+                    styles={{
+                      ...actualInvFieldStyles,
+                      input: {
+                        ...actualInvFieldStyles.input,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      },
+                    }}
+                    disabled={actualInvFieldDisabled}
+                  />
+                </Box>
+              </Tooltip>
             </Grid.Col>
             <Grid.Col span={agentColSpans.currency}>
               <Dropdown
@@ -4622,7 +4979,7 @@ export default function SupplierInvoiceCreate({
               <Box mb="sm" mt="sm">
                 <Grid
                   w="100%"
-                  gutter="sm"
+                  gutter="xs"
                   py="sm"
                   style={{
                     position: "sticky",
@@ -4735,8 +5092,8 @@ export default function SupplierInvoiceCreate({
                   <Grid
                     key={index}
                     w="100%"
-                    gutter="sm"
-                    mt={index !== 0 ? "sm" : 0}
+                    gutter="xs"
+                    mt={index !== 0 ? "xs" : 0}
                   >
                     <Grid.Col span={chargeColSpans.shipment}>
                       {isJobChargesPrefillFlow ? (
