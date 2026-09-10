@@ -37,6 +37,7 @@ import {
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   Fragment,
@@ -417,6 +418,9 @@ function HouseCreate() {
     Array<{ value: string; label: string; email?: string }>
   >([]);
   const shipperTypedNameRef = useRef("");
+  const [shipperFreeTextMode, setShipperFreeTextMode] = useState(false);
+  const shipperTextRef = useRef<HTMLInputElement>(null);
+  const shouldFocusShipperFreeTextRef = useRef(false);
   const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   // Consignee (shipment-party) search state
@@ -832,6 +836,32 @@ function HouseCreate() {
     isJobClosed(
       (location.state?.job as { status?: string | null } | undefined)?.status,
     );
+
+  useEffect(() => {
+    if (!editData) return;
+    const hasCode = Boolean(String(editData.shipper_code || "").trim());
+    const hasName = Boolean(String(editData.shipper_name || "").trim());
+    const hasFwd =
+      (editData as { forwarder_id?: number | null }).forwarder_id != null ||
+      Boolean(
+        String(
+          (editData as { forwarder_name?: string }).forwarder_name || "",
+        ).trim(),
+      );
+    if (!hasCode && hasName && hasFwd) {
+      setShipperFreeTextMode(true);
+    }
+  }, [editData]);
+
+  useLayoutEffect(() => {
+    if (!shipperFreeTextMode || !shouldFocusShipperFreeTextRef.current) return;
+    const input = shipperTextRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus();
+    input.setSelectionRange(cursor, cursor);
+    shouldFocusShipperFreeTextRef.current = false;
+  }, [shipperFreeTextMode]);
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const pendingLeaveActionRef = useRef<(() => void) | null>(null);
@@ -3870,6 +3900,29 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
+                {shipperFreeTextMode ? (
+                  <FormTextInput
+                    ref={shipperTextRef}
+                    label="Shipper Name"
+                    required
+                    placeholder="Enter shipper name"
+                    value={form.values.shipper_name || ""}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("shipper_name", v);
+                      form.setFieldValue("shipper_code", "");
+                      if (!v.trim()) {
+                        setShipperFreeTextMode(false);
+                        form.setFieldValue("shipper_name", "");
+                        setShipperAddressOptions([]);
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                      }
+                    }}
+                    error={form.errors.shipper_name as string}
+                  />
+                ) : (
                 <SearchableSelect
                   label="Shipper Name"
                   required
@@ -3891,6 +3944,9 @@ function HouseCreate() {
                       form.values.forwarder_id != null ||
                       Boolean(form.values.forwarder_name?.trim());
                     form.setFieldValue("shipper_code", value || "");
+                    if (value) {
+                      setShipperFreeTextMode(false);
+                    }
                     form.setFieldValue(
                       "shipper_name",
                       selectedData?.label ||
@@ -4036,21 +4092,26 @@ function HouseCreate() {
                       !hasResults &&
                       searchTerm.length >= 2
                     ) {
+                      const name = toTitleCase(searchTerm);
                       form.setFieldValue("shipper_code", "");
-                      form.setFieldValue(
-                        "shipper_name",
-                        toTitleCase(searchTerm),
-                      );
+                      form.setFieldValue("shipper_name", name);
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
                       form.setFieldValue("shipper_email", "");
                       form.setFieldValue("shipper_state_id", "");
+                      shouldFocusShipperFreeTextRef.current = true;
+                      setShipperFreeTextMode(true);
                     }
                   }}
                   returnOriginalData={true}
+                  hideEmptyResultsMessage={
+                    form.values.forwarder_id != null ||
+                    Boolean(form.values.forwarder_name?.trim())
+                  }
                   error={form.errors.shipper_name as string}
                   minSearchLength={3}
                 />
+                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
@@ -4709,6 +4770,18 @@ function HouseCreate() {
                       form.setFieldValue("forwarder_address", "");
                       form.setFieldValue("forwarder_email", "");
                       setForwarderAddressOptions([]);
+                      // Free-text shipper is only allowed with a forwarder — clear it.
+                      // Keep master-selected shipper (has shipper_code).
+                      if (!String(form.values.shipper_code || "").trim()) {
+                        setShipperFreeTextMode(false);
+                        shipperTypedNameRef.current = "";
+                        form.setFieldValue("shipper_code", "");
+                        form.setFieldValue("shipper_name", "");
+                        setShipperAddressOptions([]);
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                      }
                       return;
                     }
 
