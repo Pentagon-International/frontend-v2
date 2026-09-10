@@ -556,6 +556,8 @@ export const generateBillOfLadingPDF = (
     const isSinglePageBol = isDraftBol || isSeawayOrSurrendered;
     // Only DRAFT appears beside the document title (black). SEAWAY/SURRENDERED use red copy labels.
     const titleSuffix = isDraftBol ? "DRAFT" : "";
+    // Issued BOL (original / seaway / surrendered): NON-NEGOTIABLE COPY at top-right beside title
+    const showNonNegotiableTitle = !isDraftBol;
     const copyLabels = isDraftBol
       ? [""]
       : isSeawayOrSurrendered
@@ -767,15 +769,11 @@ export const generateBillOfLadingPDF = (
       housingData?.number_of_originals ??
       housingData?.no_of_originals ??
       "0/ZERO";
-    // Date of issue: draft → ETD; original (and other issued types) → ATD
+    // Date of issue: ETD for draft and issued BOL types
     const etdRaw =
       mblDetails?.etd || carrierDetails?.etd || jobInfo?.etd || null;
-    const atdRaw =
-      mblDetails?.atd || carrierDetails?.atd || jobInfo?.atd || null;
-    const issueDateRaw = isDraftBol ? etdRaw : atdRaw;
-    const issueDateFormatted = issueDateRaw
-      ? formatDateForDisplay(issueDateRaw)
-      : "";
+    const etdFormatted = etdRaw ? formatDateForDisplay(etdRaw) : "";
+    const issueDateFormatted = etdFormatted;
     const placeOfIssue =
       housingData?.place_of_issue || masterOrigin || "";
     const placeAndDateOfIssue =
@@ -817,6 +815,16 @@ export const generateBillOfLadingPDF = (
       const titleWidth = doc.getTextWidth(docTitle);
       const titleGap = 18;
       doc.text(titleSuffix, pageWidth / 2 + titleWidth / 2 + titleGap, yPos);
+    }
+    // Original BOL: "NON-NEGOTIABLE COPY" at top-right beside the document title (above border)
+    if (showNonNegotiableTitle) {
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("NON-NEGOTIABLE COPY", pageWidth - innerMargin, yPos, {
+        align: "right",
+      });
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
     }
     yPos += 5;
 
@@ -1517,11 +1525,14 @@ export const generateBillOfLadingPDF = (
     const commodityLines = commodityDesc ? doc.splitTextToSize(commodityDesc, containerCol3Width - 2 * boxPadding) : [];
     
     // Pre-calculate heights for Column 3 (Description) content
+    // Original / issued BOL: commodity description only. Draft: packages + types + commodity.
     const containerTypes = summary?.container_type || [];
     let col3ContentHeight = 0;
-    if (packagesText) col3ContentHeight += 3.5;
-    if (Array.isArray(containerTypes) && containerTypes.length > 0) {
-      col3ContentHeight += containerTypes.length * 3.5;
+    if (isDraftBol) {
+      if (packagesText) col3ContentHeight += 3.5;
+      if (Array.isArray(containerTypes) && containerTypes.length > 0) {
+        col3ContentHeight += containerTypes.length * 3.5;
+      }
     }
     if (commodityLines.length > 0) {
       col3ContentHeight += commodityLines.length * 3.5;
@@ -1577,14 +1588,15 @@ export const generateBillOfLadingPDF = (
     }
     
     // Calculate how much of commodity_description fits on first page
-    // We need to fit: packagesText + containerTypes + commodityLines
-    // Use the maximum height between Column 1 and Column 3 to determine what fits
+    // Draft also reserves space for packagesText + containerTypes
     let col3Y = 0;
-    if (packagesText) {
-      col3Y += 3.5;
-    }
-    if (Array.isArray(containerTypes) && containerTypes.length > 0) {
-      col3Y += containerTypes.length * 3.5;
+    if (isDraftBol) {
+      if (packagesText) {
+        col3Y += 3.5;
+      }
+      if (Array.isArray(containerTypes) && containerTypes.length > 0) {
+        col3Y += containerTypes.length * 3.5;
+      }
     }
     // Calculate how many commodity lines fit
     const maxCol3Height = Math.max(firstPageCol1Height, availableHeightFirstPage);
@@ -1688,21 +1700,36 @@ export const generateBillOfLadingPDF = (
       if (marksLines.length > 0) {
         doc.text(marksLines, containerCol2X + boxPadding, singleValueStartY);
       }
+      // Issued BOL: "Shipped On Board" + ETD centered in the marks column
+      if (!isDraftBol) {
+        const marksCenterX = containerCol2X + containerCol2Width / 2;
+        const sectionMidY = (headerBottomY + footerStartY) / 2;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.text("Shipped On Board", marksCenterX, sectionMidY, {
+          align: "center",
+        });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6);
+        if (etdFormatted) {
+          doc.text(etdFormatted, marksCenterX, sectionMidY + 4, {
+            align: "center",
+          });
+        }
+      }
       
-      // Column 3: Description (partial on first page) - total_no_of_packages, container_type values, and commodity_description
+      // Column 3: Description — original: commodity only; draft: packages + types + commodity
       let col3Y = singleValueStartY;
       let col3MaxY = col3Y;
 
-      if (packagesText) {
-        // Check if this fits before drawing
+      if (isDraftBol && packagesText) {
         if (col3Y + 3.5 <= footerStartY - 5) {
           doc.text(packagesText, containerCol3X + boxPadding, col3Y);
           col3Y += 3.5;
           col3MaxY = col3Y;
         }
       }
-      // Display container_type values from summary (each on a new line)
-      if (Array.isArray(containerTypes) && containerTypes.length > 0) {
+      if (isDraftBol && Array.isArray(containerTypes) && containerTypes.length > 0) {
         containerTypes.forEach((containerType: string) => {
           if (containerType && col3Y + 3.5 <= footerStartY - 5) {
             doc.text(containerType, containerCol3X + boxPadding, col3Y);
@@ -1724,8 +1751,9 @@ export const generateBillOfLadingPDF = (
         }
       }
 
-      // Copy label / SEAWAY·SURRENDERED stamp at end of Column 3 (packages)
-      if (copyLabel) {
+      // Copy label / SEAWAY·SURRENDERED stamp at end of Column 3
+      // NON NEGOTIABLE COPY is shown at top-right above the border instead
+      if (copyLabel && copyLabel !== "NON NEGOTIABLE COPY") {
         const stampCenterX = containerCol3X + containerCol3Width / 2;
         const stampDrawn = drawBolTypeStamp(
           doc,
@@ -1789,11 +1817,63 @@ export const generateBillOfLadingPDF = (
       doc.line(containerCol4X, headerBottomY, containerCol4X, containerDetailsEndY);
       doc.line(containerCol5X, headerBottomY, containerCol5X, containerDetailsEndY);
     } else {
-      // Empty row if no container details - draw vertical lines to footer section start
+      // Empty row if no container details - still draw marks / commodity / shipped on board
       const containerDetailsEndY = footerStartY;
+      const singleValueStartY = currentRowY;
+
+      if (marksLines.length > 0) {
+        doc.text(marksLines, containerCol2X + boxPadding, singleValueStartY);
+      }
+      if (!isDraftBol) {
+        const marksCenterX = containerCol2X + containerCol2Width / 2;
+        const sectionMidY = (headerBottomY + footerStartY) / 2;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.text("Shipped On Board", marksCenterX, sectionMidY, {
+          align: "center",
+        });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6);
+        if (etdFormatted) {
+          doc.text(etdFormatted, marksCenterX, sectionMidY + 4, {
+            align: "center",
+          });
+        }
+      }
+
+      let col3Y = singleValueStartY;
+      if (isDraftBol && packagesText) {
+        doc.text(packagesText, containerCol3X + boxPadding, col3Y);
+        col3Y += 3.5;
+      }
+      if (isDraftBol && Array.isArray(containerTypes) && containerTypes.length > 0) {
+        containerTypes.forEach((containerType: string) => {
+          if (containerType) {
+            doc.text(containerType, containerCol3X + boxPadding, col3Y);
+            col3Y += 3.5;
+          }
+        });
+      }
+      commodityLinesDrawn = 0;
+      for (let i = 0; i < commodityLines.length; i++) {
+        if (col3Y + 3.5 <= footerStartY - 5) {
+          doc.text(commodityLines[i], containerCol3X + boxPadding, col3Y);
+          col3Y += 3.5;
+          commodityLinesDrawn++;
+        } else {
+          break;
+        }
+      }
+
+      if (grossWeightText) {
+        doc.text(grossWeightText, containerCol4X + boxPadding, singleValueStartY);
+      }
+      if (volumeText) {
+        doc.text(volumeText, containerCol5X + boxPadding, singleValueStartY);
+      }
 
       // Copy label / SEAWAY·SURRENDERED stamp even when no container details exist
-      if (copyLabel) {
+      if (copyLabel && copyLabel !== "NON NEGOTIABLE COPY") {
         const stampCenterX = containerCol3X + containerCol3Width / 2;
         const stampDrawn = drawBolTypeStamp(
           doc,

@@ -1115,7 +1115,8 @@ const INDIA_COL = {
   half: 95 / 210,
   third: (95 / 3) / 210,
   vessel: (190 * 0.25) / 210,
-  marks: (190 * 0.14) / 210,
+  // Marks column content width (14% of 190mm box minus L/R boxPadding of 5mm each)
+  marks: (190 * 0.14 - 10) / 210,
   description: (190 * 0.44) / 210,
   cargoNarrow: (190 * 0.12) / 210,
   container: (190 * 0.18) / 210,
@@ -1361,6 +1362,8 @@ function buildIndiaBolFieldRegistry(
       multiline: true,
       type: "textarea",
       columnWidthRatio: INDIA_COL.marks,
+      // Match cargo-table body line spacing in BillOfLadingPDFTemplate (3.5mm)
+      pdfLineHeightMm: 3.5,
       getDisplayValue: (data) => String(getHousing(data).marks_no || ""),
     }),
     ...(() => {
@@ -1459,6 +1462,8 @@ function buildIndiaBolFieldRegistry(
       editable: true,
       columnWidthRatio: INDIA_COL.description,
       getDisplayValue: (data) => {
+        // Original / issued BOL shows only commodity description in this column
+        if (data.draft !== true) return "";
         const total = getSummary(data).total_no_of_packages;
         if (total === "" || total == null) return "";
         const packageType = getPackageType(data);
@@ -1562,10 +1567,8 @@ function buildIndiaBolFieldRegistry(
         const m = getMblDetails(data);
         const j = getJob(data);
         const carrier = getCarrierDetails(data);
-        const isDraft = data.draft === true;
         const etd = m.etd || carrier.etd || j.etd || null;
-        const atd = m.atd || carrier.atd || j.atd || null;
-        const issueDate = formatIndiaBolDate(isDraft ? etd : atd);
+        const issueDate = formatIndiaBolDate(etd);
         const place =
           String(h.place_of_issue || m.origin_name || j.origin_name || "").trim();
         if (place && issueDate) return `${place} / ${issueDate}`;

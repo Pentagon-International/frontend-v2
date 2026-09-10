@@ -28,7 +28,8 @@ export function EditableField({
   const fontSize = Math.max(position.rect.fontSize, 7);
   const lineHeightPx =
     position.rect.lineHeightPx ?? Math.max(fontSize * 1.15, fontSize + 2);
-  const editWidth = Math.max(position.rect.width - 12, 16);
+  // Keep edit box close to matched column width (border + horizontal padding ≈ 4px)
+  const editWidth = Math.max(position.rect.width - 4, 16);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
