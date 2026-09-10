@@ -28,6 +28,7 @@ import {
   IconFileInvoice,
   IconUpload,
   IconDownload,
+  IconListDetails,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -79,6 +80,7 @@ import {
   clickableAdjustmentDocumentNoStyles,
   useGlobalSearchDocumentNavigation,
 } from "../../../hooks/useGlobalSearchDocumentNavigation";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 
 const RECEIPT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -798,6 +800,8 @@ export default function ReceiptCreate({
     useGlobalSearchDocumentNavigation({
       getOptions: getDocumentNavigationOptions,
     });
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
@@ -1781,6 +1785,7 @@ export default function ReceiptCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -1867,6 +1872,7 @@ export default function ReceiptCreate({
           : {}),
         adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -2617,6 +2623,14 @@ export default function ReceiptCreate({
     document.body.removeChild(link);
   };
 
+  const isOpenReceipt = useMemo(
+    () =>
+      !(form.values.adjustments ?? []).some(
+        (a) => String(a.document_no ?? "").trim() !== "",
+      ),
+    [form.values.adjustments],
+  );
+
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
   const reversalStatusUpper = String(
     reverseReceiptSaveResponse?.status ?? "",
@@ -2708,6 +2722,7 @@ export default function ReceiptCreate({
   return (
     <Box p="md" style={{ position: "relative" }}>
       {documentNavUi}
+      {viewAllocationDocsUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -2855,6 +2870,29 @@ export default function ReceiptCreate({
                       onClick={openDocumentsModal}
                     >
                       Document
+                    </Menu.Item>
+                  )}
+                  {isOpenReceipt && (
+                    <Menu.Item
+                      leftSection={<IconListDetails size={16} />}
+                      disabled={
+                        !String(
+                          saveResponse.receipt_no ||
+                            saveResponse.document_no ||
+                            "",
+                        ).trim()
+                      }
+                      onClick={() =>
+                        void openViewAllocationDocs(
+                          String(
+                            saveResponse.receipt_no ||
+                              saveResponse.document_no ||
+                              "",
+                          ),
+                        )
+                      }
+                    >
+                      View allocation docs
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>

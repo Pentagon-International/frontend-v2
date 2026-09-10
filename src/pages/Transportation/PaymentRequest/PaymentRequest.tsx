@@ -28,6 +28,7 @@ import {
   IconDotsVertical,
   IconDownload,
   IconFileInvoice,
+  IconListDetails,
   IconPlus,
   IconTrash,
   IconUpload,
@@ -78,6 +79,7 @@ import {
 } from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import {
   appendEditPageAuditPatch,
   mergeEditPageAuditSources,
@@ -872,6 +874,8 @@ function PaymentRequest() {
     navigateFinanceReturn(navigate, location.state);
   }, [navigate, location.state]);
   const user = useAuthStore((state) => state.user);
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -2571,6 +2575,7 @@ function PaymentRequest() {
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {viewAllocationDocsUi}
       {/* Full-page loader overlay when saving or loading edit data */}
       {(isSubmitting || requestFetchLoading) && (
         <Box
@@ -2878,6 +2883,48 @@ function PaymentRequest() {
                   }}
                 >
                   Get Provisional Cost
+                </Menu.Item>
+                <Menu.Item
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconListDetails size={16} color="#105476" />
+                    </Box>
+                  }
+                  disabled={!String(saveResponse?.request_no ?? "").trim()}
+                  onClick={() =>
+                    void openViewAllocationDocs(
+                      String(saveResponse?.request_no ?? ""),
+                    )
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  View allocation docs
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>

@@ -38,6 +38,7 @@ import {
   IconEye,
   IconFileInvoice,
   IconFilter,
+  IconListDetails,
   IconSearch,
   IconX,
   IconBan,
@@ -73,6 +74,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -298,6 +300,8 @@ function PaymentRequestApproval() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -1205,6 +1209,22 @@ function PaymentRequestApproval() {
                   </UnstyledButton>
                 </Box>
               )}
+              <Box px={10} py={5}>
+                <UnstyledButton
+                  onClick={() =>
+                    void openViewAllocationDocs(
+                      String(row.original.request_no ?? ""),
+                    )
+                  }
+                >
+                  <Group gap="sm">
+                    <IconListDetails size={16} color={primary} />
+                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+                      View allocation docs
+                    </Text>
+                  </Group>
+                </UnstyledButton>
+              </Box>
             </Menu.Dropdown>
           </Menu>
         ),
@@ -1229,6 +1249,7 @@ function PaymentRequestApproval() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      openViewAllocationDocs,
     ],
   );
 
@@ -1409,6 +1430,7 @@ function PaymentRequestApproval() {
 
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
+      {viewAllocationDocsUi}
       <Box
         className={ERP_LIST_GEIST_ROOT_CLASS}
         style={{

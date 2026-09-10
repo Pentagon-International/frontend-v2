@@ -7,6 +7,8 @@ import {
   Grid,
   Group,
   Loader,
+  Menu,
+  ActionIcon,
   Modal,
   NumberInput,
   Stack,
@@ -25,6 +27,8 @@ import {
   IconUpload,
   IconDownload,
   IconX,
+  IconDotsVertical,
+  IconListDetails,
 } from "@tabler/icons-react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useDisclosure } from "@mantine/hooks";
@@ -47,6 +51,7 @@ import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   parseRoeForPayload,
@@ -734,6 +739,8 @@ export default function PaymentCreate({
     useGlobalSearchDocumentNavigation({
       getOptions: getDocumentNavigationOptions,
     });
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -1785,6 +1792,7 @@ export default function PaymentCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -1867,6 +1875,7 @@ export default function PaymentCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -2529,6 +2538,7 @@ export default function PaymentCreate({
   return (
     <Box p="md" style={{ position: "relative" }}>
       {documentNavUi}
+      {viewAllocationDocsUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -2661,6 +2671,48 @@ export default function PaymentCreate({
                   </Group>
                 </Group>
               )}
+            {(saveResponse && !_isReversal) ||
+            (_isReversal &&
+              (reversePaymentSaveResponse ||
+                (isReversalEditOrView && paymentFromState))) ? (
+              <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
+                <Menu.Target>
+                  <ActionIcon variant="light" color="#105476" size="lg">
+                    <IconDotsVertical size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<IconListDetails size={16} />}
+                    onClick={() =>
+                      void openViewAllocationDocs(
+                        _isReversal
+                          ? String(
+                              reversePaymentSaveResponse?.reverse_payment_no ??
+                                reversePaymentSaveResponse?.payment_no ??
+                                (
+                                  paymentFromState as {
+                                    reverse_payment_no?: string;
+                                  }
+                                )?.reverse_payment_no ??
+                                (
+                                  paymentFromState as { payment_no?: string }
+                                )?.payment_no ??
+                                "",
+                            )
+                          : String(
+                              saveResponse?.payment_no ||
+                                saveResponse?.document_no ||
+                                "",
+                            ),
+                      )
+                    }
+                  >
+                    View allocation docs
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            ) : null}
             <Button
               variant="outline"
               color="#105476"

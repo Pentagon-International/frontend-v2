@@ -26,6 +26,7 @@ import {
   IconTrash,
   IconUpload,
   IconDownload,
+  IconListDetails,
   IconX,
 } from "@tabler/icons-react";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
@@ -53,6 +54,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   formatRoeForAccountsPayload,
@@ -813,6 +815,8 @@ export default function SupplierInvoiceCreate({
   const user = useAuthStore((state) => state.user);
   const dateFormat = useDateFormat();
   const canPostDocuments = useCanPostDocuments();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
@@ -3748,6 +3752,7 @@ export default function SupplierInvoiceCreate({
 
   return (
     <Box p={"sm"} style={{ position: "relative" }}>
+      {viewAllocationDocsUi}
       {(isSubmitting || calcLoading) && (
         <Box
           style={{
@@ -3836,21 +3841,42 @@ export default function SupplierInvoiceCreate({
                 </Group>
               </Group>
             )}
-            {saveResponse?.id != null && !isReversal && (
-              <Menu shadow="md" width={200}>
+            {saveResponse?.id != null && (
+              <Menu shadow="md" width={220}>
                 <Menu.Target>
                   <ActionIcon variant="light" color="#105476" size="lg">
                     <IconDotsVertical size={18} />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
+                  {!isReversal && (
+                    <Menu.Item
+                      leftSection={<IconEye size={14} />}
+                      onClick={handleSupplierInvoicePdfPreview}
+                    >
+                      {statusUpper === "POSTED"
+                        ? "Supplier Invoice PDF"
+                        : "Draft Supplier Invoice PDF"}
+                    </Menu.Item>
+                  )}
                   <Menu.Item
-                    leftSection={<IconEye size={14} />}
-                    onClick={handleSupplierInvoicePdfPreview}
+                    leftSection={<IconListDetails size={14} />}
+                    onClick={() =>
+                      void openViewAllocationDocs(
+                        String(
+                          isReversal
+                            ? (saveResponse.reverse_crj_number ??
+                                saveResponse.crj_number ??
+                                saveResponse.Inv_Crn_no ??
+                                "")
+                            : (saveResponse.crj_number ??
+                                saveResponse.Inv_Crn_no ??
+                                ""),
+                        ),
+                      )
+                    }
                   >
-                    {statusUpper === "POSTED"
-                      ? "Supplier Invoice PDF"
-                      : "Draft Supplier Invoice PDF"}
+                    View allocation docs
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>

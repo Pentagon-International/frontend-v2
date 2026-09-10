@@ -201,6 +201,7 @@ export const URL = {
   subledgerEnquiry: "filter/subledger_enquiry/",
   documentAllocation: "filter/document_allocation/",
   outstandingAllocations: "outstanding-details/allocations/",
+  allocationsByDocument: "outstanding-details/allocations-by-document/",
   outstandingAllocationDocuments: "outstanding-details/allocation-documents/",
   outstandingAllocationDocumentsFilter:
     "outstanding-details/filter/allocation-documents/",

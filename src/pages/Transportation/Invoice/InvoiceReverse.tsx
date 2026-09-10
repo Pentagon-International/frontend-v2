@@ -10,12 +10,16 @@ import {
   ScrollArea,
   Tabs,
   Table,
+  Menu,
+  ActionIcon,
 } from "@mantine/core";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
   IconArrowLeft,
   IconChevronRight,
   IconTrash,
+  IconDotsVertical,
+  IconListDetails,
 } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -35,6 +39,7 @@ import useAuthStore from "../../../store/authStore";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { getAPICall } from "../../../service/getApiCall";
 import FormTextInput from "../../../components/FormTextInput";
 import FormNumberInput from "../../../components/FormNumberInput";
@@ -1118,6 +1123,8 @@ function InvoiceReverse() {
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
   const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
   const canPostDocuments = useCanPostDocuments();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
 
   const navigateBack = useCallback(() => {
     navigateFinanceReturn(navigate, location.state);
@@ -2575,6 +2582,7 @@ function InvoiceReverse() {
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {viewAllocationDocsUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -2646,6 +2654,32 @@ function InvoiceReverse() {
                   {saveResponse.status?.toUpperCase() || "—"}
                 </Badge>
               </Group>
+            )}
+            {(saveResponse?.reverse_document_no?.trim() ||
+              documentNo?.trim()) && (
+              <Menu shadow="md" width={220}>
+                <Menu.Target>
+                  <ActionIcon variant="light" color="#105476" size="lg">
+                    <IconDotsVertical size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<IconListDetails size={14} />}
+                    onClick={() =>
+                      void openViewAllocationDocs(
+                        String(
+                          saveResponse?.reverse_document_no?.trim() ||
+                            documentNo ||
+                            "",
+                        ),
+                      )
+                    }
+                  >
+                    View allocation docs
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
             )}
             <Button
               variant="outline"

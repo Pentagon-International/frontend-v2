@@ -16,7 +16,6 @@ import {
   Text,
   Textarea,
   TextInput,
-  UnstyledButton,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
@@ -28,6 +27,7 @@ import {
   IconFileInvoice,
   IconUpload,
   IconDownload,
+  IconListDetails,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -41,6 +41,7 @@ import {
 } from "../../../utils/editPageAuditInfo";
 import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import { useGlobalSearchDocumentNavigation } from "../../../hooks/useGlobalSearchDocumentNavigation";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -749,6 +750,8 @@ export default function OverseasReceiptCreate({
     useGlobalSearchDocumentNavigation({
       getOptions: getDocumentNavigationOptions,
     });
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
@@ -1627,6 +1630,7 @@ export default function OverseasReceiptCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -1712,6 +1716,7 @@ export default function OverseasReceiptCreate({
           : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -2405,6 +2410,14 @@ export default function OverseasReceiptCreate({
   const reversalStatusUpper = String(
     reverseReceiptSaveResponse?.status ?? "",
   ).toUpperCase();
+  const isOpenReceipt = useMemo(
+    () =>
+      !_isReversal &&
+      !(form.values.adjustments ?? []).some(
+        (a) => String(a.document_no ?? "").trim() !== "",
+      ),
+    [_isReversal, form.values.adjustments],
+  );
   const foreignExchangeJvNo = String(saveResponse?.jv_no ?? "").trim();
   const showForeignExchangeGainLossButton = Boolean(foreignExchangeJvNo);
   const isViewRoute = pathname.includes("/view");
@@ -2494,6 +2507,7 @@ export default function OverseasReceiptCreate({
   return (
     <Box p="md" style={{ position: "relative" }}>
       {documentNavUi}
+      {viewAllocationDocsUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -2621,31 +2635,39 @@ export default function OverseasReceiptCreate({
                   </Group>
                 </Group>
               )}
-            {isViewRoute && (
+            {(isViewRoute || (saveResponse?.id && isOpenReceipt)) &&
+              !_isReversal && (
               <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
                 <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray">
+                  <ActionIcon variant="light" color="#105476" size="lg">
                     <IconDotsVertical size={16} />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() => {
-                        openDocumentsModal();
-                      }}
+                  {isViewRoute && (
+                    <Menu.Item
+                      leftSection={<IconDownload size={16} />}
+                      onClick={openDocumentsModal}
                     >
-                      <Group gap="sm">
-                        <IconDownload size={16} style={{ color: "#105476" }} />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: "Inter, sans-serif" }}
-                        >
-                          Document
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
+                      Document
+                    </Menu.Item>
+                  )}
+                  {isOpenReceipt && (
+                    <Menu.Item
+                      leftSection={<IconListDetails size={16} />}
+                      onClick={() =>
+                        void openViewAllocationDocs(
+                          String(
+                            saveResponse?.receipt_no ||
+                              saveResponse?.document_no ||
+                              "",
+                          ),
+                        )
+                      }
+                    >
+                      View allocation docs
+                    </Menu.Item>
+                  )}
                 </Menu.Dropdown>
               </Menu>
             )}

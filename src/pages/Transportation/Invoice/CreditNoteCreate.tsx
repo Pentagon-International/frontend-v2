@@ -25,6 +25,7 @@ import {
   IconDotsVertical,
   IconEye,
   IconDownload,
+  IconListDetails,
   IconX,
 } from "@tabler/icons-react";
 import {
@@ -54,6 +55,7 @@ import useAuthStore from "../../../store/authStore";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -1315,6 +1317,8 @@ function CreditNoteCreate() {
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const canPostDocuments = useCanPostDocuments();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(
@@ -4948,6 +4952,7 @@ function CreditNoteCreate() {
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {viewAllocationDocsUi}
       {/* Full-page loader overlay when saving or posting */}
       {(isSubmitting || isPosting || invoiceViewFetchLoading) && (
         <Box
@@ -5041,6 +5046,17 @@ function CreditNoteCreate() {
                     {saveResponse?.status?.toUpperCase() === "POSTED"
                       ? pdfDocumentLabel
                       : `Draft ${pdfDocumentLabel}`}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconListDetails size={14} />}
+                    disabled={!String(saveResponse?.document_no ?? "").trim()}
+                    onClick={() =>
+                      void openViewAllocationDocs(
+                        String(saveResponse?.document_no ?? ""),
+                      )
+                    }
+                  >
+                    View allocation docs
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
