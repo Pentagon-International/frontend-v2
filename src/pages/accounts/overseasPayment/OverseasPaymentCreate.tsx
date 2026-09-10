@@ -3845,6 +3845,7 @@ export default function OverseasPaymentCreate({
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                       <Table.Th>Outstanding Amount</Table.Th>
+                      <Table.Th>Dr/Cr</Table.Th>
                       <Table.Th>Currency</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
@@ -3905,6 +3906,13 @@ export default function OverseasPaymentCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
+                        </Table.Td>
+                        <Table.Td>
+                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
+                            inferAllocationDrCrFromType(
+                              inv.day_book_document_type ?? inv.day_book_type,
+                            ) ??
+                            "—"}
                         </Table.Td>
                         <Table.Td>
                           {(inv.currency_code ?? "—").toString().trim() || "—"}

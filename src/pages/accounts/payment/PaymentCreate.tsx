@@ -535,6 +535,10 @@ type PaymentFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
+function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
+  return side === "Dr" ? "Cr" : "Dr";
+}
+
 /** Map API/stored party Dr/Cr. When prefilling reversal create from a source payment, flip Dr↔Cr. */
 function mapPaymentPartyDrCr(
   raw: string | null | undefined,
@@ -547,7 +551,7 @@ function mapPaymentPartyDrCr(
       ? "Dr"
       : "Cr";
   if (!flipForReversalSource) return side;
-  return side === "Dr" ? "Cr" : "Dr";
+  return flipDrCr(side);
 }
 
 /** Payment header nets Dr − Cr; reversal nets Cr − Dr so the header amount matches the source payment. */
@@ -1061,6 +1065,15 @@ export default function PaymentCreate({
               dr_cr?: string | null;
             };
             const roeFromApi = aAny.invoice_roe ?? aAny.roe;
+            const typeVal = String(aAny.type ?? aAny.type_name ?? "").trim();
+            const sourceDrCr =
+              normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
+              inferAllocationDrCrFromType(typeVal);
+            // Reversal create from payment: swap allocation Dr/Cr like party rows.
+            const allocationDrCr =
+              isReversalCreate && sourceDrCr
+                ? flipDrCr(sourceDrCr)
+                : sourceDrCr;
             return {
               id: aAny.id ?? null,
               invoice_id:
@@ -1070,7 +1083,7 @@ export default function PaymentCreate({
                     ? Number(aAny.invoice_id)
                     : null,
               location: String(aAny.location ?? "").trim(),
-              type: String(aAny.type ?? aAny.type_name ?? "").trim(),
+              type: typeVal,
               subledger: String(
                 aAny.subledger_code ?? aAny.subledger ?? "",
               ).trim(),
@@ -1086,9 +1099,7 @@ export default function PaymentCreate({
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: toLocalAmount(aAny.adj_local_amount),
-              Dr_Cr:
-                normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
-                inferAllocationDrCrFromType(aAny.type ?? aAny.type_name),
+              Dr_Cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
@@ -3669,6 +3680,7 @@ export default function PaymentCreate({
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                       <Table.Th>Outstanding Amount</Table.Th>
+                      <Table.Th>Dr/Cr</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -3731,6 +3743,13 @@ export default function PaymentCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
+                        </Table.Td>
+                        <Table.Td>
+                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
+                            inferAllocationDrCrFromType(
+                              inv.day_book_document_type ?? inv.day_book_type,
+                            ) ??
+                            "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}

@@ -949,7 +949,8 @@ export default function ReceiptCreate({
       invoiceModalOpen &&
       !!invoiceModalAllocationFilter?.account_code &&
       !!invoiceModalAllocationFilter?.subledger_code,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const currencyOptions = useMemo(() => {
@@ -1082,6 +1083,14 @@ export default function ReceiptCreate({
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
             const typeVal = (a.type_name ?? a.type ?? "").toString();
+            const sourceDrCr =
+              normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
+              inferAllocationDrCrFromType(typeVal);
+            // Reversal create from receipt: swap allocation Dr/Cr like party rows.
+            const allocationDrCr =
+              isReversalCreate && sourceDrCr
+                ? flipDrCr(sourceDrCr)
+                : sourceDrCr;
             return {
               id: a.id ?? null,
               invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
@@ -1097,9 +1106,7 @@ export default function ReceiptCreate({
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
-              Dr_Cr:
-                normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
-                inferAllocationDrCrFromType(typeVal),
+              Dr_Cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
@@ -1453,13 +1460,21 @@ export default function ReceiptCreate({
     const subledgerCode = (row?.customer_code ?? "").toString().trim();
     if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
+    setInvoiceList([]);
+    setSelectedInvoiceIndices(new Set());
+    // Drop any cached list so the modal never shows memoized documents
+    queryClient.removeQueries({
+      queryKey: [
+        "outstandingAllocationsForReceipt",
+        accountCode,
+        subledgerCode,
+      ],
+    });
     setInvoiceModalAllocationFilter({
       account_code: accountCode,
       subledger_code: subledgerCode,
     });
     setInvoiceModalOpen(true);
-    setInvoiceList([]);
-    setSelectedInvoiceIndices(new Set());
   };
 
   useEffect(() => {
@@ -3897,6 +3912,7 @@ export default function ReceiptCreate({
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                       <Table.Th>Outstanding Amount</Table.Th>
+                      <Table.Th>Dr/Cr</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -3956,6 +3972,13 @@ export default function ReceiptCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
+                        </Table.Td>
+                        <Table.Td>
+                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
+                            inferAllocationDrCrFromType(
+                              inv.day_book_document_type ?? inv.day_book_type,
+                            ) ??
+                            "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}

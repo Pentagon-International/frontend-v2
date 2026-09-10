@@ -896,7 +896,8 @@ export default function OverseasReceiptCreate({
       invoiceModalOpen &&
       !!invoiceModalAllocationFilter?.account_code &&
       !!invoiceModalAllocationFilter?.subledger_code,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const currencyOptions = useMemo(() => {
@@ -1375,13 +1376,21 @@ export default function OverseasReceiptCreate({
     const subledgerCode = (row?.customer_code ?? "").toString().trim();
     if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
+    setInvoiceList([]);
+    setSelectedInvoiceIndices(new Set());
+    // Drop any cached list so the modal never shows memoized documents
+    queryClient.removeQueries({
+      queryKey: [
+        "outstandingAllocationsForOverseasReceipt",
+        accountCode,
+        subledgerCode,
+      ],
+    });
     setInvoiceModalAllocationFilter({
       account_code: accountCode,
       subledger_code: subledgerCode,
     });
     setInvoiceModalOpen(true);
-    setInvoiceList([]);
-    setSelectedInvoiceIndices(new Set());
   };
 
   useEffect(() => {
@@ -3617,6 +3626,7 @@ export default function OverseasReceiptCreate({
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                       <Table.Th>Outstanding Amount</Table.Th>
+                      <Table.Th>Dr/Cr</Table.Th>
                       <Table.Th>Currency</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
@@ -3647,6 +3657,13 @@ export default function OverseasReceiptCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
+                        </Table.Td>
+                        <Table.Td>
+                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
+                            inferAllocationDrCrFromType(
+                              inv.day_book_document_type ?? inv.day_book_type,
+                            ) ??
+                            "—"}
                         </Table.Td>
                         <Table.Td>
                           {(inv.currency_code ?? "—").toString().trim() || "—"}
