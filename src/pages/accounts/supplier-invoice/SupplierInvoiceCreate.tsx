@@ -527,18 +527,6 @@ function resolveSupplierGstKind(chargeName: unknown): ChargeGstKind | null {
   return null;
 }
 
-function isSupplierInvoiceTdsRow(
-  row: Pick<ChargeRow, "charge_id" | "account_code" | "charge_name">,
-): boolean {
-  const hasNoChargeId =
-    row.charge_id == null || String(row.charge_id).trim() === "";
-  return (
-    hasNoChargeId &&
-    String(row.account_code ?? "").trim() !== "" &&
-    resolveSupplierGstKind(row.charge_name) == null
-  );
-}
-
 function signedByDrCr(
   amount: number,
   drCr: "Dr" | "Cr" | null | undefined,
@@ -2154,9 +2142,9 @@ export default function SupplierInvoiceCreate({
   ]);
 
   // Charges footer totals — same layout as invoice / payment request.
-  // Local Amount Total includes GST charge rows (and header GST when those
-  // rows are absent). TDS rows stay excluded. India GST uses calculated rows
-  // when present, otherwise the header CGST/SGST/IGST amounts.
+  // Local Amount Total = Dr − Cr net of every charge local amount (including
+  // GST and TDS rows). India GST column totals use calculated rows when
+  // present, otherwise header CGST/SGST/IGST.
   const chargesSectionTotals = useMemo(() => {
     const netDirection = isReversal ? "crMinusDr" : "drMinusCr";
     const charges = form.values.charges_data ?? [];
@@ -2169,27 +2157,22 @@ export default function SupplierInvoiceCreate({
     let hasChargeVat = false;
 
     for (const row of charges) {
+      const signed = signedByDrCr(
+        parseNum(row.amount_in_local) ?? 0,
+        row.Dr_Cr,
+        netDirection,
+      );
+      local += signed;
+
       const gstKind = resolveSupplierGstKind(row.charge_name);
       if (gstKind) {
         hasGstRows = true;
-        const signed = signedByDrCr(
-          parseNum(row.amount_in_local) ?? 0,
-          row.Dr_Cr,
-          netDirection,
-        );
-        local += signed;
         if (gstKind === "IGST") igst += signed;
         else if (gstKind === "CGST") cgst += signed;
         else sgst += signed;
         continue;
       }
-      if (isSupplierInvoiceTdsRow(row)) continue;
 
-      local += signedByDrCr(
-        parseNum(row.amount_in_local) ?? 0,
-        row.Dr_Cr,
-        netDirection,
-      );
       const vatAmount = parseNum(row.igst);
       if (vatAmount != null) {
         hasChargeVat = true;
