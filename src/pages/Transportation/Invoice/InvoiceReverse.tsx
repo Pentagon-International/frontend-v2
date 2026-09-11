@@ -12,6 +12,8 @@ import {
   Table,
   Menu,
   ActionIcon,
+  Modal,
+  Center,
 } from "@mantine/core";
 import { useForm, type UseFormReturnType } from "@mantine/form";
 import {
@@ -20,6 +22,9 @@ import {
   IconTrash,
   IconDotsVertical,
   IconListDetails,
+  IconEye,
+  IconDownload,
+  IconX,
 } from "@tabler/icons-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -1184,6 +1189,8 @@ function InvoiceReverse() {
   const [invoiceIsPosted, setInvoiceIsPosted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [isCreditNoteReversal, setIsCreditNoteReversal] = useState(() => {
     const st = location.state as {
       reverse_invoice_id?: number;
@@ -1352,6 +1359,9 @@ function InvoiceReverse() {
     : isCreditNoteReversal
       ? "Create Credit Note Reversal"
       : "Create Invoice Reversal";
+  const pdfDocumentLabel = isCreditNoteReversal
+    ? "Credit Note Reversal"
+    : "Invoice Reversal";
 
   const reversalAuditSource = useMemo(
     () =>
@@ -2577,6 +2587,64 @@ function InvoiceReverse() {
     );
   }, [form.values.charges, gstRatesByChargeIndex, totalsNetDirection]);
 
+  const handleReversePdfPreview = async () => {
+    const pdfId = saveResponse?.id;
+    if (!pdfId) {
+      ToastNotification({
+        type: "error",
+        message: "Save the reverse document before previewing the PDF.",
+      });
+      return;
+    }
+    setPreviewOpen(true);
+    setPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.reverseInvoice}${pdfId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching reverse invoice PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load PDF preview",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (!pdfBlob) return;
+    const link = document.createElement("a");
+    link.href = pdfBlob;
+    const docNo =
+      saveResponse?.reverse_document_no?.trim() ||
+      saveResponse?.id ||
+      "draft";
+    link.download = `${pdfDocumentLabel.replace(/\s+/g, "-")}-${docNo}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) {
     return (
       <Box
@@ -2700,7 +2768,8 @@ function InvoiceReverse() {
                 </Badge>
               </Group>
             )}
-            {(saveResponse?.reverse_document_no?.trim() ||
+            {(saveResponse?.id ||
+              saveResponse?.reverse_document_no?.trim() ||
               documentNo?.trim()) && (
               <Menu shadow="md" width={220}>
                 <Menu.Target>
@@ -2710,7 +2779,23 @@ function InvoiceReverse() {
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item
+                    leftSection={<IconEye size={14} />}
+                    disabled={!saveResponse?.id}
+                    onClick={() => void handleReversePdfPreview()}
+                  >
+                    {saveResponse?.status?.toUpperCase() === "POSTED"
+                      ? pdfDocumentLabel
+                      : `Draft ${pdfDocumentLabel}`}
+                  </Menu.Item>
+                  <Menu.Item
                     leftSection={<IconListDetails size={14} />}
+                    disabled={
+                      !String(
+                        saveResponse?.reverse_document_no?.trim() ||
+                          documentNo ||
+                          "",
+                      ).trim()
+                    }
                     onClick={() =>
                       void openViewAllocationDocs(
                         String(
@@ -2721,7 +2806,7 @@ function InvoiceReverse() {
                       )
                     }
                   >
-                    View allocation docs
+                    View Allocation Docs
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
@@ -4157,6 +4242,72 @@ function InvoiceReverse() {
           </Group>
         </Box>
       </Stack>
+
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="PDF Preview"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }

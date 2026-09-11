@@ -2924,7 +2924,7 @@ function PaymentRequest() {
                     },
                   }}
                 >
-                  View allocation docs
+                  View Allocation Docs
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>

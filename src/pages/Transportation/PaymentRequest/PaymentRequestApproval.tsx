@@ -1220,7 +1220,7 @@ function PaymentRequestApproval() {
                   <Group gap="sm">
                     <IconListDetails size={16} color={primary} />
                     <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-                      View allocation docs
+                      View Allocation Docs
                     </Text>
                   </Group>
                 </UnstyledButton>
