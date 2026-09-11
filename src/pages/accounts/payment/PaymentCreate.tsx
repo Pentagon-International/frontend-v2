@@ -2719,7 +2719,7 @@ export default function PaymentCreate({
                       )
                     }
                   >
-                    View allocation docs
+                    View Allocation Docs
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>

@@ -2674,7 +2674,7 @@ export default function OverseasReceiptCreate({
                         )
                       }
                     >
-                      View allocation docs
+                      View Allocation Docs
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>

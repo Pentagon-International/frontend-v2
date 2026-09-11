@@ -2907,7 +2907,7 @@ export default function ReceiptCreate({
                         )
                       }
                     >
-                      View allocation docs
+                      View Allocation Docs
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>

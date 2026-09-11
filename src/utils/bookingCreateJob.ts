@@ -9,6 +9,8 @@ import useAuthStore from "../store/authStore";
 import { ToastNotification } from "../components";
 import {
   costLocalAmountForPayload,
+  roundChargeAmount,
+  roundLocalChargeAmount,
   sellLocalAmountForPayload,
 } from "./houseChargeAmounts";
 import {
@@ -492,6 +494,13 @@ function hasBookingRateDetails(booking: Record<string, unknown>): boolean {
 /**
  * House charge lines for job create (mawb_charges / mbl_charges payload shape).
  * @param includeCost LCL export: true (sell + cost). FCL/other/air house: false (sell only).
+ *
+ * Booking totals already include ROE:
+ *   total_sell = sell_per_unit × roe × no_of_units
+ *   total_cost = cost_per_unit × roe × no_of_units
+ * Job fields:
+ *   amount / total_cost (currency) = units × per-unit (no ROE)
+ *   sell_local_amount / cost_local_amount = booking totals (ROE already applied)
  */
 function mapHouseChargesFromBooking(
   booking: Record<string, unknown>,
@@ -501,13 +510,61 @@ function mapHouseChargesFromBooking(
   return rates.map((c) => {
     const row = c as Record<string, unknown>;
     const noOfUnit = row.no_of_units || row.no_of_unit || "";
+    const qty = toNumberOrNull(noOfUnit);
     const amountPerUnit = toMoneyFormValue(row.sell_per_unit);
-    const amount = toMoneyFormValue(
-      row.min_sell || row.total_sell || row.sell_amount_total || "",
-    );
+    const sellPerUnit = toMoneyOrNull(row.sell_per_unit);
+    const minSell = toMoneyOrNull(row.min_sell);
     const roe = row.roe ?? "";
-    const totalCost = includeCost ? toMoneyFormValue(row.total_cost) : "";
+
+    // Currency sell: units × sell_per_unit (never use booking.total_sell — that is local).
+    let currencySell: number | null = null;
+    if (qty != null && sellPerUnit != null && qty > 0 && sellPerUnit > 0) {
+      currencySell = roundChargeAmount(qty * sellPerUnit);
+    }
+    if (minSell != null && minSell > 0) {
+      currencySell =
+        currencySell != null
+          ? roundChargeAmount(Math.max(currencySell, minSell))
+          : roundChargeAmount(minSell);
+    }
+    const amount = currencySell != null ? currencySell : "";
+
+    // Local sell: booking total_sell already has ROE applied.
+    const bookingTotalSell =
+      toNumberOrNull(row.total_sell) ?? toNumberOrNull(row.sell_amount_total);
+    const sellLocalAmount =
+      bookingTotalSell != null && bookingTotalSell > 0
+        ? roundLocalChargeAmount(bookingTotalSell)
+        : sellLocalAmountForPayload(amount, roe, noOfUnit, amountPerUnit);
+
     const unitCost = includeCost ? toMoneyFormValue(row.cost_per_unit) : "";
+    const costPerUnit = includeCost ? toMoneyOrNull(row.cost_per_unit) : null;
+
+    // Currency cost: units × cost_per_unit (never use booking.total_cost — that is local).
+    let currencyCost: number | null = null;
+    if (
+      includeCost &&
+      qty != null &&
+      costPerUnit != null &&
+      qty > 0 &&
+      costPerUnit > 0
+    ) {
+      currencyCost = roundChargeAmount(qty * costPerUnit);
+    }
+    const totalCost = includeCost
+      ? currencyCost != null
+        ? currencyCost
+        : ""
+      : "";
+
+    // Local cost: booking total_cost already has ROE applied.
+    const bookingTotalCost = toNumberOrNull(row.total_cost);
+    const costLocalAmount = includeCost
+      ? bookingTotalCost != null && bookingTotalCost > 0
+        ? roundLocalChargeAmount(bookingTotalCost)
+        : costLocalAmountForPayload(totalCost, roe)
+      : "";
+
     return {
       charge_id: row.charge_id || "",
       supplier_code: "",
@@ -518,17 +575,10 @@ function mapHouseChargesFromBooking(
       amount_per_unit: amountPerUnit,
       currency_id: row.currency_id || row.currency_country_code || "",
       roe,
-      sell_local_amount: sellLocalAmountForPayload(
-        amount,
-        roe,
-        noOfUnit,
-        amountPerUnit,
-      ),
+      sell_local_amount: sellLocalAmount,
       total_cost: totalCost,
       unit_cost: unitCost,
-      cost_local_amount: includeCost
-        ? costLocalAmountForPayload(totalCost, roe)
-        : "",
+      cost_local_amount: costLocalAmount,
     };
   });
 }
