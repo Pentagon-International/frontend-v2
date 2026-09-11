@@ -1035,6 +1035,15 @@ export default function DocumentAllocation() {
       return;
     }
 
+    if (Math.abs(allocationTotals.net) > 0.005) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Cannot post: the net total of allocated documents must be zero.",
+      });
+      return;
+    }
+
     setIsPosting(true);
     try {
       const allocationDate =

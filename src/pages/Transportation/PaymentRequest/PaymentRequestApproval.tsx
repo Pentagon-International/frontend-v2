@@ -19,7 +19,6 @@ import {
   Box,
   Menu,
   ActionIcon,
-  UnstyledButton,
   Badge,
   Grid,
   Loader,
@@ -212,12 +211,14 @@ function formatServiceFilterDisplay(
 function statusColor(status?: string): string {
   if (!status) return "gray";
   switch (status.toLowerCase()) {
-    case "approved":
+    case "posted":
       return "green";
+    case "approved":
+      return "orange";
     case "rejected":
       return "red";
     case "unapproved":
-      return "orange";
+      return "yellow";
     case "unposted":
       return "blue";
     default:
@@ -583,7 +584,12 @@ function PaymentRequestApproval() {
     for (const r of tableData) {
       const s = (r.status ?? "").trim().toLowerCase();
       if (s === "rejected") rejected += 1;
-      else if (s === "approved" || s === "approved_without_crj") approved += 1;
+      else if (
+        s === "approved" ||
+        s === "approved_without_crj" ||
+        s === "posted"
+      )
+        approved += 1;
       else pending += 1;
     }
     return { total: totalRecords, approved, pending, rejected, pageAmount };
@@ -1071,6 +1077,7 @@ function PaymentRequestApproval() {
                 data={[
                   { value: "Active", label: "Active" },
                   { value: "Approved", label: "Approved" },
+                  { value: "Posted", label: "Posted" },
                   { value: "Rejected", label: "Rejected" },
                 ]}
                 value={appliedFilters.status ?? ""}
@@ -1115,6 +1122,7 @@ function PaymentRequestApproval() {
             position="bottom-end"
             shadow="md"
             width={220}
+            closeOnItemClick
             styles={erpListGeistMenuDropdownStyles}
             classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
           >
@@ -1124,13 +1132,30 @@ function PaymentRequestApproval() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              <Box px={10} py={5}>
-                <UnstyledButton
+              <Menu.Item
+                leftSection={<IconEye size={16} color={primary} />}
+                onClick={() => {
+                  setStoreFilters(LIST_KEY, buildFilterPayload);
+                  setStoreSearch(LIST_KEY, search);
+                  setShouldRestore(LIST_KEY, true);
+                  navigate(`/payment-request/view/${row.original.id}`, {
+                    state: {
+                      fromPaymentRequestApproval: true,
+                      returnTo: "/payment-request-approval",
+                    },
+                  });
+                }}
+              >
+                View
+              </Menu.Item>
+              {row.original.status?.trim().toLowerCase() !== "rejected" && (
+                <Menu.Item
+                  leftSection={<IconEdit size={16} color={primary} />}
                   onClick={() => {
                     setStoreFilters(LIST_KEY, buildFilterPayload);
                     setStoreSearch(LIST_KEY, search);
                     setShouldRestore(LIST_KEY, true);
-                    navigate(`/payment-request/view/${row.original.id}`, {
+                    navigate(`/payment-request/edit/${row.original.id}`, {
                       state: {
                         fromPaymentRequestApproval: true,
                         returnTo: "/payment-request-approval",
@@ -1138,45 +1163,14 @@ function PaymentRequestApproval() {
                     });
                   }}
                 >
-                  <Group gap="sm">
-                    <IconEye size={16} color={primary} />
-                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-                      View
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
-              {row.original.status?.trim().toLowerCase() !== "rejected" && (
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      setStoreFilters(LIST_KEY, buildFilterPayload);
-                      setStoreSearch(LIST_KEY, search);
-                      setShouldRestore(LIST_KEY, true);
-                      navigate(`/payment-request/edit/${row.original.id}`, {
-                        state: {
-                          fromPaymentRequestApproval: true,
-                          returnTo: "/payment-request-approval",
-                        },
-                      });
-                    }}
-                  >
-                    <Group gap="sm">
-                      <IconEdit size={16} color={primary} />
-                      <Text
-                        size="sm"
-                        style={{ fontFamily: erpTheme.fontSans }}
-                      >
-                        Edit
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
+                  Edit
+                </Menu.Item>
               )}
               {row.original.status?.trim().toLowerCase() === "approved" && (
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={async () => {
+                <Menu.Item
+                  leftSection={<IconFileInvoice size={16} color={primary} />}
+                  onClick={() => {
+                    void (async () => {
                       try {
                         const raw = await apiCallProtected.get(
                           `${URL.paymentRequest}${row.original.id}/`,
@@ -1198,33 +1192,22 @@ function PaymentRequestApproval() {
                           message: "Failed to load payment request details.",
                         });
                       }
-                    }}
-                  >
-                    <Group gap="sm">
-                      <IconFileInvoice size={16} color={primary} />
-                      <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-                        Create Supplier Invoice
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
-              )}
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() =>
-                    void openViewAllocationDocs(
-                      String(row.original.request_no ?? ""),
-                    )
-                  }
+                    })();
+                  }}
                 >
-                  <Group gap="sm">
-                    <IconListDetails size={16} color={primary} />
-                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-                      View Allocation Docs
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
+                  Create Supplier Invoice
+                </Menu.Item>
+              )}
+              <Menu.Item
+                leftSection={<IconListDetails size={16} color={primary} />}
+                onClick={() =>
+                  void openViewAllocationDocs(
+                    String(row.original.request_no ?? ""),
+                  )
+                }
+              >
+                View Allocation Docs
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         ),
@@ -1708,6 +1691,7 @@ function PaymentRequestApproval() {
                       data={[
                         { value: "Active", label: "Active" },
                         { value: "Approved", label: "Approved" },
+                        { value: "Posted", label: "Posted" },
                         { value: "Rejected", label: "Rejected" },
                       ]}
                       value={draftFilters.status}
