@@ -151,6 +151,7 @@ export function useViewAllocationDocs() {
           }
           size="90%"
           centered
+          zIndex={400}
           styles={{
             content: { maxWidth: "1100px" },
             body: { position: "relative" },

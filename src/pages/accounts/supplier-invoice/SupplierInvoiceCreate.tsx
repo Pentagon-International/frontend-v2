@@ -935,6 +935,8 @@ export default function SupplierInvoiceCreate({
   const saveResponseRef = useRef<typeof saveResponse>(null);
   /** Reversal payloads: is_agent from source/reversal invoice, not reversal daybook. */
   const reversalIsAgentRef = useRef<boolean | null>(null);
+  /** PRQ → CRJ create: send source payment-request id as `prq_id`. */
+  const sourcePrqIdRef = useRef<number | null>(null);
   /** OVERSEAS daybook / agent vendor: State is optional. Ref so validate sees latest. */
   const isAgentVendorFlowRef = useRef(false);
   /**
@@ -2455,6 +2457,10 @@ export default function SupplierInvoiceCreate({
       Record<string, any> | null | undefined;
     if (!prData || isViewMode || isEditMode || isReversal) return;
 
+    const prqIdNum = Number(prData.id);
+    sourcePrqIdRef.current =
+      Number.isFinite(prqIdNum) && prqIdNum > 0 ? prqIdNum : null;
+
     const prDate = parseDateOnly(String(prData.date ?? "")) ?? null;
     const amountNum =
       prData.amount != null && prData.amount !== ""
@@ -2818,6 +2824,9 @@ export default function SupplierInvoiceCreate({
       Dr_Cr: values.Dr_Cr,
       charges_data: chargesPayload,
       ...buildSupplierInvoiceDocumentIdsPayload(values, isCreate),
+      ...(isCreate && sourcePrqIdRef.current != null
+        ? { prq_id: sourcePrqIdRef.current }
+        : {}),
     };
   };
 

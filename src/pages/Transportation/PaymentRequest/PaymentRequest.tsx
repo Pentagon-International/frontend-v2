@@ -1309,12 +1309,14 @@ function PaymentRequest() {
       );
   }, [isJobChargesPrefillFlow, prefillJobId]);
 
+  const prqStatusUpper = (saveResponse?.status ?? form.values.approved ?? "")
+    .toString()
+    .trim()
+    .toUpperCase();
+  // POSTED (after CRJ create) locks the form the same way as APPROVED.
   const isApprovedStatus =
-    (saveResponse?.status ?? form.values.approved ?? "")
-      .toString()
-      .trim()
-      .toUpperCase() === "APPROVED";
-  /** Approved edit: all fields locked except one-shot actual inv (when allowed). */
+    prqStatusUpper === "APPROVED" || prqStatusUpper === "POSTED";
+  /** Approved/Posted edit: all fields locked except one-shot actual inv (when allowed). */
   const formFieldsReadOnly = isReadOnly || isApprovedStatus;
   const docsReadOnly = formFieldsReadOnly;
   const hasProformaSet =
@@ -2642,11 +2644,13 @@ function PaymentRequest() {
                       size="sm"
                       variant="light"
                       color={
-                        saveResponse.status?.toUpperCase() === "APPROVED"
+                        saveResponse.status?.toUpperCase() === "POSTED"
                           ? "green"
-                          : saveResponse.status?.toUpperCase() === "REJECTED"
-                            ? "red"
-                            : "gray"
+                          : saveResponse.status?.toUpperCase() === "APPROVED"
+                            ? "orange"
+                            : saveResponse.status?.toUpperCase() === "REJECTED"
+                              ? "red"
+                              : "gray"
                       }
                       styles={{ root: { textTransform: "none" } }}
                     >
