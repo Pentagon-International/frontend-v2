@@ -329,56 +329,6 @@ function getMatchingAllocationsForParty(
   });
 }
 
-/** Party local from allocation Dr/Cr (Cr − Dr); party amount = local / party ROE. */
-function computeSyncedPaymentDetailRow(
-  row: DetailRow,
-  adjustments: AdjustmentRow[],
-): DetailRow {
-  const matching = getMatchingAllocationsForParty(row, adjustments);
-  if (matching.length === 0) return row;
-  const local = clampLocalAmount(sumPaymentAllocationNetLocal(matching));
-  const roeVal =
-    row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
-  const derivedAmount =
-    local != null && Number.isFinite(local)
-      ? clampAmount(local / roeVal)
-      : row.amount;
-  return {
-    ...row,
-    local_amount: local,
-    amount: derivedAmount,
-  };
-}
-
-function computePaymentDetailsSyncedFromAllocations(
-  details: DetailRow[],
-  adjustments: AdjustmentRow[],
-): DetailRow[] {
-  return details.map((row) => computeSyncedPaymentDetailRow(row, adjustments));
-}
-
-function computePaymentHeaderAmountsFromDetails(
-  details: DetailRow[],
-  isReversal: boolean,
-): { amount: number | null; local_amount: number | null } {
-  let netAmount = 0;
-  let netLocal = 0;
-  for (const d of details ?? []) {
-    const sign = paymentPartyHeaderNetSign(d.dr_cr, isReversal);
-    netAmount +=
-      sign * (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0);
-    netLocal +=
-      sign *
-      (d.local_amount != null && Number.isFinite(d.local_amount)
-        ? d.local_amount
-        : 0);
-  }
-  return {
-    amount: clampAmount(netAmount),
-    local_amount: clampLocalAmount(netLocal),
-  };
-}
-
 function normalizeObjSno(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -484,6 +434,7 @@ type PaymentListItem = {
     invoice_id?: number;
     supplier_invoice_id?: number;
     invoice_roe?: string | number;
+    supplier_invoice_roe?: string | number;
     subledger_id?: number;
     subledger_code?: string;
     subledger_name?: string;
@@ -1047,6 +998,7 @@ export default function PaymentCreate({
               supplier_invoice_id?: number;
               invoice_id?: number;
               invoice_roe?: string | number;
+              supplier_invoice_roe?: string | number;
               roe?: string | number;
               location?: string;
               type?: string;
@@ -1064,7 +1016,8 @@ export default function PaymentCreate({
               Dr_Cr?: string | null;
               dr_cr?: string | null;
             };
-            const roeFromApi = aAny.invoice_roe ?? aAny.roe;
+            const roeFromApi =
+              aAny.supplier_invoice_roe ?? aAny.invoice_roe ?? aAny.roe;
             const typeVal = String(aAny.type ?? aAny.type_name ?? "").trim();
             const sourceDrCr =
               normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
@@ -1104,14 +1057,13 @@ export default function PaymentCreate({
           })
         : [getDefaultAdjustmentRow(localCurrency)];
 
-    // Edit: allocation Dr/Cr from the list drives party and header amounts.
-    // Reversal keeps the reversed payment values; backend handles Dr/Cr.
-    const detailsForForm = _isReversal
-      ? details
-      : computePaymentDetailsSyncedFromAllocations(details, adjustments);
-    const headerAmounts = _isReversal
-      ? { amount: amountVal, local_amount: localAmountVal }
-      : computePaymentHeaderAmountsFromDetails(detailsForForm, false);
+    // Edit/view/reversal: keep party and header amounts from the API response.
+    // Allocation → party sync runs only when the user changes allocation rows.
+    const detailsForForm = details;
+    const headerAmounts = {
+      amount: amountVal,
+      local_amount: localAmountVal,
+    };
 
     setLoadedDetails(detailsForForm);
     form.setValues({
