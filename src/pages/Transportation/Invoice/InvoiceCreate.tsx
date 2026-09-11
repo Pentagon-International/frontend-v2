@@ -223,11 +223,26 @@ function resolveVatTaxBase(
   );
 }
 
-/** Per-unit / currency amount: always 2 decimal places (including Vietnam). */
+/** Per-unit / currency amount: VND (Vietnam) → whole numbers; else 2 dp (e.g. USD). */
 function clampCurrencyAmount(
   value: number | null | undefined,
+  currency?: string | null,
 ): number | null {
-  return clampMoneyAmount(value, false);
+  return clampMoneyAmount(
+    value,
+    Boolean(currency) &&
+      isMoneyWholeNumberMode() &&
+      isVndCurrency(currency),
+  );
+}
+
+/** Input decimal scale for charge currency amount / per-unit. */
+function getCurrencyAmountDecimalScale(currency?: string | null): 0 | 2 {
+  return getAmountDecimalScale(
+    Boolean(currency) &&
+      isMoneyWholeNumberMode() &&
+      isVndCurrency(currency),
+  );
 }
 
 /** Local amount: whole numbers for Vietnam branches. */
@@ -1159,7 +1174,11 @@ function calcTaxRowAmountsFromBreakupTotal(
   return {
     amountInLocal,
     amountInHeader,
-    currencyAmount: clampCurrencyAmount(amountInLocal) ?? amountInLocal,
+    currencyAmount:
+      clampCurrencyAmount(
+        amountInLocal,
+        isMoneyWholeNumberMode() ? "VND" : undefined,
+      ) ?? amountInLocal,
   };
 }
 
@@ -1713,7 +1732,6 @@ function InvoiceCreate({
 
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const isKenyaUser = useMemo(() => {
@@ -2810,6 +2828,7 @@ function InvoiceCreate({
                 ) {
                   const calcAmount = clampCurrencyAmount(
                     noOfUnit * amountPerUnit,
+                    currency,
                   );
                   if (calcAmount != null) amount = calcAmount;
                   if (
@@ -3531,7 +3550,10 @@ function InvoiceCreate({
         charge.no_of_unit > 0
       ) {
         const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
-        const clamped = clampCurrencyAmount(calculatedAmount);
+        const clamped = clampCurrencyAmount(
+          calculatedAmount,
+          charge.currency,
+        );
         if (clamped != null && clamped !== charge.amount) {
           return {
             ...charge,
@@ -4091,8 +4113,12 @@ function InvoiceCreate({
               currency_id: chargeCurrencyId,
               roe: roundRoeForPayload(charge.roe) ?? 0,
               amount_per_unit:
-                clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-              amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+                clampCurrencyAmount(
+                  charge.amount_per_unit ?? 0,
+                  charge.currency,
+                ) ?? 0,
+              amount:
+                clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
@@ -4135,8 +4161,12 @@ function InvoiceCreate({
             currency_id: chargeCurrencyId,
             roe: roundRoeForPayload(charge.roe) ?? 0,
             amount_per_unit:
-              clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+              clampCurrencyAmount(
+                charge.amount_per_unit ?? 0,
+                charge.currency,
+              ) ?? 0,
+            amount:
+              clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
@@ -4476,8 +4506,12 @@ function InvoiceCreate({
               currency_id: chargeCurrencyId,
               roe: roundRoeForPayload(charge.roe) ?? 0,
               amount_per_unit:
-                clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-              amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+                clampCurrencyAmount(
+                  charge.amount_per_unit ?? 0,
+                  charge.currency,
+                ) ?? 0,
+              amount:
+                clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
@@ -4520,8 +4554,12 @@ function InvoiceCreate({
             currency_id: chargeCurrencyId,
             roe: roundRoeForPayload(charge.roe) ?? 0,
             amount_per_unit:
-              clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+              clampCurrencyAmount(
+                charge.amount_per_unit ?? 0,
+                charge.currency,
+              ) ?? 0,
+            amount:
+              clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
@@ -5482,52 +5520,84 @@ function InvoiceCreate({
                 value={form.values.currency}
                 onChange={(value) => {
                   const newCurrency = value || "";
-                  const headerRoe = isBaseCurrency(newCurrency)
-                    ? 1
-                    : form.values.roe;
-                  const updatedCharges = form.values.charges.map((charge) => {
-                    const newHeader = calcChargeHeaderAmount(
-                      charge,
-                      newCurrency,
-                      headerRoe,
-                    );
-                    if (newHeader != null) {
-                      return { ...charge, header_amount: newHeader };
-                    }
-                    return charge;
-                  });
-                  form.setValues({
-                    ...form.values,
-                    currency: newCurrency,
-                    roe: isBaseCurrency(newCurrency) ? 1 : form.values.roe,
-                    charges: updatedCharges,
-                  });
-                  if (isBaseCurrency(newCurrency)) {
-                    roeCacheRef.current.set(
-                      newCurrency.trim().toUpperCase(),
-                      1,
-                    );
-                    const billingUpper = newCurrency.trim().toUpperCase();
-                    form.values.charges.forEach((charge, idx) => {
-                      if (
-                        charge.currency?.trim().toUpperCase() === billingUpper
-                      ) {
-                        form.setFieldValue(`charges.${idx}.roe`, 1);
+                  const billingUpper = newCurrency.trim().toUpperCase();
+                  const currencyRows =
+                    (currencyData as {
+                      id?: number;
+                      code?: string;
+                      currency_code?: string;
+                    }[]) ?? [];
+
+                  const recalcChargesForBilling = (
+                    headerRoe: number | null | undefined,
+                  ) => {
+                    const roeForCalc =
+                      isBaseCurrency(newCurrency)
+                        ? 1
+                        : headerRoe != null && headerRoe > 0
+                          ? headerRoe
+                          : form.values.roe;
+
+                    return form.values.charges.map((charge) => {
+                      const chargeCode =
+                        resolveChargeCurrencyCode(charge, currencyRows) ||
+                        charge.currency ||
+                        "";
+                      const chargeMatchesBilling =
+                        chargeCode.trim().toUpperCase() === billingUpper;
+                      const nextRoe = chargeMatchesBilling
+                        ? isBaseCurrency(newCurrency)
+                          ? 1
+                          : (roeForCalc ?? charge.roe)
+                        : charge.roe;
+                      const next = {
+                        ...charge,
+                        currency: chargeCode || charge.currency,
+                        roe: nextRoe,
+                      };
+                      const newHeader = calcChargeHeaderAmount(
+                        {
+                          amount: next.amount,
+                          amount_in_local: next.amount_in_local,
+                          currency: chargeCode || next.currency,
+                        },
+                        newCurrency,
+                        roeForCalc,
+                      );
+                      if (newHeader != null) {
+                        return { ...next, header_amount: newHeader };
                       }
+                      return next;
+                    });
+                  };
+
+                  if (isBaseCurrency(newCurrency)) {
+                    roeCacheRef.current.set(billingUpper, 1);
+                    billingCurrencyRef.current = newCurrency;
+                    billingRoeRef.current = 1;
+                    form.setValues({
+                      ...form.values,
+                      currency: newCurrency,
+                      roe: 1,
+                      charges: recalcChargesForBilling(1),
                     });
                     return;
                   }
+
+                  // Update billing currency immediately; recalc header amounts once ROE is ready.
+                  billingCurrencyRef.current = newCurrency;
+                  form.setFieldValue("currency", newCurrency);
                   void ensureRoeForCurrency(newCurrency).then((roe) => {
-                    form.setFieldValue("roe", roe);
-                    if (roe == null) return;
-                    const billingUpper = newCurrency.trim().toUpperCase();
-                    form.values.charges.forEach((charge, idx) => {
-                      if (
-                        charge.currency?.trim().toUpperCase() === billingUpper
-                      ) {
-                        form.setFieldValue(`charges.${idx}.roe`, roe);
-                      }
-                    });
+                    const roeForCalc =
+                      roe != null && roe > 0 ? roe : form.values.roe;
+                    billingRoeRef.current = roeForCalc;
+                    if (roeForCalc != null && roeForCalc > 0) {
+                      form.setFieldValue("roe", roeForCalc);
+                    }
+                    form.setFieldValue(
+                      "charges",
+                      recalcChargesForBilling(roeForCalc),
+                    );
                   });
                 }}
                 searchable
@@ -6108,14 +6178,34 @@ function InvoiceCreate({
                           );
                           const code = opt ? (opt.label ?? opt.value) : v;
                           form.setFieldValue(`charges.${index}.currency`, code);
+                          const currentCharge = form.values.charges[index];
+                          const clampedAmount = clampCurrencyAmount(
+                            currentCharge.amount,
+                            code,
+                          );
+                          const clampedPerUnit = clampCurrencyAmount(
+                            currentCharge.amount_per_unit,
+                            code,
+                          );
+                          if (clampedAmount !== currentCharge.amount) {
+                            form.setFieldValue(
+                              `charges.${index}.amount`,
+                              clampedAmount,
+                            );
+                          }
+                          if (clampedPerUnit !== currentCharge.amount_per_unit) {
+                            form.setFieldValue(
+                              `charges.${index}.amount_per_unit`,
+                              clampedPerUnit,
+                            );
+                          }
                           if (isBaseCurrency(code)) {
                             form.setFieldValue(`charges.${index}.roe`, 1);
                             roeCacheRef.current.set(
                               code.trim().toUpperCase(),
                               1,
                             );
-                            const currentCharge = form.values.charges[index];
-                            const amt = currentCharge.amount;
+                            const amt = clampedAmount ?? currentCharge.amount;
                             if (amt != null && amt > 0) {
                               const local = clampLocalAmount(amt * 1);
                               if (local != null) {
@@ -6147,10 +6237,12 @@ function InvoiceCreate({
                                 `charges.${index}.roe`,
                                 newRoe,
                               );
-                              const currentCharge = form.values.charges[index];
-                              const amt = currentCharge.amount;
+                              const latestCharge = form.values.charges[index];
+                              const amt =
+                                clampCurrencyAmount(latestCharge.amount, code) ??
+                                latestCharge.amount;
                               if (amt != null && amt > 0) {
-                                let local = currentCharge.amount_in_local;
+                                let local = latestCharge.amount_in_local;
                                 if (newRoe != null && newRoe > 0) {
                                   local = clampLocalAmount(amt * newRoe);
                                   if (local != null) {
@@ -6162,7 +6254,7 @@ function InvoiceCreate({
                                 }
                                 const headerAmt = calcChargeHeaderAmount(
                                   {
-                                    ...currentCharge,
+                                    ...latestCharge,
                                     amount: amt,
                                     amount_in_local: local,
                                     currency: code,
@@ -6314,6 +6406,7 @@ function InvoiceCreate({
                             amount = clampCurrencyAmount(
                               currentCharge.no_of_unit *
                                 currentCharge.amount_per_unit,
+                              currentCharge.currency,
                             );
                           }
                           if (
@@ -6421,6 +6514,7 @@ function InvoiceCreate({
                           ) {
                             amount = clampCurrencyAmount(
                               noOfUnit * currentCharge.amount_per_unit,
+                              currentCharge.currency,
                             );
                             const roeVal = currentCharge.roe;
                             if (
@@ -6464,15 +6558,18 @@ function InvoiceCreate({
                         placeholder="Per Unit"
                         min={0}
                         hideControls
-                        decimalScale={currencyAmountDecimalScale}
+                        decimalScale={getCurrencyAmountDecimalScale(
+                          charge.currency,
+                        )}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount_per_unit || undefined}
                         onChange={(value) => {
+                          const currentCharge = form.values.charges[index];
                           const amountPerUnit = clampCurrencyAmount(
                             value as number | null,
+                            currentCharge.currency,
                           );
-                          const currentCharge = form.values.charges[index];
                           let amount = currentCharge.amount;
                           let amountInLocal = currentCharge.amount_in_local;
                           let headerAmt = currentCharge.header_amount;
@@ -6485,6 +6582,7 @@ function InvoiceCreate({
                           ) {
                             amount = clampCurrencyAmount(
                               currentCharge.no_of_unit * amountPerUnit,
+                              currentCharge.currency,
                             );
                             const roeVal = currentCharge.roe;
                             if (
@@ -6528,16 +6626,19 @@ function InvoiceCreate({
                         placeholder="Currency Amount"
                         min={0}
                         hideControls
-                        decimalScale={currencyAmountDecimalScale}
+                        decimalScale={getCurrencyAmountDecimalScale(
+                          charge.currency,
+                        )}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount || undefined}
                         onChange={(value) => {
+                          const currentCharge = form.values.charges[index];
                           const currencyAmount = clampCurrencyAmount(
                             value as number | null,
+                            currentCharge.currency,
                           );
-                          const currentCharge = form.values.charges[index];
                           let amountInLocal = currentCharge.amount_in_local;
                           let headerAmt = currentCharge.header_amount;
 
