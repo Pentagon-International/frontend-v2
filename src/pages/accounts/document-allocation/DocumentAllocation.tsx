@@ -28,7 +28,10 @@ import {
   ToastNotification,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
-import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
+import {
+  getDefaultBranchCurrencyFromUser,
+  ROE_DECIMAL_PLACES,
+} from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmount,
@@ -178,11 +181,48 @@ const getRowLocalAmount = (row: DocumentAllocationRow): number =>
     String(row.outstanding_local_amount ?? row.amount_in_local ?? ""),
   ) ?? 0;
 
-const computeAllocationTotals = (source: DocumentAllocationRow[]) => {
+const getRowOutstandingAmount = (row: DocumentAllocationRow): number =>
+  parseDecimal(String(row.outstanding_amount ?? row.amount ?? "")) ?? 0;
+
+/** Local-currency docs → outstanding local; foreign → outstanding amount. */
+const isRowBranchLocalCurrency = (
+  row: DocumentAllocationRow,
+  branchCurrencyCode: string,
+  branchCurrencyId: string,
+): boolean => {
+  const localCode = String(branchCurrencyCode ?? "")
+    .trim()
+    .toUpperCase();
+  const rowCode = String(row.currency_code ?? "")
+    .trim()
+    .toUpperCase();
+  if (localCode && rowCode) return rowCode === localCode;
+
+  const localId = String(branchCurrencyId ?? "").trim();
+  const rowId = row.currency_id != null ? String(row.currency_id) : "";
+  if (localId && rowId) return localId === rowId;
+
+  // Incomplete currency metadata: keep prior local-amount behaviour.
+  return true;
+};
+
+const getRowAmountForValidation = (
+  row: DocumentAllocationRow,
+  branchCurrencyCode: string,
+  branchCurrencyId: string,
+): number =>
+  isRowBranchLocalCurrency(row, branchCurrencyCode, branchCurrencyId)
+    ? getRowLocalAmount(row)
+    : getRowOutstandingAmount(row);
+
+const sumCreditDebitNet = (
+  source: DocumentAllocationRow[],
+  getAmount: (row: DocumentAllocationRow) => number,
+) => {
   let credit = 0;
   let debit = 0;
   for (const row of source) {
-    const amount = getRowLocalAmount(row);
+    const amount = getAmount(row);
     if (isCreditSide(row.Dr_Cr)) credit += amount;
     else if (isDebitSide(row.Dr_Cr)) debit += amount;
   }
@@ -193,31 +233,54 @@ const computeAllocationTotals = (source: DocumentAllocationRow[]) => {
   };
 };
 
+const computeAllocationTotals = (
+  source: DocumentAllocationRow[],
+  branchCurrencyCode: string,
+  branchCurrencyId: string,
+) => {
+  // UI totals always use outstanding local amount.
+  const display = sumCreditDebitNet(source, getRowLocalAmount);
+  // Post validation follows document vs branch currency.
+  const validation = sumCreditDebitNet(source, (row) =>
+    getRowAmountForValidation(row, branchCurrencyCode, branchCurrencyId),
+  );
+  return {
+    credit: display.credit,
+    debit: display.debit,
+    net: display.net,
+    validationNet: validation.net,
+  };
+};
+
 type AllocationTotals = ReturnType<typeof computeAllocationTotals>;
 
 /** Exact leading column spans (same as table rows) so gutters align. */
 const MODAL_TOTALS_LEADING_SPANS = [
-  0.4, 0.8, 1.2, 0.9, 1.8, 1.1, 0.8, 0.7, 1.1,
+  0.4, 0.8, 1.2, 0.9, 1.8, 1.1, 0.8, 0.7,
 ];
-const MODAL_TOTALS_LABEL_SPAN = 1.1; // Outstanding amount
-const MODAL_TOTALS_VALUE_SPAN = 1.5; // Outstanding local amount
+const MODAL_TOTALS_LABEL_SPAN = 1.1; // Document Amount (spacer)
+const MODAL_TOTALS_OUTSTANDING_SPAN = 1.1; // Label before local totals
+const MODAL_TOTALS_LOCAL_SPAN = 1.5; // Outstanding local amount
 
 const MAIN_TOTALS_LEADING_SPANS = [
-  0.9, 0.8, 0.7, 1.7, 1.2, 0.9, 0.7, 1.2,
+  0.9, 0.8, 0.7, 1.7, 1.2, 0.9, 0.7,
 ];
-const MAIN_TOTALS_LABEL_SPAN = 1.2; // Outstanding amount
-const MAIN_TOTALS_VALUE_SPAN = 1.3; // Outstanding local amount
+const MAIN_TOTALS_LABEL_SPAN = 1.2; // Document Amount (spacer)
+const MAIN_TOTALS_OUTSTANDING_SPAN = 1.2; // Label before local totals
+const MAIN_TOTALS_LOCAL_SPAN = 1.3; // Outstanding local amount
 
 const AllocationTotalsSummary = ({
   totals,
   leadingSpans,
   labelSpan,
-  valueSpan,
+  outstandingSpan,
+  localSpan,
 }: {
   totals: AllocationTotals;
   leadingSpans: number[];
   labelSpan: number;
-  valueSpan: number;
+  outstandingSpan: number;
+  localSpan: number;
 }) => {
   const items: {
     label: string;
@@ -228,6 +291,16 @@ const AllocationTotalsSummary = ({
     { label: "Debit Total:", value: totals.debit },
     { label: "Net Total:", value: totals.net, colorBySign: true },
   ];
+
+  const valueBoxStyle = {
+    height: "36px",
+    display: "flex",
+    alignItems: "center",
+    // Match FormTextInput size="sm": 1px border + input horizontal padding
+    paddingLeft: "calc(1px + 0.75rem * var(--mantine-scale, 1))",
+    fontSize: "13px",
+    fontFamily: "Inter",
+  } as const;
 
   return (
     <Box mt="md">
@@ -241,60 +314,44 @@ const AllocationTotalsSummary = ({
           : "#105476";
 
         return (
-        <Grid
-          key={item.label}
-          w="100%"
-          gutter="xs"
-          // mt={index !== 0 ? 2 : 0}
-          align="center"
-        >
-          {leadingSpans.map((span, leadIndex) => (
-            <Grid.Col key={`lead-${leadIndex}`} span={span} />
-          ))}
-          <Grid.Col span={labelSpan}>
-            <Box
-              style={{
-                height: "36px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-              }}
-            >
-              <Text
-                size="xs"
-                fw={600}
-                c="dimmed"
-                ta="right"
-                style={{ fontFamily: "Inter" }}
+          <Grid key={item.label} w="100%" gutter="xs" align="center">
+            {leadingSpans.map((span, leadIndex) => (
+              <Grid.Col key={`lead-${leadIndex}`} span={span} />
+            ))}
+            <Grid.Col span={labelSpan} />
+            <Grid.Col span={outstandingSpan}>
+              <Box
+                style={{
+                  height: "36px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                }}
               >
-                {item.label}
-              </Text>
-            </Box>
-          </Grid.Col>
-          <Grid.Col span={valueSpan}>
-            <Box
-              style={{
-                height: "36px",
-                display: "flex",
-                alignItems: "center",
-                // Match FormTextInput size="sm": 1px border + input horizontal padding
-                paddingLeft:
-                  "calc(1px + 0.75rem * var(--mantine-scale, 1))",
-                fontSize: "13px",
-                fontFamily: "Inter",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={700}
-                c={valueColor}
-                style={{ fontFamily: "Inter" }}
-              >
-                {formatMoneyAmountForUi(item.value)}
-              </Text>
-            </Box>
-          </Grid.Col>
-        </Grid>
+                <Text
+                  size="xs"
+                  fw={600}
+                  c="dimmed"
+                  ta="right"
+                  style={{ fontFamily: "Inter" }}
+                >
+                  {item.label}
+                </Text>
+              </Box>
+            </Grid.Col>
+            <Grid.Col span={localSpan}>
+              <Box style={valueBoxStyle}>
+                <Text
+                  size="sm"
+                  fw={700}
+                  c={valueColor}
+                  style={{ fontFamily: "Inter" }}
+                >
+                  {formatMoneyAmountForUi(item.value)}
+                </Text>
+              </Box>
+            </Grid.Col>
+          </Grid>
         );
       })}
     </Box>
@@ -655,6 +712,10 @@ export default function DocumentAllocation() {
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
+  const { branchCurrencyCode, branchCurrencyId } = useMemo(
+    () => getDefaultBranchCurrencyFromUser(user?.branches),
+    [user?.branches],
+  );
   const hydratedDocumentIdRef = useRef<number | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
@@ -704,12 +765,17 @@ export default function DocumentAllocation() {
   const showForeignExchangeGainLossButton = Boolean(foreignExchangeJvNo);
 
   const allocationTotals = useMemo(
-    () => computeAllocationTotals(rows),
-    [rows],
+    () => computeAllocationTotals(rows, branchCurrencyCode, branchCurrencyId),
+    [rows, branchCurrencyCode, branchCurrencyId],
   );
   const fetchedAllocationTotals = useMemo(
-    () => computeAllocationTotals(fetchedRows),
-    [fetchedRows],
+    () =>
+      computeAllocationTotals(
+        fetchedRows,
+        branchCurrencyCode,
+        branchCurrencyId,
+      ),
+    [fetchedRows, branchCurrencyCode, branchCurrencyId],
   );
 
   const allocationAuditSource = useMemo(() => {
@@ -1035,7 +1101,7 @@ export default function DocumentAllocation() {
       return;
     }
 
-    if (Math.abs(allocationTotals.net) > 0.005) {
+    if (Math.abs(allocationTotals.validationNet) > 0.005) {
       ToastNotification({
         type: "error",
         message:
@@ -1463,7 +1529,8 @@ export default function DocumentAllocation() {
               totals={fetchedAllocationTotals}
               leadingSpans={MODAL_TOTALS_LEADING_SPANS}
               labelSpan={MODAL_TOTALS_LABEL_SPAN}
-              valueSpan={MODAL_TOTALS_VALUE_SPAN}
+              outstandingSpan={MODAL_TOTALS_OUTSTANDING_SPAN}
+              localSpan={MODAL_TOTALS_LOCAL_SPAN}
             />
           ) : null}
 
@@ -2009,7 +2076,8 @@ export default function DocumentAllocation() {
                         totals={allocationTotals}
                         leadingSpans={MAIN_TOTALS_LEADING_SPANS}
                         labelSpan={MAIN_TOTALS_LABEL_SPAN}
-                        valueSpan={MAIN_TOTALS_VALUE_SPAN}
+                        outstandingSpan={MAIN_TOTALS_OUTSTANDING_SPAN}
+                        localSpan={MAIN_TOTALS_LOCAL_SPAN}
                       />
                       </Box>
                     </Card>
