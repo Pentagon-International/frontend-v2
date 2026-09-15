@@ -66,6 +66,7 @@ import {
 import {
   bindMoneyWholeNumberMode,
   clampMoneyAmount,
+  clampMoneyAmountBound,
   formatMoneyAmountForUi,
   getAmountDecimalScale,
 } from "../../../utils/nonDecimalMoneyAmount";
@@ -223,6 +224,19 @@ function clampAmount(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/** GST amounts: same decimal rounding as Invoice pages (2 dp / VN whole). */
+function clampGstAmount(value: number | null | undefined): number | null {
+  return clampMoneyAmountBound(value);
+}
+
+/** GST rate %: same clean 2 dp as Invoice money decimals. */
+function clampGstRate(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return parseFloat(n.toFixed(2));
 }
 
 /** Payload money fields: exactly 2 decimal places (no whole-number rounding). */
@@ -434,7 +448,7 @@ function calcGstTotalsByDrCr(
       addDr: (n: number) => void,
     ) => {
       if (rate == null) return;
-      const amount = clampAmount((localAmount * rate) / 100) ?? 0;
+      const amount = clampGstAmount((localAmount * rate) / 100) ?? 0;
       if (isDr) addDr(amount);
       else addCr(amount);
     };
@@ -469,9 +483,9 @@ function calcGstTotalsByDrCr(
   });
 
   return {
-    igst_total: clampAmount(netDrCrAmount(crIgst, drIgst, netDirection)) ?? 0,
-    cgst_total: clampAmount(netDrCrAmount(crCgst, drCgst, netDirection)) ?? 0,
-    sgst_total: clampAmount(netDrCrAmount(crSgst, drSgst, netDirection)) ?? 0,
+    igst_total: clampGstAmount(netDrCrAmount(crIgst, drIgst, netDirection)) ?? 0,
+    cgst_total: clampGstAmount(netDrCrAmount(crCgst, drCgst, netDirection)) ?? 0,
+    sgst_total: clampGstAmount(netDrCrAmount(crSgst, drSgst, netDirection)) ?? 0,
   };
 }
 
@@ -518,14 +532,35 @@ const parseGstRatesPayload = (res: unknown): GstRates | null => {
   };
   const payload = resObj?.data?.data ?? resObj?.data ?? res;
   const data = payload as GstRatesBySacResponse | null | undefined;
+  if (!data || typeof data !== "object") return null;
   const igstRaw = data?.igst_percent;
   const cgstRaw = data?.cgst_percent;
   const sgstRaw = data?.sgst_percent;
-  const sameState = data?.same_state ?? false;
+  // Normalize same_state (API may send boolean; guard string "true"/"false").
+  const rawSame = data?.same_state as boolean | string | undefined;
+  let sameState = false;
+  if (rawSame === true || rawSame === "true" || rawSame === "True") {
+    sameState = true;
+  } else if (rawSame === false || rawSame === "false" || rawSame === "False") {
+    sameState = false;
+  } else if (rawSame != null) {
+    sameState = Boolean(rawSame);
+  }
+  const igst =
+    igstRaw == null || igstRaw === "" ? null : clampGstRate(Number(igstRaw));
+  const cgst =
+    cgstRaw == null || cgstRaw === "" ? null : clampGstRate(Number(cgstRaw));
+  const sgst =
+    sgstRaw == null || sgstRaw === "" ? null : clampGstRate(Number(sgstRaw));
+  // If flag missing, infer from which percents were returned.
+  if (data?.same_state == null) {
+    if ((cgst ?? 0) > 0 || (sgst ?? 0) > 0) sameState = true;
+    else if ((igst ?? 0) > 0) sameState = false;
+  }
   return {
-    igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-    cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-    sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
+    igst,
+    cgst,
+    sgst,
     same_state: sameState,
   };
 };
@@ -777,6 +812,9 @@ type ChargeItem = {
   tax_code: string;
   tax_rate?: number | null;
   tax_amount?: number | null;
+  igst_rate?: number | null;
+  cgst_rate?: number | null;
+  sgst_rate?: number | null;
   dr_cr: "Cr" | "Dr";
   is_tax_row?: boolean;
 };
@@ -903,6 +941,12 @@ type ReversableDataResponse = {
     tax_code?: string;
     tax_rate?: string | number | null;
     tax_amount?: string | number | null;
+    igst?: string | number | null;
+    cgst?: string | number | null;
+    sgst?: string | number | null;
+    igst_rate?: string | number | null;
+    cgst_rate?: string | number | null;
+    sgst_rate?: string | number | null;
     Dr_Cr?: string;
     dr_cr?: string;
     Dr_cr?: string;
@@ -1025,6 +1069,9 @@ function applyReversableDataToReverseForm(
                 Dr_Cr: c.Dr_Cr,
               }),
               is_tax_row: isTaxRow,
+              igst_rate: clampGstRate(parseNullableNumber(c.igst_rate)),
+              cgst_rate: clampGstRate(parseNullableNumber(c.cgst_rate)),
+              sgst_rate: clampGstRate(parseNullableNumber(c.sgst_rate)),
               tax_rate: isTaxRow ? null : parseNullableNumber(c.tax_rate),
               tax_amount: isTaxRow
                 ? null
@@ -1078,8 +1125,30 @@ function reverseChargeIdPayload(
   return { id: charge.id };
 }
 
-/** Map a reverse-form charge to API payload as-is (user + tax charge rows).
- * Reverse has no tax-tab regeneration — send stored amounts/rates only. */
+/** Map a reverse-form charge to API payload (user + tax charge rows).
+ * GST: compute igst/cgst/sgst rates and amounts from SAC lookup (same as Invoice). */
+function resolveGstSameStateForPayload(
+  rates: GstRates | null,
+  charge: ChargeItem,
+  cgstRate: number,
+  sgstRate: number,
+  igstRate: number,
+): boolean {
+  // Explicit API flag first (same as Invoice).
+  if (rates?.same_state === true) return true;
+  if (rates?.same_state === false) {
+    // Guard: API said interstate but only CGST/SGST rates are present → treat as intra.
+    if ((cgstRate > 0 || sgstRate > 0) && !(igstRate > 0)) return true;
+    return false;
+  }
+  // Infer when same_state is missing (Invoice headerSameState fallback pattern).
+  if (cgstRate > 0 || sgstRate > 0) return true;
+  if (igstRate > 0) return false;
+  if ((charge.cgst_rate ?? 0) > 0 || (charge.sgst_rate ?? 0) > 0) return true;
+  if ((charge.igst_rate ?? 0) > 0) return false;
+  return false;
+}
+
 function buildReverseChargePayload(
   charge: ChargeItem,
   opts: {
@@ -1092,6 +1161,8 @@ function buildReverseChargePayload(
     unitData: Array<{ id?: number; unit_code?: string; code?: string }>;
     isVat: boolean;
     isGst: boolean;
+    hasSez?: boolean;
+    gstRates?: GstRates | null;
     defaultDrCr?: "Dr" | "Cr";
   },
 ): Record<string, unknown> {
@@ -1143,6 +1214,52 @@ function buildReverseChargePayload(
       ...base,
       tax_rate: toPayloadAmount(taxRate),
       tax_amount: taxAmount,
+    };
+  }
+
+  if (opts.isGst && !isTaxRow) {
+    const rates = opts.gstRates ?? null;
+    const hasSez = opts.hasSez ?? false;
+    // Prefer live SAC rates; fall back to charge-level rates (edit / prior save).
+    const igstRate = hasSez
+      ? 0
+      : (clampGstRate(rates?.igst ?? charge.igst_rate) ?? 0);
+    const cgstRate = hasSez
+      ? 0
+      : (clampGstRate(rates?.cgst ?? charge.cgst_rate) ?? 0);
+    const sgstRate = hasSez
+      ? 0
+      : (clampGstRate(rates?.sgst ?? charge.sgst_rate) ?? 0);
+    const sameState = resolveGstSameStateForPayload(
+      rates,
+      charge,
+      cgstRate,
+      sgstRate,
+      igstRate,
+    );
+    // Same taxable base as Invoice save (header), with local fallback.
+    const taxBase =
+      headerAmount || toPayloadAmount(charge.amount_in_local) || 0;
+    const igstAmt =
+      hasSez || sameState || igstRate <= 0
+        ? 0
+        : clampGstAmount(taxBase * (Number(igstRate) / 100));
+    const cgstAmt =
+      hasSez || !sameState || cgstRate <= 0
+        ? 0
+        : clampGstAmount(taxBase * (Number(cgstRate) / 100));
+    const sgstAmt =
+      hasSez || !sameState || sgstRate <= 0
+        ? 0
+        : clampGstAmount(taxBase * (Number(sgstRate) / 100));
+    return {
+      ...base,
+      igst_rate: igstRate,
+      cgst_rate: cgstRate,
+      sgst_rate: sgstRate,
+      igst: igstAmt ?? 0,
+      cgst: cgstAmt ?? 0,
+      sgst: sgstAmt ?? 0,
     };
   }
 
@@ -2039,13 +2156,40 @@ function InvoiceReverse() {
         unit_code?: string;
         code?: string;
       }>;
-      const chargesPayload = values.charges.map((charge) =>
+      // Same as InvoiceCreate: resolve GST rates at save/post time (cache or refetch).
+      const gstRatesForCharges: (GstRates | null)[] = !applyGst
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              if (isReverseTaxChargeRow(charge)) return null;
+              const cached = gstRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const sacCode = (charge.tax_code ?? "").trim();
+              if (!sacCode || stateId == null || stateId <= 0) return null;
+              try {
+                const res = await fetchGstRatesByStateSac({
+                  state_id: stateId,
+                  sac_code: sacCode,
+                });
+                const rates = parseGstRatesPayload(res);
+                if (rates) {
+                  gstRatesCacheRef.current.set(`${stateId}:${sacCode}`, rates);
+                }
+                return rates;
+              } catch {
+                return null;
+              }
+            }),
+          );
+      const chargesPayload = values.charges.map((charge, idx) =>
         buildReverseChargePayload(charge, {
           includeChargeIds,
           currencyData: currencyDataArr,
           unitData: unitDataArr,
           isVat: isVatPost,
           isGst: isGstInvoiceUser,
+          hasSez,
+          gstRates: gstRatesForCharges[idx] ?? null,
           defaultDrCr: chargeDefaultDrCr,
         }),
       );
@@ -2198,6 +2342,9 @@ function InvoiceReverse() {
               dr_cr: (c as { dr_cr?: string | null }).dr_cr,
             }),
             is_tax_row: isTaxRow,
+            igst_rate: clampGstRate(parseNullableNumber(c.igst_rate)),
+            cgst_rate: clampGstRate(parseNullableNumber(c.cgst_rate)),
+            sgst_rate: clampGstRate(parseNullableNumber(c.sgst_rate)),
             tax_rate: isTaxRow
               ? null
               : parseNullableNumber(
@@ -2389,13 +2536,40 @@ function InvoiceReverse() {
         unit_code?: string;
         code?: string;
       }>;
-      const chargesPayload = values.charges.map((charge) =>
+      // Same as InvoiceCreate: resolve GST rates at save time (cache or refetch).
+      const gstRatesForCharges: (GstRates | null)[] = !applyGst
+        ? values.charges.map(() => null)
+        : await Promise.all(
+            values.charges.map(async (charge, idx) => {
+              if (isReverseTaxChargeRow(charge)) return null;
+              const cached = gstRatesByChargeIndex[idx];
+              if (cached) return cached;
+              const sacCode = (charge.tax_code ?? "").trim();
+              if (!sacCode || stateId == null || stateId <= 0) return null;
+              try {
+                const res = await fetchGstRatesByStateSac({
+                  state_id: stateId,
+                  sac_code: sacCode,
+                });
+                const rates = parseGstRatesPayload(res);
+                if (rates) {
+                  gstRatesCacheRef.current.set(`${stateId}:${sacCode}`, rates);
+                }
+                return rates;
+              } catch {
+                return null;
+              }
+            }),
+          );
+      const chargesPayload = values.charges.map((charge, idx) =>
         buildReverseChargePayload(charge, {
           includeChargeIds: isUpdate,
           currencyData: currencyDataArr,
           unitData: unitDataArr,
           isVat: isVatSave,
           isGst: isGstInvoiceUser,
+          hasSez,
+          gstRates: gstRatesForCharges[idx] ?? null,
           defaultDrCr: chargeDefaultDrCr,
         }),
       );
@@ -2546,9 +2720,21 @@ function InvoiceReverse() {
     }
   };
 
-  const headerSameState = Object.values(gstRatesByChargeIndex).find(
-    (rates) => rates?.same_state !== undefined,
-  )?.same_state;
+  const headerSameState = (() => {
+    const fromFetchedRates = Object.values(gstRatesByChargeIndex).find(
+      (rates) => rates?.same_state !== undefined,
+    )?.same_state;
+    if (fromFetchedRates !== undefined) return fromFetchedRates;
+
+    // Same fallback as InvoiceCreate when rates are not fetched yet.
+    const nonTax = (form.values.charges || []).filter(
+      (c) => !isReverseTaxChargeRow(c),
+    );
+    if (nonTax.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0))
+      return true;
+    if (nonTax.some((c) => (c.igst_rate ?? 0) > 0)) return false;
+    return undefined;
+  })();
 
   const chargeSectionTotals = useMemo(
     () =>
@@ -3716,7 +3902,7 @@ function InvoiceReverse() {
                               const localAmount = charge.amount_in_local;
                               if (rate == null || localAmount == null)
                                 return "";
-                              const amount = clampAmount(
+                              const amount = clampGstAmount(
                                 (localAmount * rate) / 100,
                               );
                               return amount != null ? String(amount) : "";
@@ -3729,7 +3915,7 @@ function InvoiceReverse() {
                               const amount =
                                 rate == null || localAmount == null
                                   ? null
-                                  : clampAmount((localAmount * rate) / 100);
+                                  : clampGstAmount((localAmount * rate) / 100);
                               const display =
                                 amount != null ? String(amount) : "";
                               return gstRatesLoadingByIndex[index] &&
@@ -3758,7 +3944,7 @@ function InvoiceReverse() {
                               const localAmount = charge.amount_in_local;
                               if (rate == null || localAmount == null)
                                 return "";
-                              const amount = clampAmount(
+                              const amount = clampGstAmount(
                                 (localAmount * rate) / 100,
                               );
                               return amount != null ? String(amount) : "";
@@ -3771,7 +3957,7 @@ function InvoiceReverse() {
                               const amount =
                                 rate == null || localAmount == null
                                   ? null
-                                  : clampAmount((localAmount * rate) / 100);
+                                  : clampGstAmount((localAmount * rate) / 100);
                               const display =
                                 amount != null ? String(amount) : "";
                               return gstRatesLoadingByIndex[index] &&
@@ -3800,7 +3986,7 @@ function InvoiceReverse() {
                               const localAmount = charge.amount_in_local;
                               if (rate == null || localAmount == null)
                                 return "";
-                              const amount = clampAmount(
+                              const amount = clampGstAmount(
                                 (localAmount * rate) / 100,
                               );
                               return amount != null ? String(amount) : "";
@@ -3813,7 +3999,7 @@ function InvoiceReverse() {
                               const amount =
                                 rate == null || localAmount == null
                                   ? null
-                                  : clampAmount((localAmount * rate) / 100);
+                                  : clampGstAmount((localAmount * rate) / 100);
                               const display =
                                 amount != null ? String(amount) : "";
                               return gstRatesLoadingByIndex[index] &&
@@ -4064,12 +4250,17 @@ function InvoiceReverse() {
                                         String(rateVal).trim() === ""
                                       )
                                         return "—";
+                                      const rounded = clampGstRate(Number(rateVal));
+                                      const displayRate =
+                                        rounded != null
+                                          ? String(rounded)
+                                          : String(rateVal);
                                       const typeStr = String(rateType).trim();
                                       if (typeStr === "%" || typeStr === "％")
-                                        return `${rateVal}%`;
+                                        return `${displayRate}%`;
                                       if (typeStr !== "")
-                                        return `${rateVal}${typeStr}`;
-                                      return String(rateVal);
+                                        return `${displayRate}${typeStr}`;
+                                      return displayRate;
                                     })()}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
@@ -4147,13 +4338,19 @@ function InvoiceReverse() {
                                     {row.charge_name ?? "—"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
-                                    {row.rate != null && row.rate_type != null
-                                      ? `${row.rate}${row.rate_type}`
-                                      : "—"}
+                                    {(() => {
+                                      if (row.rate == null || row.rate_type == null)
+                                        return "—";
+                                      const rounded = clampGstRate(Number(row.rate));
+                                      return `${rounded ?? row.rate}${row.rate_type}`;
+                                    })()}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {row.total_amount != null
-                                      ? Number(row.total_amount)
+                                      ? formatMoneyAmountForUi(
+                                          Number(row.total_amount),
+                                          false,
+                                        )
                                       : "—"}
                                   </Table.Td>
                                 </Table.Tr>

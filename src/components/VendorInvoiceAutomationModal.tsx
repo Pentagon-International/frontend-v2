@@ -28,13 +28,15 @@ import {
   isVendorInvoiceExtractionSettled,
   isOverseasCrjDaybook,
   isVendorInvoiceAlreadyCreated,
-  isVendorInvoiceOverrideReady,
+  getVendorInvoiceOverrideFieldErrors,
+  hasVendorInvoiceOverrideFieldErrors,
   normalizeVendorInvoiceDrCr,
   isVendorInvoiceAbortError,
   pollVendorInvoiceRecord,
   startVendorInvoiceCreation,
   uploadVendorInvoicePdf,
   type VendorInvoiceExtractedData,
+  type VendorInvoiceFieldErrors,
   type VendorInvoiceOverrideDraft,
   type VendorInvoiceRecord,
 } from "../utils/vendorInvoiceAutomation";
@@ -212,6 +214,9 @@ function ExtractedPayloadBreakdown({
   override,
   onOverrideChange,
   readOnly = false,
+  fieldErrors,
+  clearHeaderError,
+  clearChargeError,
 }: {
   record: VendorInvoiceRecord;
   extracted: VendorInvoiceExtractedData;
@@ -221,6 +226,9 @@ function ExtractedPayloadBreakdown({
   override: VendorInvoiceOverrideDraft;
   onOverrideChange: (next: VendorInvoiceOverrideDraft) => void;
   readOnly?: boolean;
+  fieldErrors: VendorInvoiceFieldErrors;
+  clearHeaderError: (key: string) => void;
+  clearChargeError: (index: number, key: string) => void;
 }) {
   const isAdmin = useIsAdminUser();
   const [tab, setTab] = useState<string | null>("form");
@@ -403,8 +411,10 @@ function ExtractedPayloadBreakdown({
                         placeholder="Shipment no."
                         withAsterisk
                         value={shipmentNo}
+                        error={fieldErrors.header.shipment_no}
                         onChange={(e) => {
                           const next = e.currentTarget.value;
+                          clearHeaderError("shipment_no");
                           onShipmentNoChange?.(next);
                           patchOverride({
                             charges_data: override.charges_data.map((row) =>
@@ -423,7 +433,9 @@ function ExtractedPayloadBreakdown({
                       placeholder={isDaybookLoading ? "Loading..." : "Select day book"}
                       data={daybookOptions}
                       value={override.day_book_id || null}
+                      error={fieldErrors.header.day_book_id}
                       onChange={(value) => {
+                        clearHeaderError("day_book_id");
                         const selected = daybookOptions.find((option) => option.value === value);
                         patchOverride({
                           day_book_id: value ?? "",
@@ -442,7 +454,11 @@ function ExtractedPayloadBreakdown({
                       withAsterisk
                       size="sm"
                       value={isoDateToDate(override.date)}
-                      onChange={(date) => patchOverride({ date: dateToIso(date) })}
+                      error={fieldErrors.header.date}
+                      onChange={(date) => {
+                        clearHeaderError("date");
+                        patchOverride({ date: dateToIso(date) });
+                      }}
                       styles={fieldStyles}
                       disabled={readOnly}
                     />
@@ -451,7 +467,11 @@ function ExtractedPayloadBreakdown({
                       placeholder="Inv / CRN No."
                       withAsterisk
                       value={override.Inv_Crn_no}
-                      onChange={(e) => patchOverride({ Inv_Crn_no: e.currentTarget.value })}
+                      error={fieldErrors.header.Inv_Crn_no}
+                      onChange={(e) => {
+                        clearHeaderError("Inv_Crn_no");
+                        patchOverride({ Inv_Crn_no: e.currentTarget.value });
+                      }}
                       styles={fieldStyles}
                       disabled={readOnly}
                     />
@@ -466,16 +486,18 @@ function ExtractedPayloadBreakdown({
                       minSearchLength={1}
                       searchFields={["customer_name", "customer_code", "id"]}
                       styles={fieldStyles}
+                      error={fieldErrors.header.agent_id}
                       displayFormat={(item) => ({
                         value: String(item.id ?? ""),
                         label: String(item.customer_name ?? item.agent_name ?? ""),
                       })}
-                      onChange={(value, selected) =>
+                      onChange={(value, selected) => {
+                        clearHeaderError("agent_id");
                         patchOverride({
                           agent_id: value ?? "",
                           agent_name: selected?.label ?? "",
-                        })
-                      }
+                        });
+                      }}
                       disabled={readOnly}
                     />
                     <SearchableSelect
@@ -489,16 +511,18 @@ function ExtractedPayloadBreakdown({
                       minSearchLength={1}
                       searchFields={["state_name", "id"]}
                       styles={fieldStyles}
+                      error={fieldErrors.header.state_id}
                       displayFormat={(item) => ({
                         value: String(item.id ?? ""),
                         label: String(item.state_name ?? ""),
                       })}
-                      onChange={(value, selected) =>
+                      onChange={(value, selected) => {
+                        clearHeaderError("state_id");
                         patchOverride({
                           state_id: value ?? "",
                           state_name: selected?.label ?? "",
-                        })
-                      }
+                        });
+                      }}
                       disabled={readOnly}
                     />
                     <SearchableSelect
@@ -517,11 +541,13 @@ function ExtractedPayloadBreakdown({
                       searchFields={["currency_code", "currency_name", "code", "name", "id"]}
                       returnOriginalData
                       styles={fieldStyles}
+                      error={fieldErrors.header.currency_id}
                       displayFormat={(item) => ({
                         value: String(item.id ?? ""),
                         label: String(item.currency_code ?? item.code ?? ""),
                       })}
                       onChange={(value, selected, original) => {
+                        clearHeaderError("currency_id");
                         const code = String(
                           original?.currency_code ??
                             original?.code ??
@@ -553,9 +579,11 @@ function ExtractedPayloadBreakdown({
                       placeholder="0.00"
                       withAsterisk
                       value={override.taxable_amount}
-                      onChange={(e) =>
-                        patchOverride({ taxable_amount: e.currentTarget.value })
-                      }
+                      error={fieldErrors.header.taxable_amount}
+                      onChange={(e) => {
+                        clearHeaderError("taxable_amount");
+                        patchOverride({ taxable_amount: e.currentTarget.value });
+                      }}
                       styles={fieldStyles}
                       disabled={readOnly}
                     />
@@ -564,9 +592,11 @@ function ExtractedPayloadBreakdown({
                       placeholder="0.00"
                       withAsterisk
                       value={override.Inv_crn_amount}
-                      onChange={(e) =>
-                        patchOverride({ Inv_crn_amount: e.currentTarget.value })
-                      }
+                      error={fieldErrors.header.Inv_crn_amount}
+                      onChange={(e) => {
+                        clearHeaderError("Inv_crn_amount");
+                        patchOverride({ Inv_crn_amount: e.currentTarget.value });
+                      }}
                       styles={fieldStyles}
                       disabled={readOnly}
                     />
@@ -579,7 +609,11 @@ function ExtractedPayloadBreakdown({
                           : STATUS_OPTIONS
                       }
                       value={override.status || null}
-                      onChange={(value) => patchOverride({ status: value ?? "" })}
+                      error={fieldErrors.header.status}
+                      onChange={(value) => {
+                        clearHeaderError("status");
+                        patchOverride({ status: value ?? "" });
+                      }}
                       withAsterisk
                       searchable
                       disabled={readOnly}
@@ -590,7 +624,9 @@ function ExtractedPayloadBreakdown({
                       placeholder="Dr/Cr"
                       data={DR_CR_OPTIONS}
                       value={override.Dr_Cr || null}
+                      error={fieldErrors.header.Dr_Cr}
                       onChange={(value) => {
+                        clearHeaderError("Dr_Cr");
                         const next = normalizeVendorInvoiceDrCr(value);
                         patchOverride({
                           Dr_Cr: next,
@@ -674,6 +710,7 @@ function ExtractedPayloadBreakdown({
                       <Table.Tbody>
                         {override.charges_data.map((row, i) => {
                           const extractedLine = extracted.charges_data?.[i];
+                          const chargeErr = fieldErrors.charges[i] || {};
                           return (
                             <Table.Tr key={i}>
                               <Table.Td>{i + 1}</Table.Td>
@@ -687,16 +724,18 @@ function ExtractedPayloadBreakdown({
                                   minSearchLength={1}
                                   searchFields={["charge_code", "charge_name", "id"]}
                                   styles={fieldStyles}
+                                  error={chargeErr.charge_id}
                                   displayFormat={(item) => ({
                                     value: String(item.id ?? ""),
                                     label: String(item.charge_name ?? ""),
                                   })}
-                                  onChange={(value, selected) =>
+                                  onChange={(value, selected) => {
+                                    clearChargeError(i, "charge_id");
                                     patchCharge(i, {
                                       charge_id: value ?? "",
                                       charge_name: selected?.label ?? "",
-                                    })
-                                  }
+                                    });
+                                  }}
                                   disabled={readOnly}
                                 />
                               </Table.Td>
@@ -704,9 +743,11 @@ function ExtractedPayloadBreakdown({
                                 <TextInput
                                   placeholder="Narration"
                                   value={row.narration}
-                                  onChange={(e) =>
-                                    patchCharge(i, { narration: e.currentTarget.value })
-                                  }
+                                  error={chargeErr.narration}
+                                  onChange={(e) => {
+                                    clearChargeError(i, "narration");
+                                    patchCharge(i, { narration: e.currentTarget.value });
+                                  }}
                                   styles={fieldStyles}
                                   disabled={readOnly}
                                 />
@@ -715,9 +756,11 @@ function ExtractedPayloadBreakdown({
                                 <TextInput
                                   placeholder={shipmentNo || "Shipment no."}
                                   value={row.shipment_no}
-                                  onChange={(e) =>
-                                    patchCharge(i, { shipment_no: e.currentTarget.value })
-                                  }
+                                  error={chargeErr.shipment_no}
+                                  onChange={(e) => {
+                                    clearChargeError(i, "shipment_no");
+                                    patchCharge(i, { shipment_no: e.currentTarget.value });
+                                  }}
                                   styles={fieldStyles}
                                   disabled={readOnly}
                                 />
@@ -726,9 +769,11 @@ function ExtractedPayloadBreakdown({
                                 <TextInput
                                   placeholder="Tax code"
                                   value={row.tax_code}
-                                  onChange={(e) =>
-                                    patchCharge(i, { tax_code: e.currentTarget.value })
-                                  }
+                                  error={chargeErr.tax_code}
+                                  onChange={(e) => {
+                                    clearChargeError(i, "tax_code");
+                                    patchCharge(i, { tax_code: e.currentTarget.value });
+                                  }}
                                   styles={fieldStyles}
                                   disabled={readOnly}
                                 />
@@ -744,11 +789,13 @@ function ExtractedPayloadBreakdown({
                                   searchFields={["currency_code", "currency_name", "code", "name", "id"]}
                                   returnOriginalData
                                   styles={fieldStyles}
+                                  error={chargeErr.currency_id}
                                   displayFormat={(item) => ({
                                     value: String(item.id ?? ""),
                                     label: String(item.currency_code ?? item.code ?? ""),
                                   })}
-                                  onChange={(value, selected, original) =>
+                                  onChange={(value, selected, original) => {
+                                    clearChargeError(i, "currency_id");
                                     patchCharge(i, {
                                       currency_id: value ?? "",
                                       currency_code: String(
@@ -757,8 +804,8 @@ function ExtractedPayloadBreakdown({
                                           selected?.label ??
                                           "",
                                       ),
-                                    })
-                                  }
+                                    });
+                                  }}
                                   disabled={readOnly}
                                 />
                               </Table.Td>
@@ -767,11 +814,13 @@ function ExtractedPayloadBreakdown({
                                   placeholder="Dr/Cr"
                                   data={DR_CR_OPTIONS}
                                   value={row.Dr_Cr || null}
-                                  onChange={(value) =>
+                                  error={chargeErr.Dr_Cr}
+                                  onChange={(value) => {
+                                    clearChargeError(i, "Dr_Cr");
                                     patchCharge(i, {
                                       Dr_Cr: normalizeVendorInvoiceDrCr(value),
-                                    })
-                                  }
+                                    });
+                                  }}
                                   disabled={readOnly}
                                   dropdownZIndex={400}
                                 />
@@ -780,9 +829,11 @@ function ExtractedPayloadBreakdown({
                                 <TextInput
                                   placeholder="0.00"
                                   value={row.amount}
-                                  onChange={(e) =>
-                                    patchCharge(i, { amount: e.currentTarget.value })
-                                  }
+                                  error={chargeErr.amount}
+                                  onChange={(e) => {
+                                    clearChargeError(i, "amount");
+                                    patchCharge(i, { amount: e.currentTarget.value });
+                                  }}
                                   styles={fieldStyles}
                                   disabled={readOnly}
                                 />
@@ -791,9 +842,11 @@ function ExtractedPayloadBreakdown({
                                 <TextInput
                                   placeholder="0.00"
                                   value={row.amount_in_local}
-                                  onChange={(e) =>
-                                    patchCharge(i, { amount_in_local: e.currentTarget.value })
-                                  }
+                                  error={chargeErr.amount_in_local}
+                                  onChange={(e) => {
+                                    clearChargeError(i, "amount_in_local");
+                                    patchCharge(i, { amount_in_local: e.currentTarget.value });
+                                  }}
                                   styles={fieldStyles}
                                   disabled={readOnly}
                                 />
@@ -802,9 +855,11 @@ function ExtractedPayloadBreakdown({
                                 <TextInput
                                   placeholder="1.00"
                                   value={row.roe}
-                                  onChange={(e) =>
-                                    patchCharge(i, { roe: e.currentTarget.value })
-                                  }
+                                  error={chargeErr.roe}
+                                  onChange={(e) => {
+                                    clearChargeError(i, "roe");
+                                    patchCharge(i, { roe: e.currentTarget.value });
+                                  }}
                                   styles={fieldStyles}
                                   disabled={readOnly}
                                 />
@@ -938,6 +993,33 @@ export function VendorInvoiceAutomationModal({
   const [startingJob, setStartingJob] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [activeShipmentNo, setActiveShipmentNo] = useState(shipmentNo);
+  const [fieldErrors, setFieldErrors] = useState<VendorInvoiceFieldErrors>({
+    header: {},
+    charges: [],
+  });
+
+  const clearHeaderError = (key: string) => {
+    setFieldErrors((prev) => {
+      if (!prev.header[key]) return prev;
+      const header = { ...prev.header };
+      delete header[key];
+      return { ...prev, header };
+    });
+  };
+
+  const clearChargeError = (index: number, key: string) => {
+    setFieldErrors((prev) => {
+      const row = prev.charges[index];
+      if (!row?.[key]) return prev;
+      const charges = prev.charges.map((item, i) => {
+        if (i !== index) return item;
+        const next = { ...item };
+        delete next[key];
+        return next;
+      });
+      return { ...prev, charges };
+    });
+  };
 
   const resetModal = useCallback(() => {
     resetKeyRef.current += 1;
@@ -948,6 +1030,7 @@ export function VendorInvoiceAutomationModal({
     setUploading(false);
     setStartingJob(false);
     setActiveShipmentNo(shipmentNo);
+    setFieldErrors({ header: {}, charges: [] });
     // Keep isRedirecting so the full-screen loader stays visible after modal close
   }, [shipmentNo]);
 
@@ -1061,7 +1144,17 @@ export function VendorInvoiceAutomationModal({
 
   const handleStartJob = async () => {
     if (invoiceAlreadyCreated) return;
-    if (!record?.id || !activeShipmentNo.trim() || !override) return;
+    if (!record?.id || !override) return;
+    const errors = getVendorInvoiceOverrideFieldErrors(activeShipmentNo, override);
+    if (hasVendorInvoiceOverrideFieldErrors(errors)) {
+      setFieldErrors(errors);
+      ToastNotification({
+        type: "error",
+        message: "Fill the required invoice fields before starting.",
+      });
+      return;
+    }
+    setFieldErrors({ header: {}, charges: [] });
     let startPayload;
     try {
       startPayload = buildVendorInvoiceStartPayload(
@@ -1283,6 +1376,9 @@ export function VendorInvoiceAutomationModal({
               override={override}
               onOverrideChange={setOverride}
               readOnly={invoiceAlreadyCreated}
+              fieldErrors={fieldErrors}
+              clearHeaderError={clearHeaderError}
+              clearChargeError={clearChargeError}
             />
             
             <Group justify="flex-end" gap="sm" style={{ flexShrink: 0 }}>
@@ -1298,10 +1394,7 @@ export function VendorInvoiceAutomationModal({
               <Button
                 color="#105476"
                 loading={startingJob}
-                disabled={
-                  startingJob ||
-                  !isVendorInvoiceOverrideReady(activeShipmentNo, override)
-                }
+                disabled={startingJob}
                 onClick={handleStartJob}
               >
                 Create Vendor Invoice

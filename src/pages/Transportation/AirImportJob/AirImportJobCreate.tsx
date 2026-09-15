@@ -117,8 +117,11 @@ import {  } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -467,6 +470,24 @@ function AirImportJobCreate() {
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
+
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
+  }, []);
+
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -3532,11 +3553,18 @@ function AirImportJobCreate() {
                         Create Agent Invoice
                       </Menu.Item>
                       {jobData?.id != null && (
-                        <AutomateVendorInvoiceTrigger
-                          variant="menu"
-                          shipmentNo={getMasterShipmentNo(jobData)}
-                          onOpen={openVendorInvoiceAutomation}
-                        />
+                        <>
+                          <AutomateVendorInvoiceTrigger
+                            variant="menu"
+                            shipmentNo={getMasterShipmentNo(jobData)}
+                            onOpen={openVendorInvoiceAutomation}
+                          />
+                          <AutomatePaymentRequestTrigger
+                            variant="menu"
+                            shipmentNo={getMasterShipmentNo(jobData)}
+                            onOpen={openPaymentRequestAutomation}
+                          />
+                        </>
                       )}
                       <Menu.Item
                         leftSection={
@@ -5268,6 +5296,11 @@ function AirImportJobCreate() {
                     shipmentNo={getMasterShipmentNo(jobData)}
                     onOpen={openVendorInvoiceAutomation}
                   />
+                  <AutomatePaymentRequestTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openPaymentRequestAutomation}
+                  />
                   <Button
                     variant="light"
                     color="#105476"
@@ -5740,6 +5773,11 @@ function AirImportJobCreate() {
                             getCurrentHousingDetail={() => hawb}
                             jobId={jobData?.id}
                             onOpen={openVendorInvoiceAutomation}
+                          />
+                          <HouseAutomatePaymentRequestMenuItem
+                            getCurrentHousingDetail={() => hawb}
+                            jobId={jobData?.id}
+                            onOpen={openPaymentRequestAutomation}
                           />
                           <HouseJobLedgerMenuItem
                             serviceName="Air Import"
@@ -6298,6 +6336,12 @@ function AirImportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="AIR IMPORTS"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

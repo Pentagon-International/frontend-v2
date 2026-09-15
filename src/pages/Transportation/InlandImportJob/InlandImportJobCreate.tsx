@@ -117,7 +117,10 @@ import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisp
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -527,6 +530,10 @@ function InlandImportJobCreate() {
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -538,6 +545,18 @@ function InlandImportJobCreate() {
       return;
     }
     setVendorInvoiceAutomationShipmentNo(normalized);
+  }, []);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
   }, []);
   const jobDocuments = useJobDocuments();
 
@@ -3230,11 +3249,18 @@ function InlandImportJobCreate() {
                   </Menu.Item>
 
                   {jobData?.id != null && (
-                    <AutomateVendorInvoiceTrigger
-                      variant="menu"
-                      shipmentNo={getMasterShipmentNo(jobData)}
-                      onOpen={openVendorInvoiceAutomation}
-                    />
+                    <>
+                      <AutomateVendorInvoiceTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openVendorInvoiceAutomation}
+                      />
+                      <AutomatePaymentRequestTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openPaymentRequestAutomation}
+                      />
+                    </>
                   )}
 
                   <Menu.Item
@@ -4494,6 +4520,14 @@ function InlandImportJobCreate() {
                 )}
 
                 {mode === "edit" && !isReadOnly && (
+                  <AutomatePaymentRequestTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openPaymentRequestAutomation}
+                  />
+                )}
+
+                {mode === "edit" && !isReadOnly && (
                   <AutomateVendorInvoiceTrigger
                     variant="button"
                     shipmentNo={getMasterShipmentNo(jobData)}
@@ -5097,6 +5131,11 @@ function InlandImportJobCreate() {
                           jobId={jobData?.id}
                           onOpen={openVendorInvoiceAutomation}
                         />
+                        <HouseAutomatePaymentRequestMenuItem
+                          getCurrentHousingDetail={() => hawb}
+                          jobId={jobData?.id}
+                          onOpen={openPaymentRequestAutomation}
+                        />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Import"
                           getHouseDetail={() => hawb}
@@ -5169,6 +5208,12 @@ function InlandImportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="TRANSPORTATION"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

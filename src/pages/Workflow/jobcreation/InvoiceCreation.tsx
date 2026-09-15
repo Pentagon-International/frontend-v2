@@ -355,7 +355,18 @@ function fv(val: unknown): string | null {
 
 function fmt(dt?: string): string {
   if (!dt) return "—";
-  return dt.slice(0, 16).replace("T", " ");
+  const raw = String(dt).trim();
+  if (!raw) return "—";
+  const parsed = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
+  if (Number.isNaN(parsed.getTime())) {
+    return raw.replace("T", " ").slice(0, 19);
+  }
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const year = parsed.getFullYear();
+  const hours = String(parsed.getHours()).padStart(2, "0");
+  const minutes = String(parsed.getMinutes()).padStart(2, "0");
+  return `${day}-${month}-${year} ${hours}:${minutes}`;
 }
 
 function buildPageRange(cur: number, total: number): (number | "...")[] {

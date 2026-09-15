@@ -493,38 +493,71 @@ export function isVendorInvoiceOverrideReady(
   shipmentNo: string,
   draft: VendorInvoiceOverrideDraft | null | undefined,
 ): boolean {
-  if (!draft) return false;
-  const shipment = shipmentNo.trim();
-  if (!shipment) return false;
-  if (!hasPositiveId(draft.day_book_id)) return false;
-  if (!isOverseasCrjDaybook(draft.day_book_name) && !hasPositiveId(draft.state_id)) {
-    return false;
-  }
-  if (!hasPositiveId(draft.currency_id)) return false;
-  if (!toIsoDateString(draft.date)) return false;
-  if (!textValue(draft.Inv_Crn_no)) return false;
-  if (!textValue(draft.taxable_amount)) return false;
-  if (!textValue(draft.Inv_crn_amount)) return false;
-  if (!textValue(draft.status)) return false;
-  if (!hasPositiveId(draft.agent_id) || !textValue(draft.agent_name)) return false;
-  if (!normalizeVendorInvoiceDrCr(draft.Dr_Cr)) return false;
-  if (!draft.charges_data.length) return false;
+  return !hasVendorInvoiceOverrideFieldErrors(
+    getVendorInvoiceOverrideFieldErrors(shipmentNo, draft),
+  );
+}
 
-  return draft.charges_data.every((row) => {
-    const lineShipment = textValue(row.shipment_no) || shipment;
-    return (
-      !!lineShipment &&
-      hasPositiveId(row.charge_id) &&
-      !!textValue(row.charge_name) &&
-      hasPositiveId(row.currency_id) &&
-      !!textValue(row.roe) &&
-      !!textValue(row.amount) &&
-      !!textValue(row.amount_in_local) &&
-      !!normalizeVendorInvoiceDrCr(row.Dr_Cr) &&
-      !!textValue(row.narration) &&
-      !!textValue(row.tax_code)
-    );
-  });
+export type VendorInvoiceFieldErrors = {
+  header: Partial<Record<string, string>>;
+  charges: Array<Partial<Record<string, string>>>;
+};
+
+/** Same required rules as create payload / ready check — for click-time field borders. */
+export function getVendorInvoiceOverrideFieldErrors(
+  shipmentNo: string,
+  draft: VendorInvoiceOverrideDraft | null | undefined,
+): VendorInvoiceFieldErrors {
+  const header: VendorInvoiceFieldErrors["header"] = {};
+  const charges: VendorInvoiceFieldErrors["charges"] = [];
+  if (!draft) {
+    header.shipment_no = "Shipment number is required";
+    return { header, charges };
+  }
+  const shipment = shipmentNo.trim();
+  if (!shipment) header.shipment_no = "Shipment number is required";
+  if (!hasPositiveId(draft.day_book_id)) header.day_book_id = "Day Book is required";
+  if (!isOverseasCrjDaybook(draft.day_book_name) && !hasPositiveId(draft.state_id)) {
+    header.state_id = "State is required";
+  }
+  if (!hasPositiveId(draft.currency_id)) header.currency_id = "Currency is required";
+  if (!toIsoDateString(draft.date)) header.date = "Date is required";
+  if (!textValue(draft.Inv_Crn_no)) header.Inv_Crn_no = "Inv / CRN No. is required";
+  if (!textValue(draft.taxable_amount)) header.taxable_amount = "Taxable amount is required";
+  if (!textValue(draft.Inv_crn_amount)) header.Inv_crn_amount = "Inv / CRN amount is required";
+  if (!textValue(draft.status)) header.status = "Status is required";
+  if (!hasPositiveId(draft.agent_id) || !textValue(draft.agent_name)) {
+    header.agent_id = "Agent is required";
+  }
+  if (!normalizeVendorInvoiceDrCr(draft.Dr_Cr)) header.Dr_Cr = "Dr/Cr is required";
+  if (!draft.charges_data.length) {
+    header.charges_data = "At least one charge line is required";
+  } else {
+    draft.charges_data.forEach((row, index) => {
+      const rowErrors: Partial<Record<string, string>> = {};
+      const lineShipment = textValue(row.shipment_no) || shipment;
+      if (!lineShipment) rowErrors.shipment_no = "Shipment no. is required";
+      if (!hasPositiveId(row.charge_id) || !textValue(row.charge_name)) {
+        rowErrors.charge_id = "Charge is required";
+      }
+      if (!hasPositiveId(row.currency_id)) rowErrors.currency_id = "Currency is required";
+      if (!textValue(row.roe)) rowErrors.roe = "ROE is required";
+      if (!textValue(row.amount)) rowErrors.amount = "Amount is required";
+      if (!textValue(row.amount_in_local)) rowErrors.amount_in_local = "Local amount is required";
+      if (!normalizeVendorInvoiceDrCr(row.Dr_Cr)) rowErrors.Dr_Cr = "Dr/Cr is required";
+      if (!textValue(row.narration)) rowErrors.narration = "Narration is required";
+      if (!textValue(row.tax_code)) rowErrors.tax_code = "Tax code is required";
+      charges[index] = rowErrors;
+    });
+  }
+  return { header, charges };
+}
+
+export function hasVendorInvoiceOverrideFieldErrors(
+  errors: VendorInvoiceFieldErrors,
+): boolean {
+  if (Object.keys(errors.header).length > 0) return true;
+  return errors.charges.some((row) => Object.keys(row).length > 0);
 }
 
 function positiveId(value: string, label: string): number {
