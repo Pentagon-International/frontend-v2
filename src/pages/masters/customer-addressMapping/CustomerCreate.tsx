@@ -232,6 +232,7 @@ type CustomerFormData = {
   account_codes: string[];
   term_code: string;
   own_office: string;
+  status: string;
   credit_amount: string;
   credit_day: string;
   assigned_to: string;
@@ -436,6 +437,10 @@ function buildCustomerValidationSchema() {
       .string()
       .required("Own office selection is required")
       .oneOf(["true", "false"], "Please select a valid option"),
+    status: yup
+      .string()
+      .oneOf(["ACTIVE", "INACTIVE"], "Select ACTIVE or INACTIVE")
+      .required("Status is required"),
     credit_amount: yup.string().when("term_code", {
       is: isCreditTerm,
       then: (schema) =>
@@ -970,6 +975,12 @@ function buildCustomerFormValuesFromRecord(
     account_codes: normalizeAccountCodes(record),
     term_code: record.term_code || record.credit_type || "",
     own_office: record.own_office ? "true" : "false",
+    status:
+      String((record as { status?: string }).status ?? "ACTIVE")
+        .trim()
+        .toUpperCase() === "INACTIVE"
+        ? "INACTIVE"
+        : "ACTIVE",
     credit_amount:
       record.credit_amount != null
         ? String(record.credit_amount)
@@ -2230,6 +2241,7 @@ function CustomerCreate() {
       account_codes: [],
       term_code: "",
       own_office: "",
+      status: "ACTIVE",
       credit_amount: "",
       credit_day: "",
       assigned_to: "",
@@ -2336,6 +2348,7 @@ function CustomerCreate() {
         account_codes: formData.account_codes,
         term_code: formData.term_code,
         own_office: formData.own_office,
+        status: formData.status,
         credit_amount: formData.credit_amount,
         credit_day: formData.credit_day,
         assigned_to: formData.assigned_to,
@@ -2526,6 +2539,11 @@ function CustomerCreate() {
           account_codes: normalizeAccountCodes(restoredCustomerData),
           term_code: restoredCustomerData.term_code || "",
           own_office: restoredCustomerData.own_office || "",
+          status:
+            String(restoredCustomerData.status ?? "ACTIVE").trim().toUpperCase() ===
+            "INACTIVE"
+              ? "INACTIVE"
+              : "ACTIVE",
           credit_amount:
             restoredCustomerData.credit_amount != null
               ? String(restoredCustomerData.credit_amount)
@@ -3190,7 +3208,10 @@ function CustomerCreate() {
         account_codes: values.account_codes ?? [],
         term_code: values.term_code,
         own_office: values.own_office === "true",
-        status: "ACTIVE",
+        status:
+          String(values.status ?? "ACTIVE").trim().toUpperCase() === "INACTIVE"
+            ? "INACTIVE"
+            : "ACTIVE",
         credit_amount: parseOptionalNumber(values.credit_amount),
         credit_day: parseOptionalNumber(values.credit_day),
         assigned_to: values.assigned_to,
@@ -3706,6 +3727,22 @@ function CustomerCreate() {
                           {...customerForm.getInputProps("own_office")}
                         />
                       </Grid.Col>
+
+                      {(isEditMode || isViewMode) && (
+                        <Grid.Col span={4}>
+                          <Dropdown
+                            label="Status"
+                            withAsterisk
+                            placeholder="Select status"
+                            data={[
+                              { value: "ACTIVE", label: "ACTIVE" },
+                              { value: "INACTIVE", label: "INACTIVE" },
+                            ]}
+                            disabled={isViewMode}
+                            {...customerForm.getInputProps("status")}
+                          />
+                        </Grid.Col>
+                      )}
 
                       <Grid.Col span={4}>
                         <SearchableSelect

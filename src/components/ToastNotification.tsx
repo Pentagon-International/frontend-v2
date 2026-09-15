@@ -6,7 +6,9 @@ interface ToastNotificationProps {
 }
 
 const ToastNotification = ({ type, message }: ToastNotificationProps) => {
-  const options: ToastOptions = {};
+  const options: ToastOptions = {
+    duration: type === "error" ? 6000 : 4000,
+  };
 
   switch (type) {
     case "success":
@@ -22,7 +24,13 @@ const ToastNotification = ({ type, message }: ToastNotificationProps) => {
       break;
   }
 
-  toast(message, options);
+  const text =
+    typeof message === "string"
+      ? message.trim()
+      : message != null
+        ? String(message)
+        : "";
+  toast(text || "Something went wrong. Please try again.", options);
 };
 
 export default ToastNotification;

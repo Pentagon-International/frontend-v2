@@ -86,6 +86,7 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
+  resolveHouseChargesSource,
   validateMeaningfulHouseCharges,
 } from "../../../utils/houseChargesPayload";
 import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
@@ -1010,14 +1011,14 @@ function HouseCreate() {
         setCargoDetails(mappedCargoDetails);
       }
 
-      // Load charges - check both charges and mbl_charges
-      const chargesToLoad =
-        (editData.charges && Array.isArray(editData.charges)
-          ? editData.charges
-          : null) ||
-        (editData as { mbl_charges?: unknown[] }).mbl_charges ||
-        [];
-      const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+      // Load charges - prefer non-empty charges, then mbl_charges/mawb_charges
+      const chargesArray = resolveHouseChargesSource(
+        editData as {
+          charges?: unknown;
+          mbl_charges?: unknown;
+          mawb_charges?: unknown;
+        },
+      );
       // unitArr/currArr from masters - will be empty on first run; chargesIdsResolvedRef effect resolves when masters load
       const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];
       const currArr = Array.isArray(currencyData) ? currencyData : [];

@@ -411,7 +411,7 @@ function isTaxChargeDraft(row: {
   return /^(c\s*gst|s\s*gst|i\s*gst|cgst|sgst|igst)\b/i.test(narr);
 }
 
-/** True when a charge draft is a GST/tax line (PRQ Calculate GST shape). */
+/** True when a charge draft looks like a GST/tax line (filtered out of preview charges). */
 export function isPaymentRequestTaxChargeDraft(row: {
   is_tax_row?: boolean;
   line_type?: string;
@@ -419,61 +419,6 @@ export function isPaymentRequestTaxChargeDraft(row: {
   charge_name?: string;
 }): boolean {
   return isTaxChargeDraft(row);
-}
-
-/** Build CGST/SGST/IGST charge lines in Payment Request Calculate-GST shape. */
-export function buildPrqGstChargeDrafts(args: {
-  jobId: string;
-  paidTo?: string;
-  taxableAmount?: string;
-  cgstAmount?: string;
-  sgstAmount?: string;
-  igstAmount?: string;
-  currencyId?: string;
-  currencyCode?: string;
-  currencyName?: string;
-  existing?: PaymentRequestChargeDraft[];
-}): PaymentRequestChargeDraft[] {
-  const existing = Array.isArray(args.existing) ? args.existing : [];
-  const hasTaxLabel = (label: string) =>
-    existing.some((row) => {
-      if (!isTaxChargeDraft(row)) return false;
-      const name = textValue(row.charge_name || row.narration).toUpperCase();
-      return name.includes(label.toUpperCase());
-    });
-
-  const taxable = toAmountString(args.taxableAmount);
-  const paidTo = textValue(args.paidTo);
-  const out: PaymentRequestChargeDraft[] = [];
-  for (const [label, amountRaw] of [
-    ["CGST", args.cgstAmount],
-    ["SGST", args.sgstAmount],
-    ["IGST", args.igstAmount],
-  ] as const) {
-    const amount = toAmountString(amountRaw);
-    if (!amount || Number(amount) <= 0) continue;
-    if (hasTaxLabel(label)) continue;
-    const taxablePart = taxable || amount;
-    // Matches calculate-gst-breakup narration: "{party} -- {charge} -- {taxable}"
-    const narration = `${paidTo || label} -- ${label} -- ${taxablePart}`;
-    out.push({
-      ...emptyCharge(args.jobId),
-      charge_name: label,
-      charge_code: "",
-      currency_id: textValue(args.currencyId),
-      currency_code: textValue(args.currencyCode) || "INR",
-      currency_name: textValue(args.currencyName),
-      roe: "1.00",
-      amount,
-      local_amount: amount,
-      narration,
-      cn_r: "Dr",
-      Dr_Cr: "Dr",
-      is_tax_row: true,
-      line_type: "tax",
-    });
-  }
-  return out;
 }
 
 export function buildPaymentRequestOverrideDraft(
@@ -519,63 +464,13 @@ export function buildPaymentRequestOverrideDraft(
     return { ...base, ...recalc };
   };
 
-  const mapTaxRow = (row: PaymentRequestChargeDraft | Record<string, unknown>): PaymentRequestChargeDraft => {
-    const chargeId = idString(row.charge_id);
-    const chargeName = textValue(row.charge_name) || textValue(row.narration) || "GST";
-    const amount = toAmountString(row.amount);
-    const drCr = textValue(row.Dr_Cr) || textValue(row.cn_r) || "Dr";
-    return {
-      job_id: jobId || textValue(row.job_id),
-      charge_id: chargeId,
-      charge_name: chargeName,
-      charge_code: textValue(row.charge_code),
-      account_id: idString(row.account_id),
-      account_code: textValue(row.account_code),
-      account_name: textValue(row.account_name),
-      subledger_code: textValue(row.subledger_code),
-      currency_id: idString(row.currency_id) || headerCurrencyId,
-      currency_code: textValue(row.currency_code) || headerCurrencyCode || "INR",
-      currency_name: textValue(row.currency_name) || textValue(extracted?.currency_name),
-      roe: toAmountString(row.roe, "1.00") || "1.00",
-      unit_id: "",
-      unit_code: "",
-      no_of_unit: "",
-      amount_per_unit: "",
-      amount,
-      local_amount: toAmountString(row.local_amount || row.amount) || amount,
-      sac_code: textValue(row.sac_code),
-      narration: textValue(row.narration) || `${paidTo || chargeName} -- ${chargeName} -- ${toAmountString(extracted?.taxable_amount) || amount}`,
-      cn_r: textValue(row.cn_r) || drCr,
-      Dr_Cr: drCr,
-      is_tax_row: true,
-      line_type: "tax",
-    };
-  };
-
-  const taxFromExtract = sourceCharges
-    .filter((row) => isTaxChargeDraft(row as PaymentRequestChargeDraft))
-    .map((row) => mapTaxRow(row as PaymentRequestChargeDraft));
-
   const serviceCharges = sourceCharges.filter(
     (row) => !isNonServiceChargeDraftRow(row as PaymentRequestChargeDraft),
   );
-  const serviceMapped =
+  const charges =
     serviceCharges.length > 0
       ? serviceCharges.map((row) => mapServiceRow(row as PaymentRequestChargeDraft))
       : [emptyCharge(jobId)];
-
-  const gstFromTotals = buildPrqGstChargeDrafts({
-    jobId,
-    paidTo,
-    taxableAmount: toAmountString(extracted?.taxable_amount),
-    cgstAmount: toAmountString(extracted?.cgst_amount),
-    sgstAmount: toAmountString(extracted?.sgst_amount),
-    igstAmount: toAmountString(extracted?.igst_amount),
-    currencyId: headerCurrencyId,
-    currencyCode: headerCurrencyCode || "INR",
-    currencyName: textValue(extracted?.currency_name),
-    existing: taxFromExtract,
-  });
 
   return {
     job_reference: jobId || textValue(extracted?.job_reference),
@@ -605,7 +500,8 @@ export function buildPaymentRequestOverrideDraft(
     note: limitToMaxWords(extracted?.note, 20),
     account_note: limitToMaxWords(extracted?.account_note, 20),
     tds_section_code: textValue(extracted?.tds_section_code),
-    charges_data: [...serviceMapped, ...taxFromExtract, ...gstFromTotals],
+    // Service charges only — GST lines come from Calculate GST after PRQ create.
+    charges_data: charges,
   };
 }
 

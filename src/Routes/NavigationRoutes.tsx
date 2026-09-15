@@ -102,6 +102,7 @@ import {
   GSTSACMaster,
   GSTSACCreate,
   GSTRateMaster,
+  GSTRateCreate,
   GSTChargeMappingMaster,
   GSTChargeMappingCreate,
   VatChargeMappingMaster,
@@ -1164,8 +1165,8 @@ const NavigationRoutes = () => {
 
           <Route path="gst-rate">
             <Route index element={<GSTRateMaster />} />
-            <Route path="create" element={<GSTRateMaster />} />
-            <Route path="edit" element={<GSTRateMaster />} />
+            <Route path="create" element={<GSTRateCreate />} />
+            <Route path="edit" element={<GSTRateCreate />} />
           </Route>
 
           <Route path="gst-charge-mapping">

@@ -201,6 +201,7 @@ import MakerCheckerMappingCreate from "./masters/maker-checker-mapping/MakerChec
 import GSTSACMaster from "./masters/gst-sac/GSTSACMaster";
 import GSTSACCreate from "./masters/gst-sac/GSTSACCreate";
 import GSTRateMaster from "./masters/gst-rate/GSTRateMaster";
+import GSTRateCreate from "./masters/gst-rate/GSTRateCreate";
 import GSTChargeMappingMaster from "./masters/gst-charge-mapping/GSTChargeMappingMaster";
 import GSTChargeMappingCreate from "./masters/gst-charge-mapping/GSTChargeMappingCreate";
 import VatChargeMappingMaster from "./masters/vat-charge-mapping/VatChargeMappingMaster";
@@ -322,6 +323,7 @@ export {
   GSTSACMaster,
   GSTSACCreate,
   GSTRateMaster,
+  GSTRateCreate,
   GSTChargeMappingMaster,
   GSTChargeMappingCreate,
   VatChargeMappingMaster,

@@ -55,7 +55,7 @@ type GSTRateApiItem = {
 
 /** One table row per nested rate; SAC fields repeated for each state rate */
 type GSTRateMasterRow = {
-  sno: number;
+  sno: string;
   id?: number;
   rate_id?: number;
   sac_id?: number;
@@ -70,33 +70,41 @@ type GSTRateMasterRow = {
   _parent: GSTRateApiItem;
 };
 
+/** 0 -> A, 25 -> Z, 26 -> AA, 27 -> AB, ... */
+function indexToLetters(index: number): string {
+  let n = index;
+  let result = "";
+  while (n >= 0) {
+    result = String.fromCharCode((n % 26) + 65) + result;
+    n = Math.floor(n / 26) - 1;
+  }
+  return result;
+}
+
 function flattenGSTRateRows(
   items: GSTRateApiItem[],
   pageStartIndex: number,
 ): GSTRateMasterRow[] {
-  let rowIndex = 0;
-  return items.flatMap((item) => {
+  return items.flatMap((item, groupOffset) => {
+    const groupNum = pageStartIndex + groupOffset + 1;
     const rates =
       Array.isArray(item.rate) && item.rate.length > 0
         ? item.rate
         : [undefined];
-    return rates.map((rate) => {
-      rowIndex += 1;
-      return {
-        sno: pageStartIndex + rowIndex,
-        id: item.id,
-        rate_id: rate?.id,
-        sac_id: item.sac_id,
-        sac_code: item.sac_code ?? "",
-        sac_name: item.sac_name ?? "",
-        state_name: rate?.state_name ?? "-",
-        cgst: rate?.cgst ?? "-",
-        sgst: rate?.sgst ?? "-",
-        igst: rate?.igst ?? "-",
-        status: item.status,
-        _parent: item,
-      };
-    });
+    return rates.map((rate, stateIndex) => ({
+      sno: `${groupNum}-${indexToLetters(stateIndex)}`,
+      id: item.id,
+      rate_id: rate?.id,
+      sac_id: item.sac_id,
+      sac_code: item.sac_code ?? "",
+      sac_name: item.sac_name ?? "",
+      state_name: rate?.state_name ?? "-",
+      cgst: rate?.cgst ?? "-",
+      sgst: rate?.sgst ?? "-",
+      igst: rate?.igst ?? "-",
+      status: item.status,
+      _parent: item,
+    }));
   });
 }
 
@@ -176,9 +184,9 @@ export default function GSTRateMasterList() {
       {
         accessorKey: "sno",
         header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
+        size: 80,
+        minSize: 60,
+        maxSize: 100,
         enableColumnFilter: false,
         enableSorting: false,
       },
@@ -227,9 +235,16 @@ export default function GSTRateMasterList() {
               <Box px={10} py={5}>
                 <UnstyledButton
                   onClick={() =>
-                    navigate("/master/gst-rate/edit", {
-                      state: row.original._parent,
-                    })
+                    navigate(
+                      `/master/gst-rate/edit${
+                        row.original.id != null
+                          ? `?id=${row.original.id}`
+                          : ""
+                      }`,
+                      {
+                        state: row.original._parent,
+                      },
+                    )
                   }
                 >
                   <Group gap={"sm"}>
