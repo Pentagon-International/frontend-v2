@@ -84,6 +84,7 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
+  resolveHouseChargesSource,
   validateMeaningfulHouseCharges,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
@@ -1155,15 +1156,15 @@ function HouseCreate() {
       }
     }
 
-    // Load charges when editData has them - same as AirImportJob
-    const chargesToLoad =
-      (editData.charges && Array.isArray(editData.charges)
-        ? editData.charges
-        : null) ||
-      (editData as { mawb_charges?: unknown[] }).mawb_charges ||
-      [];
-    console.log("_____chargesToLoad", chargesToLoad);
-    const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+    // Load charges - prefer non-empty charges, then mawb_charges/mbl_charges
+    const chargesArray = resolveHouseChargesSource(
+      editData as {
+        charges?: unknown;
+        mbl_charges?: unknown;
+        mawb_charges?: unknown;
+      },
+    );
+    console.log("_____chargesToLoad", chargesArray);
     if (chargesArray.length > 0) {
       const unitDataArr: { id?: number; unit_code?: string }[] = [];
       const currencyDataArr: {
@@ -5702,21 +5703,13 @@ function HouseCreate() {
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => {
-              const leave = () => {
-                if (isViewOnly) {
-                  navigateToJobWithHousingList(existingHousingDetails);
-                } else {
-                  navigateToJobWithHousingList(
-                    buildUpdatedHousingDetailsFromForm(),
-                  );
-                }
-              };
-              if (!isReadOnly && hasUnsavedChanges) {
-                pendingLeaveActionRef.current = leave;
-                setConfirmBackToListOpen(true);
-                return;
+              if (isViewOnly) {
+                navigateToJobWithHousingList(existingHousingDetails);
+              } else {
+                navigateToJobWithHousingList(
+                  buildUpdatedHousingDetailsFromForm(),
+                );
               }
-              leave();
             }}
           >
             Back to Import Job

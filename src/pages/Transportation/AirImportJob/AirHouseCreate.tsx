@@ -85,6 +85,7 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
+  resolveHouseChargesSource,
   validateMeaningfulHouseCharges,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
@@ -1495,18 +1496,14 @@ function HouseCreate() {
       }
     }
 
-    // Load charges - handle both "charges" (mapped) and "mawb_charges" (raw API)
-    const chargesToLoad = (() => {
-      const rawCharges = (editData as { charges?: unknown }).charges;
-      const rawMawbCharges = (editData as { mawb_charges?: unknown })
-        .mawb_charges;
-      const chargesArr = Array.isArray(rawCharges) ? rawCharges : null;
-      const mawbArr = Array.isArray(rawMawbCharges) ? rawMawbCharges : null;
-      if (chargesArr && chargesArr.length > 0) return chargesArr;
-      if (mawbArr && mawbArr.length > 0) return mawbArr;
-      return [];
-    })();
-    const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+    // Load charges - prefer non-empty charges, then mawb_charges/mbl_charges
+    const chargesArray = resolveHouseChargesSource(
+      editData as {
+        charges?: unknown;
+        mbl_charges?: unknown;
+        mawb_charges?: unknown;
+      },
+    );
     if (chargesArray.length === 0) {
       console.log("[AirHouseCreate] Charges: NOT SET (empty or missing)", {
         hasCharges: !!(editData as { charges?: unknown }).charges,
@@ -5865,21 +5862,13 @@ function HouseCreate() {
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
             onClick={() => {
-              const leave = () => {
-                if (isViewOnly) {
-                  navigateToJobWithHousingList(existingHousingDetails);
-                } else {
-                  navigateToJobWithHousingList(
-                    buildUpdatedHousingDetailsFromForm(),
-                  );
-                }
-              };
-              if (!isReadOnly) {
-                pendingLeaveActionRef.current = leave;
-                setConfirmBackToListOpen(true);
-                return;
+              if (isViewOnly) {
+                navigateToJobWithHousingList(existingHousingDetails);
+              } else {
+                navigateToJobWithHousingList(
+                  buildUpdatedHousingDetailsFromForm(),
+                );
               }
-              leave();
             }}
           >
             Back to Import Job

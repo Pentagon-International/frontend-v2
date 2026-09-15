@@ -246,18 +246,18 @@ function pickRawHouseCharges(
   const charges = house.charges;
   const mawbCharges = house.mawb_charges;
   const mblCharges = house.mbl_charges;
+  const modeAlias = chargeKey === "mawb_charges" ? mawbCharges : mblCharges;
+  const otherAlias = chargeKey === "mawb_charges" ? mblCharges : mawbCharges;
 
-  // Form state writes the latest lines onto `charges`. Prefer that, then the
-  // API alias for this mode, then the other alias.
-  if (chargeKey === "mawb_charges") {
-    if (Array.isArray(charges)) return charges;
-    if (Array.isArray(mawbCharges)) return mawbCharges;
-    if (Array.isArray(mblCharges)) return mblCharges;
-    return null;
-  }
+  // Prefer any non-empty source. Empty `charges: []` must not hide API rows
+  // under mbl_charges/mawb_charges (that previously wiped charges on PUT).
+  if (Array.isArray(charges) && charges.length > 0) return charges;
+  if (Array.isArray(modeAlias) && modeAlias.length > 0) return modeAlias;
+  if (Array.isArray(otherAlias) && otherAlias.length > 0) return otherAlias;
 
-  if (Array.isArray(mblCharges)) return mblCharges;
+  // Explicit empty form `charges` = intentional clear for this house.
   if (Array.isArray(charges)) return charges;
+  if (Array.isArray(modeAlias)) return modeAlias;
   return null;
 }
 
@@ -433,6 +433,8 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     : Array.isArray(job.estimates)
       ? job.estimates
       : null;
+  // Only include estimates when present in nav/job state.
+  // Omitting the key preserves existing JobChargesDetails (backend key-presence sync).
   if (estimatesRaw) {
     payload.estimates = (estimatesRaw as Record<string, unknown>[])
       .map(mapEstimateForPayload)

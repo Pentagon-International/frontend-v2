@@ -54,7 +54,6 @@ import {
   isPaymentRequestExtractionSettled,
   getPaymentRequestOverrideFieldErrors,
   hasPaymentRequestOverrideFieldErrors,
-  isPaymentRequestTaxChargeDraft,
   pollPaymentRequestRecord,
   readableError,
   recalculateAutomationChargeAmounts,
@@ -540,14 +539,6 @@ function sumChargeMoney(
   return hasValue ? total.toFixed(2) : "";
 }
 
-function toDisplayMoney(value: unknown): string {
-  const raw = String(value ?? "").replace(/,/g, "").trim();
-  if (!raw) return "";
-  const num = Number(raw);
-  if (!Number.isFinite(num) || num <= 0) return "";
-  return num.toFixed(2);
-}
-
 export function PaymentRequestAutomationModal({
   opened,
   onClose,
@@ -625,44 +616,6 @@ export function PaymentRequestAutomationModal({
     () => (override ? sumChargeMoney(override.charges_data, "local_amount") : ""),
     [override],
   );
-  const taxChargeRows = useMemo(
-    () => (override ? override.charges_data.filter((row) => isPaymentRequestTaxChargeDraft(row)) : []),
-    [override],
-  );
-  const serviceChargeCount = useMemo(
-    () =>
-      override
-        ? override.charges_data.filter((row) => !isPaymentRequestTaxChargeDraft(row)).length
-        : 0,
-    [override],
-  );
-  const taxBreakupTotals = useMemo(() => {
-    if (!override) return { cgst: "", sgst: "", igst: "", total: "" };
-    let cgst = toDisplayMoney(override.cgst_amount);
-    let sgst = toDisplayMoney(override.sgst_amount);
-    let igst = toDisplayMoney(override.igst_amount);
-    for (const row of override.charges_data) {
-      if (!isPaymentRequestTaxChargeDraft(row)) continue;
-      const name = `${row.charge_name || ""} ${row.narration || ""}`.toUpperCase();
-      const amt = toDisplayMoney(row.amount);
-      if (!amt) continue;
-      if (!cgst && name.includes("CGST")) cgst = amt;
-      else if (!sgst && name.includes("SGST")) sgst = amt;
-      else if (!igst && name.includes("IGST")) igst = amt;
-    }
-    const nums = [cgst, sgst, igst]
-      .map((v) => Number(String(v).replace(/,/g, "")))
-      .filter((n) => Number.isFinite(n) && n > 0);
-    const total =
-      nums.length > 0 ? nums.reduce((a, b) => a + b, 0).toFixed(2) : "";
-    return { cgst, sgst, igst, total };
-  }, [override]);
-
-  const showTaxBreakup =
-    taxChargeRows.length > 0 ||
-    !!toDisplayMoney(override?.cgst_amount) ||
-    !!toDisplayMoney(override?.sgst_amount) ||
-    !!toDisplayMoney(override?.igst_amount);
 
   useEffect(() => {
     if (!opened) return;
@@ -877,18 +830,10 @@ export function PaymentRequestAutomationModal({
   };
 
   const removeCharge = (index: number) => {
-    if (!override) return;
-    const rows = override.charges_data;
-    const target = rows[index];
-    if (!target) return;
-    const isTax = isPaymentRequestTaxChargeDraft(target);
-    const serviceCount = rows.filter((row) => !isPaymentRequestTaxChargeDraft(row)).length;
-    // Keep at least one service charge line (tax rows may be removed freely).
-    if (!isTax && serviceCount <= 1) return;
-    if (rows.length <= 1) return;
+    if (!override || override.charges_data.length <= 1) return;
     setOverride({
       ...override,
-      charges_data: rows.filter((_, i) => i !== index),
+      charges_data: override.charges_data.filter((_, i) => i !== index),
     });
   };
 
@@ -1399,7 +1344,7 @@ export function PaymentRequestAutomationModal({
 
                 <PreviewSection
                   title="Charges"
-                  hint="Aligned with Payment Request charge lines: service rows plus GST tax rows (same as Calculate GST)."
+                  hint="Service charge lines only. Run Calculate GST on the Payment Request form after create."
                 >
                   <Tabs defaultValue="form">
                     <Tabs.List>
@@ -1436,28 +1381,11 @@ export function PaymentRequestAutomationModal({
                           </Table.Thead>
                           <Table.Tbody>
                             {override.charges_data.map((row, index) => {
-                              const isTax = isPaymentRequestTaxChargeDraft(row);
-                              const canDelete = isTax
-                                ? override.charges_data.length > 1
-                                : serviceChargeCount > 1;
+                              const canDelete = override.charges_data.length > 1;
                               const chargeErr = fieldErrors.charges[index] || {};
                               return (
-                              <Table.Tr
-                                key={index}
-                                style={
-                                  isTax
-                                    ? { background: "rgba(16, 84, 118, 0.06)" }
-                                    : undefined
-                                }
-                              >
-                                <Table.Td>
-                                  {index + 1}
-                                  {isTax ? (
-                                    <Text size="xs" c="#105476" fw={600}>
-                                      GST
-                                    </Text>
-                                  ) : null}
-                                </Table.Td>
+                              <Table.Tr key={index}>
+                                <Table.Td>{index + 1}</Table.Td>
                                 <Table.Td style={{ minWidth: 180 }}>
                                   <SearchableSelect
                                     placeholder="Search charge"
@@ -1725,75 +1653,6 @@ export function PaymentRequestAutomationModal({
                     </Tabs.Panel>
                   </Tabs>
                 </PreviewSection>
-
-                {showTaxBreakup ? (
-                  <PreviewSection
-                    title="Tax Breakup"
-                    hint="Mirrors Payment Request Tax Breakup after Calculate GST (from extracted CGST/SGST/IGST)."
-                  >
-                    <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="xs" mb="sm">
-                      <AmountTile label="IGST Total" value={taxBreakupTotals.igst} />
-                      <AmountTile label="CGST Total" value={taxBreakupTotals.cgst} />
-                      <AmountTile label="SGST Total" value={taxBreakupTotals.sgst} />
-                      <AmountTile label="GST Total" value={taxBreakupTotals.total} />
-                    </SimpleGrid>
-                    {taxChargeRows.length > 0 ? (
-                      <Box style={{ overflowX: "auto" }}>
-                        <Table
-                          withTableBorder
-                          withColumnBorders
-                          striped
-                          highlightOnHover
-                          fz="xs"
-                          style={{ minWidth: 420 }}
-                        >
-                          <Table.Thead>
-                            <Table.Tr>
-                              <Table.Th>SAC</Table.Th>
-                              <Table.Th>Charge Name</Table.Th>
-                              <Table.Th>Dr/Cr</Table.Th>
-                              <Table.Th>Amount</Table.Th>
-                            </Table.Tr>
-                          </Table.Thead>
-                          <Table.Tbody>
-                            {taxChargeRows.map((row, idx) => (
-                              <Table.Tr key={`tax-${idx}`}>
-                                <Table.Td>{row.sac_code || "—"}</Table.Td>
-                                <Table.Td>
-                                  {row.charge_name
-                                    ? row.charge_code
-                                      ? `${row.charge_name} (${row.charge_code})`
-                                      : row.charge_name
-                                    : "—"}
-                                </Table.Td>
-                                <Table.Td>{row.Dr_Cr || row.cn_r || "Dr"}</Table.Td>
-                                <Table.Td>{row.amount || "—"}</Table.Td>
-                              </Table.Tr>
-                            ))}
-                          </Table.Tbody>
-                          {taxBreakupTotals.total ? (
-                            <Table.Tfoot>
-                              <Table.Tr>
-                                <Table.Td />
-                                <Table.Td />
-                                <Table.Td>
-                                  <Text size="xs" fw={600} c="#105476">
-                                    Total:
-                                  </Text>
-                                </Table.Td>
-                                <Table.Td>
-                                  <Text size="xs" fw={600} c="#105476">
-                                    {taxBreakupTotals.total}
-                                  </Text>
-                                </Table.Td>
-                              </Table.Tr>
-                            </Table.Tfoot>
-                          ) : null}
-                        </Table>
-                      </Box>
-                    ) : null}
-                  </PreviewSection>
-                ) : null}
               </Stack>
             </Box>
             <Group justify="flex-end">

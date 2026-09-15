@@ -155,6 +155,7 @@ export const URL = {
   gstChargeMapping: "gst-charge-mapping/",
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
   gstChargeMappingGetEffectiveSac: "gst-charge-mapping/get-effective-sac/",
+  gstRateMaster: "gst-rate-master/",
   gstRateMasterFilter: "filter/gst-rate-master/",
   gstSacMaster: "gst-sac-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
