@@ -1038,12 +1038,37 @@ function calcChargeTotalsByDrCr(
   };
 }
 
+/** Taxable local base for GST display/totals (prefer amount_in_local, else amount × roe). */
+function resolveChargeLocalAmountForGst(charge: {
+  amount_in_local?: number | null;
+  amount?: number | null;
+  roe?: number | null;
+}): number | null {
+  const local = charge.amount_in_local;
+  if (local != null && Number.isFinite(Number(local))) {
+    return Number(local);
+  }
+  const amount = charge.amount;
+  const roe = charge.roe;
+  if (
+    amount != null &&
+    roe != null &&
+    Number(amount) > 0 &&
+    Number(roe) > 0
+  ) {
+    return clampAmount(Number(amount) * Number(roe));
+  }
+  return null;
+}
+
 /** Net GST totals: invoice is Cr − Dr; credit note is Dr − Cr. */
 function calcGstTotalsByDrCr(
   charges: Array<{
     dr_cr?: string | null;
     Dr_Cr?: string | null;
     amount_in_local?: number | null;
+    amount?: number | null;
+    roe?: number | null;
     is_tax_row?: boolean;
   }>,
   gstRatesByChargeIndex: Record<
@@ -1061,7 +1086,7 @@ function calcGstTotalsByDrCr(
 
   charges.forEach((charge, idx) => {
     if (charge.is_tax_row === true) return;
-    const localAmount = charge.amount_in_local;
+    const localAmount = resolveChargeLocalAmountForGst(charge);
     if (localAmount == null) return;
     const rates = gstRatesByChargeIndex[idx];
     if (!rates) return;
@@ -2381,6 +2406,47 @@ function InvoiceCreate({
     [jobServiceId],
   );
 
+  const applyGstRatesForChargeIndex = useCallback(
+    (index: number, sacCode: string) => {
+      const sac = String(sacCode ?? "").trim();
+      if (!sac || !showGstTax) return;
+
+      void (async () => {
+        const cacheKey = applyAgentGstRates
+          ? `agent:${sac}`
+          : `${form.values.state ? Number(form.values.state) : ""}:${sac}`;
+
+        const cached = gstRatesCacheRef.current.get(cacheKey);
+        if (cached) {
+          setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: cached }));
+          return;
+        }
+
+        try {
+          const stateId = form.values.state ? Number(form.values.state) : null;
+          if (!applyAgentGstRates && (stateId == null || Number.isNaN(stateId))) {
+            return;
+          }
+          const res = await fetchGstRatesByStateSac(
+            applyAgentGstRates
+              ? { sac_code: sac, agent: true }
+              : { state_id: stateId as number, sac_code: sac },
+          );
+          const rates = parseGstRatesPayload(res);
+          if (rates) {
+            gstRatesCacheRef.current.set(cacheKey, rates);
+            setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: rates }));
+          } else {
+            setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: null }));
+          }
+        } catch {
+          setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: null }));
+        }
+      })();
+    },
+    [applyAgentGstRates, showGstTax, form.values.state],
+  );
+
   // Format charge options (legacy charge master, kept if used elsewhere)
   const chargeOptions = useMemo(() => {
     const data = chargeData as any[];
@@ -3611,8 +3677,8 @@ function InvoiceCreate({
       .filter((x) => x.sac !== "" && !x.isTaxRow);
 
     if (sacs.length === 0) {
-      // Clear loading states if no SAC codes are present
       setGstRatesLoadingByIndex({});
+      setGstRatesByChargeIndex({});
       return;
     }
 
@@ -3673,8 +3739,13 @@ function InvoiceCreate({
       }),
     ).then((results) => {
       if (cancelled) return;
-      setGstRatesByChargeIndex((prev) => {
-        const next = { ...prev };
+      setGstRatesByChargeIndex(() => {
+        const next: Record<number, GstRates | null> = {};
+        (form.values.charges || []).forEach((c, idx) => {
+          if (c.is_tax_row === true || !String(c.tax_code ?? "").trim()) {
+            next[idx] = null;
+          }
+        });
         results.forEach(({ idx, rates }) => {
           next[idx] = rates;
         });
@@ -3705,10 +3776,6 @@ function InvoiceCreate({
   // When charges lack SAC, fetch effective SAC for India GST / India agent invoices (incl. SEZ)
   useEffect(() => {
     if (!needsEffectiveSac) return;
-    const jobServiceId =
-      (location.state as { job?: { service_id?: number } } | null)?.job
-        ?.service_id ?? null;
-    if (!jobServiceId) return;
 
     const chargesWithIds = form.values.charges
       .map((c, originalIdx) => ({ charge: c, originalIdx }))
@@ -3720,13 +3787,24 @@ function InvoiceCreate({
       );
     if (!chargesWithIds.length) return;
 
-    void fetchGetEffectiveSac(
-      chargesWithIds.map(({ charge }) => ({
-        charge_id: charge.charge_id!,
-        service_id: jobServiceId,
-      })),
-      isIndiaAgentInvoice ? { agent: true } : undefined,
-    ).then((data) => {
+    void (async () => {
+      let serviceId = parseNumericServiceId(
+        (location.state as { job?: { service_id?: number } } | null)?.job
+          ?.service_id ?? null,
+      );
+      if (serviceId == null && isIndiaAgentInvoice) {
+        const headerNo = String(form.values.shipment_no ?? "").trim();
+        serviceId = await getServiceIdForSac(headerNo);
+      }
+      if (serviceId == null) return;
+
+      const data = await fetchGetEffectiveSac(
+        chargesWithIds.map(({ charge }) => ({
+          charge_id: charge.charge_id!,
+          service_id: serviceId,
+        })),
+        isIndiaAgentInvoice ? { agent: true } : undefined,
+      );
       data.forEach((item, responseIdx) => {
         const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
         if (
@@ -3735,11 +3813,20 @@ function InvoiceCreate({
           item.sac_code !== ""
         ) {
           form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
+          if (showGstTax) {
+            applyGstRatesForChargeIndex(originalIdx, item.sac_code);
+          }
         }
       });
-    });
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsEffectiveSac, isIndiaAgentInvoice, hasSez]);
+  }, [
+    needsEffectiveSac,
+    isIndiaAgentInvoice,
+    hasSez,
+    form.values.shipment_no,
+    showGstTax,
+  ]);
 
   // Ensure appended tax rows never carry GST rates (avoid stale cached rates causing display/calculation).
   useEffect(() => {
@@ -4829,7 +4916,7 @@ function InvoiceCreate({
                 Dr_Cr: taxRowDrCr,
               };
             })
-        : isAgentPost || isUsPost || hasSez || isVatPost
+        : isUsPost || hasSez || isVatPost
           ? []
           : sacWiseTotals
               .filter((row) => {
@@ -5234,6 +5321,11 @@ function InvoiceCreate({
     return undefined;
   })();
 
+  /** India agent invoice: IGST-only (inter-state); avoid undefined hiding GST columns. */
+  const effectiveHeaderSameState = applyAgentGstRates
+    ? false
+    : headerSameState;
+
   const chargeSectionTotals = useMemo(
     () =>
       calcChargeTotalsByDrCr(
@@ -5311,9 +5403,9 @@ function InvoiceCreate({
       drCr: applyVat ? 0.7 : 0.55,
       vatRate: applyVat ? 0.9 : 0,
       vatAmount: applyVat ? 0.9 : 0,
-      cgst: showGstTax && headerSameState === true ? 0.55 : 0,
-      sgst: showGstTax && headerSameState === true ? 0.55 : 0,
-      igst: showGstTax && headerSameState === false ? 0.55 : 0,
+      cgst: showGstTax && effectiveHeaderSameState === true ? 0.55 : 0,
+      sgst: showGstTax && effectiveHeaderSameState === true ? 0.55 : 0,
+      igst: showGstTax && effectiveHeaderSameState === false ? 0.55 : 0,
       actions: !isReadOnly ? 0.7 : 0,
     };
     const used = Object.values(cols).reduce((a, b) => a + b, 0);
@@ -5325,7 +5417,7 @@ function InvoiceCreate({
     showSacColumn,
     showGstTax,
     applyVat,
-    headerSameState,
+    effectiveHeaderSameState,
     isReadOnly,
   ]);
 
@@ -6129,7 +6221,7 @@ function InvoiceCreate({
                       VAT Amount
                     </Grid.Col>
                   )}
-                  {showGstTax && headerSameState === true && (
+                  {showGstTax && effectiveHeaderSameState === true && (
                     <Grid.Col
                       span={chargeGridCols.cgst}
                       style={chargeHeaderCellStyle}
@@ -6137,7 +6229,7 @@ function InvoiceCreate({
                       CGST
                     </Grid.Col>
                   )}
-                  {showGstTax && headerSameState === true && (
+                  {showGstTax && effectiveHeaderSameState === true && (
                     <Grid.Col
                       span={chargeGridCols.sgst}
                       style={chargeHeaderCellStyle}
@@ -6145,7 +6237,7 @@ function InvoiceCreate({
                       SGST
                     </Grid.Col>
                   )}
-                  {showGstTax && headerSameState === false && (
+                  {showGstTax && effectiveHeaderSameState === false && (
                     <Grid.Col
                       span={chargeGridCols.igst}
                       style={chargeHeaderCellStyle}
@@ -6344,6 +6436,10 @@ function InvoiceCreate({
                                     `charges.${index}.tax_code`,
                                     item.sac_code,
                                   );
+                                  applyGstRatesForChargeIndex(
+                                    index,
+                                    item.sac_code,
+                                  );
                                 }
                               })();
                             } else if (jobServiceId != null) {
@@ -6365,6 +6461,10 @@ function InvoiceCreate({
                                 ) {
                                   form.setFieldValue(
                                     `charges.${index}.tax_code`,
+                                    item.sac_code,
+                                  );
+                                  applyGstRatesForChargeIndex(
+                                    index,
                                     item.sac_code,
                                   );
                                 }
@@ -7136,7 +7236,7 @@ function InvoiceCreate({
                         />
                       </Grid.Col>
                     )}
-                    {showGstTax && headerSameState === true && (
+                    {showGstTax && effectiveHeaderSameState === true && (
                       <Grid.Col span={chargeGridCols.cgst}>
                         <FormTextInput
                           placeholder="CGST"
@@ -7153,7 +7253,8 @@ function InvoiceCreate({
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.cgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             if (rate == null || localAmount == null) return "";
                             const amount = clampAmount(
                               (localAmount * rate) / 100,
@@ -7164,7 +7265,8 @@ function InvoiceCreate({
                           // disabled
                           rightSection={(() => {
                             const rate = gstRatesByChargeIndex[index]?.cgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             const amount =
                               rate == null || localAmount == null
                                 ? null
@@ -7188,7 +7290,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {showGstTax && headerSameState === true && (
+                    {showGstTax && effectiveHeaderSameState === true && (
                       <Grid.Col span={chargeGridCols.sgst}>
                         <FormTextInput
                           placeholder="SGST"
@@ -7205,7 +7307,8 @@ function InvoiceCreate({
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.sgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             if (rate == null || localAmount == null) return "";
                             const amount = clampAmount(
                               (localAmount * rate) / 100,
@@ -7216,7 +7319,8 @@ function InvoiceCreate({
                           readOnly
                           rightSection={(() => {
                             const rate = gstRatesByChargeIndex[index]?.sgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             const amount =
                               rate == null || localAmount == null
                                 ? null
@@ -7241,7 +7345,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {showGstTax && headerSameState === false && (
+                    {showGstTax && effectiveHeaderSameState === false && (
                       <Grid.Col span={chargeGridCols.igst}>
                         <FormTextInput
                           placeholder="IGST"
@@ -7258,7 +7362,8 @@ function InvoiceCreate({
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.igst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             if (rate == null || localAmount == null) return "";
                             const amount = clampAmount(
                               (localAmount * rate) / 100,
@@ -7268,7 +7373,8 @@ function InvoiceCreate({
                           readOnly
                           rightSection={(() => {
                             const rate = gstRatesByChargeIndex[index]?.igst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             const amount =
                               rate == null || localAmount == null
                                 ? null
