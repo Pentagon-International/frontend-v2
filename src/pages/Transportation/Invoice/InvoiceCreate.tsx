@@ -89,6 +89,7 @@ import {
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { resolveAgentInvoiceCollectCharges } from "../../../utils/collectAgentInvoiceCharges";
+import { findJobCreateDropdownRow } from "../../../utils/jobCreateDropdown";
 
 // Fetch functions
 
@@ -531,6 +532,23 @@ const fetchGetEffectiveSac = async (
     console.error("Error fetching get-effective-sac:", error);
     return [];
   }
+};
+
+const parseNumericServiceId = (raw: unknown): number | null => {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+};
+
+const serviceIdFromJobCreateRow = (
+  match: Record<string, unknown> | undefined,
+): number | null => {
+  if (!match) return null;
+  return parseNumericServiceId(
+    match.service_id ??
+      match.serviceId ??
+      (match.job as { service_id?: unknown } | undefined)?.service_id,
+  );
 };
 
 type SezStatusResult = {
@@ -2328,6 +2346,40 @@ function InvoiceCreate({
   const jobServiceId =
     (location.state as { job?: { service_id?: number } })?.job?.service_id ??
     null;
+
+  // Agent invoice (incl. global-search edit): resolve service_id from header
+  // shipment no / job id via filter/job-create. Fall back to location.state.job.
+  const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
+  const getServiceIdForSac = useCallback(
+    async (shipmentOrJobNo: string | null | undefined): Promise<number | null> => {
+      const key = String(shipmentOrJobNo ?? "").trim();
+      if (key) {
+        if (key in shipmentServiceIdCacheRef.current) {
+          const cached = shipmentServiceIdCacheRef.current[key];
+          if (cached != null) return cached;
+        } else {
+          try {
+            const results = await commonSearchAPI({
+              endpoint: URL.filterJobCreate,
+              query: key,
+            });
+            const arr = Array.isArray(results)
+              ? (results as Array<Record<string, unknown>>)
+              : [];
+            const serviceId = serviceIdFromJobCreateRow(
+              findJobCreateDropdownRow(arr, key),
+            );
+            shipmentServiceIdCacheRef.current[key] = serviceId;
+            if (serviceId != null) return serviceId;
+          } catch {
+            shipmentServiceIdCacheRef.current[key] = null;
+          }
+        }
+      }
+      return parseNumericServiceId(jobServiceId);
+    },
+    [jobServiceId],
+  );
 
   // Format charge options (legacy charge master, kept if used elsewhere)
   const chargeOptions = useMemo(() => {
@@ -6263,31 +6315,61 @@ function InvoiceCreate({
                             }
                           }
 
-                          if (
-                            chargeId != null &&
-                            jobServiceId != null &&
-                            needsEffectiveSac
-                          ) {
-                            fetchGetEffectiveSac(
-                              [
-                                {
-                                  charge_id: chargeId,
-                                  service_id: jobServiceId,
-                                },
-                              ],
-                              isIndiaAgentInvoice ? { agent: true } : undefined,
-                            ).then((data) => {
-                              const item = data[0];
-                              if (
-                                item?.sac_code != null &&
-                                item.sac_code !== ""
-                              ) {
-                                form.setFieldValue(
-                                  `charges.${index}.tax_code`,
-                                  item.sac_code,
+                          if (chargeId != null && needsEffectiveSac) {
+                            if (isAgentInvoice) {
+                              const headerShipmentNo = String(
+                                form.values.shipment_no ?? "",
+                              ).trim();
+                              void (async () => {
+                                const serviceId =
+                                  await getServiceIdForSac(headerShipmentNo);
+                                if (serviceId == null) return;
+                                const data = await fetchGetEffectiveSac(
+                                  [
+                                    {
+                                      charge_id: chargeId,
+                                      service_id: serviceId,
+                                    },
+                                  ],
+                                  isIndiaAgentInvoice
+                                    ? { agent: true }
+                                    : undefined,
                                 );
-                              }
-                            });
+                                const item = data[0];
+                                if (
+                                  item?.sac_code != null &&
+                                  item.sac_code !== ""
+                                ) {
+                                  form.setFieldValue(
+                                    `charges.${index}.tax_code`,
+                                    item.sac_code,
+                                  );
+                                }
+                              })();
+                            } else if (jobServiceId != null) {
+                              fetchGetEffectiveSac(
+                                [
+                                  {
+                                    charge_id: chargeId,
+                                    service_id: jobServiceId,
+                                  },
+                                ],
+                                isIndiaAgentInvoice
+                                  ? { agent: true }
+                                  : undefined,
+                              ).then((data) => {
+                                const item = data[0];
+                                if (
+                                  item?.sac_code != null &&
+                                  item.sac_code !== ""
+                                ) {
+                                  form.setFieldValue(
+                                    `charges.${index}.tax_code`,
+                                    item.sac_code,
+                                  );
+                                }
+                              });
+                            }
                           }
                           if (
                             chargeId != null &&
