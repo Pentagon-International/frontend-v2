@@ -41,9 +41,35 @@ import { getActiveBranch } from "../../../utils/branchOdexCredentials";
 
 const LIST_KEY = "EXCHANGE_RATE_MASTER";
 
-type ExchangeRateMasterRow = {
+type ExchangeRateItem = {
   id?: number;
+  currency_id?: number;
+  currency_code?: string;
+  sell_rate?: string | number;
+  buy_rate?: string | number;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+
+type ExchangeRateGroup = {
   sno?: number;
+  id?: number;
+  country_id?: number;
+  country_code?: string;
+  country_name?: string;
+  rate_date?: string | null;
+  rates?: ExchangeRateItem[];
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  updated_by?: string | null;
+};
+
+type ExchangeRateMasterRow = {
+  sno: string;
+  id?: number;
   country_id?: number;
   country_code?: string;
   country_name?: string;
@@ -56,6 +82,8 @@ type ExchangeRateMasterRow = {
   updated_at?: string;
   created_by?: string | null;
   updated_by?: string | null;
+  /** Full country+date group for edit navigation */
+  _parent: ExchangeRateGroup;
 };
 
 type ExchangeRateMasterFilters = {
@@ -69,6 +97,47 @@ type BranchWithCountry = {
   is_default?: boolean;
   country?: { country_code?: string };
 };
+
+/** 0 -> A, 25 -> Z, 26 -> AA, ... */
+function indexToLetters(index: number): string {
+  let n = index;
+  let result = "";
+  while (n >= 0) {
+    result = String.fromCharCode((n % 26) + 65) + result;
+    n = Math.floor(n / 26) - 1;
+  }
+  return result;
+}
+
+function flattenExchangeRateRows(
+  groups: ExchangeRateGroup[],
+  pageStartIndex: number,
+): ExchangeRateMasterRow[] {
+  return groups.flatMap((group, groupOffset) => {
+    const groupNum = pageStartIndex + groupOffset + 1;
+    const rates =
+      Array.isArray(group.rates) && group.rates.length > 0
+        ? group.rates
+        : [undefined];
+    return rates.map((rate, rateIndex) => ({
+      sno: `${groupNum}-${indexToLetters(rateIndex)}`,
+      id: rate?.id ?? group.id,
+      country_id: group.country_id,
+      country_code: group.country_code,
+      country_name: group.country_name,
+      currency_id: rate?.currency_id,
+      currency_code: rate?.currency_code ?? "-",
+      sell_rate: rate?.sell_rate ?? "-",
+      buy_rate: rate?.buy_rate ?? "-",
+      rate_date: group.rate_date,
+      created_at: rate?.created_at ?? group.created_at,
+      updated_at: rate?.updated_at ?? group.updated_at,
+      created_by: rate?.created_by ?? group.created_by,
+      updated_by: rate?.updated_by ?? group.updated_by,
+      _parent: group,
+    }));
+  });
+}
 
 function getBranchCountryCode(
   branches: BranchWithCountry[] | undefined,
@@ -217,12 +286,12 @@ export default function ExchangeRateMasterList() {
         setShowFilters(false);
 
         const data = response as {
-          data?: ExchangeRateMasterRow[];
+          data?: ExchangeRateGroup[];
           total?: number;
         };
         if (data && Array.isArray(data.data)) {
           setTotalRecords(data.total || data.data.length);
-          return data.data;
+          return flattenExchangeRateRows(data.data, index);
         }
         setTotalRecords(0);
         return [];
@@ -248,8 +317,8 @@ export default function ExchangeRateMasterList() {
       {
         accessorKey: "sno",
         header: "S.No",
-        size: 60,
-        minSize: 50,
+        size: 70,
+        minSize: 60,
         enableColumnFilter: false,
         enableSorting: false,
       },
@@ -302,7 +371,7 @@ export default function ExchangeRateMasterList() {
                     setStoreSearch(LIST_KEY, search);
                     setShouldRestore(LIST_KEY, true);
                     navigate("/master/exchange-rate-master/edit", {
-                      state: row.original,
+                      state: row.original._parent,
                     });
                   }}
                 >
@@ -319,7 +388,14 @@ export default function ExchangeRateMasterList() {
         ),
       },
     ],
-    [navigate, appliedFilters, search, setStoreFilters, setStoreSearch, setShouldRestore],
+    [
+      navigate,
+      appliedFilters,
+      search,
+      setStoreFilters,
+      setStoreSearch,
+      setShouldRestore,
+    ],
   );
 
   const table = useMantineReactTable({
