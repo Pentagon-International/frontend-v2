@@ -16,6 +16,10 @@ export type ReverseInvoiceDetail = {
   shipment_no?: string;
   day_book_id?: number;
   day_book_name?: string;
+  day_book_code?: string;
+  day_book_type?: string;
+  daybook_id?: number;
+  daybook_name?: string;
   document_no?: string;
   reverse_document_no?: string;
   document_date?: string;

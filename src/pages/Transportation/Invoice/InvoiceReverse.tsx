@@ -967,6 +967,10 @@ type ReversableDataResponse = {
   shipment_no?: string;
   day_book_id?: number;
   day_book_name?: string;
+  day_book_code?: string;
+  day_book_type?: string;
+  daybook_id?: number;
+  daybook_name?: string;
   document_no?: string;
   reverse_document_no?: string;
   document_date?: string;
@@ -1063,7 +1067,9 @@ function applyReversableDataToReverseForm(
       ? ""
       : data.day_book_id != null
         ? String(data.day_book_id)
-        : "",
+        : data.daybook_id != null
+          ? String(data.daybook_id)
+          : "",
     document_date: normalizeDate(data.document_date ?? null),
     due_date: normalizeDate(data.due_date ?? null),
     currency: data.currency_code ?? "",
@@ -1717,9 +1723,16 @@ function InvoiceReverse() {
     queryFn: fetchStateMaster,
     staleTime: Infinity,
   });
-  const daybookDocumentType: "INV" | "CRN" = isCreditNoteReversal
-    ? "INV"
-    : "CRN";
+  const daybookDocumentType: "INV" | "CRN" = (() => {
+    const loadedType = String(
+      (reversalRecordData as { day_book_type?: string } | null)?.day_book_type ??
+        "",
+    )
+      .toUpperCase()
+      .trim();
+    if (loadedType === "INV" || loadedType === "CRN") return loadedType;
+    return isCreditNoteReversal ? "INV" : "CRN";
+  })();
   const { data: daybookData = [] } = useQuery({
     queryKey: ["daybook", daybookDocumentType],
     queryFn: () => fetchDaybookByDocumentType(daybookDocumentType),
@@ -1754,13 +1767,61 @@ function InvoiceReverse() {
   }, [stateData]);
 
   const daybookOptions = useMemo(() => {
-    const data = daybookData as { id?: number; name?: string }[];
-    if (!Array.isArray(data)) return [];
-    return data.map((item) => ({
-      value: String(item.id ?? ""),
-      label: item.name ?? "",
-    }));
-  }, [daybookData]);
+    const saved = reversalRecordData as ReversableDataResponse | null;
+    const savedDaybookId =
+      form.values.daybook_id?.trim() ||
+      (saved?.day_book_id != null
+        ? String(saved.day_book_id)
+        : saved?.daybook_id != null
+          ? String(saved.daybook_id)
+          : "");
+    const savedDaybookName =
+      saved?.day_book_name ||
+      saved?.daybook_name ||
+      (saved?.day_book_code ? String(saved.day_book_code) : "") ||
+      "";
+
+    const data = daybookData as Array<{
+      id?: number | string;
+      name?: string;
+      daybook_id?: number | string;
+      daybook_name?: string;
+      day_book_name?: string;
+      code?: string;
+    }>;
+    if (!Array.isArray(data)) {
+      if (savedDaybookId) {
+        return [
+          {
+            value: savedDaybookId,
+            label: savedDaybookName || savedDaybookId,
+          },
+        ];
+      }
+      return [];
+    }
+    const options = data
+      .map((item) => ({
+        value: String(item.id ?? item.daybook_id ?? ""),
+        label:
+          item.name ??
+          item.daybook_name ??
+          item.day_book_name ??
+          item.code ??
+          "",
+      }))
+      .filter((opt) => opt.value);
+    if (
+      savedDaybookId &&
+      !options.some((opt) => opt.value === savedDaybookId)
+    ) {
+      options.push({
+        value: savedDaybookId,
+        label: savedDaybookName || savedDaybookId,
+      });
+    }
+    return options;
+  }, [daybookData, form.values.daybook_id, reversalRecordData]);
 
   const unitOptions = useMemo(() => {
     const data = unitData as {
@@ -3519,7 +3580,7 @@ function InvoiceReverse() {
                 label="Daybook"
                 placeholder="Select daybook"
                 data={daybookOptions}
-                value={form.values.daybook_id || null}
+                value={form.values.daybook_id ? form.values.daybook_id : null}
                 onChange={(value) =>
                   form.setFieldValue("daybook_id", value ?? "")
                 }

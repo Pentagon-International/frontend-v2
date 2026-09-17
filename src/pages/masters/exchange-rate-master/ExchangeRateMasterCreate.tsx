@@ -11,24 +11,36 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconPaperclip, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
-import { postAPICall } from "../../../service/postApiCall";
-import { putAPICall } from "../../../service/putApiCall";
-import { API_HEADER } from "../../../store/storeKeys";
+import { apiCallProtected } from "../../../api/axios";
 import {
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
 } from "../../../components";
+import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import { URL } from "../../../api/serverUrls";
 import useAuthStore from "../../../store/authStore";
 import { getActiveBranch } from "../../../utils/branchOdexCredentials";
 import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
+import {
+  mapDocumentsListToSupportingDocuments,
+  type CustomerDocumentListItem,
+} from "../../../utils/customerDocuments";
+import {
+  appendExchangeRateUploadDocumentsToFormData,
+  EMPTY_SUPPORTING_DOCUMENT,
+  MULTIPART_FORM_HEADERS,
+  type SupportingDocument,
+  validateSupportingDocumentSizes,
+} from "../../../utils/customerVerificationFormData";
+import { postAPICall } from "../../../service/postApiCall";
+import { API_HEADER } from "../../../store/storeKeys";
 
 type ExchangeRateFormData = {
   country_id: string;
@@ -60,6 +72,8 @@ type EditState = {
   country_name?: string;
   rate_date?: string | null;
   rates?: EditRateItem[];
+  documents?: CustomerDocumentListItem[];
+  documents_list?: CustomerDocumentListItem[];
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -200,9 +214,15 @@ export default function ExchangeRateMasterCreate() {
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCopyingRates, setIsCopyingRates] = useState(false);
   const [rateRows, setRateRows] = useState<RateDetailRow[]>([
     createEmptyRateRow(),
   ]);
+  const [supportingDocuments, setSupportingDocuments] = useState<
+    SupportingDocument[]
+  >([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+  const [documentsModalOpened, setDocumentsModalOpened] = useState(false);
+  const [isDocumentUploading, setIsDocumentUploading] = useState(false);
 
   const editData = (location.state as EditState | null) || null;
   const isEditMode =
@@ -277,6 +297,18 @@ export default function ExchangeRateMasterCreate() {
       } else {
         setRateRows([createEmptyRateRow()]);
       }
+      const docsList =
+        (Array.isArray(editData.documents_list) && editData.documents_list) ||
+        (Array.isArray(editData.documents) && editData.documents) ||
+        [];
+      if (docsList.length > 0) {
+        setSupportingDocuments([
+          ...mapDocumentsListToSupportingDocuments(docsList),
+          { ...EMPTY_SUPPORTING_DOCUMENT },
+        ]);
+      } else {
+        setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+      }
       return;
     }
 
@@ -287,6 +319,7 @@ export default function ExchangeRateMasterCreate() {
       rate_date: new Date(),
     });
     setRateRows([createEmptyRateRow()]);
+    setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init once from edit/default country
   }, [isEditMode, editData?.id, defaultCountry.country_id]);
 
@@ -316,6 +349,233 @@ export default function ExchangeRateMasterCreate() {
     );
   };
 
+  const handleCopyPriorRates = async () => {
+    if (isEditMode) return;
+    const rateDate = form.values.rate_date;
+    const countryId = form.values.country_id?.trim();
+    if (!rateDate || !countryId) {
+      ToastNotification({
+        type: "error",
+        message: "Select Rate Date (and Country) before copying rates.",
+      });
+      return;
+    }
+
+    const beforeDate = formatDateToYYYYMMDD(rateDate);
+    if (!beforeDate) {
+      ToastNotification({
+        type: "error",
+        message: "Invalid rate date.",
+      });
+      return;
+    }
+
+    setIsCopyingRates(true);
+    try {
+      const params = new URLSearchParams({
+        country_id: countryId,
+        before_date: beforeDate,
+      });
+      const response = await apiCallProtected.get(
+        `${URL.exchangeRateMaster}prior-group/?${params.toString()}`,
+      );
+      const data =
+        response && typeof response === "object"
+          ? (response as {
+              rates?: EditRateItem[];
+              rate_date?: string | null;
+            })
+          : null;
+      const priorRates = Array.isArray(data?.rates) ? data.rates : [];
+      if (priorRates.length === 0) {
+        ToastNotification({
+          type: "error",
+          message:
+            "No prior exchange rate entries found before the selected rate date.",
+        });
+        return;
+      }
+
+      setRateRows(
+        mapRateRows(priorRates).map((row) => ({
+          ...row,
+          id: undefined,
+        })),
+      );
+
+      const priorDateLabel = data?.rate_date
+        ? (() => {
+            const part = String(data.rate_date).slice(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(part)) {
+              const [y, m, d] = part.split("-");
+              return `${d}-${m}-${y}`;
+            }
+            return String(data.rate_date);
+          })()
+        : "prior date";
+
+      ToastNotification({
+        type: "success",
+        message: `Copied ${priorRates.length} rate(s) from ${priorDateLabel}. You can edit before saving.`,
+      });
+    } catch (err) {
+      ToastNotification({
+        type: "error",
+        message: extractErrorMessage(err),
+      });
+    } finally {
+      setIsCopyingRates(false);
+    }
+  };
+
+  const handleUploadDocuments = async () => {
+    const countryId = form.values.country_id?.trim();
+    const rateDate = form.values.rate_date;
+    if (!countryId || !rateDate) {
+      ToastNotification({
+        type: "error",
+        message: "Select Country and Rate Date before uploading documents.",
+      });
+      return;
+    }
+
+    const sizeError = validateSupportingDocumentSizes(supportingDocuments);
+    if (sizeError) {
+      ToastNotification({ type: "error", message: sizeError });
+      return;
+    }
+
+    const rowsToUpload = supportingDocuments.filter((doc) => {
+      const hasName = String(doc.name || "").trim().length > 0;
+      const hasFile = doc.file instanceof File;
+      const hasExisting = doc.document_id != null;
+      return (hasFile && hasName) || (hasExisting && hasName);
+    });
+
+    if (rowsToUpload.length === 0) {
+      // Allow closing with no docs / empty rows (same as job empty close).
+      setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+      setDocumentsModalOpened(false);
+      return;
+    }
+
+    const incomplete = supportingDocuments.some((doc) => {
+      const hasName = String(doc.name || "").trim().length > 0;
+      const hasFile = doc.file instanceof File;
+      const hasExisting = doc.document_id != null;
+      if (!hasName && !hasFile && !hasExisting) return false;
+      if (hasFile && !hasName) return true;
+      if (hasName && !hasFile && !hasExisting) return true;
+      return false;
+    });
+    if (incomplete) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Each document row needs a name and either a new file or an existing file.",
+      });
+      return;
+    }
+
+    const hasNewFiles = rowsToUpload.some((doc) => doc.file instanceof File);
+    if (!hasNewFiles) {
+      // Keep/rename existing only — local state is enough until Create/Update.
+      setDocumentsModalOpened(false);
+      ToastNotification({
+        type: "success",
+        message: "Document(s) saved successfully",
+      });
+      return;
+    }
+
+    setIsDocumentUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("country", String(Number(countryId)));
+      formData.append("rate_date", formatDateToYYYYMMDD(rateDate) || "");
+      const count = appendExchangeRateUploadDocumentsToFormData(
+        formData,
+        supportingDocuments,
+      );
+      if (count === 0) {
+        ToastNotification({
+          type: "error",
+          message: "No documents to upload.",
+        });
+        return;
+      }
+
+      const rawResponse = await postAPICall(
+        URL.exchangeRateMasterUploadDocument,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            ...API_HEADER.headers,
+          },
+          timeout: 120000,
+        },
+      );
+
+      const body =
+        rawResponse && typeof rawResponse === "object"
+          ? (rawResponse as Record<string, unknown>)
+          : {};
+      const uploaded = Array.isArray(body.documents)
+        ? (body.documents as Array<Record<string, unknown>>)
+        : Array.isArray(body.data)
+          ? (body.data as Array<Record<string, unknown>>)
+          : body.data && typeof body.data === "object"
+            ? [body.data as Record<string, unknown>]
+            : [];
+
+      const ok =
+        body.status === true ||
+        body.success === true ||
+        uploaded.length > 0;
+
+      if (!ok) {
+        ToastNotification({
+          type: "error",
+          message:
+            String(body.message ?? "").trim() ||
+            "Upload failed for one or more documents",
+        });
+        return;
+      }
+
+      const mapped = uploaded
+        .filter((d) => d.id != null)
+        .map((d) => ({
+          name: String(d.document_name ?? "").trim(),
+          file: null as File | null,
+          document_id: Number(d.id),
+          document_url:
+            d.document_url != null ? String(d.document_url) : undefined,
+          original_document_name: String(d.document_name ?? "").trim(),
+        }));
+
+      setSupportingDocuments([
+        ...mapped,
+        { ...EMPTY_SUPPORTING_DOCUMENT },
+      ]);
+      ToastNotification({
+        type: "success",
+        message:
+          String(body.message ?? "").trim() ||
+          "Document(s) uploaded successfully",
+      });
+      setDocumentsModalOpened(false);
+    } catch (err) {
+      ToastNotification({
+        type: "error",
+        message: extractErrorMessage(err),
+      });
+    } finally {
+      setIsDocumentUploading(false);
+    }
+  };
+
   const handleSubmit = async (values: ExchangeRateFormData) => {
     setIsSubmitting(true);
 
@@ -330,7 +590,7 @@ export default function ExchangeRateMasterCreate() {
         ToastNotification({
           type: "error",
           message:
-            "Please fill Currency, Sell Rate and Buy Rate for all rate detail rows.",
+            "Please fill Currency, Buy Rate and Sell Rate for all rate detail rows.",
         });
         setIsSubmitting(false);
         return;
@@ -358,25 +618,52 @@ export default function ExchangeRateMasterCreate() {
         return;
       }
 
-      const payload = {
-        country: Number(values.country_id),
-        rate_date: formatDateToYYYYMMDD(values.rate_date),
-        rates: rateRows.map((row) => ({
-          ...(row.id != null ? { id: row.id } : {}),
-          currency: Number(row.currency_id),
-          sell_rate: formatRateForPayload(row.sell_rate),
-          buy_rate: formatRateForPayload(row.buy_rate),
-        })),
-      };
+      const pendingNewFiles = supportingDocuments.some(
+        (doc) => doc.file instanceof File,
+      );
+      if (pendingNewFiles) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Upload documents from Attach Documents before saving (same as job pages).",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const ratesPayload = rateRows.map((row) => ({
+        ...(row.id != null ? { id: row.id } : {}),
+        currency: Number(row.currency_id),
+        sell_rate: formatRateForPayload(row.sell_rate),
+        buy_rate: formatRateForPayload(row.buy_rate),
+      }));
+
+      const keepDocs = supportingDocuments.filter(
+        (doc) => doc.document_id != null && !(doc.file instanceof File),
+      );
+
+      const formData = new FormData();
+      formData.append("country", String(Number(values.country_id)));
+      formData.append(
+        "rate_date",
+        formatDateToYYYYMMDD(values.rate_date) || "",
+      );
+      formData.append("rates", JSON.stringify(ratesPayload));
+      formData.append(
+        "documents_list",
+        JSON.stringify(
+          keepDocs.map((doc) => ({
+            id: doc.document_id,
+            document_name: doc.name || doc.original_document_name || "",
+          })),
+        ),
+      );
 
       if (isEditMode && primaryEditId != null) {
-        const response = await putAPICall(
-          URL.exchangeRateMaster,
-          {
-            ...payload,
-            id: primaryEditId,
-          },
-          API_HEADER,
+        const response = await apiCallProtected.put(
+          `${URL.exchangeRateMaster}${primaryEditId}/`,
+          formData,
+          MULTIPART_FORM_HEADERS,
         );
         applyAuditFromResponse(response);
         await refreshAuditFromDetail(primaryEditId);
@@ -385,7 +672,11 @@ export default function ExchangeRateMasterCreate() {
           message: "Exchange Rate Master updated successfully",
         });
       } else {
-        await postAPICall(URL.exchangeRateMaster, payload, API_HEADER);
+        await apiCallProtected.post(
+          URL.exchangeRateMaster,
+          formData,
+          MULTIPART_FORM_HEADERS,
+        );
         ToastNotification({
           type: "success",
           message: "Exchange Rate Master created successfully",
@@ -548,15 +839,44 @@ export default function ExchangeRateMasterCreate() {
                 </Grid.Col>
 
                 <Grid.Col span={6}>
-                  <SingleDateInput
-                    label="Rate Date"
-                    placeholder="Select rate date"
-                    value={form.values.rate_date}
-                    onChange={(date) => form.setFieldValue("rate_date", date)}
-                    size="sm"
-                    withAsterisk
-                    error={form.errors.rate_date as string}
-                  />
+                  <Flex align="flex-end" gap="sm">
+                    <Box style={{ flex: 1 }}>
+                      <SingleDateInput
+                        label="Rate Date"
+                        placeholder="Select rate date"
+                        value={form.values.rate_date}
+                        onChange={(date) =>
+                          form.setFieldValue("rate_date", date)
+                        }
+                        size="sm"
+                        withAsterisk
+                        error={form.errors.rate_date as string}
+                      />
+                    </Box>
+                    {!isEditMode && form.values.rate_date != null ? (
+                      <Button
+                        variant="outline"
+                        color="#105476"
+                        size="sm"
+                        leftSection={<IconCopy size={16} />}
+                        loading={isCopyingRates}
+                        onClick={() => {
+                          void handleCopyPriorRates();
+                        }}
+                        styles={{
+                          root: {
+                            fontFamily: "Inter",
+                            fontSize: "13px",
+                            height: "36px",
+                            marginBottom:
+                              form.errors.rate_date != null ? "22px" : 0,
+                          },
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    ) : null}
+                  </Flex>
                 </Grid.Col>
 
                 <Grid.Col span={12}>
@@ -601,7 +921,7 @@ export default function ExchangeRateMasterCreate() {
                         c="#424242"
                         style={{ fontFamily: "Inter" }}
                       >
-                        Sell Rate
+                        Buy Rate
                       </Text>
                     </Grid.Col>
                     <Grid.Col span={3.4}>
@@ -611,7 +931,7 @@ export default function ExchangeRateMasterCreate() {
                         c="#424242"
                         style={{ fontFamily: "Inter" }}
                       >
-                        Buy Rate
+                        Sell Rate
                       </Text>
                     </Grid.Col>
                     <Grid.Col span={1} />
@@ -690,14 +1010,14 @@ export default function ExchangeRateMasterCreate() {
                       </Grid.Col>
                       <Grid.Col span={3.4}>
                         <NumberInput
-                          placeholder="Enter sell rate"
+                          placeholder="Enter buy rate"
                           value={
-                            row.sell_rate === "" ? "" : Number(row.sell_rate)
+                            row.buy_rate === "" ? "" : Number(row.buy_rate)
                           }
                           onChange={(value) =>
                             updateRateRow(
                               index,
-                              "sell_rate",
+                              "buy_rate",
                               value === "" || value == null
                                 ? ""
                                 : String(value),
@@ -712,14 +1032,14 @@ export default function ExchangeRateMasterCreate() {
                       </Grid.Col>
                       <Grid.Col span={3.4}>
                         <NumberInput
-                          placeholder="Enter buy rate"
+                          placeholder="Enter sell rate"
                           value={
-                            row.buy_rate === "" ? "" : Number(row.buy_rate)
+                            row.sell_rate === "" ? "" : Number(row.sell_rate)
                           }
                           onChange={(value) =>
                             updateRateRow(
                               index,
-                              "buy_rate",
+                              "sell_rate",
                               value === "" || value == null
                                 ? ""
                                 : String(value),
@@ -783,26 +1103,66 @@ export default function ExchangeRateMasterCreate() {
                   Cancel
                 </Button>
 
-                <Button
-                  type="submit"
-                  size="sm"
-                  loading={isSubmitting}
-                  disabled={isSubmitting}
-                  style={{
-                    backgroundColor: "#105476",
-                    fontSize: "13px",
-                    fontFamily: "Inter",
-                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                  }}
-                  rightSection={<IconCheck size={16} />}
-                >
-                  {isEditMode ? "Update" : "Create"}
-                </Button>
+                <Group gap="sm">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    leftSection={<IconPaperclip size={16} />}
+                    onClick={() => setDocumentsModalOpened(true)}
+                    styles={{
+                      root: {
+                        borderColor: "#105476",
+                        color: "#105476",
+                        fontSize: "13px",
+                        fontFamily: "Inter",
+                      },
+                    }}
+                  >
+                    Attach Documents
+                    {supportingDocuments.filter(
+                      (d) => d.file != null || d.document_id != null,
+                    ).length > 0
+                      ? ` (${
+                          supportingDocuments.filter(
+                            (d) => d.file != null || d.document_id != null,
+                          ).length
+                        })`
+                      : ""}
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    loading={isSubmitting}
+                    disabled={isSubmitting}
+                    style={{
+                      backgroundColor: "#105476",
+                      fontSize: "13px",
+                      fontFamily: "Inter",
+                      cursor: isSubmitting ? "not-allowed" : "pointer",
+                    }}
+                    rightSection={<IconCheck size={16} />}
+                  >
+                    {isEditMode ? "Update" : "Create"}
+                  </Button>
+                </Group>
               </Group>
             </Box>
           </Box>
         </Flex>
       </Box>
+
+      <SupportingDocumentsModal
+        opened={documentsModalOpened}
+        onClose={() => setDocumentsModalOpened(false)}
+        documents={supportingDocuments}
+        onChange={setSupportingDocuments}
+        title="Attach Supporting Documents"
+        onSubmit={() => {
+          void handleUploadDocuments();
+        }}
+        submitLabel="Upload"
+        submitLoading={isDocumentUploading}
+      />
     </Box>
   );
 }
