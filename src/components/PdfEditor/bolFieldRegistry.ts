@@ -1461,6 +1461,7 @@ function buildIndiaBolFieldRegistry(
       path: "housingData.summary.total_no_of_packages",
       editable: true,
       columnWidthRatio: INDIA_COL.description,
+      pdfLineHeightMm: 3.5,
       getDisplayValue: (data) => {
         // Original / issued BOL shows only commodity description in this column
         if (data.draft !== true) return "";
@@ -1484,6 +1485,8 @@ function buildIndiaBolFieldRegistry(
       multiline: true,
       type: "textarea",
       columnWidthRatio: INDIA_COL.description,
+      // Match cargo-table body line spacing in BillOfLadingPDFTemplate (3.5mm)
+      pdfLineHeightMm: 3.5,
       getDisplayValue: (data) =>
         String(getHousing(data).commodity_description || ""),
     }),

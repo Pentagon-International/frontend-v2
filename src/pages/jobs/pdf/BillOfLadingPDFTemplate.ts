@@ -552,12 +552,11 @@ export const generateBillOfLadingPDF = (
           : blTypeRaw;
     const isSeawayOrSurrendered =
       blType === "SEAWAY BILL" || blType === "SURRENDERED";
-    // Draft / SEAWAY BILL / SURRENDERED: single page. Empty or ORIGINAL: 6 copies.
-    const isSinglePageBol = isDraftBol || isSeawayOrSurrendered;
+    // Draft / SEAWAY / SURRENDERED / ORIGINAL all allow continuation pages when
+    // cargo/marks/description overflow (same multipage layout as Draft).
+    // ORIGINAL still generates 6 labeled copies; Draft / SEAWAY / SURRENDERED: one form.
     // Only DRAFT appears beside the document title (black). SEAWAY/SURRENDERED use red copy labels.
     const titleSuffix = isDraftBol ? "DRAFT" : "";
-    // Issued BOL (original / seaway / surrendered): NON-NEGOTIABLE COPY at top-right beside title
-    const showNonNegotiableTitle = !isDraftBol;
     const copyLabels = isDraftBol
       ? [""]
       : isSeawayOrSurrendered
@@ -816,8 +815,8 @@ export const generateBillOfLadingPDF = (
       const titleGap = 18;
       doc.text(titleSuffix, pageWidth / 2 + titleWidth / 2 + titleGap, yPos);
     }
-    // Original BOL: "NON-NEGOTIABLE COPY" at top-right beside the document title (above border)
-    if (showNonNegotiableTitle) {
+    // Non-negotiable copies only — not on 1st/2nd/3rd ORIGINAL (those use copy label in col 3 if needed)
+    if (copyLabel === "NON NEGOTIABLE COPY") {
       doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.text("NON-NEGOTIABLE COPY", pageWidth - innerMargin, yPos, {
@@ -1523,20 +1522,24 @@ export const generateBillOfLadingPDF = (
     // Prepare text lines for single value columns (2-5)
     const marksLines = marksNo ? doc.splitTextToSize(marksNo, containerCol2Width - 2 * boxPadding) : [];
     const commodityLines = commodityDesc ? doc.splitTextToSize(commodityDesc, containerCol3Width - 2 * boxPadding) : [];
-    
-    // Pre-calculate heights for Column 3 (Description) content
-    // Original / issued BOL: commodity description only. Draft: packages + types + commodity.
+    const col3TextWidth = containerCol3Width - 2 * boxPadding;
+
+    // Column 3 lines in draw order — Original: commodity only; Draft: packages + types + commodity.
     const containerTypes = summary?.container_type || [];
-    let col3ContentHeight = 0;
+    const col3ContentLines: string[] = [];
     if (isDraftBol) {
-      if (packagesText) col3ContentHeight += 3.5;
+      if (packagesText) {
+        col3ContentLines.push(...doc.splitTextToSize(packagesText, col3TextWidth));
+      }
       if (Array.isArray(containerTypes) && containerTypes.length > 0) {
-        col3ContentHeight += containerTypes.length * 3.5;
+        containerTypes.forEach((containerType: string) => {
+          if (containerType) {
+            col3ContentLines.push(...doc.splitTextToSize(containerType, col3TextWidth));
+          }
+        });
       }
     }
-    if (commodityLines.length > 0) {
-      col3ContentHeight += commodityLines.length * 3.5;
-    }
+    col3ContentLines.push(...commodityLines);
     
     // Pre-calculate heights for each container entry in Column 1
     interface ContainerEntry {
@@ -1565,55 +1568,19 @@ export const generateBillOfLadingPDF = (
       containerEntries.push({ cargo, lines, height });
     });
     
-    // Calculate total height needed for Column 1
-    const totalCol1Height = containerEntries.reduce((sum, entry) => sum + entry.height, 0);
+    // Line height used for cargo table body text
+    const lineStep = 3.5;
     
-    // Calculate available space on first page (before footer)
-    const availableHeightFirstPage = footerStartY - currentRowY - 5; // 5 units buffer
-    
-    // Determine how much content fits on first page
-    let firstPageCol1Height = 0;
-    let firstPageContainerCount = 0;
-    const firstPageCommodityLines: string[] = [];
-    
-    // Calculate how many containers fit on first page
-    for (let i = 0; i < containerEntries.length; i++) {
-      const entry = containerEntries[i];
-      if (firstPageCol1Height + entry.height <= availableHeightFirstPage) {
-        firstPageCol1Height += entry.height;
-        firstPageContainerCount++;
-      } else {
-        break;
-      }
-    }
-    
-    // Calculate how much of commodity_description fits on first page
-    // Draft also reserves space for packagesText + containerTypes
-    let col3Y = 0;
-    if (isDraftBol) {
-      if (packagesText) {
-        col3Y += 3.5;
-      }
-      if (Array.isArray(containerTypes) && containerTypes.length > 0) {
-        col3Y += containerTypes.length * 3.5;
-      }
-    }
-    // Calculate how many commodity lines fit
-    const maxCol3Height = Math.max(firstPageCol1Height, availableHeightFirstPage);
-    let commodityLinesUsed = 0;
-    for (let i = 0; i < commodityLines.length; i++) {
-      if (col3Y + 3.5 <= maxCol3Height) {
-        firstPageCommodityLines.push(commodityLines[i]);
-        col3Y += 3.5;
-        commodityLinesUsed++;
-      } else {
-        break;
-      }
-    }
-    
-    // Function to draw headers and borders for subsequent pages
+    // Function to draw headers and borders for subsequent pages (continuation layout)
     const drawSubsequentPageHeaders = (pageStartY: number) => {
-      const pageBoxStartY = pageStartY;
+      // Shared BL reference across continuation pages
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      const blRefText = `MTD BL NO : ${billOfLadingNo || ""}`;
+      doc.text(blRefText, pageWidth / 2, pageStartY + 3, { align: "center" });
+
+      const pageBoxStartY = pageStartY + 8;
       const pageBoxHeight = pageHeight - pageBoxStartY - innerMargin - 5;
       const pageBoxWidth = innerWidth;
       
@@ -1684,21 +1651,80 @@ export const generateBillOfLadingPDF = (
       doc.line(containerCol4X, pageBoxStartY, containerCol4X, pageHeaderBottomY);
       doc.line(containerCol5X, pageBoxStartY, containerCol5X, pageHeaderBottomY);
       
-      return pageHeaderBottomY + 3;
+      return {
+        contentStartY: pageHeaderBottomY + 3,
+        pageBoxStartY,
+        pageBoxBottomY: pageBoxStartY + pageBoxHeight,
+        pageBoxWidth,
+        headerBottomY: pageHeaderBottomY,
+      };
+    };
+
+    const drawContinuationColumnLines = (
+      fromY: number,
+      toY: number,
+    ) => {
+      doc.line(containerCol2X, fromY, containerCol2X, toY);
+      doc.line(containerCol3X, fromY, containerCol3X, toY);
+      doc.line(containerCol4X, fromY, containerCol4X, toY);
+      doc.line(containerCol5X, fromY, containerCol5X, toY);
+    };
+
+    const closeContinuationPageWithEndMarker = (
+      pageBoxStartY: number,
+      pageBoxBottomY: number,
+      pageBoxWidth: number,
+      headerBottomY: number,
+      contentEndY: number,
+    ) => {
+      const tableBottomY = Math.min(
+        Math.max(contentEndY + 2, headerBottomY + 8),
+        pageBoxBottomY,
+      );
+
+      // Clear unused lower portion of the full-height box so the table ends at content
+      doc.setFillColor(255, 255, 255);
+      doc.rect(
+        innerMargin - 0.4,
+        tableBottomY,
+        pageBoxWidth + 0.8,
+        pageBoxBottomY - tableBottomY + 0.8,
+        "F",
+      );
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+
+      // Close table bottom and restore side borders up to table bottom
+      doc.line(innerMargin, tableBottomY, innerMargin + pageBoxWidth, tableBottomY);
+      doc.line(innerMargin, pageBoxStartY, innerMargin, tableBottomY);
+      doc.line(innerMargin + pageBoxWidth, pageBoxStartY, innerMargin + pageBoxWidth, tableBottomY);
+      drawContinuationColumnLines(headerBottomY, tableBottomY);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(0, 0, 0);
+      const endText = `********** END OF BL NO : ${billOfLadingNo || ""} **********`;
+      doc.text(endText, pageWidth / 2, tableBottomY + 5, { align: "center" });
     };
     
     // Declare variables for tracking what was drawn on first page (accessible after if/else)
     let containersDrawnOnFirstPage = 0;
-    let commodityLinesDrawn = 0;
+    let col3LinesDrawn = 0;
+    let marksLinesDrawn = 0;
     
     // Draw first page content
     if (containerDetails && containerDetails.length > 0) {
       // Draw single values for columns 2, 4, 5 once (only on first page)
       const singleValueStartY = currentRowY;
       
-      // Column 2: Marks and Numbers (single value, drawn once on first page only)
-      if (marksLines.length > 0) {
-        doc.text(marksLines, containerCol2X + boxPadding, singleValueStartY);
+      // Column 2: Marks and Numbers (clip to first page; remainder continues)
+      marksLinesDrawn = 0;
+      let marksY = singleValueStartY;
+      for (let i = 0; i < marksLines.length; i++) {
+        if (marksY + lineStep > footerStartY - 5) break;
+        doc.text(marksLines[i], containerCol2X + boxPadding, marksY);
+        marksY += lineStep;
+        marksLinesDrawn++;
       }
       // Issued BOL: "Shipped On Board" + ETD centered in the marks column
       if (!isDraftBol) {
@@ -1721,34 +1747,13 @@ export const generateBillOfLadingPDF = (
       // Column 3: Description — original: commodity only; draft: packages + types + commodity
       let col3Y = singleValueStartY;
       let col3MaxY = col3Y;
-
-      if (isDraftBol && packagesText) {
-        if (col3Y + 3.5 <= footerStartY - 5) {
-          doc.text(packagesText, containerCol3X + boxPadding, col3Y);
-          col3Y += 3.5;
-          col3MaxY = col3Y;
-        }
-      }
-      if (isDraftBol && Array.isArray(containerTypes) && containerTypes.length > 0) {
-        containerTypes.forEach((containerType: string) => {
-          if (containerType && col3Y + 3.5 <= footerStartY - 5) {
-            doc.text(containerType, containerCol3X + boxPadding, col3Y);
-            col3Y += 3.5;
-            col3MaxY = col3Y;
-          }
-        });
-      }
-      // Display commodity_description (partial on first page)
-      commodityLinesDrawn = 0;
-      for (let i = 0; i < commodityLines.length; i++) {
-        if (col3Y + 3.5 <= footerStartY - 5) {
-          doc.text(commodityLines[i], containerCol3X + boxPadding, col3Y);
-          col3Y += 3.5;
-          col3MaxY = col3Y;
-          commodityLinesDrawn++;
-        } else {
-          break;
-        }
+      col3LinesDrawn = 0;
+      for (let i = 0; i < col3ContentLines.length; i++) {
+        if (col3Y + lineStep > footerStartY - 5) break;
+        doc.text(col3ContentLines[i], containerCol3X + boxPadding, col3Y);
+        col3Y += lineStep;
+        col3MaxY = col3Y;
+        col3LinesDrawn++;
       }
 
       // Copy label / SEAWAY·SURRENDERED stamp at end of Column 3
@@ -1801,7 +1806,7 @@ export const generateBillOfLadingPDF = (
         // Draw the entry
         entry.lines.forEach((line: string) => {
           doc.text(line, containerCol1X + boxPadding, col1Y);
-          col1Y += 3.5;
+          col1Y += lineStep;
         });
         col1Y += 2; // Spacing between entries
         containersDrawnOnFirstPage++;
@@ -1821,8 +1826,13 @@ export const generateBillOfLadingPDF = (
       const containerDetailsEndY = footerStartY;
       const singleValueStartY = currentRowY;
 
-      if (marksLines.length > 0) {
-        doc.text(marksLines, containerCol2X + boxPadding, singleValueStartY);
+      marksLinesDrawn = 0;
+      let marksY = singleValueStartY;
+      for (let i = 0; i < marksLines.length; i++) {
+        if (marksY + lineStep > footerStartY - 5) break;
+        doc.text(marksLines[i], containerCol2X + boxPadding, marksY);
+        marksY += lineStep;
+        marksLinesDrawn++;
       }
       if (!isDraftBol) {
         const marksCenterX = containerCol2X + containerCol2Width / 2;
@@ -1842,27 +1852,12 @@ export const generateBillOfLadingPDF = (
       }
 
       let col3Y = singleValueStartY;
-      if (isDraftBol && packagesText) {
-        doc.text(packagesText, containerCol3X + boxPadding, col3Y);
-        col3Y += 3.5;
-      }
-      if (isDraftBol && Array.isArray(containerTypes) && containerTypes.length > 0) {
-        containerTypes.forEach((containerType: string) => {
-          if (containerType) {
-            doc.text(containerType, containerCol3X + boxPadding, col3Y);
-            col3Y += 3.5;
-          }
-        });
-      }
-      commodityLinesDrawn = 0;
-      for (let i = 0; i < commodityLines.length; i++) {
-        if (col3Y + 3.5 <= footerStartY - 5) {
-          doc.text(commodityLines[i], containerCol3X + boxPadding, col3Y);
-          col3Y += 3.5;
-          commodityLinesDrawn++;
-        } else {
-          break;
-        }
+      col3LinesDrawn = 0;
+      for (let i = 0; i < col3ContentLines.length; i++) {
+        if (col3Y + lineStep > footerStartY - 5) break;
+        doc.text(col3ContentLines[i], containerCol3X + boxPadding, col3Y);
+        col3Y += lineStep;
+        col3LinesDrawn++;
       }
 
       if (grossWeightText) {
@@ -2028,91 +2023,169 @@ export const generateBillOfLadingPDF = (
     doc.line(innerMargin + mainBoxWidth, footerStartY, innerMargin + mainBoxWidth, footerBottomY);
     
     // ===== REMAINING CONTENT ON SUBSEQUENT PAGES (NO FOOTER) =====
-    // Single-page BOL variants (draft / SEAWAY BILL / SURRENDERED) stay on one page.
-    if (!isSinglePageBol && containerDetails && containerDetails.length > 0) {
-      const remainingContainers = containerEntries.slice(containersDrawnOnFirstPage);
-      const remainingCommodityLines = commodityLines.slice(commodityLinesDrawn);
-      
-      if (remainingContainers.length > 0 || remainingCommodityLines.length > 0) {
-        // Create new page for remaining content (footer is only on first page)
+    // Draft / SEAWAY / SURRENDERED / ORIGINAL: overflow cargo continues with MTD BL NO + END OF BL.
+    let nextContainerIdx = containersDrawnOnFirstPage;
+    let nextCol3Idx = col3LinesDrawn;
+    let nextMarksIdx = marksLinesDrawn;
+    const hasContinuationContent =
+      nextContainerIdx < containerEntries.length ||
+      nextCol3Idx < col3ContentLines.length ||
+      nextMarksIdx < marksLines.length;
+
+    if (hasContinuationContent) {
+      while (
+        nextContainerIdx < containerEntries.length ||
+        nextCol3Idx < col3ContentLines.length ||
+        nextMarksIdx < marksLines.length
+      ) {
         doc.addPage();
-        let pageStartY = innerMargin + 5;
-        let currentPageY = drawSubsequentPageHeaders(pageStartY);
-        const pageBottomY = pageHeight - innerMargin - 5;
-        
-      // Set font to normal (same as first page) before drawing container data
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6);
-      
-      // Track the box boundaries for each page to draw vertical lines correctly
-      let currentPageBoxStartY = pageStartY;
-      let currentPageBoxBottomY = pageHeight - innerMargin - 5;
-      
-      // Draw remaining containers
-      for (let i = containersDrawnOnFirstPage; i < containerEntries.length; i++) {
-        const entry = containerEntries[i];
-        
-        // Check if we need a new page
-        if (currentPageY + entry.height > pageBottomY) {
-          // Draw vertical lines to bottom of current page box before moving to next page
-          doc.line(containerCol2X, currentPageBoxStartY, containerCol2X, currentPageBoxBottomY);
-          doc.line(containerCol3X, currentPageBoxStartY, containerCol3X, currentPageBoxBottomY);
-          doc.line(containerCol4X, currentPageBoxStartY, containerCol4X, currentPageBoxBottomY);
-          doc.line(containerCol5X, currentPageBoxStartY, containerCol5X, currentPageBoxBottomY);
-          
-          doc.addPage();
-          pageStartY = innerMargin + 5;
-          currentPageY = drawSubsequentPageHeaders(pageStartY);
-          currentPageBoxStartY = pageStartY;
-          currentPageBoxBottomY = pageHeight - innerMargin - 5;
-          
-          // Reset font to normal after drawing headers
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(6);
+        const pageStartY = innerMargin + 5;
+        const pageLayout = drawSubsequentPageHeaders(pageStartY);
+        // Leave room at bottom for 1st/2nd/3rd ORIGINAL / SEAWAY / SURRENDERED stamp
+        const stampBottomReserve =
+          copyLabel && copyLabel !== "NON NEGOTIABLE COPY" ? 14 : 0;
+        const pageBottomLimit =
+          pageLayout.pageBoxBottomY - 2 - stampBottomReserve;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6);
+
+        // Columns are independent — each continues from the top of this page
+        let col1Y = pageLayout.contentStartY;
+        let marksY = pageLayout.contentStartY;
+        let col3Y = pageLayout.contentStartY;
+        const marksBefore = nextMarksIdx;
+        const containersBefore = nextContainerIdx;
+        const col3Before = nextCol3Idx;
+
+        while (
+          nextMarksIdx < marksLines.length &&
+          marksY + lineStep <= pageBottomLimit
+        ) {
+          doc.text(
+            marksLines[nextMarksIdx],
+            containerCol2X + boxPadding,
+            marksY,
+          );
+          marksY += lineStep;
+          nextMarksIdx++;
         }
-        
-        // Draw container entry
-        entry.lines.forEach((line: string) => {
-          doc.text(line, containerCol1X + boxPadding, currentPageY);
-          currentPageY += 3.5;
-        });
-        currentPageY += 2; // Spacing between entries
-      }
-      
-      // Draw remaining commodity description
-      if (remainingCommodityLines.length > 0) {
-        // Check if we need a new page for commodity description
-        const commodityHeight = remainingCommodityLines.length * 3.5;
-        if (currentPageY + commodityHeight > pageBottomY) {
-          // Draw vertical lines to bottom of current page box before moving to next page
-          doc.line(containerCol2X, currentPageBoxStartY, containerCol2X, currentPageBoxBottomY);
-          doc.line(containerCol3X, currentPageBoxStartY, containerCol3X, currentPageBoxBottomY);
-          doc.line(containerCol4X, currentPageBoxStartY, containerCol4X, currentPageBoxBottomY);
-          doc.line(containerCol5X, currentPageBoxStartY, containerCol5X, currentPageBoxBottomY);
-          
-          doc.addPage();
-          pageStartY = innerMargin + 5;
-          currentPageY = drawSubsequentPageHeaders(pageStartY);
-          currentPageBoxStartY = pageStartY;
-          currentPageBoxBottomY = pageHeight - innerMargin - 5;
-          
-          // Reset font to normal after drawing headers
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(6);
+
+        while (nextContainerIdx < containerEntries.length) {
+          const entry = containerEntries[nextContainerIdx];
+          if (col1Y + entry.height > pageBottomLimit) break;
+          entry.lines.forEach((line: string) => {
+            doc.text(line, containerCol1X + boxPadding, col1Y);
+            col1Y += lineStep;
+          });
+          col1Y += 2;
+          nextContainerIdx++;
         }
-        
-        // Draw remaining commodity lines in Column 3
-        remainingCommodityLines.forEach((line: string) => {
-          doc.text(line, containerCol3X + boxPadding, currentPageY);
-          currentPageY += 3.5;
-        });
-      }
-      
-      // Draw vertical lines to bottom of last page box (touching the box border)
-      doc.line(containerCol2X, currentPageBoxStartY, containerCol2X, currentPageBoxBottomY);
-      doc.line(containerCol3X, currentPageBoxStartY, containerCol3X, currentPageBoxBottomY);
-      doc.line(containerCol4X, currentPageBoxStartY, containerCol4X, currentPageBoxBottomY);
-      doc.line(containerCol5X, currentPageBoxStartY, containerCol5X, currentPageBoxBottomY);
+
+        while (
+          nextCol3Idx < col3ContentLines.length &&
+          col3Y + lineStep <= pageBottomLimit
+        ) {
+          doc.text(
+            col3ContentLines[nextCol3Idx],
+            containerCol3X + boxPadding,
+            col3Y,
+          );
+          col3Y += lineStep;
+          nextCol3Idx++;
+        }
+
+        // Avoid infinite loop if a single entry is taller than the page
+        if (
+          nextMarksIdx === marksBefore &&
+          nextContainerIdx === containersBefore &&
+          nextCol3Idx === col3Before
+        ) {
+          if (nextMarksIdx < marksLines.length) {
+            doc.text(
+              marksLines[nextMarksIdx],
+              containerCol2X + boxPadding,
+              marksY,
+            );
+            nextMarksIdx++;
+            marksY += lineStep;
+          } else if (nextCol3Idx < col3ContentLines.length) {
+            doc.text(
+              col3ContentLines[nextCol3Idx],
+              containerCol3X + boxPadding,
+              col3Y,
+            );
+            nextCol3Idx++;
+            col3Y += lineStep;
+          } else if (nextContainerIdx < containerEntries.length) {
+            const entry = containerEntries[nextContainerIdx];
+            entry.lines.forEach((line: string) => {
+              if (col1Y + lineStep <= pageBottomLimit) {
+                doc.text(line, containerCol1X + boxPadding, col1Y);
+                col1Y += lineStep;
+              }
+            });
+            nextContainerIdx++;
+          }
+        }
+
+        const contentEndY = Math.max(col1Y, marksY, col3Y);
+        const stillHasMore =
+          nextContainerIdx < containerEntries.length ||
+          nextCol3Idx < col3ContentLines.length ||
+          nextMarksIdx < marksLines.length;
+
+        const drawPageCopyLabel = (stampBottomY: number) => {
+          if (!copyLabel || copyLabel === "NON NEGOTIABLE COPY") return;
+          const stampCenterX = containerCol3X + containerCol3Width / 2;
+          const stampDrawn = drawBolTypeStamp(
+            doc,
+            copyLabel,
+            stampCenterX,
+            stampBottomY,
+            containerCol3Width - 4,
+          );
+          if (!stampDrawn) {
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(11);
+            doc.setTextColor(255, 0, 0);
+            doc.text(copyLabel, stampCenterX, stampBottomY - 3, {
+              align: "center",
+            });
+            doc.setTextColor(0, 0, 0);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(6);
+          }
+        };
+
+        if (stillHasMore) {
+          // Intermediate continuation page — stamp near box bottom (like page 1 near footer)
+          drawPageCopyLabel(pageLayout.pageBoxBottomY - 3);
+          drawContinuationColumnLines(
+            pageLayout.headerBottomY,
+            pageLayout.pageBoxBottomY,
+          );
+        } else {
+          // Reserve space for stamp so END OF BL sits below it
+          const hasCopyStamp =
+            Boolean(copyLabel) && copyLabel !== "NON NEGOTIABLE COPY";
+          const stampReserve = hasCopyStamp ? 12 : 0;
+          const tableContentEndY = contentEndY + stampReserve;
+          closeContinuationPageWithEndMarker(
+            pageLayout.pageBoxStartY,
+            pageLayout.pageBoxBottomY,
+            pageLayout.pageBoxWidth,
+            pageLayout.headerBottomY,
+            tableContentEndY,
+          );
+          if (hasCopyStamp) {
+            const tableBottomY = Math.min(
+              Math.max(tableContentEndY + 2, pageLayout.headerBottomY + 8),
+              pageLayout.pageBoxBottomY,
+            );
+            drawPageCopyLabel(tableBottomY - 2);
+          }
+        }
       }
     }
     } // end 6-copy loop

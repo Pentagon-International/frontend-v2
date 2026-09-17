@@ -586,8 +586,7 @@ export const generateUsBillOfLadingPDF = (
         : blTypeRaw;
   const isSeawayOrSurrendered =
     blType === "SEAWAY BILL" || blType === "SURRENDERED";
-  // Draft / SEAWAY BILL / SURRENDERED: single page. ORIGINAL: one copy (may continue if cargo overflows).
-  const isSinglePageBol = isDraftBol || isSeawayOrSurrendered;
+  // Draft / SEAWAY / SURRENDERED / ORIGINAL all allow cargo continuation pages.
   // DRAFT after FMC number. SEAWAY/SURRENDERED use red label in Description column.
   const titleSuffix = isDraftBol ? "DRAFT" : "";
   const cargoTypeLabel = isDraftBol
@@ -1486,8 +1485,8 @@ export const generateUsBillOfLadingPDF = (
       }
     });
 
-    // SEAWAY BILL / SURRENDERED — PNG stamp centered in Description of Goods column
-    if (isLastSegment && cargoTypeLabel) {
+    // SEAWAY BILL / SURRENDERED — PNG stamp on every page (same as page 1), centered in Description column
+    if (cargoTypeLabel) {
       const stampDrawn = drawUsBolTypeStamp(
         doc,
         cargoTypeLabel,
@@ -1541,15 +1540,12 @@ export const generateUsBillOfLadingPDF = (
 
   const cargoSegments =
     pageBreaks.length > 0 ? pageBreaks : [cargoColumns.map(() => 0)];
-  // Draft / SEAWAY / SURRENDER stay on one page (same as India BOL variants).
-  const segmentsToDraw = isSinglePageBol
-    ? [cargoSegments[0]]
-    : cargoSegments;
-  segmentsToDraw.forEach((startIndices, segmentIndex) => {
+  // Draft / SEAWAY / SURRENDERED / ORIGINAL: draw all cargo page segments when content overflows.
+  cargoSegments.forEach((startIndices, segmentIndex) => {
     drawCargoPageSegment(
       segmentIndex,
       startIndices,
-      segmentIndex === segmentsToDraw.length - 1,
+      segmentIndex === cargoSegments.length - 1,
     );
   });
 
