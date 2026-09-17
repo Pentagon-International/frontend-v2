@@ -207,6 +207,7 @@ type HAWBDetailsForm = {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
+  consignee_state_id: string;
   notify1_customer_name: string;
   notify1_customer_address: string;
   notify1_customer_email: string;
@@ -718,6 +719,14 @@ function HouseCreate() {
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
+      consignee_state_id:
+        (editData as { consignee_state_id?: number | string } | undefined)
+          ?.consignee_state_id != null
+          ? String(
+              (editData as { consignee_state_id?: number | string })
+                .consignee_state_id,
+            )
+          : "",
       notify1_customer_name:
         (editData as { notify1_customer_name?: string })
           ?.notify1_customer_name ??
@@ -1355,6 +1364,14 @@ function HouseCreate() {
         consignee_name: editData.consignee_name || "",
         consignee_address: editData.consignee_address || "",
         consignee_email: editData.consignee_email || "",
+        consignee_state_id:
+          (editData as { consignee_state_id?: number | string })
+            .consignee_state_id != null
+            ? String(
+                (editData as { consignee_state_id?: number | string })
+                  .consignee_state_id,
+              )
+            : "",
         notify1_customer_name:
           (editData as { notify1_customer_name?: string })
             .notify1_customer_name ??
@@ -2459,6 +2476,16 @@ function HouseCreate() {
           }
         )?.housing_details?.[editIndex ?? 0]?.consignee_gst_id ??
         null,
+      consignee_state_id: v.consignee_state_id
+        ? Number(v.consignee_state_id)
+        : ((editData as { consignee_state_id?: number } | undefined)
+            ?.consignee_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ consignee_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.consignee_state_id ??
+          null),
       notify1_customer_name: v.notify1_customer_name,
       notify1_customer_address: v.notify1_customer_address,
       notify1_customer_email: v.notify1_customer_email,
@@ -2550,6 +2577,16 @@ function HouseCreate() {
       consignee_name: currentFormValues.consignee_name,
       consignee_address: currentFormValues.consignee_address,
       consignee_email: currentFormValues.consignee_email,
+      consignee_state_id: currentFormValues.consignee_state_id
+        ? Number(currentFormValues.consignee_state_id)
+        : ((editData as { consignee_state_id?: number } | undefined)
+            ?.consignee_state_id ??
+          (
+            location.state?.job as {
+              housing_details?: Array<{ consignee_state_id?: number }>;
+            }
+          )?.housing_details?.[editIndex ?? 0]?.consignee_state_id ??
+          null),
       notify1_customer_name: currentFormValues.notify1_customer_name,
       notify1_customer_address: currentFormValues.notify1_customer_address,
       notify1_customer_email: currentFormValues.notify1_customer_email,
@@ -3975,6 +4012,7 @@ function HouseCreate() {
                       form.setFieldValue("consignee_name", "");
                       form.setFieldValue("consignee_email", "");
                       form.setFieldValue("consignee_address", "");
+                      form.setFieldValue("consignee_state_id", "");
                       setConsigneeAddressOptions([]);
                       return;
                     }
@@ -3997,6 +4035,7 @@ function HouseCreate() {
                       ? (original.addresses_data as Array<{
                           address?: string;
                           email?: string;
+                          state_id?: number | null;
                           address_type?: string | null;
                         }>)
                       : [];
@@ -4024,7 +4063,24 @@ function HouseCreate() {
                         toTitleCase(String(primaryAddr.address)),
                       );
                     }
-                    // If customer has no address list, keep any typed value
+
+                    // State id for Invoice Create (Bill To state) — same as Ocean Import
+                    const primaryAddress = addressesData.find(
+                      (a) =>
+                        String(a.address_type || "").toUpperCase() ===
+                        "PRIMARY",
+                    );
+                    const addrForState =
+                      primaryAddress ||
+                      addressesData.find((a) => a.state_id != null);
+                    if (addrForState?.state_id != null) {
+                      form.setFieldValue(
+                        "consignee_state_id",
+                        String(addrForState.state_id),
+                      );
+                    } else {
+                      form.setFieldValue("consignee_state_id", "");
+                    }
                   }}
                   returnOriginalData={true}
                   error={form.errors.consignee_name as string}

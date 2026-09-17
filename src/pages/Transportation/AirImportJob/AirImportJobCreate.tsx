@@ -269,6 +269,8 @@ type HAWBDetail = HouseDocumentFields & {
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
+  /** State id from consignee customer master — used for Invoice Create (Bill To state). */
+  consignee_state_id?: number | null;
   // Backward-compat fields used in submit payload mapping
   notify1_customer_name?: string;
   notify1_customer_address?: string;
@@ -1362,6 +1364,10 @@ function AirImportJobCreate() {
                 consignee_email: house.consignee_email
                   ? String(house.consignee_email)
                   : "",
+                consignee_state_id:
+                  house.consignee_state_id != null
+                    ? Number(house.consignee_state_id)
+                    : null,
                 notify_customer1_name:
                   (house.notify1_customer_name ?? house.notify_customer1_name)
                     ? String(
