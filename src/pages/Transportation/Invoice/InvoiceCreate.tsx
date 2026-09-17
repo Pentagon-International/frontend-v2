@@ -55,6 +55,10 @@ import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import {
+  isCustomerMasterCode,
+  pickCustomerMasterCodeFromRecords,
+} from "../../../utils/customerSelection";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import FormNumberInput from "../../../components/FormNumberInput";
@@ -1792,7 +1796,7 @@ function InvoiceCreate({
     );
   }, [isFromAirExportJob, isFromHouseLevel, isAgentInvoice, location.pathname]);
 
-  // Ocean Import customer invoice: Bill To/state from consignee when billToFrom is omitted (matches Air Import + House flow).
+  // Import customer invoice: Bill To/state from consignee when billToFrom is omitted.
   const invoiceUsesConsigneeParty = useMemo(() => {
     const isAgentFlow =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
@@ -1802,7 +1806,11 @@ function InvoiceCreate({
     )?.billToFrom;
     if (bt === "consignee") return true;
     if (bt === "shipper") return false;
-    return location.pathname.includes("/SeaExport/import-job/invoice");
+    return (
+      location.pathname.includes("/SeaExport/import-job/invoice") ||
+      location.pathname.includes("/air/import-job/invoice") ||
+      location.pathname.includes("/inland/import-job/invoice")
+    );
   }, [location.pathname, location.state?.is_agent, location.state?.billToFrom]);
 
   // Active branch local currency (ROE = 1 when billing/charge currency matches)
@@ -2657,35 +2665,47 @@ function InvoiceCreate({
   // When Bill To is set from job/house invoice navigation (no SearchableSelect
   // originalData), fetch agent/customer master and show all addresses for selection.
   // Covers every job module including CHA (same InvoiceCreate route).
+  // Always search by customer_code (never bare numeric PK / id).
   useEffect(() => {
     const billTo = String(form.values.bill_to ?? "").trim();
     if (!billTo) return;
+    if (!isCustomerMasterCode(billTo)) return;
     if (billToAddressesLoadedForRef.current === billTo) return;
-    if (addressOptions.length > 0) {
-      billToAddressesLoadedForRef.current = billTo;
-      return;
-    }
 
     const endpoint = isCreditNoteFlow
       ? URL.customer
       : isAgentInvoice
         ? URL.agent
-        : URL.allCustomers;
+        : invoiceUsesConsigneeParty
+          ? URL.consignee
+          : URL.shipper;
     let cancelled = false;
 
     void (async () => {
       try {
-        const results = await commonSearchAPI({
+        let results = await commonSearchAPI({
           endpoint,
           query: billTo,
         });
+        // Fallback: conditional-list when party-type endpoint returns nothing
+        if (
+          (!Array.isArray(results) || results.length === 0) &&
+          !isAgentInvoice &&
+          !isCreditNoteFlow
+        ) {
+          results = await commonSearchAPI({
+            endpoint: URL.allCustomers,
+            query: billTo,
+          });
+        }
         if (cancelled) return;
         if (!Array.isArray(results) || results.length === 0) return;
 
         const matched =
           (results as Record<string, unknown>[]).find(
             (row) => String(row.customer_code ?? "").trim() === billTo,
-          ) ?? (results[0] as Record<string, unknown>);
+          ) ?? null;
+        if (!matched) return;
 
         const addressesData = readAddressesDataFromParty(matched);
         if (addressesData.length === 0) return;
@@ -2710,9 +2730,9 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     form.values.bill_to,
-    addressOptions.length,
     isAgentInvoice,
     isCreditNoteFlow,
+    invoiceUsesConsigneeParty,
     location.key,
     applyBillToAddressesFromParty,
   ]);
@@ -2755,7 +2775,7 @@ function InvoiceCreate({
               form.setFieldValue("roe", roe);
             }
           });
-          const agentCode = pickFirstTrimmedCode(
+          const agentCode = pickCustomerMasterCodeFromRecords(
             [
               (job ?? null) as Record<string, unknown> | null,
               firstHawbRec,
@@ -2785,6 +2805,8 @@ function InvoiceCreate({
           // Set display name before code so ocean export job invoice (Bill To agent) avoids a transient code-only Bill To hint.
           if (agentNamePick) setBillToDisplayName(agentNamePick);
           if (agentCode) {
+            billToAddressesLoadedForRef.current = "";
+            setAddressOptions([]);
             form.setFieldValue("bill_to", agentCode);
           }
           const agentAddressRaw =
@@ -2821,19 +2843,21 @@ function InvoiceCreate({
             ) {
               form.setFieldValue("address", consigneeAddr);
             }
-            const consigneeCode = pickFirstTrimmedCode(
+            const consigneeCode = pickCustomerMasterCodeFromRecords(
               [
                 firstHawbRec,
                 jobHouse0,
                 (job ?? null) as Record<string, unknown> | null,
               ],
-              ["consignee_code", "consignee_id", "customer_code"],
+              ["consignee_code", "customer_code"],
             );
             console.log(
               "[InvoiceCreate] Consignee mapping - extracted consignee_code:",
               consigneeCode,
             );
             if (consigneeCode) {
+              billToAddressesLoadedForRef.current = "";
+              setAddressOptions([]);
               form.setFieldValue("bill_to", consigneeCode);
               console.log(
                 "[InvoiceCreate] Consignee mapping - set form.bill_to to consignee_code",
@@ -2894,15 +2918,17 @@ function InvoiceCreate({
             if (firstHawb.shipper_address) {
               form.setFieldValue("address", firstHawb.shipper_address);
             }
-            const shipperCode = pickFirstTrimmedCode(
+            const shipperCode = pickCustomerMasterCodeFromRecords(
               [
                 firstHawbRec,
                 jobHouse0,
                 (job ?? null) as Record<string, unknown> | null,
               ],
-              ["shipper_code", "shipper_id", "customer_code"],
+              ["shipper_code", "customer_code"],
             );
             if (shipperCode) {
+              billToAddressesLoadedForRef.current = "";
+              setAddressOptions([]);
               form.setFieldValue("bill_to", shipperCode);
             }
             if (firstHawb.shipper_name) {

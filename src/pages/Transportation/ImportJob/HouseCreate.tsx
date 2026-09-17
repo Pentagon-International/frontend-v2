@@ -60,6 +60,7 @@ import {
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { resolveCustomerMasterCode } from "../../../utils/customerSelection";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
@@ -1140,10 +1141,7 @@ function HouseCreate() {
       cha_code: (editData as { cha_code?: string })?.cha_code ?? "",
       cha_name: (editData as { cha_name?: string })?.cha_name ?? "",
       cha_address: (editData as { cha_address?: string })?.cha_address ?? "",
-      shipper_code:
-        editData?.shipper_id != null && String(editData.shipper_id) !== ""
-          ? String(editData.shipper_id)
-          : String(editData?.shipper_code || ""),
+      shipper_code: String(editData?.shipper_code || ""),
       shipper_name: editData?.shipper_name || "",
       shipper_address: editData?.shipper_address || "",
       shipper_email: editData?.shipper_email || "",
@@ -1151,7 +1149,7 @@ function HouseCreate() {
         editData?.shipper_state_id != null
           ? String(editData.shipper_state_id)
           : "",
-      consignee_code: editData?.consignee_code || "",
+      consignee_code: String(editData?.consignee_code || ""),
       consignee_name: editData?.consignee_name || "",
       consignee_address: editData?.consignee_address || "",
       consignee_email: editData?.consignee_email || "",
@@ -1210,10 +1208,7 @@ function HouseCreate() {
       setShipperSearch(shipperName);
     }
 
-    const shipperSelectValue =
-      editData.shipper_id != null && String(editData.shipper_id) !== ""
-        ? String(editData.shipper_id)
-        : String(editData.shipper_code || "");
+    const shipperSelectValue = String(editData.shipper_code || "");
     if (shipperSelectValue) {
       form.setFieldValue("shipper_code", shipperSelectValue);
     }
@@ -1228,10 +1223,7 @@ function HouseCreate() {
       setShipperManualMode(true);
     }
 
-    const consigneeSelectValue =
-      editData.consignee_id != null && String(editData.consignee_id) !== ""
-        ? String(editData.consignee_id)
-        : String(editData.consignee_code || "");
+    const consigneeSelectValue = String(editData.consignee_code || "");
     if (consigneeSelectValue) {
       form.setFieldValue("consignee_code", consigneeSelectValue);
     }
@@ -3001,7 +2993,11 @@ function HouseCreate() {
       forwarder_email: v.forwarder_email || "",
       cha_name: v.cha_name,
       cha_address: v.cha_address,
-      shipper_code: v.shipper_code,
+      shipper_code:
+        resolveCustomerMasterCode(
+          v.shipper_code,
+          (editData as { shipper_code?: string } | undefined)?.shipper_code,
+        ) || String(v.shipper_code || ""),
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -3025,7 +3021,11 @@ function HouseCreate() {
           null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
-      consignee_code: v.consignee_code,
+      consignee_code:
+        resolveCustomerMasterCode(
+          v.consignee_code,
+          (editData as { consignee_code?: string } | undefined)?.consignee_code,
+        ) || String(v.consignee_code || ""),
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
@@ -4971,6 +4971,154 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
 
+            {/* Consignee Section */}
+            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+              Consignee
+            </Text>
+            <Grid mb="xs">
+              <Grid.Col span={4}>
+                <SearchableSelect
+                  label="Consignee Name"
+                  required
+                  placeholder="Type consignee name"
+                  apiEndpoint={URL.consignee}
+                  dropdownZIndex={10}
+                  searchFields={["customer_name", "customer_code"]}
+                  displayFormat={customerCodeNameDisplayFormat}
+                  value={form.values.consignee_code}
+                  displayValue={form.values.consignee_name}
+                  onChange={(value, selectedData, originalData) => {
+                    if (!value) {
+                      form.setFieldValue("consignee_code", "");
+                      form.setFieldValue("consignee_name", "");
+                      form.setFieldValue("consignee_email", "");
+                      form.setFieldValue("consignee_address", "");
+                      form.setFieldValue("consignee_state_id", "");
+                      setConsigneeAddressOptions([]);
+                      return;
+                    }
+                    // Map email + addresses from customer-master response (addresses_data)
+                    const original = (originalData || {}) as Record<
+                      string,
+                      unknown
+                    >;
+                    const consigneeCode =
+                      resolveCustomerMasterCode(
+                        original.customer_code,
+                        value,
+                      ) || String(value || "");
+                    form.setFieldValue("consignee_code", consigneeCode);
+                    form.setFieldValue(
+                      "consignee_name",
+                      selectedData?.label || "",
+                    );
+
+                    const email = String(
+                      original.customer_email ?? original.email ?? "",
+                    );
+
+                    const addressesData = Array.isArray(original.addresses_data)
+                      ? (original.addresses_data as Array<{
+                          address?: string;
+                          email?: string;
+                          state_id?: number | null;
+                          address_type?: string | null;
+                        }>)
+                      : [];
+                    const addressOptions = addressesData
+                      .filter((a) => a.address)
+                      .map((a) => {
+                        const addr = toTitleCase(String(a.address || ""));
+                        return {
+                          value: addr,
+                          label: addr,
+                          email: String(a.email || ""),
+                        };
+                      });
+                    setConsigneeAddressOptions(addressOptions);
+
+                    const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                    form.setFieldValue(
+                      "consignee_email",
+                      String(primaryAddr?.email || email || ""),
+                    );
+
+                    if (primaryAddr?.address) {
+                      form.setFieldValue(
+                        "consignee_address",
+                        toTitleCase(String(primaryAddr.address)),
+                      );
+                    }
+
+                    const primaryAddress = addressesData.find(
+                      (a) =>
+                        String(a.address_type || "").toUpperCase() ===
+                        "PRIMARY",
+                    );
+                    const addrForState =
+                      primaryAddress ||
+                      addressesData.find((a) => a.state_id != null);
+                    if (addrForState?.state_id != null) {
+                      form.setFieldValue(
+                        "consignee_state_id",
+                        String(addrForState.state_id),
+                      );
+                    } else {
+                      form.setFieldValue("consignee_state_id", "");
+                    }
+                  }}
+                  returnOriginalData={true}
+                  error={form.errors.consignee_name as string}
+                  minSearchLength={3}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                <FormTextInput
+                  label="Consignee Email"
+                  type="email"
+                  format="normal"
+                  placeholder="Enter Consignee Email"
+                  {...form.getInputProps("consignee_email")}
+                  error={form.errors.consignee_email}
+                />
+              </Grid.Col>
+              <Grid.Col span={4}>
+                {consigneeAddressOptions.length > 0 ? (
+                  <Dropdown
+                    label="Consignee Address"
+                    placeholder="Select consignee address"
+                    searchable
+                    data={consigneeAddressOptions}
+                    value={form.values.consignee_address || ""}
+                    onChange={(value) => {
+                      form.setFieldValue("consignee_address", value || "");
+                      if (value) {
+                        const selected = consigneeAddressOptions.find(
+                          (item) => item.value === value,
+                        );
+                        form.setFieldValue(
+                          "consignee_email",
+                          selected?.email || "",
+                        );
+                      }
+                    }}
+                    error={form.errors.consignee_address}
+                  />
+                ) : (
+                  <FormTextInput
+                    label="Consignee Address"
+                    placeholder="Enter consignee address"
+                    value={form.values.consignee_address || ""}
+                    onChange={(e) => {
+                      const formattedValue = toTitleCase(e.target.value);
+                      form.setFieldValue("consignee_address", formattedValue);
+                    }}
+                    error={form.errors.consignee_address}
+                  />
+                )}
+              </Grid.Col>
+            </Grid>
+
             {/* Forwarder Section */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Forwarder
@@ -5122,149 +5270,6 @@ function HouseCreate() {
                       );
                     }}
                     error={form.errors.forwarder_address}
-                  />
-                )}
-              </Grid.Col>
-            </Grid>
-
-            {/* Consignee Section */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
-              Consignee
-            </Text>
-            <Grid mb="xs">
-              <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Consignee Name"
-                  required
-                  placeholder="Type consignee name"
-                  apiEndpoint={URL.consignee}
-                  dropdownZIndex={10}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={customerCodeNameDisplayFormat}
-                  value={form.values.consignee_code}
-                  displayValue={form.values.consignee_name}
-                  onChange={(value, selectedData, originalData) => {
-                    if (!value) {
-                      form.setFieldValue("consignee_code", "");
-                      form.setFieldValue("consignee_name", "");
-                      form.setFieldValue("consignee_email", "");
-                      form.setFieldValue("consignee_address", "");
-                      form.setFieldValue("consignee_state_id", "");
-                      setConsigneeAddressOptions([]);
-                      return;
-                    }
-                    form.setFieldValue("consignee_code", value || "");
-                    form.setFieldValue(
-                      "consignee_name",
-                      selectedData?.label || "",
-                    );
-
-                    // Map email + addresses from customer-master response (addresses_data)
-                    const original = (originalData || {}) as Record<
-                      string,
-                      unknown
-                    >;
-                    const email = String(
-                      original.customer_email ?? original.email ?? "",
-                    );
-
-                    const addressesData = Array.isArray(original.addresses_data)
-                      ? (original.addresses_data as Array<{
-                          address?: string;
-                          email?: string;
-                          state_id?: number | null;
-                          address_type?: string | null;
-                        }>)
-                      : [];
-                    const addressOptions = addressesData
-                      .filter((a) => a.address)
-                      .map((a) => {
-                        const addr = toTitleCase(String(a.address || ""));
-                        return {
-                          value: addr,
-                          label: addr,
-                          email: String(a.email || ""),
-                        };
-                      });
-                    setConsigneeAddressOptions(addressOptions);
-
-                    const primaryAddr = pickPrimaryPartyAddress(addressesData);
-                    form.setFieldValue(
-                      "consignee_email",
-                      String(primaryAddr?.email || email || ""),
-                    );
-
-                    if (primaryAddr?.address) {
-                      form.setFieldValue(
-                        "consignee_address",
-                        toTitleCase(String(primaryAddr.address)),
-                      );
-                    }
-
-                    const primaryAddress = addressesData.find(
-                      (a) =>
-                        String(a.address_type || "").toUpperCase() ===
-                        "PRIMARY",
-                    );
-                    const addrForState =
-                      primaryAddress ||
-                      addressesData.find((a) => a.state_id != null);
-                    if (addrForState?.state_id != null) {
-                      form.setFieldValue(
-                        "consignee_state_id",
-                        String(addrForState.state_id),
-                      );
-                    } else {
-                      form.setFieldValue("consignee_state_id", "");
-                    }
-                  }}
-                  returnOriginalData={true}
-                  error={form.errors.consignee_name as string}
-                  minSearchLength={3}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <FormTextInput
-                  label="Consignee Email"
-                  type="email"
-                  format="normal"
-                  placeholder="Enter Consignee Email"
-                  {...form.getInputProps("consignee_email")}
-                  error={form.errors.consignee_email}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                {consigneeAddressOptions.length > 0 ? (
-                  <Dropdown
-                    label="Consignee Address"
-                    placeholder="Select consignee address"
-                    searchable
-                    data={consigneeAddressOptions}
-                    value={form.values.consignee_address || ""}
-                    onChange={(value) => {
-                      form.setFieldValue("consignee_address", value || "");
-                      if (value) {
-                        const selected = consigneeAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "consignee_email",
-                          selected?.email || "",
-                        );
-                      }
-                    }}
-                    error={form.errors.consignee_address}
-                  />
-                ) : (
-                  <FormTextInput
-                    label="Consignee Address"
-                    placeholder="Enter consignee address"
-                    value={form.values.consignee_address || ""}
-                    onChange={(e) => {
-                      const formattedValue = toTitleCase(e.target.value);
-                      form.setFieldValue("consignee_address", formattedValue);
-                    }}
-                    error={form.errors.consignee_address}
                   />
                 )}
               </Grid.Col>

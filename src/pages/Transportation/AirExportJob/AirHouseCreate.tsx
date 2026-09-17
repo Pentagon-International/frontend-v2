@@ -58,6 +58,7 @@ import {
   SingleDateInput,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import { resolveCustomerMasterCode } from "../../../utils/customerSelection";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
@@ -2307,7 +2308,11 @@ function HouseCreate() {
       forwarder_email: v.forwarder_email || "",
       cha_name: v.cha_name,
       cha_address: v.cha_address,
-      shipper_code: v.shipper_code,
+      shipper_code:
+        resolveCustomerMasterCode(
+          v.shipper_code,
+          (editData as { shipper_code?: string } | undefined)?.shipper_code,
+        ) || String(v.shipper_code || ""),
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
@@ -2332,7 +2337,11 @@ function HouseCreate() {
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
       consignee_name: v.consignee_name,
-      consignee_code: v.consignee_code,
+      consignee_code:
+        resolveCustomerMasterCode(
+          v.consignee_code,
+          (editData as { consignee_code?: string } | undefined)?.consignee_code,
+        ) || String(v.consignee_code || ""),
       consignee_address: v.consignee_address,
       consignee_email: v.consignee_email,
       consignee_gst_id:
@@ -3584,7 +3593,16 @@ function HouseCreate() {
                     const hasForwarder =
                       form.values.forwarder_id != null ||
                       Boolean(form.values.forwarder_name?.trim());
-                    form.setFieldValue("shipper_code", value || "");
+                    const original = (originalData || {}) as Record<
+                      string,
+                      unknown
+                    >;
+                    const shipperCode =
+                      resolveCustomerMasterCode(
+                        original.customer_code,
+                        value,
+                      ) || String(value || "");
+                    form.setFieldValue("shipper_code", shipperCode);
                     if (value) {
                       setShipperFreeTextMode(false);
                     }
@@ -3600,7 +3618,7 @@ function HouseCreate() {
 
                     // Use originalData to populate address options and shipper_state_id
                     if (
-                      value &&
+                      shipperCode &&
                       originalData &&
                       (originalData as Record<string, unknown>).addresses_data
                     ) {
@@ -3845,7 +3863,12 @@ function HouseCreate() {
                         setConsigneeAddressSearch("");
                       }
 
-                      form.setFieldValue("consignee_code", value);
+                      const consigneeCode =
+                        resolveCustomerMasterCode(
+                          (original as Record<string, unknown>).customer_code,
+                          value,
+                        ) || String(value || "");
+                      form.setFieldValue("consignee_code", consigneeCode);
                       form.setFieldValue("consignee_name", toTitleCase(name));
                       form.setFieldValue(
                         "consignee_email",
@@ -5186,6 +5209,7 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
+                          billToFrom: "shipper",
                           ...(location.state?.job && {
                             job: location.state.job,
                           }),
