@@ -155,6 +155,7 @@ export const URL = {
   gstChargeMapping: "gst-charge-mapping/",
   gstChargeMappingFilter: "filter/gst-charge-mapping/",
   gstChargeMappingGetEffectiveSac: "gst-charge-mapping/get-effective-sac/",
+  gstRateMaster: "gst-rate-master/",
   gstRateMasterFilter: "filter/gst-rate-master/",
   gstSacMaster: "gst-sac-master/",
   gstSacMasterFilter: "filter/gst-sac-master/",
@@ -201,6 +202,7 @@ export const URL = {
   subledgerEnquiry: "filter/subledger_enquiry/",
   documentAllocation: "filter/document_allocation/",
   outstandingAllocations: "outstanding-details/allocations/",
+  allocationsByDocument: "outstanding-details/allocations-by-document/",
   outstandingAllocationDocuments: "outstanding-details/allocation-documents/",
   outstandingAllocationDocumentsFilter:
     "outstanding-details/filter/allocation-documents/",

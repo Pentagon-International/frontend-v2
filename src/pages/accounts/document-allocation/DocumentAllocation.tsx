@@ -18,6 +18,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
 import { URL } from "../../../api/serverUrls";
+import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
@@ -27,7 +28,10 @@ import {
   ToastNotification,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
-import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
+import {
+  getDefaultBranchCurrencyFromUser,
+  ROE_DECIMAL_PLACES,
+} from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmount,
@@ -38,8 +42,15 @@ import {
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
-import { useGlobalSearchDocumentNavigation } from "../../../hooks/useGlobalSearchDocumentNavigation";
+import {
+  clickableAdjustmentDocumentNoStyles,
+  useGlobalSearchDocumentNavigation,
+} from "../../../hooks/useGlobalSearchDocumentNavigation";
 import dayjs from "dayjs";
+import {
+  ALLOC_DOC_OPEN_QUERY,
+  stashOpenedDocumentState,
+} from "../../../utils/openAllocationDocumentTab";
 
 type CoaItem = {
   id?: number;
@@ -56,6 +67,9 @@ type DocumentAllocationRow = {
   day_book_name?: string | null; // fallback for older response
   document_type?: string | null;
   day_book_document_type?: string | null; // fallback for older response
+  day_book_type?: string | null;
+  /** Primary key of the source document (invoice / supplier invoice). */
+  doc_id?: number | string | null;
   document_no?: string | null;
   document_date?: string | null;
   currency_id?: number | null;
@@ -167,11 +181,48 @@ const getRowLocalAmount = (row: DocumentAllocationRow): number =>
     String(row.outstanding_local_amount ?? row.amount_in_local ?? ""),
   ) ?? 0;
 
-const computeAllocationTotals = (source: DocumentAllocationRow[]) => {
+const getRowOutstandingAmount = (row: DocumentAllocationRow): number =>
+  parseDecimal(String(row.outstanding_amount ?? row.amount ?? "")) ?? 0;
+
+/** Local-currency docs → outstanding local; foreign → outstanding amount. */
+const isRowBranchLocalCurrency = (
+  row: DocumentAllocationRow,
+  branchCurrencyCode: string,
+  branchCurrencyId: string,
+): boolean => {
+  const localCode = String(branchCurrencyCode ?? "")
+    .trim()
+    .toUpperCase();
+  const rowCode = String(row.currency_code ?? "")
+    .trim()
+    .toUpperCase();
+  if (localCode && rowCode) return rowCode === localCode;
+
+  const localId = String(branchCurrencyId ?? "").trim();
+  const rowId = row.currency_id != null ? String(row.currency_id) : "";
+  if (localId && rowId) return localId === rowId;
+
+  // Incomplete currency metadata: keep prior local-amount behaviour.
+  return true;
+};
+
+const getRowAmountForValidation = (
+  row: DocumentAllocationRow,
+  branchCurrencyCode: string,
+  branchCurrencyId: string,
+): number =>
+  isRowBranchLocalCurrency(row, branchCurrencyCode, branchCurrencyId)
+    ? getRowLocalAmount(row)
+    : getRowOutstandingAmount(row);
+
+const sumCreditDebitNet = (
+  source: DocumentAllocationRow[],
+  getAmount: (row: DocumentAllocationRow) => number,
+) => {
   let credit = 0;
   let debit = 0;
   for (const row of source) {
-    const amount = getRowLocalAmount(row);
+    const amount = getAmount(row);
     if (isCreditSide(row.Dr_Cr)) credit += amount;
     else if (isDebitSide(row.Dr_Cr)) debit += amount;
   }
@@ -182,31 +233,54 @@ const computeAllocationTotals = (source: DocumentAllocationRow[]) => {
   };
 };
 
+const computeAllocationTotals = (
+  source: DocumentAllocationRow[],
+  branchCurrencyCode: string,
+  branchCurrencyId: string,
+) => {
+  // UI totals always use outstanding local amount.
+  const display = sumCreditDebitNet(source, getRowLocalAmount);
+  // Post validation follows document vs branch currency.
+  const validation = sumCreditDebitNet(source, (row) =>
+    getRowAmountForValidation(row, branchCurrencyCode, branchCurrencyId),
+  );
+  return {
+    credit: display.credit,
+    debit: display.debit,
+    net: display.net,
+    validationNet: validation.net,
+  };
+};
+
 type AllocationTotals = ReturnType<typeof computeAllocationTotals>;
 
 /** Exact leading column spans (same as table rows) so gutters align. */
 const MODAL_TOTALS_LEADING_SPANS = [
-  0.4, 0.8, 1.2, 0.9, 1.8, 1.1, 0.8, 0.7, 1.1,
+  0.4, 0.8, 1.2, 0.9, 1.8, 1.1, 0.8, 0.7,
 ];
-const MODAL_TOTALS_LABEL_SPAN = 1.1; // Outstanding amount
-const MODAL_TOTALS_VALUE_SPAN = 1.5; // Outstanding local amount
+const MODAL_TOTALS_LABEL_SPAN = 1.1; // Document Amount (spacer)
+const MODAL_TOTALS_OUTSTANDING_SPAN = 1.1; // Label before local totals
+const MODAL_TOTALS_LOCAL_SPAN = 1.5; // Outstanding local amount
 
 const MAIN_TOTALS_LEADING_SPANS = [
-  0.9, 0.8, 0.7, 1.7, 1.2, 0.9, 0.7, 1.2,
+  0.9, 0.8, 0.7, 1.7, 1.2, 0.9, 0.7,
 ];
-const MAIN_TOTALS_LABEL_SPAN = 1.2; // Outstanding amount
-const MAIN_TOTALS_VALUE_SPAN = 1.3; // Outstanding local amount
+const MAIN_TOTALS_LABEL_SPAN = 1.2; // Document Amount (spacer)
+const MAIN_TOTALS_OUTSTANDING_SPAN = 1.2; // Label before local totals
+const MAIN_TOTALS_LOCAL_SPAN = 1.3; // Outstanding local amount
 
 const AllocationTotalsSummary = ({
   totals,
   leadingSpans,
   labelSpan,
-  valueSpan,
+  outstandingSpan,
+  localSpan,
 }: {
   totals: AllocationTotals;
   leadingSpans: number[];
   labelSpan: number;
-  valueSpan: number;
+  outstandingSpan: number;
+  localSpan: number;
 }) => {
   const items: {
     label: string;
@@ -217,6 +291,16 @@ const AllocationTotalsSummary = ({
     { label: "Debit Total:", value: totals.debit },
     { label: "Net Total:", value: totals.net, colorBySign: true },
   ];
+
+  const valueBoxStyle = {
+    height: "36px",
+    display: "flex",
+    alignItems: "center",
+    // Match FormTextInput size="sm": 1px border + input horizontal padding
+    paddingLeft: "calc(1px + 0.75rem * var(--mantine-scale, 1))",
+    fontSize: "13px",
+    fontFamily: "Inter",
+  } as const;
 
   return (
     <Box mt="md">
@@ -230,60 +314,44 @@ const AllocationTotalsSummary = ({
           : "#105476";
 
         return (
-        <Grid
-          key={item.label}
-          w="100%"
-          gutter="xs"
-          // mt={index !== 0 ? 2 : 0}
-          align="center"
-        >
-          {leadingSpans.map((span, leadIndex) => (
-            <Grid.Col key={`lead-${leadIndex}`} span={span} />
-          ))}
-          <Grid.Col span={labelSpan}>
-            <Box
-              style={{
-                height: "36px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "flex-end",
-              }}
-            >
-              <Text
-                size="xs"
-                fw={600}
-                c="dimmed"
-                ta="right"
-                style={{ fontFamily: "Inter" }}
+          <Grid key={item.label} w="100%" gutter="xs" align="center">
+            {leadingSpans.map((span, leadIndex) => (
+              <Grid.Col key={`lead-${leadIndex}`} span={span} />
+            ))}
+            <Grid.Col span={labelSpan} />
+            <Grid.Col span={outstandingSpan}>
+              <Box
+                style={{
+                  height: "36px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                }}
               >
-                {item.label}
-              </Text>
-            </Box>
-          </Grid.Col>
-          <Grid.Col span={valueSpan}>
-            <Box
-              style={{
-                height: "36px",
-                display: "flex",
-                alignItems: "center",
-                // Match FormTextInput size="sm": 1px border + input horizontal padding
-                paddingLeft:
-                  "calc(1px + 0.75rem * var(--mantine-scale, 1))",
-                fontSize: "13px",
-                fontFamily: "Inter",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={700}
-                c={valueColor}
-                style={{ fontFamily: "Inter" }}
-              >
-                {formatMoneyAmountForUi(item.value)}
-              </Text>
-            </Box>
-          </Grid.Col>
-        </Grid>
+                <Text
+                  size="xs"
+                  fw={600}
+                  c="dimmed"
+                  ta="right"
+                  style={{ fontFamily: "Inter" }}
+                >
+                  {item.label}
+                </Text>
+              </Box>
+            </Grid.Col>
+            <Grid.Col span={localSpan}>
+              <Box style={valueBoxStyle}>
+                <Text
+                  size="sm"
+                  fw={700}
+                  c={valueColor}
+                  style={{ fontFamily: "Inter" }}
+                >
+                  {formatMoneyAmountForUi(item.value)}
+                </Text>
+              </Box>
+            </Grid.Col>
+          </Grid>
         );
       })}
     </Box>
@@ -339,6 +407,153 @@ const formatDocumentDateDisplay = (
   const parsed = dayjs(trimmed);
   return parsed.isValid() ? parsed.format(dateFormat) : trimmed;
 };
+
+type FetchedDocumentOpenTarget = {
+  endpoint: string;
+  buildPath: (
+    mode: string,
+    docId: number,
+    record: Record<string, unknown> | null,
+  ) => string;
+  missingMessage: string;
+  errorMessage: string;
+  openingLabel: string;
+  /** Pages that load from location.state rather than a route id. */
+  needsState?: boolean;
+  stateFromRecord?: (record: Record<string, unknown>) => unknown;
+};
+
+const isAgentDocument = (record: Record<string, unknown> | null): boolean =>
+  record?.is_agent === true ||
+  String(record?.is_agent ?? "").trim().toLowerCase() === "true";
+
+const isTradeNote = (record: Record<string, unknown> | null): boolean => {
+  const type = String(record?.type ?? record?.note_type ?? "")
+    .trim()
+    .toLowerCase();
+  return type === "trade";
+};
+
+/** Same new-tab open as Receipt select-document: fetch by doc_id, then view or edit. */
+function resolveFetchedDocumentOpenTarget(
+  row: DocumentAllocationRow,
+): FetchedDocumentOpenTarget | null {
+  const docType = String(
+    row.day_book_document_type ?? row.document_type ?? row.day_book_type ?? "",
+  )
+    .trim()
+    .toUpperCase();
+
+  if (
+    docType === "INV" ||
+    docType === "INVOICE" ||
+    docType === "CRN" ||
+    docType === "CN" ||
+    docType === "CDN"
+  ) {
+    return {
+      endpoint: URL.invoice,
+      buildPath: (mode, docId) => `/invoice/${mode}/${docId}`,
+      missingMessage: "Invoice not found",
+      errorMessage: "Unable to open invoice details.",
+      openingLabel: docType === "INV" || docType === "INVOICE"
+        ? "Opening invoice…"
+        : "Opening credit note…",
+    };
+  }
+
+  if (docType === "CRJ" || docType === "SI") {
+    return {
+      endpoint: URL.supplierInvoice,
+      buildPath: (mode, docId) => `/supplier-invoice/${mode}/${docId}`,
+      missingMessage: "Supplier invoice not found",
+      errorMessage: "Unable to open supplier invoice details.",
+      openingLabel: "Opening supplier invoice…",
+    };
+  }
+
+  if (docType === "GLJ" || docType === "JV" || docType === "JOURNAL") {
+    return {
+      endpoint: URL.journalVoucher,
+      buildPath: (mode, docId) => `/journal-voucher/${mode}/${docId}`,
+      missingMessage: "Journal voucher not found",
+      errorMessage: "Unable to open journal voucher details.",
+      openingLabel: "Opening journal voucher…",
+    };
+  }
+
+  if (docType === "RPT" || docType === "RCT" || docType === "RECEIPT") {
+    return {
+      endpoint: URL.receipt,
+      buildPath: (mode, _docId, record) =>
+        isAgentDocument(record)
+          ? `/overseas-receipt/${mode}`
+          : `/receipt/${mode}`,
+      missingMessage: "Receipt not found",
+      errorMessage: "Unable to open receipt details.",
+      openingLabel: "Opening receipt…",
+      needsState: true,
+    };
+  }
+
+  if (docType === "RPTREV" || docType === "RCTREV") {
+    return {
+      endpoint: URL.reverseReceipt,
+      buildPath: (mode) => `/receipt/reversal/${mode}`,
+      missingMessage: "Receipt reversal not found",
+      errorMessage: "Unable to open receipt reversal details.",
+      openingLabel: "Opening receipt reversal…",
+      needsState: true,
+    };
+  }
+
+  if (docType === "PMT" || docType === "PAYMENT") {
+    return {
+      endpoint: URL.payment,
+      buildPath: (mode, _docId, record) =>
+        isAgentDocument(record)
+          ? `/overseas-payment/${mode}`
+          : `/payment/${mode}`,
+      missingMessage: "Payment not found",
+      errorMessage: "Unable to open payment details.",
+      openingLabel: "Opening payment…",
+      needsState: true,
+    };
+  }
+
+  if (docType === "PMTREV") {
+    return {
+      endpoint: URL.reversePayment,
+      buildPath: (mode) => `/payment/reversal/${mode}`,
+      missingMessage: "Payment reversal not found",
+      errorMessage: "Unable to open payment reversal details.",
+      openingLabel: "Opening payment reversal…",
+      needsState: true,
+    };
+  }
+
+  if (
+    docType === "DBN" ||
+    docType === "DN" ||
+    docType === "DEBIT" ||
+    docType === "DCN"
+  ) {
+    return {
+      endpoint: URL.debitCreditNote,
+      buildPath: (mode, docId, record) =>
+        isTradeNote(record)
+          ? `/debit-credit-note-trade/${mode}/${docId}`
+          : `/debit-credit-note-non-trade/${mode}/${docId}`,
+      missingMessage: "Debit / credit note not found",
+      errorMessage: "Unable to open debit / credit note details.",
+      openingLabel: "Opening debit / credit note…",
+      needsState: true,
+      stateFromRecord: (record) => ({ data: record }),
+    };
+  }
+
+  return null;
+}
 
 const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRow => {
   const outAmt = r.outstanding_amount ?? r.amount ?? "";
@@ -497,6 +712,10 @@ export default function DocumentAllocation() {
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
+  const { branchCurrencyCode, branchCurrencyId } = useMemo(
+    () => getDefaultBranchCurrencyFromUser(user?.branches),
+    [user?.branches],
+  );
   const hydratedDocumentIdRef = useRef<number | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
@@ -516,6 +735,11 @@ export default function DocumentAllocation() {
   const [isPosting, setIsPosting] = useState(false);
   const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
     null,
+  );
+  const [isOpeningDocumentFromModal, setIsOpeningDocumentFromModal] =
+    useState(false);
+  const [openingDocumentLabel, setOpeningDocumentLabel] = useState(
+    "Opening document…",
   );
 
   const getDocumentNavigationOptions = useCallback(
@@ -541,12 +765,17 @@ export default function DocumentAllocation() {
   const showForeignExchangeGainLossButton = Boolean(foreignExchangeJvNo);
 
   const allocationTotals = useMemo(
-    () => computeAllocationTotals(rows),
-    [rows],
+    () => computeAllocationTotals(rows, branchCurrencyCode, branchCurrencyId),
+    [rows, branchCurrencyCode, branchCurrencyId],
   );
   const fetchedAllocationTotals = useMemo(
-    () => computeAllocationTotals(fetchedRows),
-    [fetchedRows],
+    () =>
+      computeAllocationTotals(
+        fetchedRows,
+        branchCurrencyCode,
+        branchCurrencyId,
+      ),
+    [fetchedRows, branchCurrencyCode, branchCurrencyId],
   );
 
   const allocationAuditSource = useMemo(() => {
@@ -872,6 +1101,15 @@ export default function DocumentAllocation() {
       return;
     }
 
+    if (Math.abs(allocationTotals.validationNet) > 0.005) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Cannot post: the net total of allocated documents must be zero.",
+      });
+      return;
+    }
+
     setIsPosting(true);
     try {
       const allocationDate =
@@ -974,6 +1212,98 @@ export default function DocumentAllocation() {
     }
   };
 
+  const openFetchedDocumentInNewTab = async (row: DocumentAllocationRow) => {
+    const target = resolveFetchedDocumentOpenTarget(row);
+    if (!target) return;
+
+    const docIdRaw = row.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: target.missingMessage,
+      });
+      return;
+    }
+
+    // Open the tab immediately (popup blockers allow this on user gesture).
+    // Never navigate away from the Document Allocation page.
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the document in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setOpeningDocumentLabel(target.openingLabel);
+      setIsOpeningDocumentFromModal(true);
+      const res = await apiCallProtected.get(
+        `${target.endpoint}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? record.document_status ?? "")
+            .trim()
+            .toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+      const recordObject =
+        record && typeof record === "object"
+          ? (record as Record<string, unknown>)
+          : null;
+
+      setIsOpeningDocumentFromModal(false);
+      let path = target.buildPath(mode, docId, recordObject);
+      if (target.needsState && recordObject) {
+        const key = stashOpenedDocumentState(
+          target.stateFromRecord
+            ? target.stateFromRecord(recordObject)
+            : recordObject,
+        );
+        const joiner = path.includes("?") ? "&" : "?";
+        path = `${path}${joiner}${ALLOC_DOC_OPEN_QUERY}=${encodeURIComponent(key)}`;
+      }
+      const documentUrl = new window.URL(
+        path,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = documentUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open document", e);
+      ToastNotification({
+        type: "error",
+        message: target.errorMessage,
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningDocumentFromModal(false);
+    }
+  };
+
   return (
     <Box
       style={{
@@ -985,14 +1315,38 @@ export default function DocumentAllocation() {
     >
       <Modal
         opened={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setIsOpeningDocumentFromModal(false);
+        }}
         title="Select Allocations"
         size="100%"
         centered
         styles={{
           content: { maxWidth: "95vw" },
+          body: { position: "relative" },
         }}
       >
+        {isOpeningDocumentFromModal && (
+          <Box
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundColor: "rgba(255,255,255,0.75)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10,
+            }}
+          >
+            <Group gap="sm">
+              <Loader size="sm" color="#105476" />
+              <Text size="sm" c="#105476" fw={600}>
+                {openingDocumentLabel}
+              </Text>
+            </Group>
+          </Box>
+        )}
         <Box>
           {/* Modal header */}
           <Grid
@@ -1052,6 +1406,7 @@ export default function DocumentAllocation() {
             const outstandingAmt = row.outstanding_amount ?? row.amount ?? "";
             const outstandingLocal =
               row.outstanding_local_amount ?? row.amount_in_local ?? "";
+            const canOpenDocument = resolveFetchedDocumentOpenTarget(row) != null;
             return (
               <Grid
                 key={key || idx}
@@ -1095,7 +1450,17 @@ export default function DocumentAllocation() {
                   <FormTextInput
                     value={row.document_no ?? ""}
                     readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
+                    title={
+                      canOpenDocument ? "Open document in a new tab" : undefined
+                    }
+                    onClick={() => {
+                      if (canOpenDocument) void openFetchedDocumentInNewTab(row);
+                    }}
+                    styles={
+                      canOpenDocument
+                        ? clickableAdjustmentDocumentNoStyles
+                        : { input: readOnlyInputStyles.input }
+                    }
                     format="normal"
                   />
                 </Grid.Col>
@@ -1164,7 +1529,8 @@ export default function DocumentAllocation() {
               totals={fetchedAllocationTotals}
               leadingSpans={MODAL_TOTALS_LEADING_SPANS}
               labelSpan={MODAL_TOTALS_LABEL_SPAN}
-              valueSpan={MODAL_TOTALS_VALUE_SPAN}
+              outstandingSpan={MODAL_TOTALS_OUTSTANDING_SPAN}
+              localSpan={MODAL_TOTALS_LOCAL_SPAN}
             />
           ) : null}
 
@@ -1306,7 +1672,10 @@ export default function DocumentAllocation() {
                   <SearchableSelect
                     label="Account Name"
                     placeholder="Search by account name"
-                    apiEndpoint={URL.chartOfAccounts}
+                    apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
+                    postBody={(query) => ({
+                      filters: { account_name: query.trim() },
+                    })}
                     value={
                       selectedAccount?.id != null
                         ? String(selectedAccount.id)
@@ -1314,7 +1683,7 @@ export default function DocumentAllocation() {
                     }
                     dropdownZIndex={1100}
                     minSearchLength={1}
-                    searchFields={["gl_name", "gl_account_code", "account_name", "id"]}
+                    searchFields={["account_name"]}
                     disabled={isLocked}
                     readOnly={isLocked}
                     displayFormat={(item: Record<string, unknown>) => {
@@ -1560,9 +1929,26 @@ export default function DocumentAllocation() {
                                       placeholder="Document Number"
                                       value={row.document_no ?? ""}
                                       readOnly
-                                      styles={{
-                                        input: readOnlyInputStyles.input,
+                                      title={
+                                        String(row.document_no ?? "").trim()
+                                          ? "Open document"
+                                          : undefined
+                                      }
+                                      onClick={() => {
+                                        const documentNo = String(
+                                          row.document_no ?? "",
+                                        ).trim();
+                                        if (documentNo) {
+                                          void onDocumentNoClick(documentNo);
+                                        }
                                       }}
+                                      styles={
+                                        String(row.document_no ?? "").trim()
+                                          ? clickableAdjustmentDocumentNoStyles
+                                          : {
+                                              input: readOnlyInputStyles.input,
+                                            }
+                                      }
                                       format="normal"
                                     />
                                   </Grid.Col>
@@ -1690,7 +2076,8 @@ export default function DocumentAllocation() {
                         totals={allocationTotals}
                         leadingSpans={MAIN_TOTALS_LEADING_SPANS}
                         labelSpan={MAIN_TOTALS_LABEL_SPAN}
-                        valueSpan={MAIN_TOTALS_VALUE_SPAN}
+                        outstandingSpan={MAIN_TOTALS_OUTSTANDING_SPAN}
+                        localSpan={MAIN_TOTALS_LOCAL_SPAN}
                       />
                       </Box>
                     </Card>

@@ -19,6 +19,7 @@ import {
   buildJobCreatePayloadFromBooking,
   extractJobDetailsIdFromResponse,
   fetchJobRecordByDetailsId,
+  prepareHouseDocumentIdsFromBooking,
   resolveBookingRecordForJobCreate,
   type BookingCreateJobMode,
 } from "./bookingCreateJob";
@@ -82,8 +83,9 @@ export async function buildChaJobCreatePayloadFromBooking(
   mode: BookingCreateChaJobMode,
 ): Promise<Record<string, unknown> | null> {
   const chaConfig = CHA_CONFIG_BY_BOOKING_MODE[mode];
+  const houseDocumentIds = await prepareHouseDocumentIdsFromBooking(booking);
   const agentPayload = stripBookingLinksFromAgentPayload(
-    buildJobCreatePayloadFromBooking(booking, mode),
+    buildJobCreatePayloadFromBooking(booking, mode, { houseDocumentIds }),
   );
 
   const chaServices = await fetchChaServices(chaConfig.serviceCodes);

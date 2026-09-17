@@ -7,6 +7,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "./jobSaveResponse";
+import { collectLinkedBookingIds } from "./bookingCreateJob";
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 import {
   hasMeaningfulHouseChargeData,
@@ -236,25 +237,69 @@ function mapHouseChargeForPayload(
   };
 }
 
+type HouseChargePayloadKey = "mawb_charges" | "mbl_charges";
+
+function pickRawHouseCharges(
+  house: Record<string, unknown>,
+  chargeKey: HouseChargePayloadKey,
+): unknown[] | null {
+  const charges = house.charges;
+  const mawbCharges = house.mawb_charges;
+  const mblCharges = house.mbl_charges;
+  const modeAlias = chargeKey === "mawb_charges" ? mawbCharges : mblCharges;
+  const otherAlias = chargeKey === "mawb_charges" ? mblCharges : mawbCharges;
+
+  // Prefer any non-empty source. Empty `charges: []` must not hide API rows
+  // under mbl_charges/mawb_charges (that previously wiped charges on PUT).
+  if (Array.isArray(charges) && charges.length > 0) return charges;
+  if (Array.isArray(modeAlias) && modeAlias.length > 0) return modeAlias;
+  if (Array.isArray(otherAlias) && otherAlias.length > 0) return otherAlias;
+
+  // Explicit empty form `charges` = intentional clear for this house.
+  if (Array.isArray(charges)) return charges;
+  if (Array.isArray(modeAlias)) return modeAlias;
+  return null;
+}
+
+function omitHouseChargeAliases(
+  house: Record<string, unknown>,
+): Record<string, unknown> {
+  const {
+    charges: _charges,
+    mbl_charges: _mblCharges,
+    mawb_charges: _mawbCharges,
+    ...rest
+  } = house;
+  return rest;
+}
+
+function mapHouseChargeRows(rawCharges: unknown[]): Record<string, unknown>[] {
+  return (rawCharges as Record<string, unknown>[])
+    .map(mapHouseChargeForPayload)
+    .filter((row): row is Record<string, unknown> => row != null);
+}
+
 function sanitizeHousingDetailsForPayload(
   housingDetails: unknown[],
+  chargeKey: HouseChargePayloadKey = "mbl_charges",
 ): unknown[] {
   return housingDetails.map((house) => {
     if (!house || typeof house !== "object" || Array.isArray(house)) {
       return house;
     }
     const h = house as Record<string, unknown>;
-    const rawCharges = Array.isArray(h.mbl_charges)
-      ? h.mbl_charges
-      : Array.isArray(h.charges)
-        ? h.charges
-        : null;
+    const rawCharges = pickRawHouseCharges(h, chargeKey);
+
+    // Air jobs accept house charges only on `mawb_charges`.
+    if (chargeKey === "mawb_charges") {
+      const rest = omitHouseChargeAliases(h);
+      if (!rawCharges) return rest;
+      return { ...rest, mawb_charges: mapHouseChargeRows(rawCharges) };
+    }
+
     if (!rawCharges) return house;
 
-    const mapped = (rawCharges as Record<string, unknown>[])
-      .map(mapHouseChargeForPayload)
-      .filter((row): row is Record<string, unknown> => row != null);
-
+    const mapped = mapHouseChargeRows(rawCharges);
     return {
       ...h,
       mbl_charges: mapped,
@@ -294,15 +339,9 @@ export function buildFullJobUpdatePayloadFromHouseNav(
   const jobDateSrc =
     mbl.job_date ?? (isImport ? etaSrc : etdSrc) ?? job.job_date;
 
-  const bookingIds = Array.from(
-    new Set(
-      (updatedHousingDetails as Array<{ booking_id?: unknown }>)
-        .map((h) => h?.booking_id)
-        .map((v) => (v == null || v === "" ? null : Number(v)))
-        .filter(
-          (n): n is number => typeof n === "number" && !Number.isNaN(n),
-        ),
-    ),
+  const bookingIds = collectLinkedBookingIds(
+    updatedHousingDetails as Array<{ booking_id?: unknown }>,
+    job.booking_ids,
   );
 
   const payload: Record<string, unknown> = {
@@ -361,7 +400,10 @@ export function buildFullJobUpdatePayloadFromHouseNav(
         : (job.igm_no ?? null),
     igm_date: formatDateYmd(mbl.igm_date ?? job.igm_date),
     ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
-    housing_details: sanitizeHousingDetailsForPayload(updatedHousingDetails),
+    housing_details: sanitizeHousingDetailsForPayload(
+      updatedHousingDetails,
+      isAir ? "mawb_charges" : "mbl_charges",
+    ),
   };
 
   const routings = Array.isArray(state.routings)
@@ -391,6 +433,8 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     : Array.isArray(job.estimates)
       ? job.estimates
       : null;
+  // Only include estimates when present in nav/job state.
+  // Omitting the key preserves existing JobChargesDetails (backend key-presence sync).
   if (estimatesRaw) {
     payload.estimates = (estimatesRaw as Record<string, unknown>[])
       .map(mapEstimateForPayload)

@@ -92,7 +92,9 @@ function canEditPaymentRequest(status?: string | null): boolean {
   const s = String(status ?? "")
     .trim()
     .toLowerCase();
-  return s !== "approved" && s !== "rejected";
+  // Rejected stays locked. Approved remains editable so Actual Invoice No/Date
+  // can be set once from job Accounts (approve/reject stay approval-list only).
+  return s !== "rejected";
 }
 
 export type JobAccountsDocumentsTableProps = {
@@ -449,7 +451,7 @@ export function JobAccountsDocumentsTable({
             styles={menuItemStyles}
             onClick={() =>
               navigate(`/payment-request/view/${docId}`, {
-                state: withNavState({ ...row }),
+                state: withNavState({ ...row, fromJobAccounts: true }),
               })
             }
           >
@@ -465,7 +467,7 @@ export function JobAccountsDocumentsTable({
               styles={menuItemStyles}
               onClick={() =>
                 navigate(`/payment-request/edit/${docId}`, {
-                  state: withNavState({ ...row }),
+                  state: withNavState({ ...row, fromJobAccounts: true }),
                 })
               }
             >

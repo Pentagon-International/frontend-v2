@@ -28,6 +28,7 @@ import {
   IconFileInvoice,
   IconUpload,
   IconDownload,
+  IconListDetails,
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState, useEffect, useRef } from "react";
@@ -79,6 +80,7 @@ import {
   clickableAdjustmentDocumentNoStyles,
   useGlobalSearchDocumentNavigation,
 } from "../../../hooks/useGlobalSearchDocumentNavigation";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 
 const RECEIPT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -195,6 +197,8 @@ type DetailRow = {
   amount: number | null;
   local_amount: number | null;
   dr_cr: "Cr" | "Dr";
+  /** Backend-appended TDS line; must not be overwritten by allocation sync. */
+  is_tds_calculated_record?: boolean;
 };
 
 type AdjustmentRow = {
@@ -211,6 +215,10 @@ type AdjustmentRow = {
   roe: number | null; // invoice ROE for recalculating adj_local_amount when user edits adj_curr_amount
   adj_curr_amount: number | null;
   adj_local_amount: number | null;
+  /** Outstanding allocation serial; sent back on the receipt allocation payload. */
+  obj_sno?: string | null;
+  /** Outstanding allocation side; used for party/header net (Dr − Cr). */
+  Dr_Cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -232,8 +240,78 @@ type InvoiceCombinedItem = {
   roe?: number | string;
   amount?: number | string;
   amount_in_local?: number | string;
+  obj_sno?: string | number | null;
+  Dr_Cr?: string | null;
   [key: string]: unknown;
 };
+
+function normalizeAllocationDrCr(
+  value: unknown,
+): "Cr" | "Dr" | null {
+  const v = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (v === "CR" || v === "CREDIT" || v === "C") return "Cr";
+  if (v === "DR" || v === "DEBIT" || v === "D") return "Dr";
+  return null;
+}
+
+/** When API omits Dr_Cr (saved allocations), infer from document type. */
+function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
+  const t = String(type ?? "")
+    .trim()
+    .toUpperCase();
+  if (!t) return null;
+  if (
+    t === "INV" ||
+    t === "INVOICE" ||
+    t === "DBN" ||
+    t === "DN" ||
+    t === "DEBIT" ||
+    t.startsWith("DEBIT")
+  ) {
+    return "Dr";
+  }
+  if (
+    t === "CRN" ||
+    t === "CN" ||
+    t === "CDN" ||
+    t === "CREDIT" ||
+    t.startsWith("CREDIT")
+  ) {
+    return "Cr";
+  }
+  return null;
+}
+
+function resolveAllocationDrCr(a: {
+  Dr_Cr?: "Cr" | "Dr" | null;
+  type?: string;
+}): "Cr" | "Dr" | null {
+  return (
+    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
+  );
+}
+
+function normalizeObjSno(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function allocationDocumentKey(documentNo: unknown, objSno: unknown): string {
+  return `${String(documentNo ?? "").trim()}|${normalizeObjSno(objSno)}`;
+}
+
+/** Receipt allocation net = Dr − Cr. Missing Dr_Cr (and type) counts as Dr. */
+function receiptAllocationNetSign(
+  drCr: "Cr" | "Dr" | null | undefined,
+): 1 | -1 {
+  return drCr === "Cr" ? -1 : 1;
+}
+
+function isDetailTdsRow(row: DetailRow): boolean {
+  if (row.is_tds_calculated_record) return true;
+  return /^TDS\s*@/i.test(String(row.narration ?? "").trim());
+}
 
 const fetchOutstandingAllocations = async (payload: {
   account_code: string;
@@ -317,11 +395,14 @@ type ReceiptListItem = {
     day_book_code?: string;
     document_no?: string;
     document_date?: string;
+    obj_sno?: string | number | null;
     adj_curr_amount?: string | number;
     adj_local_amount?: string | number;
     currency_code?: string;
     currency_id?: number;
     roe?: string | number;
+    Dr_Cr?: string | null;
+    dr_cr?: string | null;
   }>;
   [key: string]: unknown;
 };
@@ -369,6 +450,7 @@ const getDefaultDetailRow = (
   amount: null,
   local_amount: null,
   dr_cr: forReversal ? "Dr" : "Cr",
+  is_tds_calculated_record: false,
 });
 
 const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
@@ -384,6 +466,8 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   adj_curr_amount: null,
   adj_local_amount: null,
   invoice_id: null,
+  obj_sno: null,
+  Dr_Cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -591,16 +675,12 @@ function computeSyncedDetailRow(
   row: DetailRow,
   adjustments: AdjustmentRow[],
 ): DetailRow {
+  // TDS / system party lines keep their saved amounts.
+  if (isDetailTdsRow(row)) return row;
   const matching = getMatchingAllocationsForParty(row, adjustments);
   if (matching.length === 0) return row;
-  const sum = matching.reduce(
-    (s, a) =>
-      s +
-      (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-        ? a.adj_local_amount
-        : 0),
-    0,
-  );
+  // Party local from allocations: Dr − Cr when Dr_Cr (or type) is present.
+  const sum = sumAdjustmentLocalAmounts(matching);
   const local = clampLocalAmount(sum);
   const roeVal =
     row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
@@ -635,14 +715,13 @@ function sumDetailLocalAmounts(details: DetailRow[]): number {
 }
 
 function sumAdjustmentLocalAmounts(adjustments: AdjustmentRow[]): number {
-  const sum = (adjustments ?? []).reduce(
-    (total, a) =>
-      total +
-      (a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+  const sum = (adjustments ?? []).reduce((total, a) => {
+    const amt =
+      a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
         ? a.adj_local_amount
-        : 0),
-    0,
-  );
+        : 0;
+    return total + receiptAllocationNetSign(resolveAllocationDrCr(a)) * amt;
+  }, 0);
   return clampLocalAmount(sum) ?? sum;
 }
 
@@ -721,6 +800,8 @@ export default function ReceiptCreate({
     useGlobalSearchDocumentNavigation({
       getOptions: getDocumentNavigationOptions,
     });
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
@@ -868,7 +949,8 @@ export default function ReceiptCreate({
       invoiceModalOpen &&
       !!invoiceModalAllocationFilter?.account_code &&
       !!invoiceModalAllocationFilter?.subledger_code,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const currencyOptions = useMemo(() => {
@@ -991,6 +1073,7 @@ export default function ReceiptCreate({
               _isReversal && !isReversalEditOrView
                 ? invertPartyDrCrForReversalCreate(p)
                 : receiptPartyDrCrToSide(p.dr_cr),
+            is_tds_calculated_record: isPartyTdsCalculatedRecord(p),
           }))
         : [getDefaultDetailRow(localCurrency, _isReversal)];
 
@@ -999,35 +1082,46 @@ export default function ReceiptCreate({
       Array.isArray(allocations) && allocations.length > 0
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
+            const typeVal = (a.type_name ?? a.type ?? "").toString();
+            const sourceDrCr =
+              normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
+              inferAllocationDrCrFromType(typeVal);
+            // Reversal create from receipt: swap allocation Dr/Cr like party rows.
+            const allocationDrCr =
+              isReversalCreate && sourceDrCr
+                ? flipDrCr(sourceDrCr)
+                : sourceDrCr;
             return {
               id: a.id ?? null,
               invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
               location: (a.location ?? "").toString(),
-              type: (a.type_name ?? a.type ?? "").toString(),
+              type: typeVal,
               subledger: (a.subledger_code ?? "").toString(),
               subledger_display: (a.subledger_name ?? "").toString(),
               daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
               document_no: (a.document_no ?? "").toString(),
+              obj_sno: normalizeObjSno(a.obj_sno) || null,
               doc_date: parseDocumentDate(a.document_date),
               currency: (a.currency_code ?? localCurrency).toString().trim(),
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
+              Dr_Cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
 
     const normalizedAdjustments = normalizeAdjustmentAmounts(adjustments);
-    const syncedDetailsFromAllocations = computeDetailsSyncedFromAllocations(
-      details,
-      normalizedAdjustments,
-    );
-    const loadedHeaderAmounts = computeHeaderAmountsFromDetails(
-      syncedDetailsFromAllocations,
-      _isReversal,
-    );
+    // Edit: allocation Dr/Cr from the list drives party and header amounts.
+    // TDS rows keep saved amounts. Reversal keeps the reversed receipt values.
+    const detailsForForm = _isReversal
+      ? details
+      : computeDetailsSyncedFromAllocations(details, normalizedAdjustments);
+    const headerAmounts = _isReversal
+      ? { amount: amountVal, local_amount: localAmountVal }
+      : computeHeaderAmountsFromDetails(detailsForForm, false);
 
-    setLoadedDetails(syncedDetailsFromAllocations);
+    setLoadedDetails(detailsForForm);
     form.setValues({
       daybook_id: isReversalCreate
         ? ""
@@ -1040,8 +1134,8 @@ export default function ReceiptCreate({
         .toString()
         .trim(),
       roe: roeVal ?? 1,
-      amount: loadedHeaderAmounts.amount ?? amountVal,
-      local_amount: loadedHeaderAmounts.local_amount ?? localAmountVal,
+      amount: headerAmounts.amount,
+      local_amount: headerAmounts.local_amount,
       narration: (receiptFromState.narration ?? "").toString(),
       note: (receiptFromState.note ?? "").toString(),
       account_code: "",
@@ -1050,12 +1144,12 @@ export default function ReceiptCreate({
       cheque_no: (receiptFromState.cheque_no ?? "").toString(),
       cheque_date: chequeDateVal,
       chq_clrd_date: chqClrdDateVal,
-      details: syncedDetailsFromAllocations,
+      details: detailsForForm,
       adjustments: normalizedAdjustments,
     });
     // Force details to apply (ensures all parties from list are shown, e.g. when navigating from Receipt Reversal)
-    if (syncedDetailsFromAllocations.length > 0) {
-      form.setFieldValue("details", syncedDetailsFromAllocations);
+    if (detailsForForm.length > 0) {
+      form.setFieldValue("details", detailsForForm);
     }
 
     if (_isReversal) {
@@ -1164,6 +1258,14 @@ export default function ReceiptCreate({
     const headerAmountRoeChanged =
       prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
 
+    // Reversal keeps the reversed receipt header; backend handles Dr/Cr.
+    if (_isReversal) {
+      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+      prevPartyAmountsRef.current = partyAmountsSnapshot;
+      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+      return;
+    }
+
     const details = form.values.details ?? [];
     let amountForLocal = form.values.amount;
 
@@ -1243,11 +1345,13 @@ export default function ReceiptCreate({
     }
   };
 
-  /** Sync party details from allocation totals: party local = Σ adj local; party amount = local / party ROE. */
+  /** Sync party details from allocation totals: party local = net adj local (Dr − Cr); party amount = local / party ROE. */
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
     options?: { detailIndex?: number; allocationsForDetail?: AdjustmentRow[] },
   ) => {
+    // Reversal keeps the reversed receipt amounts; do not recompute from allocations.
+    if (_isReversal) return;
     const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
     form.values.details.forEach((row, idx) => {
       const matchingAllocations = getMatchingAllocations(row, adjustments);
@@ -1277,6 +1381,8 @@ export default function ReceiptCreate({
       skipPartyLocalFromAmountRef.current = false;
       return;
     }
+    // Reversal keeps the reversed party amounts; do not derive them from allocations.
+    if (_isReversal) return;
     form.values.details.forEach((row, idx) => {
       const roeVal =
         row.roe != null && Number.isFinite(row.roe) && row.roe !== 0
@@ -1310,7 +1416,7 @@ export default function ReceiptCreate({
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
     });
-  }, [detailsSnapshotForLocal, localCurrency]);
+  }, [detailsSnapshotForLocal, localCurrency, _isReversal]);
 
   const showChequeSection = form.values.type !== "CASH";
 
@@ -1354,28 +1460,36 @@ export default function ReceiptCreate({
     const subledgerCode = (row?.customer_code ?? "").toString().trim();
     if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
+    setInvoiceList([]);
+    setSelectedInvoiceIndices(new Set());
+    // Drop any cached list so the modal never shows memoized documents
+    queryClient.removeQueries({
+      queryKey: [
+        "outstandingAllocationsForReceipt",
+        accountCode,
+        subledgerCode,
+      ],
+    });
     setInvoiceModalAllocationFilter({
       account_code: accountCode,
       subledger_code: subledgerCode,
     });
     setInvoiceModalOpen(true);
-    setInvoiceList([]);
-    setSelectedInvoiceIndices(new Set());
   };
 
   useEffect(() => {
     if (!invoiceModalOpen || !filterInvoiceData) return;
     const list = filterInvoiceData;
     setInvoiceList(list);
-    const existingDocNos = new Set(
+    const existingDocKeys = new Set(
       form.values.adjustments
-        .map((a) => (a.document_no ?? "").toString().trim())
-        .filter(Boolean),
+        .map((a) => allocationDocumentKey(a.document_no, a.obj_sno))
+        .filter((key) => !key.startsWith("|")),
     );
     const alreadySelected = new Set<number>();
-    existingDocNos.forEach((docNo) => {
+    existingDocKeys.forEach((key) => {
       const idx = list.findIndex(
-        (inv) => (inv.document_no ?? "").toString().trim() === docNo,
+        (inv) => allocationDocumentKey(inv.document_no, inv.obj_sno) === key,
       );
       if (idx >= 0) alreadySelected.add(idx);
     });
@@ -1501,13 +1615,13 @@ export default function ReceiptCreate({
       (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
       (partyDisplay &&
         (a.subledger_display ?? "").toString().trim() === partyDisplay);
-    const managedDocNos = new Set(
+    const managedDocKeys = new Set(
       invoiceList
-        .map((inv) => (inv.document_no ?? "").toString().trim())
-        .filter(Boolean),
+        .map((inv) => allocationDocumentKey(inv.document_no, inv.obj_sno))
+        .filter((key) => !key.startsWith("|")),
     );
     const isManagedRow = (a: AdjustmentRow) =>
-      managedDocNos.has((a.document_no ?? "").toString().trim());
+      managedDocKeys.has(allocationDocumentKey(a.document_no, a.obj_sno));
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
       const inv = invoiceList[listIdx];
       const docDate =
@@ -1559,6 +1673,7 @@ export default function ReceiptCreate({
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
         document_no: inv.document_no ?? "",
+        obj_sno: normalizeObjSno(inv.obj_sno) || null,
         doc_date: docDate,
         currency: inv.currency_code ?? localCurrency,
         roe: invRoe,
@@ -1575,6 +1690,11 @@ export default function ReceiptCreate({
             : inv.id != null
               ? Number(inv.id)
               : null,
+        Dr_Cr:
+          normalizeAllocationDrCr(inv.Dr_Cr) ??
+          inferAllocationDrCrFromType(
+            inv.day_book_document_type ?? inv.day_book_type,
+          ),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1675,10 +1795,12 @@ export default function ReceiptCreate({
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
         document_no: a.document_no ?? "",
+        obj_sno: a.obj_sno ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -1757,6 +1879,7 @@ export default function ReceiptCreate({
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
         document_no: a.document_no ?? "",
+        obj_sno: a.obj_sno ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         ...(a.invoice_id != null && a.invoice_id > 0
@@ -1764,6 +1887,7 @@ export default function ReceiptCreate({
           : {}),
         adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
+        Dr_Cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -1991,14 +2115,13 @@ export default function ReceiptCreate({
     });
 
     const adjustments = normalizeAdjustmentAmounts(values.adjustments ?? []);
-    const syncedDetails = computeDetailsSyncedFromAllocations(
-      values.details ?? [],
-      adjustments,
-    );
-    const headerAmounts = computeHeaderAmountsFromDetails(
-      syncedDetails,
-      _isReversal,
-    );
+    // Reversal keeps the reversed receipt values; backend handles Dr/Cr.
+    const syncedDetails = _isReversal
+      ? (values.details ?? [])
+      : computeDetailsSyncedFromAllocations(values.details ?? [], adjustments);
+    const headerAmounts = _isReversal
+      ? { amount: values.amount, local_amount: values.local_amount }
+      : computeHeaderAmountsFromDetails(syncedDetails, false);
     const valuesForSave: ReceiptFormValues = {
       ...values,
       adjustments,
@@ -2007,6 +2130,7 @@ export default function ReceiptCreate({
       local_amount: headerAmounts.local_amount,
     };
 
+    if (!_isReversal) {
     const detailsChanged = syncedDetails.some((d, i) => {
       const prev = values.details?.[i];
       return (
@@ -2035,8 +2159,9 @@ export default function ReceiptCreate({
         form.setFieldValue("local_amount", valuesForSave.local_amount);
       }
     }
+    }
 
-    if (hasAdjustments) {
+    if (!_isReversal && hasAdjustments) {
       const partyLocalTotal = sumDetailLocalAmounts(syncedDetails);
       const adjLocalTotal = sumAdjustmentLocalAmounts(adjustments);
       if (partyLocalTotal < adjLocalTotal) {
@@ -2205,17 +2330,6 @@ export default function ReceiptCreate({
           });
           // After create, reflect the exact API response (can include extra party rows like TDS)
           applyCreatedReceiptToUI(data);
-          if (
-            data.allocations &&
-            Array.isArray(data.allocations) &&
-            data.allocations.length === form.values.adjustments.length
-          ) {
-            const updatedAdjustments = form.values.adjustments.map((a, i) => ({
-              ...a,
-              id: data.allocations![i]?.id ?? a.id,
-            }));
-            form.setFieldValue("adjustments", updatedAdjustments);
-          }
           await queryClient.invalidateQueries({ queryKey: ["receipt"] });
           ToastNotification({
             type: "success",
@@ -2250,6 +2364,28 @@ export default function ReceiptCreate({
         amount?: number | string | null;
         local_amount?: number | string | null;
         dr_cr?: "Cr" | "Dr" | string;
+        is_tds_calcualted_record?: boolean;
+        is_tds_calculated_record?: boolean;
+      }>;
+      allocations?: Array<{
+        id?: number;
+        type?: string;
+        type_name?: string;
+        Dr_Cr?: string | null;
+        dr_cr?: string | null;
+        adj_curr_amount?: string | number;
+        adj_local_amount?: string | number;
+        invoice_roe?: string | number;
+        roe?: string | number;
+        location?: string;
+        subledger_code?: string;
+        subledger_name?: string;
+        day_book_id?: number;
+        document_no?: string;
+        document_date?: string;
+        obj_sno?: string | number | null;
+        currency_code?: string;
+        invoice_id?: number;
       }>;
     };
 
@@ -2282,23 +2418,62 @@ export default function ReceiptCreate({
       amount: parseNum(p.amount),
       local_amount: toLocalAmount(p.local_amount),
       dr_cr: p.dr_cr === "Dr" ? "Dr" : "Cr",
+      is_tds_calculated_record: isPartyTdsCalculatedRecord(p),
     }));
 
-    const normalizedAdjustments = normalizeAdjustmentAmounts(
-      form.values.adjustments ?? [],
-    );
-    const syncedDetails = computeDetailsSyncedFromAllocations(
-      details,
-      normalizedAdjustments,
-    );
-    setLoadedDetails(syncedDetails);
-    form.setFieldValue("adjustments", normalizedAdjustments);
-    form.setFieldValue("details", syncedDetails);
+    // Preserve API party amounts (incl. TDS). Recalculate header from party Dr/Cr.
+    setLoadedDetails(details);
+    form.setFieldValue("details", details);
 
-    const headerAmounts = computeHeaderAmountsFromDetails(
-      syncedDetails,
-      _isReversal,
-    );
+    if (Array.isArray(data.allocations) && data.allocations.length > 0) {
+      const nextAdjustments: AdjustmentRow[] = data.allocations.map((a, i) => {
+        const prev = form.values.adjustments[i];
+        const typeVal = (a.type_name ?? a.type ?? prev?.type ?? "").toString();
+        const roeFromApi = a.invoice_roe ?? a.roe ?? prev?.roe;
+        return {
+          id: a.id ?? prev?.id ?? null,
+          invoice_id:
+            a.invoice_id != null
+              ? Number(a.invoice_id)
+              : (prev?.invoice_id ?? null),
+          location: (a.location ?? prev?.location ?? "").toString(),
+          type: typeVal,
+          subledger: (a.subledger_code ?? prev?.subledger ?? "").toString(),
+          subledger_display: (
+            a.subledger_name ??
+            prev?.subledger_display ??
+            ""
+          ).toString(),
+          daybook_id:
+            a.day_book_id != null
+              ? String(a.day_book_id)
+              : (prev?.daybook_id ?? ""),
+          document_no: (a.document_no ?? prev?.document_no ?? "").toString(),
+          obj_sno: normalizeObjSno(a.obj_sno) || prev?.obj_sno || null,
+          doc_date:
+            parseDocumentDate(a.document_date) ?? prev?.doc_date ?? null,
+          currency: (a.currency_code ?? prev?.currency ?? localCurrency)
+            .toString()
+            .trim(),
+          roe: parseNum(roeFromApi),
+          adj_curr_amount:
+            parseNum(a.adj_curr_amount) ?? prev?.adj_curr_amount ?? null,
+          adj_local_amount:
+            toLocalAmount(a.adj_local_amount) ?? prev?.adj_local_amount ?? null,
+          Dr_Cr:
+            normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
+            inferAllocationDrCrFromType(typeVal) ??
+            prev?.Dr_Cr ??
+            null,
+        };
+      });
+      form.setFieldValue(
+        "adjustments",
+        normalizeAdjustmentAmounts(nextAdjustments),
+      );
+    }
+
+    const headerAmounts = computeHeaderAmountsFromDetails(details, _isReversal);
     if (headerAmounts.amount !== form.values.amount) {
       form.setFieldValue("amount", headerAmounts.amount);
     }
@@ -2463,6 +2638,14 @@ export default function ReceiptCreate({
     document.body.removeChild(link);
   };
 
+  const isOpenReceipt = useMemo(
+    () =>
+      !(form.values.adjustments ?? []).some(
+        (a) => String(a.document_no ?? "").trim() !== "",
+      ),
+    [form.values.adjustments],
+  );
+
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
   const reversalStatusUpper = String(
     reverseReceiptSaveResponse?.status ?? "",
@@ -2554,6 +2737,7 @@ export default function ReceiptCreate({
   return (
     <Box p="md" style={{ position: "relative" }}>
       {documentNavUi}
+      {viewAllocationDocsUi}
       {(isSubmitting || isPosting) && (
         <Box
           style={{
@@ -2701,6 +2885,29 @@ export default function ReceiptCreate({
                       onClick={openDocumentsModal}
                     >
                       Document
+                    </Menu.Item>
+                  )}
+                  {isOpenReceipt && (
+                    <Menu.Item
+                      leftSection={<IconListDetails size={16} />}
+                      disabled={
+                        !String(
+                          saveResponse.receipt_no ||
+                            saveResponse.document_no ||
+                            "",
+                        ).trim()
+                      }
+                      onClick={() =>
+                        void openViewAllocationDocs(
+                          String(
+                            saveResponse.receipt_no ||
+                              saveResponse.document_no ||
+                              "",
+                          ),
+                        )
+                      }
+                    >
+                      View Allocation Docs
                     </Menu.Item>
                   )}
                 </Menu.Dropdown>
@@ -3414,41 +3621,44 @@ export default function ReceiptCreate({
                       borderBottom: "1px solid #e9ecef",
                     }}
                   >
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                       Location
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Daybook
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Type
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Account Name
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Document no
                     </Grid.Col>
-                    <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1.3} style={{ fontSize: "13px" }}>
                       Document date
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
                       Adj Curr Amount
                     </Grid.Col>
                     <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       Adj local amount
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                      Dr/Cr
+                    </Grid.Col>
+                    <Grid.Col span={1.4} style={{ fontSize: "13px" }}>
                       Actions
                     </Grid.Col>
                   </Grid>
 
                   {form.values.adjustments.map((_, idx) => (
                     <Grid key={idx} w="100%" gutter="sm" mt="sm">
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <TextInput
                           placeholder="Location"
                           readOnly
@@ -3456,7 +3666,7 @@ export default function ReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <Dropdown
                           placeholder="Daybook"
                           data={daybookAdjustmentOptions}
@@ -3468,7 +3678,7 @@ export default function ReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <TextInput
                           placeholder="Type"
                           readOnly
@@ -3476,7 +3686,7 @@ export default function ReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <TextInput
                           placeholder="Account Name"
                           readOnly
@@ -3487,7 +3697,7 @@ export default function ReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.4}>
                         <TextInput
                           placeholder="Document no"
                           readOnly
@@ -3510,7 +3720,7 @@ export default function ReceiptCreate({
                           }
                         />
                       </Grid.Col>
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.3}>
                         {/* <Box style={reversalReadOnlyWrapperStyle}> */}
                         <SingleDateInput
                           placeholder="Document date"
@@ -3523,7 +3733,7 @@ export default function ReceiptCreate({
                         />
                         {/* </Box> */}
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <Dropdown
                           placeholder="Currency"
                           data={currencyOptions}
@@ -3533,7 +3743,7 @@ export default function ReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <NumberInput
                           placeholder="Adj Curr Amount"
                           min={0}
@@ -3591,7 +3801,19 @@ export default function ReceiptCreate({
                           styles={adjustmentFieldStyles}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.7}>
+                        <TextInput
+                          placeholder="Dr/Cr"
+                          readOnly
+                          value={
+                            resolveAllocationDrCr(
+                              form.values.adjustments[idx],
+                            ) ?? ""
+                          }
+                          styles={adjustmentFieldStyles}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1.4}>
                         <Group gap={4} wrap="nowrap">
                           {!_isReversal && (
                             <Button
@@ -3690,6 +3912,7 @@ export default function ReceiptCreate({
                       <Table.Th>Document Date</Table.Th>
                       <Table.Th>Document Amount</Table.Th>
                       <Table.Th>Outstanding Amount</Table.Th>
+                      <Table.Th>Dr/Cr</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -3749,6 +3972,13 @@ export default function ReceiptCreate({
                         </Table.Td>
                         <Table.Td>
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
+                        </Table.Td>
+                        <Table.Td>
+                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
+                            inferAllocationDrCrFromType(
+                              inv.day_book_document_type ?? inv.day_book_type,
+                            ) ??
+                            "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}

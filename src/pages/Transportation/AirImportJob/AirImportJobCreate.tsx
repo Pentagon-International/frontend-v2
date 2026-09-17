@@ -117,8 +117,11 @@ import {  } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -152,6 +155,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
+import { collectLinkedBookingIds } from "../../../utils/bookingCreateJob";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -452,8 +456,13 @@ function AirImportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 4,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
@@ -461,6 +470,24 @@ function AirImportJobCreate() {
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
+
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
+  }, []);
+
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -579,8 +606,8 @@ function AirImportJobCreate() {
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Confirm before leaving so unsaved edits are not discarded silently.
+    if (!isReadOnly) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -1991,7 +2018,7 @@ function AirImportJobCreate() {
         setActive(3);
       }
     } else if (active === 3) {
-      // Save ALL current form values before submitting
+      // Save ALL current form values before navigating
       navigate(location.pathname, {
         replace: true,
         state: {
@@ -2009,7 +2036,10 @@ function AirImportJobCreate() {
           ...(location.state?.job && { job: location.state.job }),
         },
       });
-      handleSubmit();
+      // Navigate to Accounts when available; save stays on top Create/Update
+      if (jobData?.id != null) {
+        setActive(4);
+      }
     }
   };
 
@@ -2965,15 +2995,9 @@ function AirImportJobCreate() {
       return;
     }
     try {
-      const bookingIds = Array.from(
-        new Set(
-          (hawbDetails ?? [])
-            .map((h) => (h as { booking_id?: unknown }).booking_id)
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        hawbDetails as Array<{ booking_id?: unknown }>,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3019,7 +3043,7 @@ function AirImportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         ocean_routings: routingsForm.values.routings.map((routing) => {
           const toIso = (d: Date | null) =>
             d && dayjs(d).isValid()
@@ -3160,8 +3184,9 @@ function AirImportJobCreate() {
           })),
           mawb_charges: (() => {
             const src =
-              (hawb as { mawb_charges?: unknown }).mawb_charges ??
               (hawb as { charges?: unknown }).charges ??
+              (hawb as { mawb_charges?: unknown }).mawb_charges ??
+              (hawb as { mbl_charges?: unknown }).mbl_charges ??
               [];
             const arr = Array.isArray(src) ? src : [];
             const meaningful = arr.filter((charge) =>
@@ -3340,7 +3365,7 @@ function AirImportJobCreate() {
         navigate(`${jobModuleBasePath}/edit`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -3528,11 +3553,18 @@ function AirImportJobCreate() {
                         Create Agent Invoice
                       </Menu.Item>
                       {jobData?.id != null && (
-                        <AutomateVendorInvoiceTrigger
-                          variant="menu"
-                          shipmentNo={getMasterShipmentNo(jobData)}
-                          onOpen={openVendorInvoiceAutomation}
-                        />
+                        <>
+                          <AutomateVendorInvoiceTrigger
+                            variant="menu"
+                            shipmentNo={getMasterShipmentNo(jobData)}
+                            onOpen={openVendorInvoiceAutomation}
+                          />
+                          <AutomatePaymentRequestTrigger
+                            variant="menu"
+                            shipmentNo={getMasterShipmentNo(jobData)}
+                            onOpen={openPaymentRequestAutomation}
+                          />
+                        </>
                       )}
                       <Menu.Item
                         leftSection={
@@ -5241,7 +5273,7 @@ function AirImportJobCreate() {
                         ToastNotification({
                           type: "error",
                           message:
-                            "No charges found in Estimates/House charges to prefill.",
+                            "Select a supplier/vendor to create supplier invoice",
                         });
                         return;
                       }
@@ -5263,6 +5295,11 @@ function AirImportJobCreate() {
                     variant="button"
                     shipmentNo={getMasterShipmentNo(jobData)}
                     onOpen={openVendorInvoiceAutomation}
+                  />
+                  <AutomatePaymentRequestTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openPaymentRequestAutomation}
                   />
                   <Button
                     variant="light"
@@ -5425,7 +5462,11 @@ function AirImportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2 || active === 3) && !isReadOnly && (
+          {(active === 1 ||
+            active === 2 ||
+            active === 3 ||
+            (active === 4 && jobData?.id != null)) &&
+            !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -5484,14 +5525,13 @@ function AirImportJobCreate() {
               Next
             </Button>
           )}
-          {active === 3 && !isReadOnly && (
+          {active === 3 && jobData?.id != null && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
-              loading={isSubmitting}
             >
-              Submit
+              Next
             </Button>
           )}
         </Group>
@@ -5500,11 +5540,12 @@ function AirImportJobCreate() {
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -5732,6 +5773,11 @@ function AirImportJobCreate() {
                             getCurrentHousingDetail={() => hawb}
                             jobId={jobData?.id}
                             onOpen={openVendorInvoiceAutomation}
+                          />
+                          <HouseAutomatePaymentRequestMenuItem
+                            getCurrentHousingDetail={() => hawb}
+                            jobId={jobData?.id}
+                            onOpen={openPaymentRequestAutomation}
                           />
                           <HouseJobLedgerMenuItem
                             serviceName="Air Import"
@@ -6290,6 +6336,12 @@ function AirImportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="AIR IMPORTS"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

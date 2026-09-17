@@ -114,8 +114,14 @@ async function fetchCurrencyMaster(): Promise<CurrencyMasterItem[]> {
   return Array.isArray(raw) ? (raw as CurrencyMasterItem[]) : [];
 }
 
-async function fetchUnitMaster(serviceType: string): Promise<UnitMasterItem[]> {
-  const payload = { filters: { service_type: serviceType } };
+async function fetchUnitMaster(
+  serviceType: string | string[],
+): Promise<UnitMasterItem[]> {
+  const payload = {
+    filters: {
+      service_type: serviceType,
+    },
+  };
   const response = (await postAPICall(
     URL.unitMasterFilter,
     payload,
@@ -244,11 +250,11 @@ export function EstimatesSection({
   const [estimateErrors, setEstimateErrors] = useState<
     Record<number, Record<string, string>>
   >({});
-  const serviceTypeValue = Array.isArray(serviceType)
-    ? (serviceType[0] ?? "")
-    : (serviceType ?? "");
   const serviceTypeKey = Array.isArray(serviceType)
     ? serviceType.join(",")
+    : (serviceType ?? "");
+  const serviceTypeValue = Array.isArray(serviceType)
+    ? (serviceType[0] ?? "")
     : (serviceType ?? "");
 
   const { data: currencyDataRaw = [] } = useQuery({
@@ -260,7 +266,10 @@ export function EstimatesSection({
 
   const { data: unitDataRaw = [] } = useQuery({
     queryKey: ["unitMaster", serviceTypeKey],
-    queryFn: () => fetchUnitMaster(serviceTypeValue),
+    queryFn: () =>
+      fetchUnitMaster(
+        Array.isArray(serviceType) ? serviceType : (serviceType ?? ""),
+      ),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
@@ -368,15 +377,6 @@ export function EstimatesSection({
     });
   };
 
-  const unitOptions = (unitDataRaw ?? [])
-    .map((u) => {
-      const id = u?.id != null ? String(u.id) : "";
-      const name = String(u?.unit_name ?? "").trim();
-      if (!id || !name) return null;
-      return { value: id, label: name };
-    })
-    .filter(Boolean) as Array<{ value: string; label: string }>;
-
   const jobUnitOptions = buildJobUnitOptions(unitDataRaw ?? []);
 
   const computedEstimatesTotal = useMemo(
@@ -433,13 +433,13 @@ export function EstimatesSection({
       estimatesCount: estimates.length,
       estimates,
       missingByRow,
-      unitOptionsCount: unitOptions.length,
+      unitOptionsCount: jobUnitOptions.length,
       currencyOptionsCount: currencyOptions.length,
     });
   }, [
     debugTag,
     form.values.estimates,
-    unitOptions.length,
+    jobUnitOptions.length,
     currencyOptions.length,
   ]);
 
@@ -607,7 +607,7 @@ export function EstimatesSection({
             <Dropdown
               placeholder="Unit"
               searchable
-              data={unitOptions}
+              data={jobUnitOptions}
               value={selectStringId(row.unit_id)}
               onChange={(value) => {
                 const unitId = value ?? "";
@@ -672,7 +672,7 @@ export function EstimatesSection({
               hideControls
               {...jobChargeNoOfUnitInputProps(
                 row.unit_code ?? "",
-                unitOptions.find(
+                jobUnitOptions.find(
                   (option) =>
                     option.value === (selectStringId(row.unit_id) ?? ""),
                 )?.label,

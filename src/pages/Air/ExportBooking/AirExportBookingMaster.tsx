@@ -1714,6 +1714,7 @@ function AirExportBookingMaster() {
     const isCancel = statusUpper.includes("CANCEL");
     const canCancel = statusUpper !== "GENERATED" && !isCancel;
     const isBooked = statusUpper === "BOOKED";
+    const isGenerated = statusUpper === "GENERATED";
     return (
       <Menu
         shadow="md"
@@ -1765,32 +1766,32 @@ function AirExportBookingMaster() {
             Generate AWB
           </Menu.Item> */}
           {isBooked && (
-            <>
-              <Menu.Item
-                leftSection={<IconBriefcase size={14} />}
-                disabled={
-                  createJobBookingId === row.id ||
-                  createChaJobBookingId === row.id
-                }
-                onClick={() => void handleCreateJob(row)}
-              >
-                {createJobBookingId === row.id
-                  ? "Creating job…"
-                  : "Create Job"}
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconBriefcase size={14} />}
-                disabled={
-                  createJobBookingId === row.id ||
-                  createChaJobBookingId === row.id
-                }
-                onClick={() => void handleCreateChaJob(row)}
-              >
-                {createChaJobBookingId === row.id
-                  ? "Creating CHA job…"
-                  : "Create CHA Job"}
-              </Menu.Item>
-            </>
+            <Menu.Item
+              leftSection={<IconBriefcase size={14} />}
+              disabled={
+                createJobBookingId === row.id ||
+                createChaJobBookingId === row.id
+              }
+              onClick={() => void handleCreateJob(row)}
+            >
+              {createJobBookingId === row.id
+                ? "Creating job…"
+                : "Create Job"}
+            </Menu.Item>
+          )}
+          {(isBooked || isGenerated) && (
+            <Menu.Item
+              leftSection={<IconBriefcase size={14} />}
+              disabled={
+                createJobBookingId === row.id ||
+                createChaJobBookingId === row.id
+              }
+              onClick={() => void handleCreateChaJob(row)}
+            >
+              {createChaJobBookingId === row.id
+                ? "Creating CHA job…"
+                : "Create CHA Job"}
+            </Menu.Item>
           )}
           <Menu.Divider />
           <Menu.Item

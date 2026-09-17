@@ -72,6 +72,11 @@ export default function ReportsPage() {
           path: "/reports/gst-report",
         },
         {
+          label: "IRN",
+          icon: <IconFileSpreadsheet size={28} color="#105476" />,
+          path: "/reports/irn-report",
+        },
+        {
           label: "OS Report- Document Wise",
           icon: <IconFileInvoice size={28} color="#105476" />,
           path: "/reports/document-wise-outstanding",

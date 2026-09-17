@@ -1303,8 +1303,13 @@ function ServiceJobAccountsSection({
   } = useJobAccountInvoices({
     activeTab,
     accountsTabIndex,
-    jobId: jobData?.job_id ? String(jobData.job_id) : null,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
 
   return (
@@ -1385,6 +1390,14 @@ export default function ServiceJobCreate() {
   const isReadOnly = isViewOnly || isClosedJob;
   const documentsReadOnly = isViewOnly;
   const jobDocuments = useJobDocuments();
+  const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const handleBackToListClick = () => {
+    if (!isReadOnly) {
+      setConfirmBackToListOpen(true);
+      return;
+    }
+    navigate("/service-job");
+  };
 
   const { getBranchCurrencyDefaults } = useExchangeRateRoe();
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
@@ -2296,7 +2309,7 @@ export default function ServiceJobCreate() {
         navigate(`/service-job/edit/${savedId}`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
           },
         });
       }
@@ -2936,7 +2949,7 @@ export default function ServiceJobCreate() {
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate("/service-job")}
+              onClick={handleBackToListClick}
             >
               Back to List
             </Button>
@@ -2984,6 +2997,35 @@ export default function ServiceJobCreate() {
         onRemoveRow={jobDocuments.removeDocumentRow}
         onSubmit={jobDocuments.handleSubmitDocumentsModal}
       />
+
+      <Modal
+        opened={confirmBackToListOpen}
+        onClose={() => setConfirmBackToListOpen(false)}
+        title="Unsaved Changes"
+        centered
+      >
+        <Text size="sm" mb="md">
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
+        </Text>
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setConfirmBackToListOpen(false);
+              navigate("/service-job");
+            }}
+          >
+            Yes, close
+          </Button>
+        </Group>
+      </Modal>
 
       <Modal
         opened={costSheetPreviewOpen}

@@ -19,13 +19,13 @@ import {
   Box,
   Menu,
   ActionIcon,
-  UnstyledButton,
   Badge,
   Grid,
   Loader,
   Select,
   Stack,
   TextInput,
+  Tooltip,
   MantineProvider,
 } from "@mantine/core";
 import {
@@ -37,6 +37,7 @@ import {
   IconEye,
   IconFileInvoice,
   IconFilter,
+  IconListDetails,
   IconSearch,
   IconX,
   IconBan,
@@ -48,6 +49,7 @@ import { apiCallProtected } from "../../../api/axios";
 import {
   Dropdown,
   ERPListColumnHeaderFilter,
+  ERPListHeaderFilterInput,
   ERPListColumnToggleMenu,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
@@ -71,6 +73,7 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -109,6 +112,10 @@ type PaymentRequestRecord = {
   vouchar_type?: string;
   paid_to_type?: string;
   paid_to?: string;
+  service?: string;
+  service_type?: string;
+  job_id?: string | number | null;
+  shipment_id?: string | null;
   not_over?: string;
   state_code?: string;
   state_id?: number;
@@ -157,17 +164,11 @@ type FilterState = {
   date_from: Date | null;
   date_to: Date | null;
   payment_type: string | null;
-  paid_to_type: string | null;
   request_no: string | null;
+  service: string | null;
+  service_type: string | null;
   job_reference: string | null;
-  /**
-   * Free-text filter on the `not_over` column (backend `not_over` icontains).
-   * Stored as a nullable string so the advanced filter section can render an
-   * empty FormTextInput while still distinguishing "filter cleared" (null)
-   * from "filter set to empty" — both are treated the same in the payload
-   * (only non-empty trimmed values are sent).
-   */
-  not_over: string | null;
+  shipment_id: string | null;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -180,19 +181,44 @@ function calcLocalAmount(charges?: PaymentRequestCharge[]): number {
   );
 }
 
-function getFirstJobNo(charges?: PaymentRequestCharge[]): string {
-  return charges?.find((c) => c.job_id)?.job_id ?? "-";
+function displayCellValue(value: unknown): string {
+  if (value == null || value === "") return "-";
+  return String(value);
+}
+
+function formatServiceColumnValue(
+  service?: string | null,
+  serviceType?: string | null,
+): string {
+  const svc = String(service ?? "").trim();
+  const type = String(serviceType ?? "").trim();
+  if (svc && type) return `${svc} / ${type}`;
+  return svc || type || "-";
+}
+
+function formatServiceFilterDisplay(
+  service?: string | null,
+  serviceType?: string | null,
+): string {
+  const svc = String(service ?? "").trim();
+  const type = String(serviceType ?? "").trim();
+  if (svc && type && svc.toUpperCase() !== type.toUpperCase()) {
+    return `${svc} / ${type}`;
+  }
+  return svc || type || "";
 }
 
 function statusColor(status?: string): string {
   if (!status) return "gray";
   switch (status.toLowerCase()) {
-    case "approved":
+    case "posted":
       return "green";
+    case "approved":
+      return "orange";
     case "rejected":
       return "red";
     case "unapproved":
-      return "orange";
+      return "yellow";
     case "unposted":
       return "blue";
     default:
@@ -205,10 +231,11 @@ const emptyFilters = (): FilterState => ({
   date_from: dayjs().startOf("month").toDate(),
   date_to: dayjs().toDate(),
   payment_type: null,
-  paid_to_type: null,
   request_no: null,
+  service: null,
+  service_type: null,
   job_reference: null,
-  not_over: null,
+  shipment_id: null,
 });
 
 const LIST_KEY = "PAYMENT_REQUEST_APPROVAL";
@@ -219,13 +246,11 @@ type PaymentRequestColumnVisibility = {
   request_no: boolean;
   local_amount: boolean;
   payment_type: boolean;
-  not_over: boolean;
+  service: boolean;
   date: boolean;
-  paid_to_type: boolean;
   paid_to: boolean;
-  job_no: boolean;
-  note: boolean;
-  account_note: boolean;
+  job_id: boolean;
+  shipment_id: boolean;
   status: boolean;
 };
 
@@ -235,13 +260,11 @@ const paymentRequestColumnDefault: PaymentRequestColumnVisibility = {
   request_no: true,
   local_amount: true,
   payment_type: true,
-  not_over: true,
+  service: true,
   date: true,
-  paid_to_type: true,
   paid_to: true,
-  job_no: true,
-  note: true,
-  account_note: true,
+  job_id: true,
+  shipment_id: true,
   status: true,
 };
 
@@ -253,14 +276,12 @@ const paymentRequestColumnLabels: Record<
   created_by: "User",
   request_no: "Request No",
   local_amount: "Local Amount",
-  payment_type: "Type",
-  not_over: "Over",
+  payment_type: "Paid Type",
+  service: "Service",
   date: "Date",
-  paid_to_type: "Paid To Type",
   paid_to: "Paid To",
-  job_no: "Job Id",
-  note: "Note",
-  account_note: "Accountant Note",
+  job_id: "Job Id",
+  shipment_id: "Shipment Id",
   status: "Status",
 };
 
@@ -280,6 +301,8 @@ function PaymentRequestApproval() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -352,10 +375,11 @@ function PaymentRequestApproval() {
         date_from: f.date_from ? new Date(f.date_from as string) : null,
         date_to: f.date_to ? new Date(f.date_to as string) : null,
         payment_type: (f.payment_type as string) ?? null,
-        paid_to_type: (f.paid_to_type as string) ?? null,
         request_no: (f.request_no as string) ?? null,
+        service: (f.service as string) ?? null,
+        service_type: (f.service_type as string) ?? null,
         job_reference: (f.job_reference as string) ?? null,
-        not_over: (f.not_over as string) ?? null,
+        shipment_id: (f.shipment_id as string) ?? null,
       };
       setDraftFilters(restored);
       setAppliedFilters(restored);
@@ -384,14 +408,16 @@ function PaymentRequestApproval() {
       payload.date_to = dayjs(appliedFilters.date_to).format("YYYY-MM-DD");
     if (appliedFilters.payment_type)
       payload.payment_type = appliedFilters.payment_type;
-    if (appliedFilters.paid_to_type)
-      payload.paid_to_type = appliedFilters.paid_to_type;
     if (appliedFilters.request_no?.trim())
       payload.request_no = appliedFilters.request_no.trim();
+    if (appliedFilters.service?.trim())
+      payload.service = appliedFilters.service.trim();
+    if (appliedFilters.service_type?.trim())
+      payload.service_type = appliedFilters.service_type.trim();
     if (appliedFilters.job_reference?.trim())
       payload.job_reference = appliedFilters.job_reference.trim();
-    if (appliedFilters.not_over?.trim())
-      payload.not_over = appliedFilters.not_over.trim();
+    if (appliedFilters.shipment_id?.trim())
+      payload.shipment_id = appliedFilters.shipment_id.trim();
     if (appliedCreatedBy.trim()) payload.created_by = appliedCreatedBy.trim();
     if (appliedPaidTo.trim()) payload.paid_to = appliedPaidTo.trim();
     return payload;
@@ -558,7 +584,12 @@ function PaymentRequestApproval() {
     for (const r of tableData) {
       const s = (r.status ?? "").trim().toLowerCase();
       if (s === "rejected") rejected += 1;
-      else if (s === "approved" || s === "approved_without_crj") approved += 1;
+      else if (
+        s === "approved" ||
+        s === "approved_without_crj" ||
+        s === "posted"
+      )
+        approved += 1;
       else pending += 1;
     }
     return { total: totalRecords, approved, pending, rejected, pageAmount };
@@ -676,14 +707,16 @@ function PaymentRequestApproval() {
         payload.date_to = dayjs(nextFilters.date_to).format("YYYY-MM-DD");
       if (nextFilters.payment_type)
         payload.payment_type = nextFilters.payment_type;
-      if (nextFilters.paid_to_type)
-        payload.paid_to_type = nextFilters.paid_to_type;
       if (nextFilters.request_no?.trim())
         payload.request_no = nextFilters.request_no.trim();
+      if (nextFilters.service?.trim())
+        payload.service = nextFilters.service.trim();
+      if (nextFilters.service_type?.trim())
+        payload.service_type = nextFilters.service_type.trim();
       if (nextFilters.job_reference?.trim())
         payload.job_reference = nextFilters.job_reference.trim();
-      if (nextFilters.not_over?.trim())
-        payload.not_over = nextFilters.not_over.trim();
+      if (nextFilters.shipment_id?.trim())
+        payload.shipment_id = nextFilters.shipment_id.trim();
       if (nextCreatedBy.trim()) payload.created_by = nextCreatedBy.trim();
       if (nextPaidTo.trim()) payload.paid_to = nextPaidTo.trim();
       setStoreFilters(LIST_KEY, payload);
@@ -698,7 +731,8 @@ function PaymentRequestApproval() {
       {
         id: "sno",
         header: "S.No",
-        size: 60,
+        size: 48,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ row }) => index + row.index + 1,
@@ -706,7 +740,8 @@ function PaymentRequestApproval() {
       {
         accessorKey: "created_by",
         header: "User",
-        size: 130,
+        size: 100,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="User"
@@ -725,7 +760,8 @@ function PaymentRequestApproval() {
       {
         accessorKey: "request_no",
         header: "Request No",
-        size: 150,
+        size: 128,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Request No"
@@ -757,16 +793,18 @@ function PaymentRequestApproval() {
       {
         id: "local_amount",
         header: "Local Amount",
-        size: 130,
+        size: 108,
+        grow: false,
         Cell: ({ row }) => formatMoneyAmountForUi(calcLocalAmount(row.original.charges)),
       },
       {
         accessorKey: "payment_type",
         header: "Type",
-        size: 120,
+        size: 128,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
-            label="Type"
+            label="Paid Type"
             value={appliedFilters.payment_type ?? ""}
             displayValue={appliedFilters.payment_type ?? ""}
             onChange={() => {}}
@@ -810,40 +848,102 @@ function PaymentRequestApproval() {
             )}
           />
         ),
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>() || "-";
+          if (value === "-") return value;
+          return (
+            <Tooltip label={value} withArrow withinPortal>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: erpTheme.fontSans, maxWidth: "100%" }}
+              >
+                {value}
+              </Text>
+            </Tooltip>
+          );
+        },
       },
       {
-        accessorKey: "not_over",
-        header: "Over",
-        size: 120,
+        accessorKey: "service",
+        header: "Service",
+        size: 96,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
-            label="Over"
-            value={appliedFilters.not_over ?? ""}
-            displayValue={appliedFilters.not_over ?? ""}
+            label="Service"
+            value={formatServiceFilterDisplay(
+              appliedFilters.service,
+              appliedFilters.service_type,
+            )}
+            displayValue={formatServiceFilterDisplay(
+              appliedFilters.service,
+              appliedFilters.service_type,
+            )}
+            onChange={() => {}}
             theme={erpTheme}
-            placeholder="Filter Over"
-            isEditing={editingHeaderId === "not_over"}
-            onStartEdit={() => openHeaderEditor("not_over")}
-            onStopEdit={() => collapseHeaderEditor("not_over")}
-            onChange={(nextVal) =>
-              commitHeaderFilters({
-                filters: (prev) => ({
-                  ...prev,
-                  not_over: nextVal || null,
-                }),
-              })
-            }
+            isEditing={editingHeaderId === "service"}
+            onStartEdit={() => openHeaderEditor("service")}
+            onStopEdit={() => collapseHeaderEditor("service")}
+            renderEditor={() => (
+              <Box
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  width: "100%",
+                  minWidth: 0,
+                }}
+              >
+                <ERPListHeaderFilterInput
+                  value={appliedFilters.service ?? ""}
+                  onChange={(nextVal) =>
+                    commitHeaderFilters({
+                      filters: (prev) => ({
+                        ...prev,
+                        service: nextVal ? nextVal.trim().toUpperCase() : null,
+                      }),
+                    })
+                  }
+                  placeholder="Service"
+                  ariaLabel="Filter Service"
+                  autoFocus
+                />
+                <ERPListHeaderFilterInput
+                  value={appliedFilters.service_type ?? ""}
+                  onChange={(nextVal) =>
+                    commitHeaderFilters({
+                      filters: (prev) => ({
+                        ...prev,
+                        service_type: nextVal
+                          ? nextVal.trim().toUpperCase()
+                          : null,
+                      }),
+                    })
+                  }
+                  placeholder="Type"
+                  ariaLabel="Filter Service Type"
+                />
+              </Box>
+            )}
           />
         ),
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ row }) =>
+          formatServiceColumnValue(
+            row.original.service,
+            row.original.service_type,
+          ),
       },
       {
         accessorKey: "date",
         header: "Date",
-        size: 100,
+        size: 108,
+        grow: false,
         Cell: ({ row }) => (
-          <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+          <Text
+            size="sm"
+            style={{ fontFamily: erpTheme.fontSans, whiteSpace: "nowrap" }}
+          >
             {row.original.date
               ? dayjs(String(row.original.date)).format(dateFormat)
               : "-"}
@@ -851,47 +951,10 @@ function PaymentRequestApproval() {
         ),
       },
       {
-        accessorKey: "paid_to_type",
-        header: "Paid To Type",
-        size: 130,
-        Header: () => (
-          <ERPListColumnHeaderFilter
-            label="Paid To Type"
-            value={appliedFilters.paid_to_type ?? ""}
-            displayValue={appliedFilters.paid_to_type ?? ""}
-            onChange={() => {}}
-            theme={erpTheme}
-            isEditing={editingHeaderId === "paid_to_type"}
-            onStartEdit={() => openHeaderEditor("paid_to_type")}
-            onStopEdit={() => collapseHeaderEditor("paid_to_type")}
-            renderEditor={({ autoFocus, onClose }) => (
-              <Select
-                autoFocus={autoFocus}
-                placeholder="Select Paid To Type"
-                searchable
-                clearable
-                size="xs"
-                data={["customer", "agent", "supplier", "Vendor"]}
-                value={appliedFilters.paid_to_type ?? ""}
-                onChange={(v) => {
-                  commitHeaderFilters({
-                    filters: (prev) => ({ ...prev, paid_to_type: v ?? null }),
-                  });
-                  if (v) onClose();
-                }}
-                comboboxProps={{ zIndex: 1000 }}
-                classNames={erpListGeistSelectClassNames}
-                styles={filterFieldStyles}
-              />
-            )}
-          />
-        ),
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
-      },
-      {
         accessorKey: "paid_to",
         header: "Paid To",
-        size: 150,
+        size: 120,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Paid To"
@@ -905,12 +968,27 @@ function PaymentRequestApproval() {
             onChange={(nextVal) => commitHeaderFilters({ paidTo: nextVal })}
           />
         ),
-        Cell: ({ cell }) => cell.getValue<string>() || "-",
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>() || "-";
+          if (value === "-") return value;
+          return (
+            <Tooltip label={value} withArrow withinPortal>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: erpTheme.fontSans, maxWidth: "100%" }}
+              >
+                {value}
+              </Text>
+            </Tooltip>
+          );
+        },
       },
       {
-        id: "job_no",
+        accessorKey: "job_id",
         header: "Job Id",
         size: 140,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Job Id"
@@ -918,9 +996,9 @@ function PaymentRequestApproval() {
             displayValue={appliedFilters.job_reference ?? ""}
             theme={erpTheme}
             placeholder="Filter Job Id"
-            isEditing={editingHeaderId === "job_no"}
-            onStartEdit={() => openHeaderEditor("job_no")}
-            onStopEdit={() => collapseHeaderEditor("job_no")}
+            isEditing={editingHeaderId === "job_id"}
+            onStartEdit={() => openHeaderEditor("job_id")}
+            onStopEdit={() => collapseHeaderEditor("job_id")}
             onChange={(nextVal) =>
               commitHeaderFilters({
                 filters: (prev) => ({
@@ -931,50 +1009,54 @@ function PaymentRequestApproval() {
             }
           />
         ),
-        Cell: ({ row }) => getFirstJobNo(row.original.charges),
+        Cell: ({ row }) => (
+          <Text
+            size="sm"
+            style={{ fontFamily: erpTheme.fontSans, whiteSpace: "nowrap" }}
+          >
+            {displayCellValue(row.original.job_id)}
+          </Text>
+        ),
       },
       {
-        accessorKey: "note",
-        header: "Note",
+        accessorKey: "shipment_id",
+        header: "Shipment Id",
         size: 160,
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          if (!val) return "-";
-          return (
-            <Text
-              size="sm"
-              style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }}
-              truncate
-              title={val}
-            >
-              {val}
-            </Text>
-          );
-        },
-      },
-      {
-        accessorKey: "account_note",
-        header: "Accountant Note",
-        size: 160,
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          if (!val) return "-";
-          return (
-            <Text
-              size="sm"
-              style={{ fontFamily: erpTheme.fontSans, maxWidth: 150 }}
-              truncate
-              title={val}
-            >
-              {val}
-            </Text>
-          );
-        },
+        grow: false,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Shipment Id"
+            value={appliedFilters.shipment_id ?? ""}
+            displayValue={appliedFilters.shipment_id ?? ""}
+            theme={erpTheme}
+            placeholder="Filter Shipment Id"
+            isEditing={editingHeaderId === "shipment_id"}
+            onStartEdit={() => openHeaderEditor("shipment_id")}
+            onStopEdit={() => collapseHeaderEditor("shipment_id")}
+            onChange={(nextVal) =>
+              commitHeaderFilters({
+                filters: (prev) => ({
+                  ...prev,
+                  shipment_id: nextVal || null,
+                }),
+              })
+            }
+          />
+        ),
+        Cell: ({ row }) => (
+          <Text
+            size="sm"
+            style={{ fontFamily: erpTheme.fontSans, whiteSpace: "nowrap" }}
+          >
+            {displayCellValue(row.original.shipment_id)}
+          </Text>
+        ),
       },
       {
         accessorKey: "status",
         header: "Status",
-        size: 120,
+        size: 96,
+        grow: false,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Status"
@@ -995,6 +1077,7 @@ function PaymentRequestApproval() {
                 data={[
                   { value: "Active", label: "Active" },
                   { value: "Approved", label: "Approved" },
+                  { value: "Posted", label: "Posted" },
                   { value: "Rejected", label: "Rejected" },
                 ]}
                 value={appliedFilters.status ?? ""}
@@ -1029,7 +1112,8 @@ function PaymentRequestApproval() {
       {
         id: "actions",
         header: "Actions",
-        size: 80,
+        size: 56,
+        grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ row }) => (
@@ -1038,6 +1122,7 @@ function PaymentRequestApproval() {
             position="bottom-end"
             shadow="md"
             width={220}
+            closeOnItemClick
             styles={erpListGeistMenuDropdownStyles}
             classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
           >
@@ -1047,50 +1132,45 @@ function PaymentRequestApproval() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              {row.original.status?.trim().toLowerCase() !== "approved" &&
-                row.original.status?.trim().toLowerCase() !== "rejected" && (
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() => {
-                        setStoreFilters(LIST_KEY, buildFilterPayload);
-                        setStoreSearch(LIST_KEY, search);
-                        setShouldRestore(LIST_KEY, true);
-                        navigate(`/payment-request/edit/${row.original.id}`);
-                      }}
-                    >
-                      <Group gap="sm">
-                        <IconEdit size={16} color={primary} />
-                        <Text
-                          size="sm"
-                          style={{ fontFamily: erpTheme.fontSans }}
-                        >
-                          Edit
-                        </Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                )}
-              <Box px={10} py={5}>
-                <UnstyledButton
+              <Menu.Item
+                leftSection={<IconEye size={16} color={primary} />}
+                onClick={() => {
+                  setStoreFilters(LIST_KEY, buildFilterPayload);
+                  setStoreSearch(LIST_KEY, search);
+                  setShouldRestore(LIST_KEY, true);
+                  navigate(`/payment-request/view/${row.original.id}`, {
+                    state: {
+                      fromPaymentRequestApproval: true,
+                      returnTo: "/payment-request-approval",
+                    },
+                  });
+                }}
+              >
+                View
+              </Menu.Item>
+              {row.original.status?.trim().toLowerCase() !== "rejected" && (
+                <Menu.Item
+                  leftSection={<IconEdit size={16} color={primary} />}
                   onClick={() => {
                     setStoreFilters(LIST_KEY, buildFilterPayload);
                     setStoreSearch(LIST_KEY, search);
                     setShouldRestore(LIST_KEY, true);
-                    navigate(`/payment-request/view/${row.original.id}`);
+                    navigate(`/payment-request/edit/${row.original.id}`, {
+                      state: {
+                        fromPaymentRequestApproval: true,
+                        returnTo: "/payment-request-approval",
+                      },
+                    });
                   }}
                 >
-                  <Group gap="sm">
-                    <IconEye size={16} color={primary} />
-                    <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-                      View
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
+                  Edit
+                </Menu.Item>
+              )}
               {row.original.status?.trim().toLowerCase() === "approved" && (
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={async () => {
+                <Menu.Item
+                  leftSection={<IconFileInvoice size={16} color={primary} />}
+                  onClick={() => {
+                    void (async () => {
                       try {
                         const raw = await apiCallProtected.get(
                           `${URL.paymentRequest}${row.original.id}/`,
@@ -1112,17 +1192,22 @@ function PaymentRequestApproval() {
                           message: "Failed to load payment request details.",
                         });
                       }
-                    }}
-                  >
-                    <Group gap="sm">
-                      <IconFileInvoice size={16} color={primary} />
-                      <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-                        Create Supplier Invoice
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
+                    })();
+                  }}
+                >
+                  Create Supplier Invoice
+                </Menu.Item>
               )}
+              <Menu.Item
+                leftSection={<IconListDetails size={16} color={primary} />}
+                onClick={() =>
+                  void openViewAllocationDocs(
+                    String(row.original.request_no ?? ""),
+                  )
+                }
+              >
+                View Allocation Docs
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         ),
@@ -1147,6 +1232,7 @@ function PaymentRequestApproval() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      openViewAllocationDocs,
     ],
   );
 
@@ -1187,6 +1273,7 @@ function PaymentRequestApproval() {
       columnPinning: { right: ["actions"] },
     },
     layoutMode: "grid",
+    defaultColumn: { grow: false },
     manualPagination: true,
     onPaginationChange: setPagination,
     rowCount: totalRecords,
@@ -1221,22 +1308,25 @@ function PaymentRequestApproval() {
            */
           width: colSize,
           minWidth: colSize,
-          padding: "8px 16px",
-          fontSize: 14,
+          maxWidth: colSize,
+          padding: "6px 8px",
+          fontSize: 13,
           fontFamily: erpTheme.fontSans,
           color: muted,
           backgroundColor: cardBg,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
           ...(column.id === "actions"
             ? {
-                // Pinned-right Actions cell. `minWidth: 80px` matches the
-                // head cell so the sticky body cell and sticky head cell
-                // stay the same width. `zIndex: 2` stays BELOW the sticky
-                // head (`zIndex: 4`) so the head paints over the body cell
-                // at the bottom-right corner during horizontal scroll.
+                // Pinned-right Actions cell. `minWidth` matches the head cell
+                // so the sticky body cell and sticky head cell stay the same
+                // width. `zIndex: 2` stays BELOW the sticky head (`zIndex: 4`)
+                // so the head paints over the body cell at the corner.
                 position: "sticky" as const,
                 right: 0,
                 zIndex: 2,
-                minWidth: "80px",
+                minWidth: "56px",
                 borderLeft: `1px solid ${border}`,
                 boxShadow: "1px -2px 4px 0px #00000040",
               }
@@ -1255,8 +1345,9 @@ function PaymentRequestApproval() {
            */
           width: colSize,
           minWidth: colSize,
-          padding: "8px 16px",
-          fontSize: 14,
+          maxWidth: colSize,
+          padding: "6px 8px",
+          fontSize: 13,
           fontFamily: erpTheme.fontSans,
           color: muted,
           backgroundColor: erpTheme.headerBg,
@@ -1275,7 +1366,7 @@ function PaymentRequestApproval() {
                 position: "sticky" as const,
                 right: 0,
                 zIndex: 4,
-                minWidth: "80px",
+                minWidth: "56px",
                 backgroundColor: erpTheme.headerBg,
                 boxShadow: "0px -2px 4px 0px #00000040",
               }
@@ -1322,6 +1413,7 @@ function PaymentRequestApproval() {
 
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
+      {viewAllocationDocsUi}
       <Box
         className={ERP_LIST_GEIST_ROOT_CLASS}
         style={{
@@ -1440,7 +1532,7 @@ function PaymentRequestApproval() {
             opened: showFilters,
             title: "Filters",
             subtitle:
-              "Refine by user, request no., job, payment type, paid-to, dates, or status",
+              "Refine by user, request no., type, date range, paid to, job id, shipment id, or status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1463,6 +1555,79 @@ function PaymentRequestApproval() {
                       size="xs"
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <FormTextInput
+                      format="capital"
+                      label="Request No"
+                      value={draftFilters.request_no ?? ""}
+                      placeholder="Type Request No"
+                      onChange={(e) =>
+                        updateFilter(
+                          "request_no",
+                          e.currentTarget.value || null,
+                        )
+                      }
+                      size="xs"
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      size="xs"
+                      label="Type"
+                      placeholder="Select Type"
+                      data={["Bank", "Cash", "Online Transfer", "PDC", "DD/PO"]}
+                      searchable
+                      value={draftFilters.payment_type}
+                      onChange={(v) => {
+                        const mapped =
+                          v === "Cash"
+                            ? "CASH"
+                            : v === "Online Transfer"
+                              ? "ONLINE TRANSFER"
+                              : v;
+                        updateFilter("payment_type", mapped ?? null);
+                      }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Date From"
+                      placeholder="YYYY-MM-DD"
+                      value={draftFilters.date_from}
+                      onChange={(d) => updateFilter("date_from", d)}
+                      size="xs"
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SingleDateInput
+                      label="Date To"
+                      placeholder="YYYY-MM-DD"
+                      value={draftFilters.date_to}
+                      onChange={(d) => updateFilter("date_to", d)}
+                      size="xs"
+                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={{
+                        ...filterFieldStyles,
+                        input: { ...filterFieldStyles.input, minHeight: 32 },
+                      }}
                     />
                   </Box>
                 </Grid.Col>
@@ -1502,12 +1667,12 @@ function PaymentRequestApproval() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
                       format="capital"
-                      label="Request Number"
-                      value={draftFilters.request_no ?? ""}
-                      placeholder="Type Request Number"
+                      label="Shipment Id"
+                      value={draftFilters.shipment_id ?? ""}
+                      placeholder="Type Shipment Id"
                       onChange={(e) =>
                         updateFilter(
-                          "request_no",
+                          "shipment_id",
                           e.currentTarget.value || null,
                         )
                       }
@@ -1521,103 +1686,12 @@ function PaymentRequestApproval() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <Dropdown
                       size="xs"
-                      label="Payment Type"
-                      placeholder="Select Payment Type"
-                      data={["Bank", "Cash", "Online Transfer", "PDC", "DD/PO"]}
-                      searchable
-                      value={draftFilters.payment_type}
-                      onChange={(v) => {
-                        const mapped =
-                          v === "Cash"
-                            ? "CASH"
-                            : v === "Online Transfer"
-                              ? "ONLINE TRANSFER"
-                              : v;
-                        updateFilter("payment_type", mapped ?? null);
-                      }}
-                      styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <Dropdown
-                      size="xs"
-                      label="Paid To Type"
-                      placeholder="Select Paid To Type"
-                      data={["customer", "agent", "supplier", "Vendor"]}
-                      searchable
-                      value={draftFilters.paid_to_type}
-                      onChange={(v) => updateFilter("paid_to_type", v ?? null)}
-                      styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    {/*
-                     * Backend supports the `not_over` icontains filter and
-                     * the "Over" column is visible in the table — surface
-                     * it here so the advanced filter section is in sync
-                     * with the column-header filter.
-                     */}
-                    <FormTextInput
-                      label="Over"
-                      placeholder="Filter Over"
-                      value={draftFilters.not_over ?? ""}
-                      onChange={(e) =>
-                        updateFilter(
-                          "not_over",
-                          e.currentTarget.value || null,
-                        )
-                      }
-                      size="xs"
-                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
-                      styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <SingleDateInput
-                      label="Date From"
-                      placeholder="YYYY-MM-DD"
-                      value={draftFilters.date_from}
-                      onChange={(d) => updateFilter("date_from", d)}
-                      size="xs"
-                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                      styles={{
-                        ...filterFieldStyles,
-                        input: { ...filterFieldStyles.input, minHeight: 32 },
-                      }}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <SingleDateInput
-                      label="Date To"
-                      placeholder="YYYY-MM-DD"
-                      value={draftFilters.date_to}
-                      onChange={(d) => updateFilter("date_to", d)}
-                      size="xs"
-                      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                      styles={{
-                        ...filterFieldStyles,
-                        input: { ...filterFieldStyles.input, minHeight: 32 },
-                      }}
-                    />
-                  </Box>
-                </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <Dropdown
-                      size="xs"
                       label="Status"
                       placeholder="Select Status"
                       data={[
                         { value: "Active", label: "Active" },
                         { value: "Approved", label: "Approved" },
+                        { value: "Posted", label: "Posted" },
                         { value: "Rejected", label: "Rejected" },
                       ]}
                       value={draftFilters.status}

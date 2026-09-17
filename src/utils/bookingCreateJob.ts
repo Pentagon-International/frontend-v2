@@ -3,15 +3,21 @@ import dayjs from "dayjs";
 import { apiCallProtected } from "../api/axios";
 import { URL } from "../api/serverUrls";
 import { getAPICall } from "../service/getApiCall";
+import { postAPICall } from "../service/postApiCall";
 import { API_HEADER } from "../store/storeKeys";
 import useAuthStore from "../store/authStore";
 import { ToastNotification } from "../components";
 import {
   costLocalAmountForPayload,
+  roundChargeAmount,
+  roundLocalChargeAmount,
   sellLocalAmountForPayload,
 } from "./houseChargeAmounts";
 import {
-  parseJobDocumentsFromApi,
+  extractUploadDocumentsFromApiBody,
+  isDocumentUploadSuccessful,
+  mapUploadDocumentsToDisplayList,
+  unwrapPostApiResponseBody,
 } from "./jobDocuments";
 import {
   bindMoneyWholeNumberMode,
@@ -488,6 +494,13 @@ function hasBookingRateDetails(booking: Record<string, unknown>): boolean {
 /**
  * House charge lines for job create (mawb_charges / mbl_charges payload shape).
  * @param includeCost LCL export: true (sell + cost). FCL/other/air house: false (sell only).
+ *
+ * Booking totals already include ROE:
+ *   total_sell = sell_per_unit × roe × no_of_units
+ *   total_cost = cost_per_unit × roe × no_of_units
+ * Job fields:
+ *   amount / total_cost (currency) = units × per-unit (no ROE)
+ *   sell_local_amount / cost_local_amount = booking totals (ROE already applied)
  */
 function mapHouseChargesFromBooking(
   booking: Record<string, unknown>,
@@ -497,13 +510,61 @@ function mapHouseChargesFromBooking(
   return rates.map((c) => {
     const row = c as Record<string, unknown>;
     const noOfUnit = row.no_of_units || row.no_of_unit || "";
+    const qty = toNumberOrNull(noOfUnit);
     const amountPerUnit = toMoneyFormValue(row.sell_per_unit);
-    const amount = toMoneyFormValue(
-      row.min_sell || row.total_sell || row.sell_amount_total || "",
-    );
+    const sellPerUnit = toMoneyOrNull(row.sell_per_unit);
+    const minSell = toMoneyOrNull(row.min_sell);
     const roe = row.roe ?? "";
-    const totalCost = includeCost ? toMoneyFormValue(row.total_cost) : "";
+
+    // Currency sell: units × sell_per_unit (never use booking.total_sell — that is local).
+    let currencySell: number | null = null;
+    if (qty != null && sellPerUnit != null && qty > 0 && sellPerUnit > 0) {
+      currencySell = roundChargeAmount(qty * sellPerUnit);
+    }
+    if (minSell != null && minSell > 0) {
+      currencySell =
+        currencySell != null
+          ? roundChargeAmount(Math.max(currencySell, minSell))
+          : roundChargeAmount(minSell);
+    }
+    const amount = currencySell != null ? currencySell : "";
+
+    // Local sell: booking total_sell already has ROE applied.
+    const bookingTotalSell =
+      toNumberOrNull(row.total_sell) ?? toNumberOrNull(row.sell_amount_total);
+    const sellLocalAmount =
+      bookingTotalSell != null && bookingTotalSell > 0
+        ? roundLocalChargeAmount(bookingTotalSell)
+        : sellLocalAmountForPayload(amount, roe, noOfUnit, amountPerUnit);
+
     const unitCost = includeCost ? toMoneyFormValue(row.cost_per_unit) : "";
+    const costPerUnit = includeCost ? toMoneyOrNull(row.cost_per_unit) : null;
+
+    // Currency cost: units × cost_per_unit (never use booking.total_cost — that is local).
+    let currencyCost: number | null = null;
+    if (
+      includeCost &&
+      qty != null &&
+      costPerUnit != null &&
+      qty > 0 &&
+      costPerUnit > 0
+    ) {
+      currencyCost = roundChargeAmount(qty * costPerUnit);
+    }
+    const totalCost = includeCost
+      ? currencyCost != null
+        ? currencyCost
+        : ""
+      : "";
+
+    // Local cost: booking total_cost already has ROE applied.
+    const bookingTotalCost = toNumberOrNull(row.total_cost);
+    const costLocalAmount = includeCost
+      ? bookingTotalCost != null && bookingTotalCost > 0
+        ? roundLocalChargeAmount(bookingTotalCost)
+        : costLocalAmountForPayload(totalCost, roe)
+      : "";
+
     return {
       charge_id: row.charge_id || "",
       supplier_code: "",
@@ -514,17 +575,10 @@ function mapHouseChargesFromBooking(
       amount_per_unit: amountPerUnit,
       currency_id: row.currency_id || row.currency_country_code || "",
       roe,
-      sell_local_amount: sellLocalAmountForPayload(
-        amount,
-        roe,
-        noOfUnit,
-        amountPerUnit,
-      ),
+      sell_local_amount: sellLocalAmount,
       total_cost: totalCost,
       unit_cost: unitCost,
-      cost_local_amount: includeCost
-        ? costLocalAmountForPayload(totalCost, roe)
-        : "",
+      cost_local_amount: costLocalAmount,
     };
   });
 }
@@ -570,20 +624,135 @@ function getBookingIdsFromBooking(booking: Record<string, unknown>): number[] {
   return Number.isFinite(n) && n > 0 ? [n] : [];
 }
 
-/** Booking documents belong on the single housing row in job create payload. */
+function toPositiveBookingId(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Unique booking PKs from houses, job.booking_ids, and extra ids (link-booking). */
+export function collectLinkedBookingIds(
+  housing?: Array<{ booking_id?: unknown }> | null,
+  jobBookingIds?: unknown,
+  extraIds?: unknown[],
+): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  const push = (value: unknown) => {
+    const n = toPositiveBookingId(value);
+    if (n == null || seen.has(n)) return;
+    seen.add(n);
+    out.push(n);
+  };
+  for (const row of housing ?? []) {
+    push(row?.booking_id);
+  }
+  if (Array.isArray(jobBookingIds)) {
+    for (const value of jobBookingIds) push(value);
+  } else {
+    push(jobBookingIds);
+  }
+  for (const value of extraIds ?? []) push(value);
+  return out;
+}
+
+type JobCreateFromBookingDocOptions = {
+  /** Fresh job-upload document ids (cloned from booking attachments). */
+  houseDocumentIds?: number[];
+};
+
+/**
+ * House `document_ids` for job create — ids returned from
+ * `prepareHouseDocumentIdsFromBooking` (booking source ids are already attached).
+ */
 function mapBookingDocumentsForHousingPayload(
-  booking: Record<string, unknown>,
+  _booking: Record<string, unknown>,
+  houseDocumentIds?: number[],
 ): { document_ids: number[] } | Record<string, never> {
-  const { document_ids } = parseJobDocumentsFromApi(booking);
-  // Only attach when booking already has documents (omit empty on job create-from-booking)
-  if (document_ids.length === 0) return {};
-  return { document_ids };
+  if (!houseDocumentIds || houseDocumentIds.length === 0) return {};
+  return {
+    document_ids: houseDocumentIds
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0),
+  };
+}
+
+function getBookingDocumentRows(
+  booking: Record<string, unknown>,
+): Array<Record<string, unknown>> {
+  return Array.isArray(booking.documents)
+    ? (booking.documents as Array<Record<string, unknown>>).filter(
+        (doc) => doc.id != null,
+      )
+    : [];
+}
+
+/**
+ * Copy booking attachments into the job document store the same way PRQ docs
+ * are carried into supplier invoice: reference existing `document_id`s on the
+ * upload FormData (no file GET / re-download). Backend returns ids that can be
+ * attached on the house row.
+ */
+export async function prepareHouseDocumentIdsFromBooking(
+  booking: Record<string, unknown>,
+): Promise<number[]> {
+  const documents = getBookingDocumentRows(booking);
+  if (documents.length === 0) return [];
+
+  const formData = new FormData();
+  let index = 0;
+  for (const doc of documents) {
+    const sourceId = Number(doc.id);
+    if (!Number.isFinite(sourceId) || sourceId <= 0) continue;
+
+    const documentName =
+      String(doc.document_name ?? doc.doc_name ?? doc.user_file_name ?? "")
+        .trim() || `document-${sourceId}`;
+    const docCode = String(doc.doc_code ?? "").trim();
+
+    // Same multipart shape as JobDocumentsModal / PRQ→SIN: names + document_id,
+    // without downloading the file via GET.
+    formData.append(`document_names[${index}]`, documentName);
+    formData.append(`doc_code[${index}]`, docCode);
+    formData.append(`document_id[${index}]`, String(sourceId));
+    index += 1;
+  }
+
+  if (index === 0) return [];
+
+  const rawResponse = await postAPICall(URL.jobCreateUploadDocument, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+      ...API_HEADER.headers,
+    },
+  });
+  const body = unwrapPostApiResponseBody(rawResponse);
+  if (!isDocumentUploadSuccessful(body)) {
+    throw new Error(
+      String(body.message ?? "").trim() ||
+        "Failed to attach booking documents for job create",
+    );
+  }
+
+  const uploadedIds = mapUploadDocumentsToDisplayList(
+    extractUploadDocumentsFromApiBody(body),
+  )
+    .map((d) => d.id)
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (uploadedIds.length === 0) {
+    throw new Error(
+      "Booking documents were uploaded but no document ids were returned for job attach.",
+    );
+  }
+
+  return uploadedIds;
 }
 
 export async function resolveBookingRecordForJobCreate(
   booking: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (parseJobDocumentsFromApi(booking).document_ids.length > 0) {
+  if (getBookingDocumentRows(booking).length > 0) {
     return booking;
   }
 
@@ -616,7 +785,11 @@ export async function resolveBookingRecordForJobCreate(
   }
 }
 
-function buildAirHousing(booking: Record<string, unknown>, trade: string) {
+function buildAirHousing(
+  booking: Record<string, unknown>,
+  trade: string,
+  houseDocumentIds?: number[],
+) {
   return {
     hawb_no: resolveBookingHouseNumber(booking),
     origin_code: booking.origin_code || booking.origin_code_read || "",
@@ -660,7 +833,7 @@ function buildAirHousing(booking: Record<string, unknown>, trade: string) {
       ? mapHouseChargesFromBooking(booking, true)
       : [],
     events: mapBookingEventsForJob(booking),
-    ...mapBookingDocumentsForHousingPayload(booking),
+    ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
   };
 }
 
@@ -668,6 +841,7 @@ function buildOceanHousing(
   booking: Record<string, unknown>,
   trade: string,
   mode: BookingCreateJobMode,
+  houseDocumentIds?: number[],
 ) {
   const housing: Record<string, unknown> = {
     hbl_number: resolveBookingHouseNumber(booking),
@@ -710,7 +884,7 @@ function buildOceanHousing(
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
     cargo_details: mapCargoDetails(booking),
     events: mapBookingEventsForJob(booking),
-    ...mapBookingDocumentsForHousingPayload(booking),
+    ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
   };
 
   const profile = getOceanBookingChargeProfile(mode, booking);
@@ -725,8 +899,10 @@ function buildOceanHousing(
 export function buildJobCreatePayloadFromBooking(
   booking: Record<string, unknown>,
   mode: BookingCreateJobMode,
+  options?: JobCreateFromBookingDocOptions,
 ): Record<string, unknown> {
   syncBookingJobMoneyMode();
+  const houseDocumentIds = options?.houseDocumentIds;
   const isInlandExport = mode === "inland-export";
   const isInlandImport = mode === "inland-import";
   const isInland = isInlandExport || isInlandImport;
@@ -782,11 +958,13 @@ export function buildJobCreatePayloadFromBooking(
             mode === "air-export" || mode === "inland-export"
               ? "Re Export"
               : "Import",
+            houseDocumentIds,
           )
         : buildOceanHousing(
             booking,
             mode === "ocean-export" ? "Export" : "Import",
             mode,
+            houseDocumentIds,
           ),
     ],
   };
@@ -882,7 +1060,11 @@ export async function createJobFromBooking(
   onStart?.();
   try {
     const bookingForPayload = await resolveBookingRecordForJobCreate(booking);
-    const payload = buildJobCreatePayloadFromBooking(bookingForPayload, mode);
+    const houseDocumentIds =
+      await prepareHouseDocumentIdsFromBooking(bookingForPayload);
+    const payload = buildJobCreatePayloadFromBooking(bookingForPayload, mode, {
+      houseDocumentIds,
+    });
     const response = (await apiCallProtected.post(
       URL.jobCreate,
       payload,

@@ -56,6 +56,31 @@ export function getMeaningfulHouseCharges<T extends HouseChargeLike>(
   return charges.filter(hasMeaningfulHouseChargeData);
 }
 
+/**
+ * Resolve house charge rows for UI load / display.
+ * Prefer non-empty `charges` (form/mapped), then API `mawb_charges` / `mbl_charges`.
+ * Empty `charges: []` must NOT block fallback to API charge arrays.
+ */
+export function resolveHouseChargesSource(
+  source:
+    | {
+        charges?: unknown;
+        mbl_charges?: unknown;
+        mawb_charges?: unknown;
+      }
+    | null
+    | undefined,
+): unknown[] {
+  if (!source) return [];
+  const charges = source.charges;
+  if (Array.isArray(charges) && charges.length > 0) return charges;
+  const mawb = source.mawb_charges;
+  if (Array.isArray(mawb) && mawb.length > 0) return mawb;
+  const mbl = source.mbl_charges;
+  if (Array.isArray(mbl) && mbl.length > 0) return mbl;
+  return [];
+}
+
 export type HouseChargeValidationResult = {
   valid: boolean;
   errors: Record<number, Record<string, string>>;

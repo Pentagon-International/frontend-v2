@@ -146,8 +146,11 @@ import {
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -170,6 +173,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
+import { collectLinkedBookingIds } from "../../../utils/bookingCreateJob";
 import { resolveJobAgentAddress } from "../../../utils/resolveJobAgentAddress";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
@@ -644,8 +648,13 @@ function ImportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 5,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
 
   const [odexTriggerOpen, setOdexTriggerOpen] = useState(false);
@@ -653,6 +662,24 @@ function ImportJobCreate() {
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
+
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
+  }, []);
+
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -730,9 +757,11 @@ function ImportJobCreate() {
   );
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -939,6 +968,29 @@ function ImportJobCreate() {
   const jobHydratedKeyRef = useRef<string | null>(null);
   // One-shot location.state restore per navigation; tab switches must not re-apply snapshots
   const lastFormRestoreNavKeyRef = useRef<string | null>(null);
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [mode, jobData?.id, location.key]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [
+    mblDetailsForm.values,
+    carrierDetailsForm.values,
+    routingsForm.values,
+    containerDetailsForm.values,
+    estimatesForm.values,
+    housingDetails,
+    isReadOnly,
+  ]);
 
   // Load job data if in edit or view mode
   useEffect(() => {
@@ -2341,7 +2393,10 @@ function ImportJobCreate() {
         setActive(4);
       }
     } else if (active === 4) {
-      handleSubmit();
+      // Navigate to Accounts when available (edit with saved job); save stays on top Create/Update
+      if (mode === "edit" && jobData?.id) {
+        setActive(5);
+      }
     }
   };
 
@@ -3544,15 +3599,9 @@ function ImportJobCreate() {
     try {
       // Backend rejects numeric fields with more than 2 decimals.
       // Round right before we build the final create/edit payload.
-      const bookingIds = Array.from(
-        new Set(
-          (housingDetails ?? [])
-            .map((h) => (h as { booking_id?: unknown }).booking_id)
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        housingDetails as Array<{ booking_id?: unknown }>,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3615,7 +3664,7 @@ function ImportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         ocean_routings: routingsForm.values.routings.map((routing) => {
           // New format: all fields are nullable
           const routingPayload: Record<string, unknown> = {
@@ -3976,7 +4025,7 @@ function ImportJobCreate() {
         navigate(`${jobModuleBasePath}/edit`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -4210,11 +4259,18 @@ function ImportJobCreate() {
                   )}
 
                   {jobData?.id != null && (
-                    <AutomateVendorInvoiceTrigger
-                      variant="menu"
-                      shipmentNo={getMasterShipmentNo(jobData)}
-                      onOpen={openVendorInvoiceAutomation}
-                    />
+                    <>
+                      <AutomateVendorInvoiceTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openVendorInvoiceAutomation}
+                      />
+                      <AutomatePaymentRequestTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openPaymentRequestAutomation}
+                      />
+                    </>
                   )}
 
                   {jobData?.id != null && (
@@ -6313,7 +6369,7 @@ function ImportJobCreate() {
                         ToastNotification({
                           type: "error",
                           message:
-                            "No charges found in Estimates/House charges to prefill.",
+                            "Select a supplier/vendor to create supplier invoice",
                         });
                         return;
                       }
@@ -6335,6 +6391,11 @@ function ImportJobCreate() {
                     variant="button"
                     shipmentNo={getMasterShipmentNo(jobData)}
                     onOpen={openVendorInvoiceAutomation}
+                  />
+                  <AutomatePaymentRequestTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openPaymentRequestAutomation}
                   />
                   <Button
                     variant="light"
@@ -6411,7 +6472,7 @@ function ImportJobCreate() {
               )}
             </Group>
             <EstimatesSection
-              serviceType="SEA"
+              serviceType={["FCL", "LCL"]}
               form={estimatesForm}
               readOnly={isReadOnly}
               defaultPpCc="Collect"
@@ -6583,27 +6644,30 @@ function ImportJobCreate() {
               Next
             </Button>
           )}
-          {active === 4 && !isReadOnly && (
-            <Button
-              rightSection={<IconChevronRight size={16} />}
-              color="#105476"
-              onClick={handleNext}
-              loading={isSubmitting}
-            >
-              Submit
-            </Button>
-          )}
+          {active === 4 &&
+            mode === "edit" &&
+            !!jobData?.id &&
+            !isReadOnly && (
+              <Button
+                rightSection={<IconChevronRight size={16} />}
+                color="#105476"
+                onClick={handleNext}
+              >
+                Next
+              </Button>
+            )}
         </Group>
       </Group>
 
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -6619,7 +6683,7 @@ function ImportJobCreate() {
               navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
@@ -6908,6 +6972,11 @@ function ImportJobCreate() {
                             getCurrentHousingDetail={() => house}
                             jobId={jobData?.id}
                             onOpen={openVendorInvoiceAutomation}
+                          />
+                          <HouseAutomatePaymentRequestMenuItem
+                            getCurrentHousingDetail={() => house}
+                            jobId={jobData?.id}
+                            onOpen={openPaymentRequestAutomation}
                           />
                           <HouseJobLedgerMenuItem
                             serviceName="Ocean Import"
@@ -7370,6 +7439,12 @@ function ImportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="SEA IMPORTS"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

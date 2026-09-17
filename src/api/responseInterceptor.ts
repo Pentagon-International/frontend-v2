@@ -26,6 +26,80 @@ const processQueue = (error: any = null, token: string | null = null) => {
   failedQueue = [];
 };
 
+/**
+ * Flatten DRF / nested API validation payloads into a user-readable string.
+ * e.g. { sac_id: ["Already exists"], rate: ["Duplicate state"] }
+ */
+const flattenValidationMessages = (
+  value: unknown,
+  parts: string[] = [],
+): string[] => {
+  if (value == null) return parts;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) parts.push(trimmed);
+    return parts;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return parts;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenValidationMessages(item, parts));
+    return parts;
+  }
+  if (typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+      // Skip meta flags; keep field messages
+      if (key === "success" || key === "status" || key === "code") return;
+      flattenValidationMessages(item, parts);
+    });
+  }
+  return parts;
+};
+
+const resolveBadRequestMessage = (data: any): string => {
+  if (
+    data &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    typeof data.message === "string" &&
+    data.message.trim() !== ""
+  ) {
+    return data.message.trim();
+  }
+  if (data?.error_message && typeof data.error_message === "string") {
+    return data.error_message.trim();
+  }
+  if (typeof data?.detail === "string" && data.detail.trim() !== "") {
+    return data.detail.trim();
+  }
+  if (Array.isArray(data?.detail)) {
+    const fromDetail = flattenValidationMessages(data.detail);
+    if (fromDetail.length > 0) return fromDetail.join(" ");
+  }
+  if (data && typeof data === "object") {
+    const fromFields = flattenValidationMessages(data);
+    if (fromFields.length > 0) {
+      // Make common DRF unique-together wording clearer for users
+      return fromFields
+        .map((msg) => {
+          if (/fields?\s+sac_id\s+must make a unique set/i.test(msg)) {
+            return "GST Rate already exists for this SAC. Open Edit to update rates, or add a new state that is not already mapped.";
+          }
+          if (/must make a unique set/i.test(msg)) {
+            return "A duplicate record already exists for this combination.";
+          }
+          return msg;
+        })
+        .join(" ");
+    }
+  }
+  if (typeof data === "string" && data.trim() !== "") {
+    return data.trim();
+  }
+  return "Bad Request! Please check your input.";
+};
+
 const responseInterceptor = () =>
   apiCallProtected.interceptors.response.use(
     (response) => {
@@ -212,19 +286,8 @@ const responseInterceptor = () =>
         // Use standard error messages based on status code
         switch (status) {
           case 400: {
-            // For 400 errors, prioritize backend message if available
-            let errorMessage = "Bad Request! Please check your input.";
-            
-            if (hasBackendMessage) {
-              errorMessage = data.message;
-              console.log("✅ Using backend message for 400:", errorMessage);
-            } else if (data?.error_message) {
-              errorMessage = data.error_message;
-              console.log("✅ Using error_message for 400:", errorMessage);
-            } else {
-              console.log("⚠️ Using default 400 message");
-            }
-            
+            // Prefer backend message / DRF field errors over a generic Bad Request
+            const errorMessage = resolveBadRequestMessage(data);
             console.log("🔍 400 Error - Final message:", errorMessage);
             return Promise.reject({
               message: errorMessage,
@@ -249,29 +312,42 @@ const responseInterceptor = () =>
             });
           }
 
-          case 404:
+          case 404: {
+            const notFoundMessage = resolveBadRequestMessage(data);
             return Promise.reject({
               message:
-                "Resource not found! The requested resource could not be found.",
+                notFoundMessage !== "Bad Request! Please check your input."
+                  ? notFoundMessage
+                  : "Resource not found! The requested resource could not be found.",
             });
+          }
 
-          case 500:
+          case 500: {
+            const serverMessage = resolveBadRequestMessage(data);
             return Promise.reject({
               message:
-                "Internal server error! Something went wrong on the server.",
+                serverMessage !== "Bad Request! Please check your input."
+                  ? serverMessage
+                  : "Internal server error! Something went wrong on the server.",
             });
+          }
 
           case 503:
             return Promise.reject({
               message: "Service Unavailable! Please try again later.",
             });
 
-          default:
+          default: {
+            const fallbackMessage = resolveBadRequestMessage(data);
             return Promise.reject({
               message:
-                data?.error_message ||
-                "An error occurred! Please try again later.",
+                (typeof data?.error_message === "string" &&
+                  data.error_message.trim()) ||
+                (fallbackMessage !== "Bad Request! Please check your input."
+                  ? fallbackMessage
+                  : "An error occurred! Please try again later."),
             });
+          }
         }
       } else if (error.request) {
         return Promise.reject({

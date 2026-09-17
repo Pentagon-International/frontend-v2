@@ -39,6 +39,7 @@ import {
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   useRef,
@@ -85,6 +86,7 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
+  resolveHouseChargesSource,
   validateMeaningfulHouseCharges,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
@@ -125,7 +127,9 @@ import { JobAccountsDocumentsTable } from "../../../components/JobAccountsDocume
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import {
   JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
@@ -408,6 +412,9 @@ function HouseCreate() {
     Array<{ value: string; label: string; email?: string }>
   >([]);
   const shipperTypedNameRef = useRef("");
+  const [shipperFreeTextMode, setShipperFreeTextMode] = useState(false);
+  const shipperTextRef = useRef<HTMLInputElement>(null);
+  const shouldFocusShipperFreeTextRef = useRef(false);
   const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   // Consignee (shipment-party) search state
@@ -561,6 +568,44 @@ function HouseCreate() {
     isJobClosed(
       (location.state?.job as { status?: string | null } | undefined)?.status,
     );
+
+  useEffect(() => {
+    if (!editData) return;
+    const hasCode = Boolean(String(editData.shipper_code || "").trim());
+    const hasName = Boolean(String(editData.shipper_name || "").trim());
+    const hasFwd =
+      (editData as { forwarder_id?: number | null }).forwarder_id != null ||
+      Boolean(
+        String(
+          (editData as { forwarder_name?: string }).forwarder_name || "",
+        ).trim(),
+      );
+    if (!hasCode && hasName && hasFwd) {
+      setShipperFreeTextMode(true);
+    }
+  }, [editData]);
+
+  useLayoutEffect(() => {
+    if (!shipperFreeTextMode || !shouldFocusShipperFreeTextRef.current) return;
+    const input = shipperTextRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus();
+    input.setSelectionRange(cursor, cursor);
+    shouldFocusShipperFreeTextRef.current = false;
+  }, [shipperFreeTextMode]);
+
+  const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const pendingLeaveActionRef = useRef<(() => void) | null>(null);
+  const handleBackToListClick = () => {
+    const leave = () => navigate(jobModuleBasePath);
+    if (!isReadOnly) {
+      pendingLeaveActionRef.current = leave;
+      setConfirmBackToListOpen(true);
+      return;
+    }
+    leave();
+  };
   const savedHousingId = useMemo(
     () => resolveHousingDetailsPrimaryKey(editData as { id?: unknown }),
     [editData],
@@ -839,6 +884,24 @@ function HouseCreate() {
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
+
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
+  }, []);
+
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -1167,15 +1230,15 @@ function HouseCreate() {
       }
     }
 
-    // Load charges when editData has them - same as AirImportJob
-    const chargesToLoad =
-      (editData.charges && Array.isArray(editData.charges)
-        ? editData.charges
-        : null) ||
-      (editData as { mawb_charges?: unknown[] }).mawb_charges ||
-      [];
-    console.log("_____chargesToLoad", chargesToLoad);
-    const chargesArray = Array.isArray(chargesToLoad) ? chargesToLoad : [];
+    // Load charges - prefer non-empty charges, then mawb_charges/mbl_charges
+    const chargesArray = resolveHouseChargesSource(
+      editData as {
+        charges?: unknown;
+        mbl_charges?: unknown;
+        mawb_charges?: unknown;
+      },
+    );
+    console.log("_____chargesToLoad", chargesArray);
     if (chargesArray.length > 0) {
       const unitDataArr: { id?: number; unit_code?: string }[] = [];
       const currencyDataArr: {
@@ -2200,9 +2263,9 @@ function HouseCreate() {
         setActive(3);
       }
     } else if (active === 3) {
-      // Step 4: Validate charges before saving
-      if (validateStep4()) {
-        handleSave();
+      // Navigate to Accounts in edit mode; save stays on top Update
+      if (isEditMode && validateStep4()) {
+        setActive(4);
       }
     }
   };
@@ -2946,6 +3009,11 @@ function HouseCreate() {
                     jobId={location.state?.job?.id}
                     onOpen={openVendorInvoiceAutomation}
                   />
+                  <HouseAutomatePaymentRequestMenuItem
+                    getCurrentHousingDetail={getCurrentHousingDetail}
+                    jobId={location.state?.job?.id}
+                    onOpen={openPaymentRequestAutomation}
+                  />
                 </>
               )}
 
@@ -3477,6 +3545,29 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
+                {shipperFreeTextMode ? (
+                  <FormTextInput
+                    ref={shipperTextRef}
+                    label="Shipper Name"
+                    required
+                    placeholder="Enter shipper name"
+                    value={form.values.shipper_name || ""}
+                    onChange={(e) => {
+                      const v = toTitleCase(e.currentTarget.value);
+                      form.setFieldValue("shipper_name", v);
+                      form.setFieldValue("shipper_code", "");
+                      if (!v.trim()) {
+                        setShipperFreeTextMode(false);
+                        form.setFieldValue("shipper_name", "");
+                        setShipperAddressOptions([]);
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                      }
+                    }}
+                    error={form.errors.shipper_name as string}
+                  />
+                ) : (
                 <SearchableSelect
                   label="Shipper Name"
                   required
@@ -3494,6 +3585,9 @@ function HouseCreate() {
                       form.values.forwarder_id != null ||
                       Boolean(form.values.forwarder_name?.trim());
                     form.setFieldValue("shipper_code", value || "");
+                    if (value) {
+                      setShipperFreeTextMode(false);
+                    }
                     form.setFieldValue(
                       "shipper_name",
                       selectedData?.label ||
@@ -3592,21 +3686,26 @@ function HouseCreate() {
                       !hasResults &&
                       searchTerm.length >= 2
                     ) {
+                      const name = toTitleCase(searchTerm);
                       form.setFieldValue("shipper_code", "");
-                      form.setFieldValue(
-                        "shipper_name",
-                        toTitleCase(searchTerm),
-                      );
+                      form.setFieldValue("shipper_name", name);
                       setShipperAddressOptions([]);
                       form.setFieldValue("shipper_address", "");
                       form.setFieldValue("shipper_email", "");
                       form.setFieldValue("shipper_state_id", "");
+                      shouldFocusShipperFreeTextRef.current = true;
+                      setShipperFreeTextMode(true);
                     }
                   }}
                   returnOriginalData={true}
+                  hideEmptyResultsMessage={
+                    form.values.forwarder_id != null ||
+                    Boolean(form.values.forwarder_name?.trim())
+                  }
                   error={form.errors.shipper_name as string}
                   minSearchLength={3}
                 />
+                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
@@ -4261,6 +4360,18 @@ function HouseCreate() {
                       form.setFieldValue("forwarder_address", "");
                       form.setFieldValue("forwarder_email", "");
                       setForwarderAddressOptions([]);
+                      // Free-text shipper is only allowed with a forwarder — clear it.
+                      // Keep master-selected shipper (has shipper_code).
+                      if (!String(form.values.shipper_code || "").trim()) {
+                        setShipperFreeTextMode(false);
+                        shipperTypedNameRef.current = "";
+                        form.setFieldValue("shipper_code", "");
+                        form.setFieldValue("shipper_name", "");
+                        setShipperAddressOptions([]);
+                        form.setFieldValue("shipper_address", "");
+                        form.setFieldValue("shipper_email", "");
+                        form.setFieldValue("shipper_state_id", "");
+                      }
                       return;
                     }
 
@@ -5103,11 +5214,11 @@ function HouseCreate() {
               <Grid mb={2} gutter="sm" style={{ fontWeight: 700 }}>
                 <Grid.Col span={1.4} />
                 <Grid.Col span={0.9} />
+                <Grid.Col span={1.2} />
                 <Grid.Col span={0.8} />
-                <Grid.Col span={0.8} />
-                <Grid.Col span={0.7} />
-                <Grid.Col span={0.7} />
-                <Grid.Col span={2.55}>
+                <Grid.Col span={0.6} />
+                <Grid.Col span={0.6} />
+                <Grid.Col span={2.25}>
                   <Box
                     style={{
                       border: "1.5px solid #228be6",
@@ -5123,7 +5234,7 @@ function HouseCreate() {
                     SELL
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={3.65}>
+                <Grid.Col span={3.35}>
                   <Box
                     style={{
                       border: "1.5px solid #e67700",
@@ -5154,36 +5265,36 @@ function HouseCreate() {
                   <RequiredLabel label="Charge Name" required />
                 </Grid.Col>
                 <Grid.Col span={0.9}>
-                  <RequiredLabel label="Prepaid / Collect" required />
+                  <RequiredLabel label="PP/CC" required />
                 </Grid.Col>
-                <Grid.Col span={0.8}>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.8}>
                   <RequiredLabel label="Currency" required />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.6}>
                   <RequiredLabel label="ROE" required />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={0.6}>
                   <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Amount" required />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Local Amount" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Cost/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Total Cost" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.85}>
+                <Grid.Col span={0.75}>
                   <RequiredLabel label="Local Amount" required={false} />
                 </Grid.Col>
                 <Grid.Col span={1.1}>
@@ -5293,7 +5404,7 @@ function HouseCreate() {
                   </Grid.Col>
                   <Grid.Col span={0.9}>
                     <Dropdown
-                      placeholder="Select Prepaid/Collect"
+                      placeholder="PP/CC"
                       searchable
                       data={[
                         { value: "Prepaid", label: "Prepaid" },
@@ -5319,7 +5430,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.pp_cc}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.8}>
+                  <Grid.Col span={1.2}>
                     <Dropdown
                       placeholder="Select Unit"
                       searchable
@@ -5392,7 +5503,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.currency_id}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.7}>
+                  <Grid.Col span={0.6}>
                     <FormNumberInput
                       placeholder="ROE"
                       min={0}
@@ -5455,7 +5566,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.roe}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.7}>
+                  <Grid.Col span={0.6}>
                     <FormNumberInput
                       placeholder="No of Unit"
                       min={0}
@@ -5520,7 +5631,7 @@ function HouseCreate() {
                       })()}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Amount/Unit"
                       min={0}
@@ -5565,7 +5676,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount_per_unit}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Amount"
                       min={0}
@@ -5590,7 +5701,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Local Amount"
                       min={0}
@@ -5606,7 +5717,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Cost/Unit"
                       min={0}
@@ -5641,7 +5752,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Total Cost"
                       min={0}
@@ -5657,7 +5768,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.85}>
+                  <Grid.Col span={0.75}>
                     <FormNumberInput
                       placeholder="Local Amount"
                       min={0}
@@ -5827,13 +5938,45 @@ function HouseCreate() {
         readOnly={isViewOnly}
       />
 
+      <Modal
+        opened={confirmBackToListOpen}
+        onClose={() => setConfirmBackToListOpen(false)}
+        title="Unsaved Changes"
+        centered
+      >
+        <Text size="sm" mb="md">
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
+        </Text>
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={() => setConfirmBackToListOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setConfirmBackToListOpen(false);
+              const action = pendingLeaveActionRef.current;
+              pendingLeaveActionRef.current = null;
+              if (action) action();
+              else navigate(jobModuleBasePath);
+            }}
+          >
+            Yes, close
+          </Button>
+        </Group>
+      </Modal>
+
       <Group justify="space-between" mt="xl">
         <Group gap="sm">
           <Button
             variant="outline"
             color="#105476"
             leftSection={<IconArrowLeft size={16} />}
-            onClick={() => navigate(jobModuleBasePath)}
+            onClick={handleBackToListClick}
           >
             Back to List
           </Button>
@@ -5870,23 +6013,13 @@ function HouseCreate() {
             </Button>
           )}
 
-          {active < 3 && (
+          {(active < 3 || (active === 3 && isEditMode)) && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
             >
               Next
-            </Button>
-          )}
-          {active === 3 && !isViewOnly && (
-            <Button
-              rightSection={<IconChevronRight size={16} />}
-              color="#105476"
-              loading={isSavingHouse}
-              onClick={handleNext}
-            >
-              Update
             </Button>
           )}
         </Group>
@@ -6055,6 +6188,12 @@ function HouseCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="AIR EXPORTS"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

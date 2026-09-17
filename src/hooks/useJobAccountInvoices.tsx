@@ -19,9 +19,9 @@ type UseJobAccountInvoicesOptions = {
   activeTab: number;
   accountsTabIndex: number;
   /** Master-level filter: `filters.job_id` */
-  jobId?: string | null;
+  jobId?: string | number | null;
   /** House-level filter: `filters.shipment_id` */
-  shipmentId?: string | null;
+  shipmentId?: string | number | null;
   enabled?: boolean;
   pageSize?: number;
 };
@@ -32,6 +32,12 @@ const EMPTY_SEARCH: JobFinanceDocumentsSearchFilters = {
   party_name: "",
   status: "",
 };
+
+/** Coerce API/list ids (string or number) for filter keys — never call `.trim()` on non-strings. */
+function normalizeFilterId(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  return String(value).trim();
+}
 
 export function useJobAccountInvoices({
   activeTab,
@@ -55,7 +61,9 @@ export function useJobAccountInvoices({
     string | null
   >(null);
 
-  const filterKey = jobId?.trim() || shipmentId?.trim() || "";
+  const normalizedJobId = normalizeFilterId(jobId);
+  const normalizedShipmentId = normalizeFilterId(shipmentId);
+  const filterKey = normalizedJobId || normalizedShipmentId;
   const searchKey = [
     searchFilters.day_book_name?.trim() ?? "",
     searchFilters.document_no?.trim() ?? "",
@@ -93,8 +101,8 @@ export function useJobAccountInvoices({
     setInvoiceListLoading(true);
     try {
       const res = await fetchJobFinanceDocuments({
-        jobId: jobId?.trim() || null,
-        shipmentId: !jobId?.trim() ? shipmentId?.trim() || null : null,
+        jobId: normalizedJobId || null,
+        shipmentId: !normalizedJobId ? normalizedShipmentId || null : null,
         index: pageIndex * pageSize,
         limit: pageSize,
         search: searchFilters,
@@ -111,7 +119,14 @@ export function useJobAccountInvoices({
     } finally {
       setInvoiceListLoading(false);
     }
-  }, [filterKey, jobId, shipmentId, pageIndex, pageSize, searchFilters]);
+  }, [
+    filterKey,
+    normalizedJobId,
+    normalizedShipmentId,
+    pageIndex,
+    pageSize,
+    searchFilters,
+  ]);
 
   useEffect(() => {
     if (!enabled) return;

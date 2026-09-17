@@ -110,7 +110,9 @@ import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestC
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   buildJobCreatePayloadFromBooking,
+  collectLinkedBookingIds,
   fetchJobRecordByDetailsId,
+  prepareHouseDocumentIdsFromBooking,
 } from "../../../utils/bookingCreateJob";
 import {
   parseJobSaveResponse,
@@ -120,8 +122,11 @@ import {  } from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -468,8 +473,13 @@ function AirExportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 5,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -550,6 +560,24 @@ function AirExportJobCreate() {
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
 
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
+  }, []);
+
+
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
     if (!normalized) {
@@ -607,8 +635,8 @@ function AirExportJobCreate() {
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Confirm before leaving so unsaved edits are not discarded silently.
+    if (!isReadOnly) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -1888,7 +1916,10 @@ function AirExportJobCreate() {
           ...(location.state?.job && { job: location.state.job }),
         },
       });
-      handleSubmit();
+      // Navigate to Accounts when available; save stays on top Create/Update
+      if (jobData?.id != null) {
+        setActive(5);
+      }
     }
   };
 
@@ -2511,7 +2542,8 @@ function AirExportJobCreate() {
       const newHouses: Record<string, unknown>[] = [];
       const linkedBookingIds: number[] = [];
 
-      bookingResponses.forEach((bookingRes, index) => {
+      for (let index = 0; index < bookingResponses.length; index += 1) {
+        const bookingRes = bookingResponses[index];
         const bookingId = selectedIds[index];
         const bookingDetail =
           (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
@@ -2519,20 +2551,23 @@ function AirExportJobCreate() {
           Array.isArray(bookingDetail) ? bookingDetail[0] : bookingDetail
         ) as Record<string, unknown>;
 
+        const houseDocumentIds =
+          await prepareHouseDocumentIdsFromBooking(bookingRecord);
         const payload = buildJobCreatePayloadFromBooking(
           bookingRecord,
           "air-export",
+          { houseDocumentIds },
         );
         const mappedHousing = Array.isArray(payload.housing_details)
           ? payload.housing_details[0]
           : null;
         if (!mappedHousing || typeof mappedHousing !== "object") {
-          return;
+          continue;
         }
 
         newHouses.push(mappedHousing as Record<string, unknown>);
         linkedBookingIds.push(bookingId);
-      });
+      }
 
       if (newHouses.length === 0) {
         ToastNotification({
@@ -2547,30 +2582,19 @@ function AirExportJobCreate() {
         .filter((id) => id > 0)
         .map((id) => ({ id }));
 
-      const existingBookingIds = Array.from(
-        new Set(
-          [
-            ...(Array.isArray(
-              (jobData as { booking_ids?: unknown }).booking_ids,
-            )
-              ? ((jobData as { booking_ids?: unknown[] }).booking_ids ?? [])
-              : []),
-            ...hawbDetails.map((h) => h.booking_id),
-            ...linkedBookingIds,
-          ]
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number =>
-                typeof n === "number" && !Number.isNaN(n) && n > 0,
-            ),
-        ),
+      const existingBookingIds = collectLinkedBookingIds(
+        hawbDetails,
+        (jobData as { booking_ids?: unknown }).booking_ids,
+        linkedBookingIds,
       );
 
       await putAPICall(
         `${URL.base}${URL.jobCreate}`,
         {
           id: jobData.id,
-          booking_ids: existingBookingIds,
+          ...(existingBookingIds.length > 0
+            ? { booking_ids: existingBookingIds }
+            : {}),
           housing_details: [...existingHouseIds, ...newHouses],
         },
         API_HEADER,
@@ -2959,15 +2983,9 @@ function AirExportJobCreate() {
       return;
     }
     try {
-      const bookingIds = Array.from(
-        new Set(
-          (hawbDetails ?? [])
-            .map((h) => h.booking_id)
-            .map((v) => (v == null || v === ("" as unknown) ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        hawbDetails,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3009,7 +3027,7 @@ function AirExportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         commodity_description:
           cargoDetailsForm.values.commodity_description || null,
         handling_information:
@@ -3184,7 +3202,14 @@ function AirExportJobCreate() {
               haz: c.haz === "Yes",
             })),
             mawb_charges: (() => {
-              const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
+              const chargeSource =
+                hawb.charges ??
+                (hawb.mawb_charges as typeof hawb.charges | undefined) ??
+                (
+                  hawb as { mbl_charges?: typeof hawb.charges }
+                ).mbl_charges ??
+                [];
+              const meaningful = getMeaningfulHouseCharges(chargeSource);
               if (meaningful.length === 0) return [];
               return meaningful.map((charge) => ({
                 ...(charge.id != null &&
@@ -3299,7 +3324,7 @@ function AirExportJobCreate() {
         navigate(`${jobModuleBasePath}/edit`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -3588,11 +3613,18 @@ function AirExportJobCreate() {
                   </Menu.Item>
 
                   {jobData?.id != null && (
-                    <AutomateVendorInvoiceTrigger
-                      variant="menu"
-                      shipmentNo={getMasterShipmentNo(jobData)}
-                      onOpen={openVendorInvoiceAutomation}
-                    />
+                    <>
+                      <AutomateVendorInvoiceTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openVendorInvoiceAutomation}
+                      />
+                      <AutomatePaymentRequestTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openPaymentRequestAutomation}
+                      />
+                    </>
                   )}
 
                   <Menu.Item
@@ -4905,7 +4937,7 @@ function AirExportJobCreate() {
                         ToastNotification({
                           type: "error",
                           message:
-                            "No charges found in Estimates/House charges to prefill.",
+                            "Select a supplier/vendor to create supplier invoice",
                         });
                         return;
                       }
@@ -4926,11 +4958,18 @@ function AirExportJobCreate() {
                 )}
 
                 {mode === "edit" && !isReadOnly && (
-                  <AutomateVendorInvoiceTrigger
-                    variant="button"
-                    shipmentNo={getMasterShipmentNo(jobData)}
-                    onOpen={openVendorInvoiceAutomation}
-                  />
+                  <>
+                    <AutomateVendorInvoiceTrigger
+                      variant="button"
+                      shipmentNo={getMasterShipmentNo(jobData)}
+                      onOpen={openVendorInvoiceAutomation}
+                    />
+                    <AutomatePaymentRequestTrigger
+                      variant="button"
+                      shipmentNo={getMasterShipmentNo(jobData)}
+                      onOpen={openPaymentRequestAutomation}
+                    />
+                  </>
                 )}
 
                 <Button
@@ -5234,7 +5273,11 @@ function AirExportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2 || active === 3 || active === 4) &&
+          {(active === 1 ||
+            active === 2 ||
+            active === 3 ||
+            active === 4 ||
+            (active === 5 && jobData?.id != null)) &&
             !isReadOnly && (
               <Button
                 leftSection={<IconChevronLeft size={16} />}
@@ -5315,15 +5358,13 @@ function AirExportJobCreate() {
               Next
             </Button>
           )}
-
-          {active === 4 && !isReadOnly && (
+          {active === 4 && jobData?.id != null && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
-              loading={isSubmitting}
             >
-              Submit
+              Next
             </Button>
           )}
         </Group>
@@ -5332,11 +5373,12 @@ function AirExportJobCreate() {
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          Your recent changes may be lost if you close this job. Are you sure
+          you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -5853,6 +5895,11 @@ function AirExportJobCreate() {
                           jobId={jobData?.id}
                           onOpen={openVendorInvoiceAutomation}
                         />
+                        <HouseAutomatePaymentRequestMenuItem
+                          getCurrentHousingDetail={() => hawb}
+                          jobId={jobData?.id}
+                          onOpen={openPaymentRequestAutomation}
+                        />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Export"
                           getHouseDetail={() => hawb}
@@ -5925,6 +5972,12 @@ function AirExportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="AIR EXPORTS"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

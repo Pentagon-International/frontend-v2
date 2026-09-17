@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActionIcon,
   Box,
   Button,
   Flex,
@@ -7,9 +8,10 @@ import {
   Group,
   NumberInput,
   Text,
+  TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { IconCheck } from "@tabler/icons-react";
+import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -32,11 +34,23 @@ type ExchangeRateFormData = {
   country_id: string;
   country_code: string;
   country_name: string;
+  rate_date: Date | null;
+};
+
+type RateDetailRow = {
+  id?: number;
   currency_id: string;
   currency_code: string;
   sell_rate: string;
   buy_rate: string;
-  rate_date: Date | null;
+};
+
+type EditRateItem = {
+  id?: number;
+  currency_id?: number;
+  currency_code?: string;
+  sell_rate?: string | number;
+  buy_rate?: string | number;
 };
 
 type EditState = {
@@ -44,11 +58,8 @@ type EditState = {
   country_id?: number;
   country_code?: string;
   country_name?: string;
-  currency_id?: number;
-  currency_code?: string;
-  sell_rate?: string | number;
-  buy_rate?: string | number;
   rate_date?: string | null;
+  rates?: EditRateItem[];
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -69,21 +80,21 @@ const fieldStyles = {
   },
 };
 
-const rateSchema = yup
-  .string()
-  .required("This field is required")
-  .test("is-decimal", "Enter a valid rate", (value) => {
-    if (!value?.trim()) return false;
-    return /^\d+(\.\d{1,6})?$/.test(value.trim());
-  });
-
 const schema = yup.object().shape({
   country_id: yup.string().required("Country is required"),
-  currency_id: yup.string().required("Currency is required"),
-  sell_rate: rateSchema,
-  buy_rate: rateSchema,
   rate_date: yup.date().nullable().required("Rate date is required"),
 });
+
+const createEmptyRateRow = (): RateDetailRow => ({
+  id: undefined,
+  currency_id: "",
+  currency_code: "",
+  sell_rate: "",
+  buy_rate: "",
+});
+
+const isValidRate = (value: string): boolean =>
+  /^\d+(\.\d{1,6})?$/.test(value.trim());
 
 const formatRateForPayload = (value: string): string => {
   const num = Number(value);
@@ -105,21 +116,111 @@ const parseRateDate = (value: string | null | undefined): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const mapRateRows = (rows: EditRateItem[]): RateDetailRow[] =>
+  rows.map((item) => ({
+    id: item.id != null ? Number(item.id) : undefined,
+    currency_id:
+      item.currency_id != null && String(item.currency_id).trim() !== ""
+        ? String(item.currency_id)
+        : "",
+    currency_code: String(item.currency_code ?? ""),
+    sell_rate: item.sell_rate != null ? String(item.sell_rate) : "",
+    buy_rate: item.buy_rate != null ? String(item.buy_rate) : "",
+  }));
+
+const flattenApiErrorMessages = (
+  value: unknown,
+  parts: string[] = [],
+): string[] => {
+  if (value == null) return parts;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) parts.push(trimmed);
+    return parts;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return parts;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => flattenApiErrorMessages(item, parts));
+    return parts;
+  }
+  if (typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+      if (key === "success" || key === "status" || key === "code") return;
+      flattenApiErrorMessages(item, parts);
+    });
+  }
+  return parts;
+};
+
+const extractErrorMessage = (err: unknown): string => {
+  if (err && typeof err === "object") {
+    const obj = err as {
+      message?: unknown;
+      response?: { data?: unknown };
+      data?: unknown;
+      error_message?: unknown;
+      detail?: unknown;
+    };
+
+    if (typeof obj.message === "string" && obj.message.trim() !== "") {
+      return obj.message.trim();
+    }
+    if (Array.isArray(obj.message)) {
+      const fromMessage = flattenApiErrorMessages(obj.message);
+      if (fromMessage.length > 0) return fromMessage.join(" ");
+    }
+    if (typeof obj.error_message === "string" && obj.error_message.trim()) {
+      return obj.error_message.trim();
+    }
+    if (typeof obj.detail === "string" && obj.detail.trim()) {
+      return obj.detail.trim();
+    }
+
+    const fromResponse = flattenApiErrorMessages(obj.response?.data);
+    if (fromResponse.length > 0) return fromResponse.join(" ");
+
+    const fromData = flattenApiErrorMessages(obj.data);
+    if (fromData.length > 0) return fromData.join(" ");
+
+    const fromWhole = flattenApiErrorMessages(obj);
+    if (fromWhole.length > 0) return fromWhole.join(" ");
+  }
+
+  if (typeof err === "string" && err.trim() !== "") {
+    return err.trim();
+  }
+
+  return "Something went wrong while saving Exchange Rate. Please try again.";
+};
+
 export default function ExchangeRateMasterCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rateRows, setRateRows] = useState<RateDetailRow[]>([
+    createEmptyRateRow(),
+  ]);
 
   const editData = (location.state as EditState | null) || null;
-  const isEditMode = !!editData?.id;
+  const isEditMode =
+    !!editData &&
+    (Array.isArray(editData.rates)
+      ? editData.rates.length > 0
+      : !!editData.id);
+  const primaryEditId =
+    editData?.id ??
+    (Array.isArray(editData?.rates) ? editData?.rates?.[0]?.id : undefined);
+
   const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
     useMasterEditAuditRefresh(
       isEditMode ? (editData as Record<string, unknown>) : null,
       {
         detailBaseUrl: isEditMode ? URL.exchangeRateMaster : undefined,
-        recordId: editData?.id,
-        enabled: isEditMode,
+        recordId: primaryEditId,
+        enabled: isEditMode && primaryEditId != null,
       },
     );
 
@@ -157,10 +258,6 @@ export default function ExchangeRateMasterCreate() {
       country_id: "",
       country_code: "",
       country_name: "",
-      currency_id: "",
-      currency_code: "",
-      sell_rate: "",
-      buy_rate: "",
       rate_date: null,
     },
     validate: yupResolver(schema),
@@ -172,16 +269,14 @@ export default function ExchangeRateMasterCreate() {
         country_id:
           editData.country_id != null ? String(editData.country_id) : "",
         country_code: editData.country_code || "",
-        country_name:
-          editData.country_name || editData.country_code || "",
-        currency_id:
-          editData.currency_id != null ? String(editData.currency_id) : "",
-        currency_code: editData.currency_code || "",
-        sell_rate:
-          editData.sell_rate != null ? String(editData.sell_rate) : "",
-        buy_rate: editData.buy_rate != null ? String(editData.buy_rate) : "",
+        country_name: editData.country_name || editData.country_code || "",
         rate_date: parseRateDate(editData.rate_date),
       });
+      if (Array.isArray(editData.rates) && editData.rates.length > 0) {
+        setRateRows(mapRateRows(editData.rates));
+      } else {
+        setRateRows([createEmptyRateRow()]);
+      }
       return;
     }
 
@@ -189,38 +284,102 @@ export default function ExchangeRateMasterCreate() {
       country_id: defaultCountry.country_id,
       country_code: defaultCountry.country_code,
       country_name: defaultCountry.country_name,
-      currency_id: "",
-      currency_code: "",
-      sell_rate: "",
-      buy_rate: "",
       rate_date: new Date(),
     });
+    setRateRows([createEmptyRateRow()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- init once from edit/default country
   }, [isEditMode, editData?.id, defaultCountry.country_id]);
+
+  const updateRateRow = (
+    index: number,
+    key: keyof RateDetailRow,
+    value: string | number | undefined,
+  ) => {
+    setRateRows((prev) =>
+      prev.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              [key]: value == null ? "" : String(value),
+            }
+          : row,
+      ),
+    );
+  };
+
+  const addRateRow = () =>
+    setRateRows((prev) => [...prev, createEmptyRateRow()]);
+
+  const removeRateRow = (index: number) => {
+    setRateRows((prev) =>
+      prev.length > 1 ? prev.filter((_, i) => i !== index) : prev,
+    );
+  };
 
   const handleSubmit = async (values: ExchangeRateFormData) => {
     setIsSubmitting(true);
 
     try {
+      const hasInvalidRateRow = rateRows.some(
+        (row) =>
+          !row.currency_id?.trim() ||
+          !isValidRate(row.sell_rate) ||
+          !isValidRate(row.buy_rate),
+      );
+      if (hasInvalidRateRow) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Please fill Currency, Sell Rate and Buy Rate for all rate detail rows.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      const currencyIds = rateRows.map((row) => row.currency_id);
+      if (new Set(currencyIds).size !== currencyIds.length) {
+        const duplicateCodes = rateRows
+          .filter(
+            (row, index) =>
+              row.currency_id &&
+              currencyIds.indexOf(row.currency_id) !== index,
+          )
+          .map((row) => row.currency_code || row.currency_id)
+          .filter(Boolean);
+        const uniqueDupes = [...new Set(duplicateCodes)];
+        ToastNotification({
+          type: "error",
+          message:
+            uniqueDupes.length > 0
+              ? `Currency "${uniqueDupes.join(", ")}" is duplicated. Each currency can be mapped only once per rate date.`
+              : "Duplicate currencies are not allowed for the same rate date.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       const payload = {
         country: Number(values.country_id),
-        currency: Number(values.currency_id),
-        sell_rate: formatRateForPayload(values.sell_rate),
-        buy_rate: formatRateForPayload(values.buy_rate),
         rate_date: formatDateToYYYYMMDD(values.rate_date),
+        rates: rateRows.map((row) => ({
+          ...(row.id != null ? { id: row.id } : {}),
+          currency: Number(row.currency_id),
+          sell_rate: formatRateForPayload(row.sell_rate),
+          buy_rate: formatRateForPayload(row.buy_rate),
+        })),
       };
 
-      if (isEditMode && editData?.id != null) {
+      if (isEditMode && primaryEditId != null) {
         const response = await putAPICall(
           URL.exchangeRateMaster,
           {
             ...payload,
-            id: editData.id,
+            id: primaryEditId,
           },
           API_HEADER,
         );
         applyAuditFromResponse(response);
-        await refreshAuditFromDetail(editData.id);
+        await refreshAuditFromDetail(primaryEditId);
         ToastNotification({
           type: "success",
           message: "Exchange Rate Master updated successfully",
@@ -235,10 +394,9 @@ export default function ExchangeRateMasterCreate() {
 
       navigate("/master/exchange-rate-master");
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
       ToastNotification({
         type: "error",
-        message: `Error ${isEditMode ? "updating" : "creating"} Exchange Rate Master: ${errorMessage}`,
+        message: `Error ${isEditMode ? "updating" : "creating"} Exchange Rate Master: ${extractErrorMessage(err)}`,
       });
     } finally {
       setIsSubmitting(false);
@@ -332,10 +490,10 @@ export default function ExchangeRateMasterCreate() {
               <Grid
                 style={{
                   backgroundColor: "#FFFFFF",
-                  height: "100%",
                   borderRadius: "8px",
                   padding: "24px",
                 }}
+                gutter="xs"
               >
                 <Grid.Col span={6}>
                   <SearchableSelect
@@ -389,120 +547,214 @@ export default function ExchangeRateMasterCreate() {
                   />
                 </Grid.Col>
 
-                <Grid.Col span={6}></Grid.Col>
-
-                <Grid.Col span={6}>
-                  <SearchableSelect
-                    label="Currency"
-                    placeholder="Search currency"
-                    withAsterisk
-                    apiEndpoint={URL.currencyMaster}
-                    value={form.values.currency_id || null}
-                    displayValue={form.values.currency_code || undefined}
-                    returnOriginalData
-                    onChange={(val, selectedData, originalData) => {
-                      if (val == null) {
-                        form.setFieldValue("currency_id", "");
-                        form.setFieldValue("currency_code", "");
-                        return;
-                      }
-                      form.setFieldValue("currency_id", val);
-                      const code =
-                        (originalData as {
-                          currency_code?: string;
-                          code?: string;
-                        } | null)?.currency_code ??
-                        (originalData as { code?: string } | null)?.code ??
-                        selectedData?.label ??
-                        "";
-                      form.setFieldValue("currency_code", String(code));
-                    }}
-                    dropdownZIndex={1000}
-                    minSearchLength={1}
-                    displayFormat={(item: Record<string, unknown>) => {
-                      const code = String(
-                        (item as { currency_code?: string; code?: string })
-                          .currency_code ??
-                          (item as { code?: string }).code ??
-                          "",
-                      );
-                      return {
-                        value: String((item as { id?: number }).id ?? ""),
-                        label: code,
-                      };
-                    }}
-                    searchFields={["currency_code", "code", "name"]}
-                    size="sm"
-                    styles={fieldStyles}
-                    error={form.errors.currency_id}
-                  />
-                </Grid.Col>
-
                 <Grid.Col span={6}>
                   <SingleDateInput
                     label="Rate Date"
                     placeholder="Select rate date"
                     value={form.values.rate_date}
-                    onChange={(date) =>
-                      form.setFieldValue("rate_date", date)
-                    }
+                    onChange={(date) => form.setFieldValue("rate_date", date)}
                     size="sm"
                     withAsterisk
                     error={form.errors.rate_date as string}
                   />
                 </Grid.Col>
 
-                <Grid.Col span={6}>
-                  <NumberInput
-                    label="Sell Rate"
-                    placeholder="Enter sell rate"
-                    withAsterisk
-                    value={
-                      form.values.sell_rate === ""
-                        ? ""
-                        : Number(form.values.sell_rate)
-                    }
-                    onChange={(value) =>
-                      form.setFieldValue(
-                        "sell_rate",
-                        value === "" || value == null ? "" : String(value),
-                      )
-                    }
-                    min={0}
-                    decimalScale={ROE_DECIMAL_PLACES}
-                    fixedDecimalScale={false}
-                    hideControls
-                    error={form.errors.sell_rate}
-                    styles={fieldStyles}
-                  />
+                <Grid.Col span={12}>
+                  <Text
+                    size="lg"
+                    fw={600}
+                    c="#105476"
+                    mt="lg"
+                    mb="sm"
+                    style={{ fontFamily: "Inter", marginTop: "8px" }}
+                  >
+                    Currency Rates
+                  </Text>
                 </Grid.Col>
 
-                <Grid.Col span={6}>
-                  <NumberInput
-                    label="Buy Rate"
-                    placeholder="Enter buy rate"
-                    withAsterisk
-                    value={
-                      form.values.buy_rate === ""
-                        ? ""
-                        : Number(form.values.buy_rate)
-                    }
-                    onChange={(value) =>
-                      form.setFieldValue(
-                        "buy_rate",
-                        value === "" || value == null ? "" : String(value),
-                      )
-                    }
-                    min={0}
-                    decimalScale={ROE_DECIMAL_PLACES}
-                    fixedDecimalScale={false}
-                    hideControls
-                    error={form.errors.buy_rate}
-                    styles={fieldStyles}
-                  />
+                <Grid.Col span={12}>
+                  <Grid gutter="sm" style={{ marginBottom: "6px" }}>
+                    <Grid.Col span={0.8}>
+                      <Text
+                        size="13px"
+                        fw={500}
+                        c="#424242"
+                        style={{ fontFamily: "Inter" }}
+                      >
+                        Sl No
+                      </Text>
+                    </Grid.Col>
+                    <Grid.Col span={3.4}>
+                      <Text
+                        size="13px"
+                        fw={500}
+                        c="#424242"
+                        style={{ fontFamily: "Inter" }}
+                      >
+                        Currency
+                      </Text>
+                    </Grid.Col>
+                    <Grid.Col span={3.4}>
+                      <Text
+                        size="13px"
+                        fw={500}
+                        c="#424242"
+                        style={{ fontFamily: "Inter" }}
+                      >
+                        Sell Rate
+                      </Text>
+                    </Grid.Col>
+                    <Grid.Col span={3.4}>
+                      <Text
+                        size="13px"
+                        fw={500}
+                        c="#424242"
+                        style={{ fontFamily: "Inter" }}
+                      >
+                        Buy Rate
+                      </Text>
+                    </Grid.Col>
+                    <Grid.Col span={1} />
+                  </Grid>
                 </Grid.Col>
 
-                
+                {rateRows.map((row, index) => (
+                  <Grid.Col
+                    span={12}
+                    key={
+                      row.id != null ? `rate-${row.id}` : `rate-new-${index}`
+                    }
+                  >
+                    <Grid gutter="sm" align="center">
+                      <Grid.Col span={0.8}>
+                        <TextInput
+                          value={String(index + 1)}
+                          readOnly
+                          styles={fieldStyles}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3.4}>
+                        <SearchableSelect
+                          placeholder="Search currency"
+                          apiEndpoint={URL.currencyMaster}
+                          value={row.currency_id || null}
+                          displayValue={row.currency_code || undefined}
+                          returnOriginalData
+                          dropdownZIndex={1100}
+                          minSearchLength={1}
+                          styles={fieldStyles}
+                          displayFormat={(item: Record<string, unknown>) => {
+                            const code = String(
+                              (item as { currency_code?: string; code?: string })
+                                .currency_code ??
+                                (item as { code?: string }).code ??
+                                "",
+                            );
+                            return {
+                              value: String((item as { id?: number }).id ?? ""),
+                              label: code,
+                            };
+                          }}
+                          searchFields={["currency_code", "code", "name"]}
+                          onChange={(val, selectedData, originalData) => {
+                            setRateRows((prev) =>
+                              prev.map((r, rowIndex) => {
+                                if (rowIndex !== index) return r;
+                                if (val == null) {
+                                  return {
+                                    ...r,
+                                    currency_id: "",
+                                    currency_code: "",
+                                  };
+                                }
+                                const code =
+                                  (
+                                    originalData as {
+                                      currency_code?: string;
+                                      code?: string;
+                                    } | null
+                                  )?.currency_code ??
+                                  (originalData as { code?: string } | null)
+                                    ?.code ??
+                                  selectedData?.label ??
+                                  "";
+                                return {
+                                  ...r,
+                                  currency_id: val,
+                                  currency_code: String(code),
+                                };
+                              }),
+                            );
+                          }}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3.4}>
+                        <NumberInput
+                          placeholder="Enter sell rate"
+                          value={
+                            row.sell_rate === "" ? "" : Number(row.sell_rate)
+                          }
+                          onChange={(value) =>
+                            updateRateRow(
+                              index,
+                              "sell_rate",
+                              value === "" || value == null
+                                ? ""
+                                : String(value),
+                            )
+                          }
+                          min={0}
+                          decimalScale={ROE_DECIMAL_PLACES}
+                          fixedDecimalScale={false}
+                          hideControls
+                          styles={fieldStyles}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={3.4}>
+                        <NumberInput
+                          placeholder="Enter buy rate"
+                          value={
+                            row.buy_rate === "" ? "" : Number(row.buy_rate)
+                          }
+                          onChange={(value) =>
+                            updateRateRow(
+                              index,
+                              "buy_rate",
+                              value === "" || value == null
+                                ? ""
+                                : String(value),
+                            )
+                          }
+                          min={0}
+                          decimalScale={ROE_DECIMAL_PLACES}
+                          fixedDecimalScale={false}
+                          hideControls
+                          styles={fieldStyles}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={1}>
+                        <Group gap={4}>
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            onClick={() => removeRateRow(index)}
+                          >
+                            <IconTrash size={18} />
+                          </ActionIcon>
+                          {index === rateRows.length - 1 && (
+                            <ActionIcon
+                              variant="light"
+                              color="#105476"
+                              onClick={addRateRow}
+                            >
+                              <IconPlus size={18} />
+                            </ActionIcon>
+                          )}
+                        </Group>
+                      </Grid.Col>
+                    </Grid>
+                  </Grid.Col>
+                ))}
               </Grid>
             </Box>
 

@@ -117,7 +117,10 @@ import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisp
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -429,6 +432,7 @@ const parseBoolean = (value: unknown): boolean => {
 function InlandImportJobCreate() {
   const navigate = useNavigate();
   const location = useLocation();
+  const jobModuleBasePath = "/inland/import-job";
   const [active, setActive] = useState(() =>
     readJobFormActiveTabFromLocation(location.state),
   );
@@ -451,8 +455,13 @@ function InlandImportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 4,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
   const user = useAuthStore((state) => state.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
@@ -521,6 +530,10 @@ function InlandImportJobCreate() {
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
   ] = useState<string | null>(null);
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -532,6 +545,18 @@ function InlandImportJobCreate() {
       return;
     }
     setVendorInvoiceAutomationShipmentNo(normalized);
+  }, []);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
   }, []);
   const jobDocuments = useJobDocuments();
 
@@ -602,13 +627,15 @@ function InlandImportJobCreate() {
   });
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate("/inland/import-job");
+    navigate(jobModuleBasePath);
   };
 
   // Fetch full job when only jobId is provided, or list row is missing service_code.
@@ -966,6 +993,28 @@ function InlandImportJobCreate() {
   );
   const estimatesRoeValidateRef = useRef<(() => boolean) | null>(null);
   const jobHydratedKeyRef = useRef<string | null>(null);
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [mode, jobData?.id, location.key]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [
+    mawbDetailsForm.values,
+    carrierDetailsForm.values,
+    routingsForm.values,
+    estimatesForm.values,
+    hawbDetails,
+    isReadOnly,
+  ]);
 
   // Note: Container Details are not used for Inland Import Jobs
 
@@ -1932,7 +1981,10 @@ function InlandImportJobCreate() {
           ...(location.state?.job && { job: location.state.job }),
         },
       });
-      handleSubmit();
+      // Navigate to Accounts when available; save stays on top Create/Update
+      if (jobData?.id != null) {
+        setActive(4);
+      }
     }
   };
 
@@ -2979,7 +3031,7 @@ function InlandImportJobCreate() {
         navigate("/inland/import-job/edit", {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -3197,11 +3249,18 @@ function InlandImportJobCreate() {
                   </Menu.Item>
 
                   {jobData?.id != null && (
-                    <AutomateVendorInvoiceTrigger
-                      variant="menu"
-                      shipmentNo={getMasterShipmentNo(jobData)}
-                      onOpen={openVendorInvoiceAutomation}
-                    />
+                    <>
+                      <AutomateVendorInvoiceTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openVendorInvoiceAutomation}
+                      />
+                      <AutomatePaymentRequestTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openPaymentRequestAutomation}
+                      />
+                    </>
                   )}
 
                   <Menu.Item
@@ -4440,7 +4499,7 @@ function InlandImportJobCreate() {
                         ToastNotification({
                           type: "error",
                           message:
-                            "No charges found in Estimates/House charges to prefill.",
+                            "Select a supplier/vendor to create supplier invoice",
                         });
                         return;
                       }
@@ -4458,6 +4517,14 @@ function InlandImportJobCreate() {
                   >
                     Create Supplier Invoice
                   </Button>
+                )}
+
+                {mode === "edit" && !isReadOnly && (
+                  <AutomatePaymentRequestTrigger
+                    variant="button"
+                    shipmentNo={getMasterShipmentNo(jobData)}
+                    onOpen={openPaymentRequestAutomation}
+                  />
                 )}
 
                 {mode === "edit" && !isReadOnly && (
@@ -4605,7 +4672,11 @@ function InlandImportJobCreate() {
           >
             Back to List
           </Button>
-          {(active === 1 || active === 2 || active === 3) && !isReadOnly && (
+          {(active === 1 ||
+            active === 2 ||
+            active === 3 ||
+            (active === 4 && jobData?.id != null)) &&
+            !isReadOnly && (
             <Button
               leftSection={<IconChevronLeft size={16} />}
               variant="outline"
@@ -4663,15 +4734,13 @@ function InlandImportJobCreate() {
               Next
             </Button>
           )}
-
-          {active === 3 && !isReadOnly && (
+          {active === 3 && jobData?.id != null && !isReadOnly && (
             <Button
               rightSection={<IconChevronRight size={16} />}
               color="#105476"
               onClick={handleNext}
-              loading={isSubmitting}
             >
-              Submit
+              Next
             </Button>
           )}
         </Group>
@@ -4680,11 +4749,12 @@ function InlandImportJobCreate() {
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -4697,10 +4767,10 @@ function InlandImportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate("/inland/import-job");
+              navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
@@ -5061,6 +5131,11 @@ function InlandImportJobCreate() {
                           jobId={jobData?.id}
                           onOpen={openVendorInvoiceAutomation}
                         />
+                        <HouseAutomatePaymentRequestMenuItem
+                          getCurrentHousingDetail={() => hawb}
+                          jobId={jobData?.id}
+                          onOpen={openPaymentRequestAutomation}
+                        />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Import"
                           getHouseDetail={() => hawb}
@@ -5133,6 +5208,12 @@ function InlandImportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="TRANSPORTATION"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

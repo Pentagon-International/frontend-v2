@@ -131,8 +131,11 @@ import {
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
+import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAutomatePaymentRequestMenuItem";
 import { AutomateVendorInvoiceTrigger } from "../../../components/AutomateVendorInvoiceTrigger";
+import { AutomatePaymentRequestTrigger } from "../../../components/AutomatePaymentRequestTrigger";
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
+import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
@@ -150,7 +153,12 @@ import {
   extractHouseDocumentFields,
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
-import { buildJobCreatePayloadFromBooking, fetchJobRecordByDetailsId } from "../../../utils/bookingCreateJob";
+import {
+  buildJobCreatePayloadFromBooking,
+  collectLinkedBookingIds,
+  fetchJobRecordByDetailsId,
+  prepareHouseDocumentIdsFromBooking,
+} from "../../../utils/bookingCreateJob";
 import {
   parseJobSaveResponse,
   resolveSavedJobId,
@@ -658,8 +666,13 @@ function ExportJobCreate() {
   } = useJobAccountInvoices({
     activeTab: active,
     accountsTabIndex: 5,
-    jobId: jobData?.job_id,
-    enabled: !!jobData?.id,
+    jobId:
+      jobData?.job_id != null && String(jobData.job_id).trim() !== ""
+        ? String(jobData.job_id)
+        : jobData?.id != null
+          ? String(jobData.id)
+          : null,
+    enabled: !!(jobData?.job_id ?? jobData?.id),
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
@@ -732,6 +745,24 @@ function ExportJobCreate() {
   const [vendorInvoiceAutomationShipmentNo, setVendorInvoiceAutomationShipmentNo] =
     useState<string | null>(null);
 
+  const [
+    paymentRequestAutomationShipmentNo,
+    setPaymentRequestAutomationShipmentNo,
+  ] = useState<string | null>(null);
+
+  const openPaymentRequestAutomation = useCallback((shipmentNo: string) => {
+    const normalized = shipmentNo.trim();
+    if (!normalized) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found for payment request automation.",
+      });
+      return;
+    }
+    setPaymentRequestAutomationShipmentNo(normalized);
+  }, []);
+
+
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
     if (!normalized) {
@@ -795,9 +826,11 @@ function ExportJobCreate() {
   const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const skipUnsavedTrackingRef = useRef(true);
   const handleBackToListClick = () => {
-    // In create mode the job is not saved yet; confirm before leaving.
-    if (!isReadOnly && mode === "create" && !jobData?.id) {
+    // Only warn on Back to List when the user actually changed something.
+    if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
@@ -996,6 +1029,29 @@ function ExportJobCreate() {
   const jobHydratedKeyRef = useRef<string | null>(null);
   // One-shot location.state restore per navigation; tab switches must not re-apply snapshots
   const lastFormRestoreNavKeyRef = useRef<string | null>(null);
+
+  // Ignore hydration/auto-fills, then treat later form edits as unsaved changes.
+  useEffect(() => {
+    skipUnsavedTrackingRef.current = true;
+    setHasUnsavedChanges(false);
+    const timer = window.setTimeout(() => {
+      skipUnsavedTrackingRef.current = false;
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [mode, jobData?.id, location.key]);
+
+  useEffect(() => {
+    if (skipUnsavedTrackingRef.current || isReadOnly) return;
+    setHasUnsavedChanges(true);
+  }, [
+    mblDetailsForm.values,
+    carrierDetailsForm.values,
+    routingsForm.values,
+    containerDetailsForm.values,
+    estimatesForm.values,
+    housingDetails,
+    isReadOnly,
+  ]);
 
   // Load job data if in edit or view mode
   useEffect(() => {
@@ -2214,7 +2270,10 @@ function ExportJobCreate() {
         setActive(4);
       }
     } else if (active === 4) {
-      handleSubmit();
+      // Navigate to Accounts when available (edit with saved job); save stays on top Create/Update
+      if (mode === "edit" && jobData?.id) {
+        setActive(5);
+      }
     }
   };
 
@@ -3088,7 +3147,8 @@ function ExportJobCreate() {
       const newHouses: Record<string, unknown>[] = [];
       const linkedBookingIds: number[] = [];
 
-      bookingResponses.forEach((bookingRes, index) => {
+      for (let index = 0; index < bookingResponses.length; index += 1) {
+        const bookingRes = bookingResponses[index];
         const bookingId = selectedIds[index];
         const bookingDetail =
           (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
@@ -3097,15 +3157,18 @@ function ExportJobCreate() {
             ? bookingDetail[0]
             : bookingDetail) as Record<string, unknown>;
 
+        const houseDocumentIds =
+          await prepareHouseDocumentIdsFromBooking(bookingRecord);
         const payload = buildJobCreatePayloadFromBooking(
           bookingRecord,
           "ocean-export",
+          { houseDocumentIds },
         );
         const mappedHousing = Array.isArray(payload.housing_details)
           ? payload.housing_details[0]
           : null;
         if (!mappedHousing || typeof mappedHousing !== "object") {
-          return;
+          continue;
         }
 
         const oceanHousing = {
@@ -3142,7 +3205,7 @@ function ExportJobCreate() {
 
         newHouses.push(oceanHousing);
         linkedBookingIds.push(bookingId);
-      });
+      }
 
       if (newHouses.length === 0) {
         ToastNotification({
@@ -3160,28 +3223,19 @@ function ExportJobCreate() {
         })
         .filter((row): row is { id: number } => row != null);
 
-      const existingBookingIds = Array.from(
-        new Set(
-          [
-            ...(Array.isArray((jobData as { booking_ids?: unknown }).booking_ids)
-              ? ((jobData as { booking_ids?: unknown[] }).booking_ids ?? [])
-              : []),
-            ...housingDetails.map((h) => h.booking_id),
-            ...linkedBookingIds,
-          ]
-            .map((v) => (v == null || v === "" ? null : Number(v)))
-            .filter(
-              (n): n is number =>
-                typeof n === "number" && !Number.isNaN(n) && n > 0,
-            ),
-        ),
+      const existingBookingIds = collectLinkedBookingIds(
+        housingDetails,
+        (jobData as { booking_ids?: unknown }).booking_ids,
+        linkedBookingIds,
       );
 
       await putAPICall(
         URL.importJob,
         {
           id: jobData.id,
-          booking_ids: existingBookingIds,
+          ...(existingBookingIds.length > 0
+            ? { booking_ids: existingBookingIds }
+            : {}),
           housing_details: [...existingHouseIds, ...newHouses],
         },
         API_HEADER,
@@ -3442,15 +3496,9 @@ function ExportJobCreate() {
       return;
     }
     try {
-      const bookingIds = Array.from(
-        new Set(
-          (housingDetails ?? [])
-            .map((h) => h.booking_id)
-            .map((v) => (v == null || v === ("" as unknown) ? null : Number(v)))
-            .filter(
-              (n): n is number => typeof n === "number" && !Number.isNaN(n),
-            ),
-        ),
+      const bookingIds = collectLinkedBookingIds(
+        housingDetails,
+        (jobData as { booking_ids?: unknown } | null | undefined)?.booking_ids,
       );
 
       const payload = {
@@ -3469,7 +3517,7 @@ function ExportJobCreate() {
         carrier_agent_email: partyDetailsForm.values.carrier_agent_email || "",
         carrier_agent_address:
           partyDetailsForm.values.carrier_agent_address || "",
-        booking_ids: bookingIds,
+        ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
         agent: mblDetailsForm.values.origin_agent || null,
         origin_code: mblDetailsForm.values.origin_code,
         destination_code: mblDetailsForm.values.destination_code,
@@ -3859,7 +3907,7 @@ function ExportJobCreate() {
         navigate(`${jobModuleBasePath}/edit`, {
           replace: true,
           state: {
-            job: savedJob ?? { ...(jobData ?? {}), id: savedId },
+            job: { ...(jobData ?? {}), ...(savedJob ?? {}), id: savedId },
             ...(location.state?.returnTo
               ? { returnTo: location.state.returnTo }
               : {}),
@@ -4120,11 +4168,18 @@ function ExportJobCreate() {
                   )}
 
                   {jobData?.id != null && (
-                    <AutomateVendorInvoiceTrigger
-                      variant="menu"
-                      shipmentNo={getMasterShipmentNo(jobData)}
-                      onOpen={openVendorInvoiceAutomation}
-                    />
+                    <>
+                      <AutomateVendorInvoiceTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openVendorInvoiceAutomation}
+                      />
+                      <AutomatePaymentRequestTrigger
+                        variant="menu"
+                        shipmentNo={getMasterShipmentNo(jobData)}
+                        onOpen={openPaymentRequestAutomation}
+                      />
+                    </>
                   )}
 
                   {jobData?.id != null && (
@@ -5626,7 +5681,7 @@ function ExportJobCreate() {
                         ToastNotification({
                           type: "error",
                           message:
-                            "No charges found in Estimates/House charges to prefill.",
+                            "Select a supplier/vendor to create supplier invoice",
                         });
                         return;
                       }
@@ -5647,11 +5702,18 @@ function ExportJobCreate() {
                 )}
 
                 {mode === "edit" && !isReadOnly && (
-                  <AutomateVendorInvoiceTrigger
-                    variant="button"
-                    shipmentNo={getMasterShipmentNo(jobData)}
-                    onOpen={openVendorInvoiceAutomation}
-                  />
+                  <>
+                    <AutomateVendorInvoiceTrigger
+                      variant="button"
+                      shipmentNo={getMasterShipmentNo(jobData)}
+                      onOpen={openVendorInvoiceAutomation}
+                    />
+                    <AutomatePaymentRequestTrigger
+                      variant="button"
+                      shipmentNo={getMasterShipmentNo(jobData)}
+                      onOpen={openPaymentRequestAutomation}
+                    />
+                  </>
                 )}
 
                 <Button
@@ -6224,17 +6286,30 @@ function ExportJobCreate() {
               Next
             </Button>
           )}
+          {active === 4 &&
+            mode === "edit" &&
+            !!jobData?.id &&
+            !isReadOnly && (
+              <Button
+                rightSection={<IconChevronRight size={16} />}
+                color="#105476"
+                onClick={handleNext}
+              >
+                Next
+              </Button>
+            )}
         </Group>
       </Group>
 
       <Modal
         opened={confirmBackToListOpen}
         onClose={() => setConfirmBackToListOpen(false)}
-        title="Confirm"
+        title="Unsaved Changes"
         centered
       >
         <Text size="sm" mb="md">
-          Do you want to close it since the job is not saved
+          You have unsaved changes. If you leave without saving, your data will
+          be lost. Are you sure you want to continue?
         </Text>
         <Group justify="flex-end">
           <Button
@@ -6250,7 +6325,7 @@ function ExportJobCreate() {
               navigate(jobModuleBasePath);
             }}
           >
-            Yes, close
+            Leave without saving
           </Button>
         </Group>
       </Modal>
@@ -6499,6 +6574,11 @@ function ExportJobCreate() {
                               getCurrentHousingDetail={() => house}
                               jobId={jobData?.id}
                               onOpen={openVendorInvoiceAutomation}
+                            />
+                            <HouseAutomatePaymentRequestMenuItem
+                              getCurrentHousingDetail={() => house}
+                              jobId={jobData?.id}
+                              onOpen={openPaymentRequestAutomation}
                             />
                             <HouseJobLedgerMenuItem
                               serviceName="Ocean Export"
@@ -7012,6 +7092,12 @@ function ExportJobCreate() {
         opened={vendorInvoiceAutomationShipmentNo != null}
         shipmentNo={vendorInvoiceAutomationShipmentNo ?? ""}
         onClose={() => setVendorInvoiceAutomationShipmentNo(null)}
+      />
+      <PaymentRequestAutomationModal
+        opened={paymentRequestAutomationShipmentNo != null}
+        shipmentNo={paymentRequestAutomationShipmentNo ?? ""}
+        voucherType="SEA EXPORTS"
+        onClose={() => setPaymentRequestAutomationShipmentNo(null)}
       />
     </Box>
   );

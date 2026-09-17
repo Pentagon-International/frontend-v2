@@ -22,6 +22,7 @@ const requestInterceptor = () =>
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  config.headers["X-Client-Type"] = "web";
   return config;
 });
 

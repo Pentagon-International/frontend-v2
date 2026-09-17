@@ -25,6 +25,7 @@ import {
   IconDotsVertical,
   IconEye,
   IconDownload,
+  IconListDetails,
   IconX,
 } from "@tabler/icons-react";
 import {
@@ -49,11 +50,13 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
+import { commonSearchAPI } from "../../../service/searchApi";
 import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
@@ -86,6 +89,7 @@ import {
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { resolveAgentInvoiceCollectCharges } from "../../../utils/collectAgentInvoiceCharges";
+import { findJobCreateDropdownRow } from "../../../utils/jobCreateDropdown";
 
 // Fetch functions
 
@@ -118,6 +122,7 @@ type VatRates = {
 const fetchGstRatesByStateSac = async (
   payload:
     | { state_id: number; sac_code: string }
+    | { sac_code: string; agent: true }
     | { vat: true; charge_id: number; service_id: number },
 ) => {
   return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
@@ -221,11 +226,26 @@ function resolveVatTaxBase(
   );
 }
 
-/** Per-unit / currency amount: always 2 decimal places (including Vietnam). */
+/** Per-unit / currency amount: VND (Vietnam) → whole numbers; else 2 dp (e.g. USD). */
 function clampCurrencyAmount(
   value: number | null | undefined,
+  currency?: string | null,
 ): number | null {
-  return clampMoneyAmount(value, false);
+  return clampMoneyAmount(
+    value,
+    Boolean(currency) &&
+      isMoneyWholeNumberMode() &&
+      isVndCurrency(currency),
+  );
+}
+
+/** Input decimal scale for charge currency amount / per-unit. */
+function getCurrencyAmountDecimalScale(currency?: string | null): 0 | 2 {
+  return getAmountDecimalScale(
+    Boolean(currency) &&
+      isMoneyWholeNumberMode() &&
+      isVndCurrency(currency),
+  );
 }
 
 /** Local amount: whole numbers for Vietnam branches. */
@@ -479,14 +499,20 @@ const fetchChargeMaster = async () => {
 
 // Fetch unit master
 
-// Fetch effective SAC (tax code) for charge + service: POST body { items: [{ charge_id, service_id }] }
+// Fetch effective SAC (tax code) for charge + service: POST body { items: [{ charge_id, service_id }], agent?: true }
 const fetchGetEffectiveSac = async (
   items: { charge_id: number; service_id: number }[],
+  options?: { agent?: boolean },
 ) => {
   try {
+    const body: {
+      items: { charge_id: number; service_id: number }[];
+      agent?: boolean;
+    } = { items };
+    if (options?.agent) body.agent = true;
     const response = await postAPICall(
       URL.gstChargeMappingGetEffectiveSac,
-      { items },
+      body,
       API_HEADER,
     );
     return (
@@ -506,6 +532,23 @@ const fetchGetEffectiveSac = async (
     console.error("Error fetching get-effective-sac:", error);
     return [];
   }
+};
+
+const parseNumericServiceId = (raw: unknown): number | null => {
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+};
+
+const serviceIdFromJobCreateRow = (
+  match: Record<string, unknown> | undefined,
+): number | null => {
+  if (!match) return null;
+  return parseNumericServiceId(
+    match.service_id ??
+      match.serviceId ??
+      (match.job as { service_id?: unknown } | undefined)?.service_id,
+  );
 };
 
 type SezStatusResult = {
@@ -995,12 +1038,37 @@ function calcChargeTotalsByDrCr(
   };
 }
 
+/** Taxable local base for GST display/totals (prefer amount_in_local, else amount × roe). */
+function resolveChargeLocalAmountForGst(charge: {
+  amount_in_local?: number | null;
+  amount?: number | null;
+  roe?: number | null;
+}): number | null {
+  const local = charge.amount_in_local;
+  if (local != null && Number.isFinite(Number(local))) {
+    return Number(local);
+  }
+  const amount = charge.amount;
+  const roe = charge.roe;
+  if (
+    amount != null &&
+    roe != null &&
+    Number(amount) > 0 &&
+    Number(roe) > 0
+  ) {
+    return clampAmount(Number(amount) * Number(roe));
+  }
+  return null;
+}
+
 /** Net GST totals: invoice is Cr − Dr; credit note is Dr − Cr. */
 function calcGstTotalsByDrCr(
   charges: Array<{
     dr_cr?: string | null;
     Dr_Cr?: string | null;
     amount_in_local?: number | null;
+    amount?: number | null;
+    roe?: number | null;
     is_tax_row?: boolean;
   }>,
   gstRatesByChargeIndex: Record<
@@ -1018,7 +1086,7 @@ function calcGstTotalsByDrCr(
 
   charges.forEach((charge, idx) => {
     if (charge.is_tax_row === true) return;
-    const localAmount = charge.amount_in_local;
+    const localAmount = resolveChargeLocalAmountForGst(charge);
     if (localAmount == null) return;
     const rates = gstRatesByChargeIndex[idx];
     if (!rates) return;
@@ -1157,7 +1225,11 @@ function calcTaxRowAmountsFromBreakupTotal(
   return {
     amountInLocal,
     amountInHeader,
-    currencyAmount: clampCurrencyAmount(amountInLocal) ?? amountInLocal,
+    currencyAmount:
+      clampCurrencyAmount(
+        amountInLocal,
+        isMoneyWholeNumberMode() ? "VND" : undefined,
+      ) ?? amountInLocal,
   };
 }
 
@@ -1210,6 +1282,55 @@ function resolvePartyStateIdFromHousing(
   )
     return null;
   return Number(raw);
+}
+
+type BillToAddressRow = {
+  id: number;
+  address: string;
+  state_id?: number;
+  address_type?: string | null;
+  gst_id?: string | null;
+};
+
+function normalizeAddressText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function readAddressesDataFromParty(
+  party: Record<string, unknown> | null | undefined,
+): BillToAddressRow[] {
+  if (!party || !Array.isArray(party.addresses_data)) return [];
+  return (party.addresses_data as BillToAddressRow[]).filter(
+    (addr) => addr != null && addr.id != null && String(addr.address ?? "").trim() !== "",
+  );
+}
+
+/**
+ * Build Address dropdown options from party master addresses_data.
+ * - clear: user picked Bill To in search → force explicit address selection
+ * - preserve: job/house prefill → keep matching address (by id or text) when possible
+ */
+function resolveBillToAddressSelection(
+  addressesData: BillToAddressRow[],
+  mode: "clear" | "preserve",
+  currentAddress?: string | null,
+): string {
+  if (mode === "clear") return "";
+  const current = String(currentAddress ?? "").trim();
+  if (current) {
+    const byId = addressesData.find((a) => String(a.id) === current);
+    if (byId) return String(byId.id);
+    const normalized = normalizeAddressText(current);
+    const byLabel = addressesData.find(
+      (a) => normalizeAddressText(String(a.address ?? "")) === normalized,
+    );
+    if (byLabel) return String(byLabel.id);
+  }
+  if (addressesData.length === 1) return String(addressesData[0].id);
+  const primary = addressesData.find(
+    (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+  );
+  return primary ? String(primary.id) : "";
 }
 
 function isAgentTypeToken(value: unknown): boolean {
@@ -1406,6 +1527,8 @@ function InvoiceCreate({
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const canPostDocuments = useCanPostDocuments();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isViewMode = location.pathname.includes("/view/");
   const isEditMode = location.pathname.includes("/edit/");
   const isEditOrViewMode = Boolean(
@@ -1489,15 +1612,9 @@ function InvoiceCreate({
    * until document date or party changes again.
    */
   const pendingApplyDueDateFromCreditRef = useRef(!isEditMode && !isViewMode);
-  const billToAddressesRef = useRef<
-    Array<{
-      id: number;
-      address: string;
-      state_id?: number;
-      address_type?: string | null;
-      gst_id?: string | null;
-    }>
-  >([]);
+  const billToAddressesRef = useRef<BillToAddressRow[]>([]);
+  /** Tracks customer/agent code whose addresses_data we already applied (search or fetch). */
+  const billToAddressesLoadedForRef = useRef<string>("");
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
   >({});
@@ -1560,7 +1677,8 @@ function InvoiceCreate({
   const [creditNoteBillToUserTouched, setCreditNoteBillToUserTouched] =
     useState(false);
 
-  // Agent invoice: hide SAC, IGST/CGST/SGST. VAT still applies except US.
+  // Agent invoice (non-India): hide SAC/IGST/CGST/SGST; VAT still applies except US.
+  // India agent invoice: show SAC + GST tax like customer invoice (rates via agent:true APIs).
   // Credit note: after the user re-selects an agent party, follow the Agent checkbox.
   const isAgentInvoice = useMemo(() => {
     if (isCreditNoteFlow) {
@@ -1709,7 +1827,6 @@ function InvoiceCreate({
 
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
   const isKenyaUser = useMemo(() => {
@@ -1773,6 +1890,12 @@ function InvoiceCreate({
 
   // SEZ customers: SAC still applies; GST columns/totals/tax tab are hidden
   const applyGst = isGstInvoiceUser && !hasSez;
+  // India agent invoice: same tax UI as customer; SAC/GST rates use agent:true payloads.
+  const isIndiaAgentInvoice = isIndiaUser && isAgentInvoice;
+  const applyAgentGstRates = isIndiaAgentInvoice && !hasSez;
+  const needsEffectiveSac = isGstInvoiceUser || isIndiaAgentInvoice;
+  const showSacColumn = needsEffectiveSac;
+  const showGstTax = applyGst || applyAgentGstRates;
   // Vietnam SEZ: hide VAT columns / tax tab / tax calc (other VAT countries unchanged)
   const applyVat = isVatInvoiceUser && !(isVietnamUser && hasSez);
 
@@ -1788,7 +1911,7 @@ function InvoiceCreate({
     isUsInvoiceRef.current = isUsInvoiceUser;
   }, [isUsInvoiceUser]);
 
-  const showTaxTab = applyGst || applyVat;
+  const showTaxTab = showGstTax || applyVat;
 
   const isInvoicePosted =
     invoiceIsPosted ||
@@ -2249,6 +2372,81 @@ function InvoiceCreate({
     (location.state as { job?: { service_id?: number } })?.job?.service_id ??
     null;
 
+  // Agent invoice (incl. global-search edit): resolve service_id from header
+  // shipment no / job id via filter/job-create. Fall back to location.state.job.
+  const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
+  const getServiceIdForSac = useCallback(
+    async (shipmentOrJobNo: string | null | undefined): Promise<number | null> => {
+      const key = String(shipmentOrJobNo ?? "").trim();
+      if (key) {
+        if (key in shipmentServiceIdCacheRef.current) {
+          const cached = shipmentServiceIdCacheRef.current[key];
+          if (cached != null) return cached;
+        } else {
+          try {
+            const results = await commonSearchAPI({
+              endpoint: URL.filterJobCreate,
+              query: key,
+            });
+            const arr = Array.isArray(results)
+              ? (results as Array<Record<string, unknown>>)
+              : [];
+            const serviceId = serviceIdFromJobCreateRow(
+              findJobCreateDropdownRow(arr, key),
+            );
+            shipmentServiceIdCacheRef.current[key] = serviceId;
+            if (serviceId != null) return serviceId;
+          } catch {
+            shipmentServiceIdCacheRef.current[key] = null;
+          }
+        }
+      }
+      return parseNumericServiceId(jobServiceId);
+    },
+    [jobServiceId],
+  );
+
+  const applyGstRatesForChargeIndex = useCallback(
+    (index: number, sacCode: string) => {
+      const sac = String(sacCode ?? "").trim();
+      if (!sac || !showGstTax) return;
+
+      void (async () => {
+        const cacheKey = applyAgentGstRates
+          ? `agent:${sac}`
+          : `${form.values.state ? Number(form.values.state) : ""}:${sac}`;
+
+        const cached = gstRatesCacheRef.current.get(cacheKey);
+        if (cached) {
+          setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: cached }));
+          return;
+        }
+
+        try {
+          const stateId = form.values.state ? Number(form.values.state) : null;
+          if (!applyAgentGstRates && (stateId == null || Number.isNaN(stateId))) {
+            return;
+          }
+          const res = await fetchGstRatesByStateSac(
+            applyAgentGstRates
+              ? { sac_code: sac, agent: true }
+              : { state_id: stateId as number, sac_code: sac },
+          );
+          const rates = parseGstRatesPayload(res);
+          if (rates) {
+            gstRatesCacheRef.current.set(cacheKey, rates);
+            setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: rates }));
+          } else {
+            setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: null }));
+          }
+        } catch {
+          setGstRatesByChargeIndex((prev) => ({ ...prev, [index]: null }));
+        }
+      })();
+    },
+    [applyAgentGstRates, showGstTax, form.values.state],
+  );
+
   // Format charge options (legacy charge master, kept if used elsewhere)
   const chargeOptions = useMemo(() => {
     const data = chargeData as any[];
@@ -2391,7 +2589,133 @@ function InvoiceCreate({
   useEffect(() => {
     chargesPrefilledFromJobRef.current = false;
     chargeUnitsByIndexRef.current = {};
+    billToAddressesLoadedForRef.current = "";
+    billToAddressesRef.current = [];
+    setAddressOptions([]);
+    gstRatesCacheRef.current.clear();
+    lastGstRatesFetchKeyRef.current = "";
+    setGstRatesByChargeIndex({});
+    setGstRatesLoadingByIndex({});
   }, [location.key]);
+
+  /** Apply party master addresses_data to Address dropdown + GST/state. */
+  const applyBillToAddressesFromParty = useCallback(
+    (
+      partyCode: string,
+      addressesData: BillToAddressRow[],
+      mode: "clear" | "preserve",
+      currentAddress?: string | null,
+    ) => {
+      billToAddressesRef.current = addressesData;
+      billToAddressesLoadedForRef.current = partyCode;
+      const nextAddressOptions = addressesData.map((addr) => ({
+        value: String(addr.id),
+        label: addr.address,
+      }));
+      setAddressOptions(nextAddressOptions);
+
+      const selectedAddressId = resolveBillToAddressSelection(
+        addressesData,
+        mode,
+        currentAddress,
+      );
+      form.setFieldValue("address", selectedAddressId);
+
+      const primaryAddress = addressesData.find(
+        (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+      );
+      const selectedAddress =
+        addressesData.find((a) => String(a.id) === selectedAddressId) ??
+        primaryAddress ??
+        addressesData.find((a) => a.state_id != null || a.gst_id != null);
+
+      if (isGstInvoiceUser || isKenyaUser) {
+        if (isGstInvoiceUser) {
+          const addrForState =
+            selectedAddress?.state_id != null
+              ? selectedAddress
+              : primaryAddress ||
+                addressesData.find((a) => a.state_id != null);
+          if (addrForState?.state_id != null) {
+            form.setFieldValue("state", String(addrForState.state_id));
+          }
+        }
+
+        const addrForGst =
+          selectedAddress?.gst_id != null
+            ? selectedAddress
+            : primaryAddress ||
+              addressesData.find((a) => a.gst_id != null);
+        if (addrForGst?.gst_id) {
+          form.setFieldValue("gstn", String(addrForGst.gst_id));
+        }
+      }
+    },
+    [form, isGstInvoiceUser, isKenyaUser],
+  );
+
+  // When Bill To is set from job/house invoice navigation (no SearchableSelect
+  // originalData), fetch agent/customer master and show all addresses for selection.
+  // Covers every job module including CHA (same InvoiceCreate route).
+  useEffect(() => {
+    const billTo = String(form.values.bill_to ?? "").trim();
+    if (!billTo) return;
+    if (billToAddressesLoadedForRef.current === billTo) return;
+    if (addressOptions.length > 0) {
+      billToAddressesLoadedForRef.current = billTo;
+      return;
+    }
+
+    const endpoint = isCreditNoteFlow
+      ? URL.customer
+      : isAgentInvoice
+        ? URL.agent
+        : URL.allCustomers;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const results = await commonSearchAPI({
+          endpoint,
+          query: billTo,
+        });
+        if (cancelled) return;
+        if (!Array.isArray(results) || results.length === 0) return;
+
+        const matched =
+          (results as Record<string, unknown>[]).find(
+            (row) => String(row.customer_code ?? "").trim() === billTo,
+          ) ?? (results[0] as Record<string, unknown>);
+
+        const addressesData = readAddressesDataFromParty(matched);
+        if (addressesData.length === 0) return;
+        if (cancelled) return;
+        if (String(form.values.bill_to ?? "").trim() !== billTo) return;
+
+        applyBillToAddressesFromParty(
+          billTo,
+          addressesData,
+          "preserve",
+          form.values.address,
+        );
+      } catch (error) {
+        console.error("Error loading Bill To addresses:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // form.values.address intentionally omitted: preserve snapshot at fetch start via closure + re-check bill_to
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    form.values.bill_to,
+    addressOptions.length,
+    isAgentInvoice,
+    isCreditNoteFlow,
+    location.key,
+    applyBillToAddressesFromParty,
+  ]);
 
   // Populate form from house (HAWB) state: shipper/Bill To/address and house charges → invoice charges
   useEffect(() => {
@@ -2806,6 +3130,7 @@ function InvoiceCreate({
                 ) {
                   const calcAmount = clampCurrencyAmount(
                     noOfUnit * amountPerUnit,
+                    currency,
                   );
                   if (calcAmount != null) amount = calcAmount;
                   if (
@@ -2894,7 +3219,7 @@ function InvoiceCreate({
               (location.state as { job?: { service_id?: number } })?.job
                 ?.service_id ?? null;
             if (
-              isGstInvoiceUser &&
+              needsEffectiveSac &&
               jobServiceIdForSac &&
               mappedCharges.some((c: ChargeItem) => c.charge_id != null)
             ) {
@@ -2907,7 +3232,10 @@ function InvoiceCreate({
                 service_id: jobServiceIdForSac,
               }));
 
-              fetchGetEffectiveSac(items).then((data) => {
+              fetchGetEffectiveSac(
+                items,
+                isAgent ? { agent: true } : undefined,
+              ).then((data) => {
                 data.forEach((item, responseIdx) => {
                   const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
                   if (
@@ -3320,16 +3648,20 @@ function InvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceDataFromApi, isEditOrViewMode, location.state, location.key]);
 
-  // Fetch GST rates by State + SAC for each charge (used for IGST/CGST/SGST display)
+  // Fetch GST rates by State + SAC (customer) or sac_code + agent:true (India agent)
   useEffect(() => {
-    if (!applyGst) {
+    if (!showGstTax) {
       setGstRatesLoadingByIndex({});
       return;
     }
 
     const stateId = form.values.state ? Number(form.values.state) : null;
-    if (!stateId || Number.isNaN(stateId)) {
-      // Clear loading states if no state is selected
+    if (
+      !applyAgentGstRates &&
+      applyGst &&
+      (!stateId || Number.isNaN(stateId))
+    ) {
+      // Customer GST still requires Bill To state
       setGstRatesLoadingByIndex({});
       return;
     }
@@ -3345,13 +3677,14 @@ function InvoiceCreate({
       .filter((x) => x.sac !== "" && !x.isTaxRow);
 
     if (sacs.length === 0) {
-      // Clear loading states if no SAC codes are present
       setGstRatesLoadingByIndex({});
+      setGstRatesByChargeIndex({});
       return;
     }
 
     const fetchKey = JSON.stringify({
-      stateId,
+      agent: applyAgentGstRates,
+      stateId: applyAgentGstRates ? null : stateId,
       sacs: sacs.map((s) => ({ sac: s.sac, localAmount: s.localAmount })),
     });
     if (fetchKey === lastGstRatesFetchKeyRef.current) return;
@@ -3362,7 +3695,9 @@ function InvoiceCreate({
     // Set loading state only for indices that need fetching (not in cache and don't have rates yet)
     const indicesToFetch: number[] = [];
     sacs.forEach(({ idx, sac }) => {
-      const cacheKey = `${stateId}:${sac}`;
+      const cacheKey = applyAgentGstRates
+        ? `agent:${sac}`
+        : `${stateId}:${sac}`;
       const hasCache = gstRatesCacheRef.current.has(cacheKey);
       const hasRates = gstRatesByChargeIndex[idx] != null;
 
@@ -3383,15 +3718,18 @@ function InvoiceCreate({
 
     Promise.all(
       sacs.map(async ({ idx, sac }) => {
-        const cacheKey = `${stateId}:${sac}`;
+        const cacheKey = applyAgentGstRates
+          ? `agent:${sac}`
+          : `${stateId}:${sac}`;
         const cached = gstRatesCacheRef.current.get(cacheKey);
         if (cached) return { idx, rates: cached, fromCache: true };
 
         try {
-          const res = await fetchGstRatesByStateSac({
-            state_id: stateId,
-            sac_code: sac,
-          });
+          const res = await fetchGstRatesByStateSac(
+            applyAgentGstRates
+              ? { sac_code: sac, agent: true }
+              : { state_id: stateId as number, sac_code: sac },
+          );
           const rates = parseGstRatesPayload(res);
           if (rates) gstRatesCacheRef.current.set(cacheKey, rates);
           return { idx, rates, fromCache: false };
@@ -3401,8 +3739,13 @@ function InvoiceCreate({
       }),
     ).then((results) => {
       if (cancelled) return;
-      setGstRatesByChargeIndex((prev) => {
-        const next = { ...prev };
+      setGstRatesByChargeIndex(() => {
+        const next: Record<number, GstRates | null> = {};
+        (form.values.charges || []).forEach((c, idx) => {
+          if (c.is_tax_row === true || !String(c.tax_code ?? "").trim()) {
+            next[idx] = null;
+          }
+        });
         results.forEach(({ idx, rates }) => {
           next[idx] = rates;
         });
@@ -3428,15 +3771,11 @@ function InvoiceCreate({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.state, form.values.charges, applyGst]);
+  }, [form.values.state, form.values.charges, showGstTax, applyGst, applyAgentGstRates]);
 
-  // When charges lack SAC, fetch effective SAC for India GST invoices (incl. SEZ)
+  // When charges lack SAC, fetch effective SAC for India GST / India agent invoices (incl. SEZ)
   useEffect(() => {
-    if (!isGstInvoiceUser) return;
-    const jobServiceId =
-      (location.state as { job?: { service_id?: number } } | null)?.job
-        ?.service_id ?? null;
-    if (!jobServiceId) return;
+    if (!needsEffectiveSac) return;
 
     const chargesWithIds = form.values.charges
       .map((c, originalIdx) => ({ charge: c, originalIdx }))
@@ -3448,12 +3787,24 @@ function InvoiceCreate({
       );
     if (!chargesWithIds.length) return;
 
-    void fetchGetEffectiveSac(
-      chargesWithIds.map(({ charge }) => ({
-        charge_id: charge.charge_id!,
-        service_id: jobServiceId,
-      })),
-    ).then((data) => {
+    void (async () => {
+      let serviceId = parseNumericServiceId(
+        (location.state as { job?: { service_id?: number } } | null)?.job
+          ?.service_id ?? null,
+      );
+      if (serviceId == null && isIndiaAgentInvoice) {
+        const headerNo = String(form.values.shipment_no ?? "").trim();
+        serviceId = await getServiceIdForSac(headerNo);
+      }
+      if (serviceId == null) return;
+
+      const data = await fetchGetEffectiveSac(
+        chargesWithIds.map(({ charge }) => ({
+          charge_id: charge.charge_id!,
+          service_id: serviceId,
+        })),
+        isIndiaAgentInvoice ? { agent: true } : undefined,
+      );
       data.forEach((item, responseIdx) => {
         const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
         if (
@@ -3462,11 +3813,20 @@ function InvoiceCreate({
           item.sac_code !== ""
         ) {
           form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
+          if (showGstTax) {
+            applyGstRatesForChargeIndex(originalIdx, item.sac_code);
+          }
         }
       });
-    });
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGstInvoiceUser, hasSez]);
+  }, [
+    needsEffectiveSac,
+    isIndiaAgentInvoice,
+    hasSez,
+    form.values.shipment_no,
+    showGstTax,
+  ]);
 
   // Ensure appended tax rows never carry GST rates (avoid stale cached rates causing display/calculation).
   useEffect(() => {
@@ -3527,7 +3887,10 @@ function InvoiceCreate({
         charge.no_of_unit > 0
       ) {
         const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
-        const clamped = clampCurrencyAmount(calculatedAmount);
+        const clamped = clampCurrencyAmount(
+          calculatedAmount,
+          charge.currency,
+        );
         if (clamped != null && clamped !== charge.amount) {
           return {
             ...charge,
@@ -3712,6 +4075,7 @@ function InvoiceCreate({
       }
       setAddressOptions([]);
       billToAddressesRef.current = [];
+      billToAddressesLoadedForRef.current = "";
       form.setFieldValue("address", "");
       setHasSez(false);
       partyCreditDayRef.current = null;
@@ -3732,60 +4096,21 @@ function InvoiceCreate({
     // Party selected/changed → apply due date from credit_day once SEZ responds
     pendingApplyDueDateFromCreditRef.current = true;
 
-    // Customer selected from search: populate address options, state and GSTN from customer response (addresses_data)
-    if (
-      originalData &&
-      (originalData as Record<string, unknown>).addresses_data
-    ) {
-      const addressesData = (originalData as Record<string, unknown>)
-        .addresses_data as Array<{
-        id: number;
-        address: string;
-        state_id?: number;
-        address_type?: string | null;
-        gst_id?: string | null;
-      }>;
-      billToAddressesRef.current = addressesData || [];
-      const nextAddressOptions = (addressesData || []).map((addr) => ({
-        value: String(addr.id),
-        label: addr.address,
-      }));
-
-      setAddressOptions(nextAddressOptions);
-      form.setFieldValue("address", "");
-
-      // Prefer PRIMARY address for state and GSTN; if none, fall back to first address that has each field
-      const primaryAddress = (addressesData || []).find(
-        (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+    // Customer/agent selected from search: populate address options from addresses_data
+    const addressesData = readAddressesDataFromParty(originalData);
+    if (addressesData.length > 0) {
+      applyBillToAddressesFromParty(
+        String(value).trim(),
+        addressesData,
+        "clear",
       );
-
-      if (isGstInvoiceUser || isKenyaUser) {
-        if (isGstInvoiceUser) {
-          const addrForState =
-            primaryAddress ||
-            (addressesData || []).find((a) => a.state_id != null);
-          if (addrForState?.state_id != null) {
-            form.setFieldValue("state", String(addrForState.state_id));
-          }
-        }
-
-        const addrForGst =
-          primaryAddress ||
-          (addressesData || []).find(
-            (a) => (a as { gst_id?: string | null }).gst_id != null,
-          );
-        const gstFromAddress = (
-          addrForGst as { gst_id?: string | null } | undefined
-        )?.gst_id;
-        if (gstFromAddress) {
-          form.setFieldValue("gstn", String(gstFromAddress));
-        }
-      }
     } else {
       setAddressOptions([]);
       billToAddressesRef.current = [];
+      billToAddressesLoadedForRef.current = "";
       form.setFieldValue("address", "");
-      // Do not clear state or GSTN here — they may have been set from house data
+      // Do not clear state or GSTN here — they may have been set from house data.
+      // Address list will be fetched by the Bill To effect when search row lacks addresses_data.
     }
   };
 
@@ -4003,26 +4328,35 @@ function InvoiceCreate({
 
       const isVatSave = isVatInvoiceUser;
 
-      // VAT (China/Kenya): tax_rate + tax_amount. India GST: igst/cgst/sgst.
-      const gstRatesForCharges: (GstRates | null)[] = !applyGst
-        ? values.charges.map(() => null)
-        : await Promise.all(
-            values.charges.map(async (charge, idx) => {
-              const cached = gstRatesByChargeIndex[idx];
-              if (cached) return cached;
-              const sacCode = (charge.tax_code ?? "").trim();
-              if (!sacCode || stateId == null || stateId <= 0) return null;
-              try {
-                const res = await fetchGstRatesByStateSac({
-                  state_id: stateId,
-                  sac_code: sacCode,
-                });
-                return parseGstRatesPayload(res);
-              } catch {
-                return null;
-              }
-            }),
-          );
+      // VAT (China/Kenya): tax_rate + tax_amount. India GST / India agent GST: igst/cgst/sgst.
+      const gstRatesForCharges: (GstRates | null)[] =
+        !applyGst && !applyAgentGstRates
+          ? values.charges.map(() => null)
+          : await Promise.all(
+              values.charges.map(async (charge, idx) => {
+                const cached = gstRatesByChargeIndex[idx];
+                if (cached) return cached;
+                const sacCode = (charge.tax_code ?? "").trim();
+                if (!sacCode) return null;
+                try {
+                  if (applyAgentGstRates) {
+                    const res = await fetchGstRatesByStateSac({
+                      sac_code: sacCode,
+                      agent: true,
+                    });
+                    return parseGstRatesPayload(res);
+                  }
+                  if (stateId == null || stateId <= 0) return null;
+                  const res = await fetchGstRatesByStateSac({
+                    state_id: stateId,
+                    sac_code: sacCode,
+                  });
+                  return parseGstRatesPayload(res);
+                } catch {
+                  return null;
+                }
+              }),
+            );
 
       const chargesPayload = values.charges
         .filter((c) => c.is_tax_row !== true)
@@ -4087,8 +4421,12 @@ function InvoiceCreate({
               currency_id: chargeCurrencyId,
               roe: roundRoeForPayload(charge.roe) ?? 0,
               amount_per_unit:
-                clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-              amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+                clampCurrencyAmount(
+                  charge.amount_per_unit ?? 0,
+                  charge.currency,
+                ) ?? 0,
+              amount:
+                clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
@@ -4131,8 +4469,12 @@ function InvoiceCreate({
             currency_id: chargeCurrencyId,
             roe: roundRoeForPayload(charge.roe) ?? 0,
             amount_per_unit:
-              clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+              clampCurrencyAmount(
+                charge.amount_per_unit ?? 0,
+                charge.currency,
+              ) ?? 0,
+            amount:
+              clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
@@ -4359,7 +4701,7 @@ function InvoiceCreate({
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
       } else if (isVatPost) {
         percentageWiseTotals = [];
-      } else if (applyGst) {
+      } else if (showGstTax) {
         let breakupData = gstBreakup;
         if (!breakupData?.sac_wise_totals?.length) {
           breakupData = await fetchInvoiceCalculateGstBreakup({
@@ -4394,26 +4736,35 @@ function InvoiceCreate({
         code?: string;
       }[];
 
-      const gstRatesForPostCharges: (GstRates | null)[] = !applyGst
-        ? values.charges.map(() => null)
-        : await Promise.all(
-            values.charges.map(async (charge, idx) => {
-              if (charge.is_tax_row === true) return null;
-              const cached = gstRatesByChargeIndex[idx];
-              if (cached) return cached;
-              const sacCode = (charge.tax_code ?? "").trim();
-              if (!sacCode || stateId == null || stateId <= 0) return null;
-              try {
-                const res = await fetchGstRatesByStateSac({
-                  state_id: stateId,
-                  sac_code: sacCode,
-                });
-                return parseGstRatesPayload(res);
-              } catch {
-                return null;
-              }
-            }),
-          );
+      const gstRatesForPostCharges: (GstRates | null)[] =
+        !applyGst && !applyAgentGstRates
+          ? values.charges.map(() => null)
+          : await Promise.all(
+              values.charges.map(async (charge, idx) => {
+                if (charge.is_tax_row === true) return null;
+                const cached = gstRatesByChargeIndex[idx];
+                if (cached) return cached;
+                const sacCode = (charge.tax_code ?? "").trim();
+                if (!sacCode) return null;
+                try {
+                  if (applyAgentGstRates) {
+                    const res = await fetchGstRatesByStateSac({
+                      sac_code: sacCode,
+                      agent: true,
+                    });
+                    return parseGstRatesPayload(res);
+                  }
+                  if (stateId == null || stateId <= 0) return null;
+                  const res = await fetchGstRatesByStateSac({
+                    state_id: stateId,
+                    sac_code: sacCode,
+                  });
+                  return parseGstRatesPayload(res);
+                } catch {
+                  return null;
+                }
+              }),
+            );
 
       const chargesPayload = values.charges
         .filter((c) => c.is_tax_row !== true)
@@ -4472,8 +4823,12 @@ function InvoiceCreate({
               currency_id: chargeCurrencyId,
               roe: roundRoeForPayload(charge.roe) ?? 0,
               amount_per_unit:
-                clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-              amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+                clampCurrencyAmount(
+                  charge.amount_per_unit ?? 0,
+                  charge.currency,
+                ) ?? 0,
+              amount:
+                clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
               amount_in_local:
                 clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
               amount_in_header: headerAmount,
@@ -4516,8 +4871,12 @@ function InvoiceCreate({
             currency_id: chargeCurrencyId,
             roe: roundRoeForPayload(charge.roe) ?? 0,
             amount_per_unit:
-              clampCurrencyAmount(charge.amount_per_unit ?? 0) ?? 0,
-            amount: clampCurrencyAmount(charge.amount ?? 0) ?? 0,
+              clampCurrencyAmount(
+                charge.amount_per_unit ?? 0,
+                charge.currency,
+              ) ?? 0,
+            amount:
+              clampCurrencyAmount(charge.amount ?? 0, charge.currency) ?? 0,
             amount_in_local: clampLocalAmount(charge.amount_in_local ?? 0) ?? 0,
             amount_in_header: headerAmount,
             tax_code: charge.tax_code ?? "",
@@ -4557,7 +4916,7 @@ function InvoiceCreate({
                 Dr_Cr: taxRowDrCr,
               };
             })
-        : isAgentPost || isUsPost || hasSez || isVatPost
+        : isUsPost || hasSez || isVatPost
           ? []
           : sacWiseTotals
               .filter((row) => {
@@ -4605,7 +4964,7 @@ function InvoiceCreate({
                 };
               });
 
-      const appendTaxRows = applyGst || applyVat;
+      const appendTaxRows = showGstTax || applyVat;
       const allChargesPayload = appendTaxRows
         ? [...chargesPayload, ...taxCharges]
         : chargesPayload;
@@ -4962,6 +5321,11 @@ function InvoiceCreate({
     return undefined;
   })();
 
+  /** India agent invoice: IGST-only (inter-state); avoid undefined hiding GST columns. */
+  const effectiveHeaderSameState = applyAgentGstRates
+    ? false
+    : headerSameState;
+
   const chargeSectionTotals = useMemo(
     () =>
       calcChargeTotalsByDrCr(
@@ -5035,13 +5399,13 @@ function InvoiceCreate({
       currencyAmount: 0.95,
       headerAmount: 0.95,
       localAmount: 0.85,
-      sac: isGstInvoiceUser ? 0.75 : 0,
+      sac: showSacColumn ? 0.75 : 0,
       drCr: applyVat ? 0.7 : 0.55,
       vatRate: applyVat ? 0.9 : 0,
       vatAmount: applyVat ? 0.9 : 0,
-      cgst: applyGst && headerSameState === true ? 0.55 : 0,
-      sgst: applyGst && headerSameState === true ? 0.55 : 0,
-      igst: applyGst && headerSameState === false ? 0.55 : 0,
+      cgst: showGstTax && effectiveHeaderSameState === true ? 0.55 : 0,
+      sgst: showGstTax && effectiveHeaderSameState === true ? 0.55 : 0,
+      igst: showGstTax && effectiveHeaderSameState === false ? 0.55 : 0,
       actions: !isReadOnly ? 0.7 : 0,
     };
     const used = Object.values(cols).reduce((a, b) => a + b, 0);
@@ -5050,10 +5414,10 @@ function InvoiceCreate({
     return { ...cols, charge: cols.charge + remainder };
   }, [
     showShipmentIdInCharges,
-    isGstInvoiceUser,
-    applyGst,
+    showSacColumn,
+    showGstTax,
     applyVat,
-    headerSameState,
+    effectiveHeaderSameState,
     isReadOnly,
   ]);
 
@@ -5073,6 +5437,7 @@ function InvoiceCreate({
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {viewAllocationDocsUi}
       {/* Full-page loader overlay when saving or posting */}
       {(isSubmitting || isPosting || invoiceViewFetchLoading) && (
         <Box
@@ -5166,6 +5531,17 @@ function InvoiceCreate({
                     {saveResponse?.status?.toUpperCase() === "POSTED"
                       ? pdfDocumentLabel
                       : `Draft ${pdfDocumentLabel}`}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconListDetails size={14} />}
+                    disabled={!String(saveResponse?.document_no ?? "").trim()}
+                    onClick={() =>
+                      void openViewAllocationDocs(
+                        String(saveResponse?.document_no ?? ""),
+                      )
+                    }
+                  >
+                    View Allocation Docs
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
@@ -5466,52 +5842,84 @@ function InvoiceCreate({
                 value={form.values.currency}
                 onChange={(value) => {
                   const newCurrency = value || "";
-                  const headerRoe = isBaseCurrency(newCurrency)
-                    ? 1
-                    : form.values.roe;
-                  const updatedCharges = form.values.charges.map((charge) => {
-                    const newHeader = calcChargeHeaderAmount(
-                      charge,
-                      newCurrency,
-                      headerRoe,
-                    );
-                    if (newHeader != null) {
-                      return { ...charge, header_amount: newHeader };
-                    }
-                    return charge;
-                  });
-                  form.setValues({
-                    ...form.values,
-                    currency: newCurrency,
-                    roe: isBaseCurrency(newCurrency) ? 1 : form.values.roe,
-                    charges: updatedCharges,
-                  });
-                  if (isBaseCurrency(newCurrency)) {
-                    roeCacheRef.current.set(
-                      newCurrency.trim().toUpperCase(),
-                      1,
-                    );
-                    const billingUpper = newCurrency.trim().toUpperCase();
-                    form.values.charges.forEach((charge, idx) => {
-                      if (
-                        charge.currency?.trim().toUpperCase() === billingUpper
-                      ) {
-                        form.setFieldValue(`charges.${idx}.roe`, 1);
+                  const billingUpper = newCurrency.trim().toUpperCase();
+                  const currencyRows =
+                    (currencyData as {
+                      id?: number;
+                      code?: string;
+                      currency_code?: string;
+                    }[]) ?? [];
+
+                  const recalcChargesForBilling = (
+                    headerRoe: number | null | undefined,
+                  ) => {
+                    const roeForCalc =
+                      isBaseCurrency(newCurrency)
+                        ? 1
+                        : headerRoe != null && headerRoe > 0
+                          ? headerRoe
+                          : form.values.roe;
+
+                    return form.values.charges.map((charge) => {
+                      const chargeCode =
+                        resolveChargeCurrencyCode(charge, currencyRows) ||
+                        charge.currency ||
+                        "";
+                      const chargeMatchesBilling =
+                        chargeCode.trim().toUpperCase() === billingUpper;
+                      const nextRoe = chargeMatchesBilling
+                        ? isBaseCurrency(newCurrency)
+                          ? 1
+                          : (roeForCalc ?? charge.roe)
+                        : charge.roe;
+                      const next = {
+                        ...charge,
+                        currency: chargeCode || charge.currency,
+                        roe: nextRoe,
+                      };
+                      const newHeader = calcChargeHeaderAmount(
+                        {
+                          amount: next.amount,
+                          amount_in_local: next.amount_in_local,
+                          currency: chargeCode || next.currency,
+                        },
+                        newCurrency,
+                        roeForCalc,
+                      );
+                      if (newHeader != null) {
+                        return { ...next, header_amount: newHeader };
                       }
+                      return next;
+                    });
+                  };
+
+                  if (isBaseCurrency(newCurrency)) {
+                    roeCacheRef.current.set(billingUpper, 1);
+                    billingCurrencyRef.current = newCurrency;
+                    billingRoeRef.current = 1;
+                    form.setValues({
+                      ...form.values,
+                      currency: newCurrency,
+                      roe: 1,
+                      charges: recalcChargesForBilling(1),
                     });
                     return;
                   }
+
+                  // Update billing currency immediately; recalc header amounts once ROE is ready.
+                  billingCurrencyRef.current = newCurrency;
+                  form.setFieldValue("currency", newCurrency);
                   void ensureRoeForCurrency(newCurrency).then((roe) => {
-                    form.setFieldValue("roe", roe);
-                    if (roe == null) return;
-                    const billingUpper = newCurrency.trim().toUpperCase();
-                    form.values.charges.forEach((charge, idx) => {
-                      if (
-                        charge.currency?.trim().toUpperCase() === billingUpper
-                      ) {
-                        form.setFieldValue(`charges.${idx}.roe`, roe);
-                      }
-                    });
+                    const roeForCalc =
+                      roe != null && roe > 0 ? roe : form.values.roe;
+                    billingRoeRef.current = roeForCalc;
+                    if (roeForCalc != null && roeForCalc > 0) {
+                      form.setFieldValue("roe", roeForCalc);
+                    }
+                    form.setFieldValue(
+                      "charges",
+                      recalcChargesForBilling(roeForCalc),
+                    );
                   });
                 }}
                 searchable
@@ -5595,12 +6003,10 @@ function InvoiceCreate({
               <Grid.Col span={2}>
                 <FormTextInput
                   label="IRN No"
-                  placeholder="Enter IRN number"
+                  placeholder="IRN No"
                   format="capital"
                   value={form.values.irn_no}
-                  onChange={(e) => form.setFieldValue("irn_no", e.target.value)}
-                  error={form.errors.irn_no}
-                  readOnly={isReadOnly}
+                  readOnly
                 />
               </Grid.Col>
             )}
@@ -5785,7 +6191,7 @@ function InvoiceCreate({
                   >
                     Local Amount
                   </Grid.Col>
-                  {isGstInvoiceUser && (
+                  {showSacColumn && (
                     <Grid.Col
                       span={chargeGridCols.sac}
                       style={chargeHeaderCellStyle}
@@ -5815,7 +6221,7 @@ function InvoiceCreate({
                       VAT Amount
                     </Grid.Col>
                   )}
-                  {applyGst && headerSameState === true && (
+                  {showGstTax && effectiveHeaderSameState === true && (
                     <Grid.Col
                       span={chargeGridCols.cgst}
                       style={chargeHeaderCellStyle}
@@ -5823,7 +6229,7 @@ function InvoiceCreate({
                       CGST
                     </Grid.Col>
                   )}
-                  {applyGst && headerSameState === true && (
+                  {showGstTax && effectiveHeaderSameState === true && (
                     <Grid.Col
                       span={chargeGridCols.sgst}
                       style={chargeHeaderCellStyle}
@@ -5831,7 +6237,7 @@ function InvoiceCreate({
                       SGST
                     </Grid.Col>
                   )}
-                  {applyGst && headerSameState === false && (
+                  {showGstTax && effectiveHeaderSameState === false && (
                     <Grid.Col
                       span={chargeGridCols.igst}
                       style={chargeHeaderCellStyle}
@@ -6001,28 +6407,69 @@ function InvoiceCreate({
                             }
                           }
 
-                          if (
-                            chargeId != null &&
-                            jobServiceId != null &&
-                            isGstInvoiceUser
-                          ) {
-                            fetchGetEffectiveSac([
-                              {
-                                charge_id: chargeId,
-                                service_id: jobServiceId,
-                              },
-                            ]).then((data) => {
-                              const item = data[0];
-                              if (
-                                item?.sac_code != null &&
-                                item.sac_code !== ""
-                              ) {
-                                form.setFieldValue(
-                                  `charges.${index}.tax_code`,
-                                  item.sac_code,
+                          if (chargeId != null && needsEffectiveSac) {
+                            if (isAgentInvoice) {
+                              const headerShipmentNo = String(
+                                form.values.shipment_no ?? "",
+                              ).trim();
+                              void (async () => {
+                                const serviceId =
+                                  await getServiceIdForSac(headerShipmentNo);
+                                if (serviceId == null) return;
+                                const data = await fetchGetEffectiveSac(
+                                  [
+                                    {
+                                      charge_id: chargeId,
+                                      service_id: serviceId,
+                                    },
+                                  ],
+                                  isIndiaAgentInvoice
+                                    ? { agent: true }
+                                    : undefined,
                                 );
-                              }
-                            });
+                                const item = data[0];
+                                if (
+                                  item?.sac_code != null &&
+                                  item.sac_code !== ""
+                                ) {
+                                  form.setFieldValue(
+                                    `charges.${index}.tax_code`,
+                                    item.sac_code,
+                                  );
+                                  applyGstRatesForChargeIndex(
+                                    index,
+                                    item.sac_code,
+                                  );
+                                }
+                              })();
+                            } else if (jobServiceId != null) {
+                              fetchGetEffectiveSac(
+                                [
+                                  {
+                                    charge_id: chargeId,
+                                    service_id: jobServiceId,
+                                  },
+                                ],
+                                isIndiaAgentInvoice
+                                  ? { agent: true }
+                                  : undefined,
+                              ).then((data) => {
+                                const item = data[0];
+                                if (
+                                  item?.sac_code != null &&
+                                  item.sac_code !== ""
+                                ) {
+                                  form.setFieldValue(
+                                    `charges.${index}.tax_code`,
+                                    item.sac_code,
+                                  );
+                                  applyGstRatesForChargeIndex(
+                                    index,
+                                    item.sac_code,
+                                  );
+                                }
+                              });
+                            }
                           }
                           if (
                             chargeId != null &&
@@ -6094,14 +6541,34 @@ function InvoiceCreate({
                           );
                           const code = opt ? (opt.label ?? opt.value) : v;
                           form.setFieldValue(`charges.${index}.currency`, code);
+                          const currentCharge = form.values.charges[index];
+                          const clampedAmount = clampCurrencyAmount(
+                            currentCharge.amount,
+                            code,
+                          );
+                          const clampedPerUnit = clampCurrencyAmount(
+                            currentCharge.amount_per_unit,
+                            code,
+                          );
+                          if (clampedAmount !== currentCharge.amount) {
+                            form.setFieldValue(
+                              `charges.${index}.amount`,
+                              clampedAmount,
+                            );
+                          }
+                          if (clampedPerUnit !== currentCharge.amount_per_unit) {
+                            form.setFieldValue(
+                              `charges.${index}.amount_per_unit`,
+                              clampedPerUnit,
+                            );
+                          }
                           if (isBaseCurrency(code)) {
                             form.setFieldValue(`charges.${index}.roe`, 1);
                             roeCacheRef.current.set(
                               code.trim().toUpperCase(),
                               1,
                             );
-                            const currentCharge = form.values.charges[index];
-                            const amt = currentCharge.amount;
+                            const amt = clampedAmount ?? currentCharge.amount;
                             if (amt != null && amt > 0) {
                               const local = clampLocalAmount(amt * 1);
                               if (local != null) {
@@ -6133,10 +6600,12 @@ function InvoiceCreate({
                                 `charges.${index}.roe`,
                                 newRoe,
                               );
-                              const currentCharge = form.values.charges[index];
-                              const amt = currentCharge.amount;
+                              const latestCharge = form.values.charges[index];
+                              const amt =
+                                clampCurrencyAmount(latestCharge.amount, code) ??
+                                latestCharge.amount;
                               if (amt != null && amt > 0) {
-                                let local = currentCharge.amount_in_local;
+                                let local = latestCharge.amount_in_local;
                                 if (newRoe != null && newRoe > 0) {
                                   local = clampLocalAmount(amt * newRoe);
                                   if (local != null) {
@@ -6148,7 +6617,7 @@ function InvoiceCreate({
                                 }
                                 const headerAmt = calcChargeHeaderAmount(
                                   {
-                                    ...currentCharge,
+                                    ...latestCharge,
                                     amount: amt,
                                     amount_in_local: local,
                                     currency: code,
@@ -6300,6 +6769,7 @@ function InvoiceCreate({
                             amount = clampCurrencyAmount(
                               currentCharge.no_of_unit *
                                 currentCharge.amount_per_unit,
+                              currentCharge.currency,
                             );
                           }
                           if (
@@ -6407,6 +6877,7 @@ function InvoiceCreate({
                           ) {
                             amount = clampCurrencyAmount(
                               noOfUnit * currentCharge.amount_per_unit,
+                              currentCharge.currency,
                             );
                             const roeVal = currentCharge.roe;
                             if (
@@ -6450,15 +6921,18 @@ function InvoiceCreate({
                         placeholder="Per Unit"
                         min={0}
                         hideControls
-                        decimalScale={currencyAmountDecimalScale}
+                        decimalScale={getCurrencyAmountDecimalScale(
+                          charge.currency,
+                        )}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount_per_unit || undefined}
                         onChange={(value) => {
+                          const currentCharge = form.values.charges[index];
                           const amountPerUnit = clampCurrencyAmount(
                             value as number | null,
+                            currentCharge.currency,
                           );
-                          const currentCharge = form.values.charges[index];
                           let amount = currentCharge.amount;
                           let amountInLocal = currentCharge.amount_in_local;
                           let headerAmt = currentCharge.header_amount;
@@ -6471,6 +6945,7 @@ function InvoiceCreate({
                           ) {
                             amount = clampCurrencyAmount(
                               currentCharge.no_of_unit * amountPerUnit,
+                              currentCharge.currency,
                             );
                             const roeVal = currentCharge.roe;
                             if (
@@ -6514,16 +6989,19 @@ function InvoiceCreate({
                         placeholder="Currency Amount"
                         min={0}
                         hideControls
-                        decimalScale={currencyAmountDecimalScale}
+                        decimalScale={getCurrencyAmountDecimalScale(
+                          charge.currency,
+                        )}
                         withAsterisk
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
                         value={charge.amount || undefined}
                         onChange={(value) => {
+                          const currentCharge = form.values.charges[index];
                           const currencyAmount = clampCurrencyAmount(
                             value as number | null,
+                            currentCharge.currency,
                           );
-                          const currentCharge = form.values.charges[index];
                           let amountInLocal = currentCharge.amount_in_local;
                           let headerAmt = currentCharge.header_amount;
 
@@ -6631,7 +7109,7 @@ function InvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    {isGstInvoiceUser && (
+                    {showSacColumn && (
                       <Grid.Col span={chargeGridCols.sac}>
                         <FormTextInput
                           placeholder="SAC Code"
@@ -6639,7 +7117,7 @@ function InvoiceCreate({
                           readOnly={isReadOnly}
                           value={charge.tax_code}
                           rightSection={
-                            applyGst &&
+                            showGstTax &&
                             gstRatesLoadingByIndex[index] &&
                             (!charge.tax_code ||
                               charge.tax_code.trim() === "") ? (
@@ -6758,7 +7236,7 @@ function InvoiceCreate({
                         />
                       </Grid.Col>
                     )}
-                    {applyGst && headerSameState === true && (
+                    {showGstTax && effectiveHeaderSameState === true && (
                       <Grid.Col span={chargeGridCols.cgst}>
                         <FormTextInput
                           placeholder="CGST"
@@ -6775,7 +7253,8 @@ function InvoiceCreate({
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.cgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             if (rate == null || localAmount == null) return "";
                             const amount = clampAmount(
                               (localAmount * rate) / 100,
@@ -6786,7 +7265,8 @@ function InvoiceCreate({
                           // disabled
                           rightSection={(() => {
                             const rate = gstRatesByChargeIndex[index]?.cgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             const amount =
                               rate == null || localAmount == null
                                 ? null
@@ -6810,7 +7290,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {applyGst && headerSameState === true && (
+                    {showGstTax && effectiveHeaderSameState === true && (
                       <Grid.Col span={chargeGridCols.sgst}>
                         <FormTextInput
                           placeholder="SGST"
@@ -6827,7 +7307,8 @@ function InvoiceCreate({
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.sgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             if (rate == null || localAmount == null) return "";
                             const amount = clampAmount(
                               (localAmount * rate) / 100,
@@ -6838,7 +7319,8 @@ function InvoiceCreate({
                           readOnly
                           rightSection={(() => {
                             const rate = gstRatesByChargeIndex[index]?.sgst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             const amount =
                               rate == null || localAmount == null
                                 ? null
@@ -6863,7 +7345,7 @@ function InvoiceCreate({
                         {/* )} */}
                       </Grid.Col>
                     )}
-                    {applyGst && headerSameState === false && (
+                    {showGstTax && effectiveHeaderSameState === false && (
                       <Grid.Col span={chargeGridCols.igst}>
                         <FormTextInput
                           placeholder="IGST"
@@ -6880,7 +7362,8 @@ function InvoiceCreate({
                             )
                               return "";
                             const rate = gstRatesByChargeIndex[index]?.igst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             if (rate == null || localAmount == null) return "";
                             const amount = clampAmount(
                               (localAmount * rate) / 100,
@@ -6890,7 +7373,8 @@ function InvoiceCreate({
                           readOnly
                           rightSection={(() => {
                             const rate = gstRatesByChargeIndex[index]?.igst;
-                            const localAmount = charge.amount_in_local;
+                            const localAmount =
+                              resolveChargeLocalAmountForGst(charge);
                             const amount =
                               rate == null || localAmount == null
                                 ? null
@@ -7066,7 +7550,7 @@ function InvoiceCreate({
                     }}
                   >
                     <Grid gutter="md">
-                      <Grid.Col span={applyVat ? 6 : applyGst ? 3 : 6}>
+                      <Grid.Col span={applyVat ? 6 : showGstTax ? 3 : 6}>
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
                             Local Amount Total
@@ -7093,7 +7577,7 @@ function InvoiceCreate({
                           </Box>
                         </Grid.Col>
                       )}
-                      {applyGst && (
+                      {showGstTax && (
                         <>
                           <Grid.Col span={3}>
                             <Box>
@@ -7239,7 +7723,7 @@ function InvoiceCreate({
                       </ScrollArea>
                     </>
                   )}
-                  {!gstBreakupLoading && gstBreakup && applyGst && (
+                  {!gstBreakupLoading && gstBreakup && showGstTax && (
                     <>
                       <ScrollArea mt="md">
                         <Table

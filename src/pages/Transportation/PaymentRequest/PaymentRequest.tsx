@@ -24,12 +24,11 @@ import { Dropzone } from "@mantine/dropzone";
 import {
   IconArrowLeft,
   IconCheck,
-  IconChevronDown,
   IconChevronRight,
-  IconChevronUp,
   IconDotsVertical,
   IconDownload,
   IconFileInvoice,
+  IconListDetails,
   IconPlus,
   IconTrash,
   IconUpload,
@@ -56,7 +55,6 @@ import {
   mapJobCreateDropdownOptions,
 } from "../../../utils/jobCreateDropdown";
 import useAuthStore from "../../../store/authStore";
-import useDateFormat from "../../../hooks/useDateFormat";
 import {
   getBranchGstNo,
   getDefaultBranchCountryCode,
@@ -81,7 +79,11 @@ import {
 } from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
-import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
+import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
+import {
+  appendEditPageAuditPatch,
+  mergeEditPageAuditSources,
+} from "../../../utils/editPageAuditInfo";
 import {
   collectPartyGstOptions,
   extractPartyTdsSectionsFromRecord,
@@ -134,6 +136,7 @@ type PaymentRequestTaxBreakup = {
   sac_wise_totals?: Array<{
     sac_code?: string;
     charge_name?: string;
+    charge_code?: string;
     total_amount?: number | string;
     charge_names?: string[];
     charge_count?: number;
@@ -177,15 +180,6 @@ function parsePaymentRequestGstBreakupResponse(
 
   return statusBody as PaymentRequestTaxBreakup;
 }
-
-const fetchPaymentRequestGstBreakup = async (paymentRequestId: number) => {
-  const response = await postAPICall(
-    URL.invoiceCalculateGstBreakup,
-    { payment_request_id: paymentRequestId },
-    API_HEADER,
-  );
-  return parsePaymentRequestGstBreakupResponse(response);
-};
 
 function formatGstBreakupRate(
   rate: number | string | null | undefined,
@@ -341,6 +335,7 @@ const fetchGetEffectiveSac = async (
 type ChargeItem = {
   id?: number | null;
   charge_id: number | null;
+  charge_code?: string;
   charge_name: string;
   account_id?: number | null;
   account_code?: string;
@@ -420,6 +415,12 @@ type SaveResponse = {
 type PaymentRequestFromApi = {
   id?: number;
   request_no?: string;
+  created_by?: string;
+  created_by_name?: string;
+  created_at?: string | null;
+  updated_by?: string;
+  updated_by_name?: string;
+  updated_at?: string | null;
   job_reference?: string;
   crj_number?: string;
   approved_by?: string;
@@ -458,6 +459,7 @@ type PaymentRequestFromApi = {
   charges?: Array<{
     id?: number;
     charge_id?: number;
+    charge_code?: string;
     charge_name?: string;
     account_id?: number;
     account_code?: string;
@@ -568,13 +570,24 @@ const buildPaymentRequestFormData = (
 };
 
 const PAYMENT_TYPE_OPTIONS = [
-  { value: "Bank", label: "BANK" },
-  { value: "CASH", label: "CASH" },
-  { value: "PDC", label: "PDC" },
-  { value: "ONLINE TRANSFER", label: "ONLINE TRANSFER" },
-  { value: "DD/PO", label: "DD/PO" },
-  { value: "TT", label: "TT" },
+  { value: "Bank", label: "Bank" },
+  { value: "CASH", label: "Cash" },
+  { value: "PDC", label: "Pdc" },
+  { value: "ONLINE TRANSFER", label: "Online Transfer" },
+  { value: "DD/PO", label: "Dd/Po" },
+  { value: "TT", label: "Tt" },
 ];
+
+function normalizePaymentTypeValue(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const match = PAYMENT_TYPE_OPTIONS.find(
+    (option) =>
+      option.value.toLowerCase() === raw.toLowerCase() ||
+      option.label.toLowerCase() === raw.toLowerCase(),
+  );
+  return match?.value ?? raw;
+}
 
 const VOUCHER_TYPE_OPTIONS = [
   { value: "SEA EXPORTS", label: "Sea Exports" },
@@ -590,9 +603,20 @@ const VOUCHER_TYPE_OPTIONS = [
 const PAID_TO_TYPE_OPTIONS = [
   { value: "supplier", label: "Supplier" },
   { value: "agent", label: "Agent" },
-  { value: "customer", label: "Customer" },
-  // { value: "staff", label: "Staff" },
 ];
+
+const SUPPLIER_ACCOUNT_NAME_ACCOUNT_CODES = ["1203010002", "1203010007"];
+
+function supplierAccountNameSearchBody(query: string) {
+  return {
+    filters: {
+      search: query.trim(),
+      customer_type: "Supplier",
+      term_code: "CASH",
+      account_code: SUPPLIER_ACCOUNT_NAME_ACCOUNT_CODES,
+    },
+  };
+}
 
 const APPROVED_OPTIONS = [
   { value: "yes", label: "Yes" },
@@ -608,10 +632,10 @@ const CN_R_OPTIONS = [
 
 function resolveAccountNameEndpointByPaidToType(paidToType: string): string {
   const type = (paidToType ?? "").trim().toLowerCase();
-  if (type === "supplier") return URL.supplierByType;
+  // Supplier account-name search uses the customer-master filter, not the
+  // by-type supplier endpoint.
+  if (type === "supplier") return URL.customerFilter;
   if (type === "agent") return URL.agent;
-  if (type === "customer") return URL.customer;
-  if (type === "staff") return URL.customer;
   return "";
 }
 
@@ -659,8 +683,20 @@ function resolveVoucherTypeFromSourceState(state: unknown): string {
   return resolveVoucherTypeFromServiceType(serviceType);
 }
 
+function formatChargeNameWithCode(
+  name?: string | null,
+  code?: string | null,
+): string {
+  const chargeName = String(name ?? "").trim();
+  const chargeCode = String(code ?? "").trim();
+  if (!chargeName) return chargeCode;
+  if (!chargeCode || chargeName.includes(`(${chargeCode})`)) return chargeName;
+  return `${chargeName} (${chargeCode})`;
+}
+
 const emptyCharge = (): ChargeItem => ({
   charge_id: null,
+  charge_code: "",
   charge_name: "",
   account_id: null,
   account_code: "",
@@ -699,6 +735,7 @@ function mapPaymentRequestChargeToPayload(
   return {
     ...(c.id != null ? { id: c.id } : {}),
     charge_id: c.charge_id != null ? Number(c.charge_id) : undefined,
+    charge_name: c.charge_name ?? "",
     ...(c.account_id != null ? { account_id: Number(c.account_id) } : {}),
     account_code: c.account_code || undefined,
     account_name: c.account_name || c.charge_name || undefined,
@@ -727,6 +764,7 @@ function mapApiChargeToChargeItem(
   return {
     id: c.id != null ? Number(c.id) : null,
     charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+    charge_code: c.charge_code ?? "",
     charge_name: c.charge_name ?? c.account_name ?? "",
     account_id: c.account_id != null ? Number(c.account_id) : null,
     account_code: c.account_code ?? "",
@@ -771,6 +809,7 @@ function mapChargesFromState(
     (c: Record<string, unknown>) => ({
       ...emptyCharge(),
       charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+      charge_code: String(c.charge_code ?? ""),
       charge_name: String(c.charge_name ?? ""),
       segment: String(c.segment ?? ""),
       job_no: String(c.job_no ?? "") || String(c.job_id ?? ""),
@@ -835,7 +874,8 @@ function PaymentRequest() {
     navigateFinanceReturn(navigate, location.state);
   }, [navigate, location.state]);
   const user = useAuthStore((state) => state.user);
-  const dateFormat = useDateFormat();
+  const { openViewAllocationDocs, viewAllocationDocsUi } =
+    useViewAllocationDocs();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const amountDecimalScale = getAmountDecimalScale(isVietnamBranch);
@@ -863,6 +903,14 @@ function PaymentRequest() {
   const isEditOrViewMode = Boolean(requestId && (isViewMode || isEditMode));
   const isReadOnly = isViewMode;
 
+  // Approve/Reject only for the Payment Request Approval list flow — not when
+  // opened from a job Accounts documents table (fromJobAccounts).
+  const showApprovalActions =
+    (location.state as { fromPaymentRequestApproval?: boolean } | null)
+      ?.fromPaymentRequestApproval === true &&
+    (location.state as { fromJobAccounts?: boolean } | null)
+      ?.fromJobAccounts !== true;
+
   // service_id for get-effective-sac API (available when navigating from a job page)
   const jobServiceId =
     (location.state as { job?: { service_id?: number } } | null)?.job
@@ -876,11 +924,19 @@ function PaymentRequest() {
     Record<number, boolean>
   >({});
   const [saveResponse, setSaveResponse] = useState<SaveResponse | null>(null);
+  const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [chargesTabActive, setChargesTabActive] = useState("charges");
   const [gstBreakup, setGstBreakup] = useState<PaymentRequestTaxBreakup | null>(
     null,
   );
   const [gstBreakupLoading, setGstBreakupLoading] = useState(false);
+  /**
+   * Once Actual Invoice No + Date exist on an approved PRQ (from load or after
+   * one-time update), they cannot be changed again (supplier-invoice fapiao style).
+   */
+  const [actualInvAlreadySet, setActualInvAlreadySet] = useState(false);
   const showTaxTab = isIndiaUser;
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -915,7 +971,6 @@ function PaymentRequest() {
     null,
   );
   const [partyAddresses, setPartyAddresses] = useState<PartyAddressLike[]>([]);
-  const [isReferenceInfoOpen, setIsReferenceInfoOpen] = useState(true);
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
   const isUpdate =
@@ -1254,12 +1309,32 @@ function PaymentRequest() {
       );
   }, [isJobChargesPrefillFlow, prefillJobId]);
 
+  const prqStatusUpper = (saveResponse?.status ?? form.values.approved ?? "")
+    .toString()
+    .trim()
+    .toUpperCase();
+  // POSTED (after CRJ create) locks the form the same way as APPROVED.
   const isApprovedStatus =
-    (saveResponse?.status ?? form.values.approved ?? "")
-      .toString()
-      .trim()
-      .toUpperCase() === "APPROVED";
-  const docsReadOnly = isReadOnly || isApprovedStatus;
+    prqStatusUpper === "APPROVED" || prqStatusUpper === "POSTED";
+  /** Approved/Posted edit: all fields locked except one-shot actual inv (when allowed). */
+  const formFieldsReadOnly = isReadOnly || isApprovedStatus;
+  const docsReadOnly = formFieldsReadOnly;
+  const hasProformaSet =
+    Boolean(String(form.values.proforma_invoice_no_1 ?? "").trim()) &&
+    form.values.proforma_invoice_date != null;
+  /**
+   * Approved + proforma set + actual inv not yet saved: allow one-time insert
+   * of Actual Invoice No + Date (same pattern as supplier-invoice Inv/Crn after post).
+   */
+  const canEditActualInvAfterApproved =
+    !isViewMode &&
+    isApprovedStatus &&
+    hasProformaSet &&
+    !actualInvAlreadySet &&
+    saveResponse?.id != null &&
+    saveResponse.id > 0;
+  const actualInvFieldReadOnly =
+    isViewMode || (isApprovedStatus && !canEditActualInvAfterApproved);
 
   const isPaidToSelected =
     !!String(form.values.paid_to ?? "").trim() ||
@@ -1282,28 +1357,6 @@ function PaymentRequest() {
     }),
     [gstBreakup],
   );
-
-  useEffect(() => {
-    if (!saveResponse?.id || !showTaxTab) {
-      return;
-    }
-    let cancelled = false;
-    setGstBreakupLoading(true);
-    setGstBreakup(null);
-    fetchPaymentRequestGstBreakup(saveResponse.id)
-      .then((data) => {
-        if (!cancelled) setGstBreakup(data);
-      })
-      .catch(() => {
-        if (!cancelled) setGstBreakup(null);
-      })
-      .finally(() => {
-        if (!cancelled) setGstBreakupLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [saveResponse?.id, showTaxTab]);
 
   useEffect(() => {
     // In create flow, if voucher type is empty, auto-fill from source screen.
@@ -1441,7 +1494,7 @@ function PaymentRequest() {
     // Otherwise, fetch supplier details by supplier code/id, then apply PRIMARY address state.
     if (form.values.state_code_1?.trim()) return;
 
-    const supplierEndpoint = resolveAccountNameEndpointByPaidToType("supplier");
+    const supplierEndpoint = URL.supplierByType;
 
     if (!supplierEndpoint) return;
 
@@ -1589,6 +1642,152 @@ function PaymentRequest() {
     await handleSubmit(form.values);
   };
 
+  /**
+   * Approved PRQ one-shot: insert Actual Invoice No + Date once (fapiao-style),
+   * then lock those fields.
+   */
+  const handleUpdateActualInvAfterApproved = async () => {
+    if (!canEditActualInvAfterApproved || !saveResponse?.id) {
+      ToastNotification({
+        message: "Actual invoice details cannot be updated.",
+        type: "error",
+      });
+      return;
+    }
+
+    const actualInvNo = String(form.values.actual_invoice_no ?? "").trim();
+    const actualInvDate = form.values.actual_invoice_date;
+    if (!actualInvNo || actualInvDate == null) {
+      ToastNotification({
+        message:
+          "Both Actual Invoice No and Actual Invoice Date are required.",
+        type: "error",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const values = form.values;
+      const formatDate = (d: Date | null) => {
+        if (!d) return null;
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+        return `${year}-${month}-${day}`;
+      };
+
+      const currencyList = currencyData as Array<{
+        id?: number;
+        currency_code?: string;
+        code?: string;
+      }>;
+      const mainCurrencyId = currencyList?.find(
+        (item) =>
+          (item.currency_code ?? item.code ?? "")
+            .toString()
+            .trim()
+            .toUpperCase() ===
+          (values.currency ?? "").toString().trim().toUpperCase(),
+      )?.id;
+
+      const stateIdNum = values.state_code_1
+        ? Number(values.state_code_1)
+        : undefined;
+
+      const payload: Record<string, unknown> = {
+        id: saveResponse.id,
+        job_reference: "",
+        crj_number: values.payment_crj_did ?? "",
+        approved_by: values.approved_by_1 ?? "",
+        approved_date: formatDate(values.approved_date),
+        ...resolvePaymentRequestGstPayloadValues(values, branchLocationGstNo),
+        date: formatDate(values.date),
+        payment_type: values.payment_type ?? "",
+        vouchar_type: values.voucher_type ?? "",
+        CINV: values.cinv ?? false,
+        proforma_inv_no: values.proforma_invoice_no_1 ?? "",
+        proforma_inv_date: formatDate(values.proforma_invoice_date),
+        actual_inv_no: actualInvNo,
+        actual_inv_date: formatDate(actualInvDate),
+        account_id:
+          values.account_id && Number.isFinite(Number(values.account_id))
+            ? Number(values.account_id)
+            : undefined,
+        ...(values.account_code ? { account_code: values.account_code } : {}),
+        amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
+        crj_date: formatDate(values.crj_date),
+        paid_to_type: values.paid_to_type ?? "",
+        paid_to: values.paid_to ?? "",
+        not_over: values.not_over ?? "",
+        tds_section_code: values.tds_section_code ?? "",
+        account_note: values.accountant_note ?? "",
+        note: values.note ?? "",
+        rejected_note: values.rejected_note || null,
+        on_hold_note: values.on_hold_note || null,
+        status: "Approved",
+        charges_data: values.charges.map(mapPaymentRequestChargeToPayload),
+      };
+      if (mainCurrencyId != null && !Number.isNaN(mainCurrencyId)) {
+        payload.currency_id = mainCurrencyId;
+      }
+      if (stateIdNum != null && !Number.isNaN(stateIdNum)) {
+        payload.state_id = stateIdNum;
+      }
+
+      const rawPut = (await apiCallProtected.put(
+        `${(URL as any).paymentRequest}${saveResponse.id}/`,
+        buildPaymentRequestFormData(
+          payload as Record<string, unknown>,
+          supportingDocuments,
+        ),
+        {
+          headers: {
+            ...FORM_DATA_HEADERS,
+            ...API_HEADER.headers,
+          },
+        },
+      )) as any;
+
+      const d: PaymentRequestFromApi =
+        rawPut?.data?.data ?? rawPut?.data ?? rawPut;
+
+      if (d?.actual_inv_no != null) {
+        form.setFieldValue("actual_invoice_no", String(d.actual_inv_no));
+      }
+      if (d?.actual_inv_date != null) {
+        form.setFieldValue(
+          "actual_invoice_date",
+          normalizeDate(d.actual_inv_date),
+        );
+      }
+      setActualInvAlreadySet(true);
+      setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
+      setSaveResponse((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: d.status ?? prev.status ?? "Approved",
+            }
+          : prev,
+      );
+
+      ToastNotification({
+        message: "Actual invoice details updated successfully",
+        type: "success",
+      });
+    } catch (error: unknown) {
+      ToastNotification({
+        message:
+          (error as { message?: string })?.message ??
+          "Failed to update actual invoice details",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCalculateGst = async () => {
     const validation = form.validate();
     if (validation.hasErrors) return;
@@ -1623,7 +1822,7 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: values.job_reference_1 ?? "",
+        job_reference: "",
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -1701,6 +1900,15 @@ function PaymentRequest() {
         throw new Error("Payment request id not found in response.");
       }
 
+      setSaveResponse({
+        id: paymentRequestId,
+        request_no: saveData.request_no ?? saveResponse?.request_no ?? "",
+        status: saveData.status ?? saveResponse?.status,
+      });
+      if (saveData.request_no) {
+        form.setFieldValue("request_no", saveData.request_no);
+      }
+
       const gstBreakupResponse = parsePaymentRequestGstBreakupResponse(
         await postAPICall(
           URL.invoiceCalculateGstBreakup,
@@ -1739,6 +1947,7 @@ function PaymentRequest() {
               item.charge_id !== undefined && item.charge_id !== null
                 ? Number(item.charge_id)
                 : null,
+            charge_code: String(item.charge_code ?? ""),
             charge_name: String(item.charge_name ?? ""),
             job_no: String(item.job_id ?? ""),
             cn_r: String(item.Dr_Cr ?? ""),
@@ -1752,7 +1961,10 @@ function PaymentRequest() {
             is_tax_row: true,
           };
         });
-        form.setFieldValue("charges", [...form.values.charges, ...gstCharges]);
+        const chargesWithoutTax = form.values.charges.filter(
+          (c) => c.is_tax_row !== true,
+        );
+        form.setFieldValue("charges", [...chargesWithoutTax, ...gstCharges]);
       }
 
       setGstBreakup(gstBreakupResponse);
@@ -1806,7 +2018,7 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: values.job_reference_1 ?? "",
+        job_reference: "",
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -2058,7 +2270,7 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: values.job_reference_1 ?? "",
+        job_reference: "",
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -2131,6 +2343,7 @@ function PaymentRequest() {
             request_no: d.request_no ?? prev?.request_no ?? "",
             status: d.status ?? prev?.status,
           }));
+          setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
 
           if (d.request_no) {
             form.setFieldValue("request_no", d.request_no);
@@ -2152,6 +2365,13 @@ function PaymentRequest() {
               })),
             );
           }
+          setActualInvAlreadySet(
+            Boolean(
+              String(d.actual_inv_no ?? values.actual_invoice_no ?? "").trim() &&
+                (normalizeDate(d.actual_inv_date) ??
+                  values.actual_invoice_date),
+            ),
+          );
           ToastNotification({
             message: "Payment request updated successfully",
             type: "success",
@@ -2186,6 +2406,8 @@ function PaymentRequest() {
               request_no: d.request_no ?? "",
               status: d.status,
             });
+            setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
+            setPaymentRequestDataFromApi(d);
             setAccountNameDisplay(
               ((d as any).account_name ?? d.account_code ?? "").toString() ||
                 null,
@@ -2207,7 +2429,7 @@ function PaymentRequest() {
               proforma_invoice_no_1: d.proforma_inv_no ?? "",
               proforma_invoice_no_2: form.values.proforma_invoice_no_2,
               proforma_invoice_date: normalizeDate(d.proforma_inv_date),
-              payment_type: d.payment_type ?? "",
+              payment_type: normalizePaymentTypeValue(d.payment_type),
               voucher_type: d.vouchar_type ?? "",
               cinv: d.CINV ?? false,
               actual_invoice_no: d.actual_inv_no ?? "",
@@ -2241,6 +2463,12 @@ function PaymentRequest() {
                   ? d.charges.map(mapApiChargeToChargeItem)
                   : values.charges,
             });
+            setActualInvAlreadySet(
+              Boolean(
+                String(d.actual_inv_no ?? "").trim() &&
+                  normalizeDate(d.actual_inv_date),
+              ),
+            );
           }
 
           ToastNotification({
@@ -2272,6 +2500,11 @@ function PaymentRequest() {
       request_no: d.request_no ?? "",
       status: d.status,
     });
+    setGstBreakup(null);
+    setGstBreakupLoading(false);
+    const loadedActualNo = String(d.actual_inv_no ?? "").trim();
+    const loadedActualDate = normalizeDate(d.actual_inv_date);
+    setActualInvAlreadySet(Boolean(loadedActualNo && loadedActualDate));
 
     setAccountNameDisplay(
       ((d as any).account_name ?? d.account_code ?? "").toString() || null,
@@ -2292,7 +2525,7 @@ function PaymentRequest() {
       proforma_invoice_no_1: d.proforma_inv_no ?? "",
       proforma_invoice_no_2: "",
       proforma_invoice_date: normalizeDate(d.proforma_inv_date),
-      payment_type: d.payment_type ?? "",
+      payment_type: normalizePaymentTypeValue(d.payment_type),
       voucher_type: d.vouchar_type ?? "",
       cinv: d.CINV ?? false,
       actual_invoice_no: d.actual_inv_no ?? "",
@@ -2328,19 +2561,23 @@ function PaymentRequest() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId, isEditOrViewMode, paymentRequestDataFromApi]);
 
+  const showAuditInfo =
+    isEditOrViewMode || Boolean(saveResponse?.id) || Boolean(auditPatch);
   const paymentRequestAuditSource = useMemo(
     () =>
       mergeEditPageAuditSources(
         paymentRequestDataFromApi as Record<string, unknown> | null,
         saveResponse as Record<string, unknown> | null,
+        auditPatch,
       ),
-    [paymentRequestDataFromApi, saveResponse],
+    [paymentRequestDataFromApi, saveResponse, auditPatch],
   );
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <Box p="md" style={{ position: "relative" }}>
+      {viewAllocationDocsUi}
       {/* Full-page loader overlay when saving or loading edit data */}
       {(isSubmitting || requestFetchLoading) && (
         <Box
@@ -2369,11 +2606,12 @@ function PaymentRequest() {
         {/* ── Page header ── */}
         <Group justify="space-between" mb="xs" wrap="nowrap">
           <EditPageHeadingRow
-            visible={isEditOrViewMode && Boolean(paymentRequestAuditSource)}
+            visible={showAuditInfo && Boolean(paymentRequestAuditSource)}
             auditSource={paymentRequestAuditSource}
             animateKey={
               (paymentRequestAuditSource as { id?: number })?.id ?? requestId
             }
+            ariaLabel="Payment request audit info"
           >
             <Text size="xl" fw={600} c="#105476">
               Payment Request
@@ -2406,11 +2644,13 @@ function PaymentRequest() {
                       size="sm"
                       variant="light"
                       color={
-                        saveResponse.status?.toUpperCase() === "APPROVED"
+                        saveResponse.status?.toUpperCase() === "POSTED"
                           ? "green"
-                          : saveResponse.status?.toUpperCase() === "REJECTED"
-                            ? "red"
-                            : "gray"
+                          : saveResponse.status?.toUpperCase() === "APPROVED"
+                            ? "orange"
+                            : saveResponse.status?.toUpperCase() === "REJECTED"
+                              ? "red"
+                              : "gray"
                       }
                       styles={{ root: { textTransform: "none" } }}
                     >
@@ -2460,7 +2700,7 @@ function PaymentRequest() {
                 }}
               >
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2498,7 +2738,7 @@ function PaymentRequest() {
                   Get OBL Charges
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2536,7 +2776,7 @@ function PaymentRequest() {
                   Get Carrier Rate
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2574,7 +2814,7 @@ function PaymentRequest() {
                   Get Default Cost
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2612,7 +2852,7 @@ function PaymentRequest() {
                   Get Cost From Tariff
                 </Menu.Item>
                 <Menu.Item
-                  disabled={isReadOnly}
+                  disabled={formFieldsReadOnly}
                   leftSection={
                     <Box
                       style={{
@@ -2648,6 +2888,48 @@ function PaymentRequest() {
                 >
                   Get Provisional Cost
                 </Menu.Item>
+                <Menu.Item
+                  leftSection={
+                    <Box
+                      style={{
+                        backgroundColor: "#E7F5FF",
+                        borderRadius: "6px",
+                        padding: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <IconListDetails size={16} color="#105476" />
+                    </Box>
+                  }
+                  disabled={!String(saveResponse?.request_no ?? "").trim()}
+                  onClick={() =>
+                    void openViewAllocationDocs(
+                      String(saveResponse?.request_no ?? ""),
+                    )
+                  }
+                  styles={{
+                    item: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      "&:hover": {
+                        backgroundColor: "#F8F9FA",
+                      },
+                    },
+                    itemLabel: {
+                      fontFamily: "Inter",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#424242",
+                    },
+                  }}
+                >
+                  View Allocation Docs
+                </Menu.Item>
               </Menu.Dropdown>
             </Menu>
           </Group>
@@ -2657,7 +2939,9 @@ function PaymentRequest() {
         <Box
           component="form"
           onSubmit={
-            isReadOnly ? (e) => e.preventDefault() : form.onSubmit(handleSubmit)
+            formFieldsReadOnly
+              ? (e) => e.preventDefault()
+              : form.onSubmit(handleSubmit)
           }
           style={
             isReadOnly
@@ -2670,143 +2954,6 @@ function PaymentRequest() {
               : undefined
           }
         >
-          {/* ── Reference Information Panel ── */}
-          <Box
-            mb="lg"
-            style={{
-              borderRadius: 8,
-              border: "1px solid #cce4f0",
-              overflow: "hidden",
-            }}
-          >
-            {/* Header bar */}
-            <Box px="md" py="xs" style={{ backgroundColor: "#105476" }}>
-              <Group justify="space-between" align="center" wrap="nowrap">
-                <Text
-                  size="xs"
-                  fw={600}
-                  c="white"
-                  style={{
-                    fontFamily: "Inter",
-                    letterSpacing: "0.8px",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Reference Information
-                </Text>
-                <Button
-                  variant="subtle"
-                  color="white"
-                  size="compact-xs"
-                  px={4}
-                  onClick={() => setIsReferenceInfoOpen((prev) => !prev)}
-                  styles={{
-                    root: { minWidth: 24, height: 24 },
-                  }}
-                >
-                  {isReferenceInfoOpen ? (
-                    <IconChevronUp size={16} />
-                  ) : (
-                    <IconChevronDown size={16} />
-                  )}
-                </Button>
-              </Group>
-            </Box>
-
-            {/* Fields grid */}
-            {isReferenceInfoOpen && (
-              <Box p="md" style={{ backgroundColor: "#f8fcff" }}>
-                <Grid columns={12} gutter="sm">
-                  {(
-                    [
-                      {
-                        label: "Reference No:",
-                        value: form.values.job_reference_1,
-                      },
-                      {
-                        label: "Payment / CRJ DID",
-                        value: form.values.payment_crj_did,
-                      },
-                      {
-                        label: "Rejected Request No",
-                        value: form.values.rejected_request_no,
-                      },
-                      {
-                        label: "Approved By",
-                        value: form.values.approved_by_1,
-                      },
-                      {
-                        label: "Approved Date",
-                        value: form.values.approved_date
-                          ? (() => {
-                              const d = normalizeDate(
-                                form.values.approved_date,
-                              );
-                              return d ? dayjs(d).format(dateFormat) : "—";
-                            })()
-                          : "—",
-                      },
-                      {
-                        label: "Prepared By",
-                        value: form.values.prepared_by_1,
-                      },
-                    ] as {
-                      label: string;
-                      value: string;
-                      alwaysShow?: boolean;
-                    }[]
-                  )
-                    .filter(
-                      ({ value, alwaysShow }) =>
-                        alwaysShow ||
-                        (value != null &&
-                          String(value).trim() !== "" &&
-                          String(value) !== "—"),
-                    )
-                    .map(({ label, value }) => (
-                      <Grid.Col key={label} span={4}>
-                        <Box
-                          p="sm"
-                          style={{
-                            display: "flex",
-                            flexDirection: "row",
-                            backgroundColor: "white",
-                            borderRadius: 6,
-                            border: "1px solid #e3f2fc",
-                            gap: "10px",
-                          }}
-                        >
-                          <Text
-                            size="xs"
-                            c="dimmed"
-                            fw={500}
-                            mb={4}
-                            style={{
-                              fontFamily: "Inter",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {label}
-                            {" : "}
-                          </Text>
-                          <Text
-                            size="sm"
-                            fw={value && value !== "—" ? 600 : 400}
-                            c={value && value !== "—" ? "#105476" : "dimmed"}
-                            style={{ fontFamily: "Inter" }}
-                          >
-                            {value || "—"}
-                          </Text>
-                        </Box>
-                      </Grid.Col>
-                    ))}
-                </Grid>
-              </Box>
-            )}
-          </Box>
-
           <Grid columns={12} gutter="md">
             {/* ── Row 1 (3+3+3+3): Date | Payment Type | Voucher Type | CINV ── */}
             <Grid.Col span={2}>
@@ -2816,7 +2963,7 @@ function PaymentRequest() {
                 value={normalizeDate(form.values.date)}
                 onChange={(date) => form.setFieldValue("date", date)}
                 withAsterisk
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 error={
                   form.errors.date
                     ? typeof form.errors.date === "string"
@@ -2837,7 +2984,7 @@ function PaymentRequest() {
                   form.setFieldValue("payment_type", value ?? "")
                 }
                 withAsterisk
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 error={form.errors.payment_type}
                 styles={inputStyles}
               />
@@ -2852,7 +2999,7 @@ function PaymentRequest() {
                 onChange={(value) =>
                   form.setFieldValue("voucher_type", value ?? "")
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2865,7 +3012,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("proforma_invoice_no_1", e.target.value)
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -2878,7 +3025,7 @@ function PaymentRequest() {
                 onChange={(date) =>
                   form.setFieldValue("proforma_invoice_date", date)
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
               />
             </Grid.Col>
 
@@ -2890,8 +3037,10 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("actual_invoice_no", e.target.value)
                 }
-                readOnly={isReadOnly}
-                styles={inputStyles}
+                readOnly={actualInvFieldReadOnly}
+                styles={
+                  canEditActualInvAfterApproved ? inputStyles : undefined
+                }
               />
             </Grid.Col>
 
@@ -2903,7 +3052,10 @@ function PaymentRequest() {
                 onChange={(date) =>
                   form.setFieldValue("actual_invoice_date", date)
                 }
-                readOnly={isReadOnly}
+                readOnly={actualInvFieldReadOnly}
+                styles={
+                  canEditActualInvAfterApproved ? inputStyles : undefined
+                }
               />
             </Grid.Col>
             {/* ── Row 2 (6+6): Proforma Invoice No | Actual Invoice No ── */}
@@ -2915,7 +3067,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("proforma_invoice_no_1", e.target.value)
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col> */}
@@ -2940,23 +3092,28 @@ function PaymentRequest() {
                   setAccountNameDisplay(null);
                   setPartyAddresses([]);
                 }}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
 
             <Grid.Col span={2}>
               <SearchableSelect
-                label="Account Name"
+                label="Party Name"
                 placeholder={
                   form.values.paid_to_type
-                    ? "Type to search account name"
+                    ? "Type to search party name"
                     : "Select paid to type first"
                 }
                 apiEndpoint={
                   resolveAccountNameEndpointByPaidToType(
                     form.values.paid_to_type,
                   ) || undefined
+                }
+                postBody={
+                  form.values.paid_to_type?.trim().toLowerCase() === "supplier"
+                    ? supplierAccountNameSearchBody
+                    : undefined
                 }
                 searchFields={["customer_name", "customer_code", "id"]}
                 displayFormat={(item: Record<string, unknown>) => ({
@@ -3022,13 +3179,48 @@ function PaymentRequest() {
                 }}
                 minSearchLength={3}
                 dropdownZIndex={chargesDropdownZIndex}
-                disabled={!form.values.paid_to_type || isReadOnly}
-                readOnly={isReadOnly}
+                disabled={!form.values.paid_to_type || formFieldsReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
 
             <Grid.Col span={2}>
+              <Dropdown
+                label="State"
+                placeholder={isStateLoading ? "Loading..." : "Select state"}
+                data={stateOptions}
+                value={form.values.state_code_1 || null}
+                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
+                searchable
+                disabled={isStateLoading || formFieldsReadOnly}
+                styles={inputStyles}
+              />
+            </Grid.Col>
+
+            {isIndiaUser ? (
+              <Grid.Col span={2}>
+                <Dropdown
+                  label="TDS Section Code"
+                  placeholder={
+                    isTdsSectionLoading ? "Loading..." : "Select TDS section"
+                  }
+                  data={tdsSectionOptions}
+                  value={form.values.tds_section_code || null}
+                  onChange={(v) =>
+                    form.setFieldValue("tds_section_code", v ?? "")
+                  }
+                  searchable
+                  clearable
+                  disabled={
+                    isTdsSectionLoading || formFieldsReadOnly || !isPaidToSelected
+                  }
+                  styles={inputStyles}
+                />
+              </Grid.Col>
+            ) : null}
+
+            <Grid.Col span={1}>
               <Dropdown
                 key={`currency-${form.values.currency}`}
                 label="Currency"
@@ -3039,7 +3231,7 @@ function PaymentRequest() {
                   form.setFieldValue("currency", value ?? "")
                 }
                 searchable
-                readOnly={isCurrencyLoading || isReadOnly}
+                readOnly={isCurrencyLoading || formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3055,7 +3247,7 @@ function PaymentRequest() {
                 min={0}
                 decimalScale={2}
                 hideControls
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col> */}
@@ -3066,7 +3258,7 @@ function PaymentRequest() {
                 placeholder="Select CRJ date"
                 value={normalizeDate(form.values.crj_date)}
                 onChange={(date) => form.setFieldValue("crj_date", date)}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
               />
             </Grid.Col>
             <Grid.Col span={2}>
@@ -3079,27 +3271,10 @@ function PaymentRequest() {
                   form.setFieldValue("paid_to", e.target.value);
                   if (form.errors.paid_to) form.clearFieldError("paid_to");
                 }}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 error={
                   form.errors.paid_to ? String(form.errors.paid_to) : undefined
                 }
-                styles={inputStyles}
-              />
-            </Grid.Col>
-
-            <Grid.Col span={2}>
-              <Dropdown
-                label="CINV"
-                placeholder="Select"
-                data={[
-                  { value: "Yes", label: "Yes" },
-                  { value: "No", label: "No" },
-                ]}
-                value={form.values.cinv ? "Yes" : "No"}
-                onChange={(value) =>
-                  form.setFieldValue("cinv", value === "Yes")
-                }
-                readOnly={isReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3120,7 +3295,7 @@ function PaymentRequest() {
                 onChange={(value) =>
                   form.setFieldValue("not_over", value ?? "")
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -3134,48 +3309,12 @@ function PaymentRequest() {
                 onChange={(value) =>
                   form.setFieldValue("approved", value ?? "")
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 styles={inputStyles}
               />
             </Grid.Col> */}
 
-            {/* ── Row 5 (6+6): State Code | TDS Section Code ── */}
-            <Grid.Col span={2}>
-              <Dropdown
-                label="State"
-                placeholder={isStateLoading ? "Loading..." : "Select state"}
-                data={stateOptions}
-                value={form.values.state_code_1 || null}
-                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
-                searchable
-                disabled={isStateLoading || isReadOnly}
-                styles={inputStyles}
-              />
-            </Grid.Col>
-
-            {isIndiaUser ? (
-              <Grid.Col span={2}>
-                <Dropdown
-                  label="TDS Section Code"
-                  placeholder={
-                    isTdsSectionLoading ? "Loading..." : "Select TDS section"
-                  }
-                  data={tdsSectionOptions}
-                  value={form.values.tds_section_code || null}
-                  onChange={(v) =>
-                    form.setFieldValue("tds_section_code", v ?? "")
-                  }
-                  searchable
-                  clearable
-                  disabled={
-                    isTdsSectionLoading || isReadOnly || !isPaidToSelected
-                  }
-                  styles={inputStyles}
-                />
-              </Grid.Col>
-            ) : null}
-
-            {/* ── Row 6 (3+3+3+3): Notes ── */}
+            {/* ── Notes ── */}
             <Grid.Col span={2}>
               <Textarea
                 label="Accountant Note"
@@ -3184,7 +3323,7 @@ function PaymentRequest() {
                 onChange={(e) =>
                   form.setFieldValue("accountant_note", e.target.value)
                 }
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 rows={3}
                 styles={textareaStyles}
               />
@@ -3196,7 +3335,7 @@ function PaymentRequest() {
                 placeholder="Enter note"
                 value={form.values.note}
                 onChange={(e) => form.setFieldValue("note", e.target.value)}
-                readOnly={isReadOnly}
+                readOnly={formFieldsReadOnly}
                 rows={3}
                 styles={textareaStyles}
               />
@@ -3214,7 +3353,7 @@ function PaymentRequest() {
                     onChange={(e) =>
                       form.setFieldValue("rejected_note", e.target.value)
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     rows={3}
                     styles={textareaStyles}
                   />
@@ -3228,7 +3367,7 @@ function PaymentRequest() {
                     onChange={(e) =>
                       form.setFieldValue("on_hold_note", e.target.value)
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     rows={3}
                     styles={textareaStyles}
                   />
@@ -3269,7 +3408,7 @@ function PaymentRequest() {
                         findPartyAddressByGst(partyAddresses, gst),
                       );
                     }}
-                    disabled={isReadOnly}
+                    disabled={formFieldsReadOnly}
                     searchable
                     dropdownZIndex={chargesDropdownZIndex}
                     styles={{
@@ -3315,7 +3454,7 @@ function PaymentRequest() {
                 size="sm"
                 onClick={handleCalculateGst}
                 loading={isSubmitting}
-                disabled={isReadOnly}
+                disabled={formFieldsReadOnly}
               >
                 Calculate GST
               </Button>
@@ -3328,7 +3467,7 @@ function PaymentRequest() {
                   size="sm"
                   onClick={handleCalculateTds}
                   loading={isSubmitting}
-                  disabled={isReadOnly || !isPaidToSelected}
+                  disabled={formFieldsReadOnly || !isPaidToSelected}
                 >
                   Calculate TDS
                 </Button>
@@ -3376,7 +3515,7 @@ function PaymentRequest() {
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
-                    <Grid.Col span={0.98} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={formFieldsReadOnly ? 1.76 : 1.48} style={{ fontSize: "13px" }}>
                       Job Id
                     </Grid.Col>
                     {/* <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
@@ -3394,19 +3533,19 @@ function PaymentRequest() {
                     <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
                       Subledger
                     </Grid.Col>
-                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                       ROE
                     </Grid.Col>
-                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
                       Unit
                     </Grid.Col>
-                    <Grid.Col span={0.65} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       No of Unit
                     </Grid.Col>
-                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
                       Amt/Unit
                     </Grid.Col>
                     <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
@@ -3415,14 +3554,23 @@ function PaymentRequest() {
                     <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
                       Local Amt
                     </Grid.Col>
-                    <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
+                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
                       SAC Code
                     </Grid.Col>
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
               </Grid.Col> */}
-                    {!isReadOnly && (
-                      <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
+                    {!formFieldsReadOnly && (
+                      <Grid.Col
+                        span={0.77}
+                        style={{
+                          fontSize: "13px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-start",
+                          paddingLeft: 2,
+                        }}
+                      >
                         Actions
                       </Grid.Col>
                     )}
@@ -3465,7 +3613,7 @@ function PaymentRequest() {
                         e.target.value,
                       )
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     styles={{
                       input: {
                         fontSize: "13px",
@@ -3477,7 +3625,7 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Job No */}
-                      <Grid.Col span={0.98}>
+                      <Grid.Col span={formFieldsReadOnly ? 1.76 : 1.48}>
                         {isJobChargesPrefillFlow ? (
                           <Dropdown
                             placeholder="Select job id"
@@ -3490,7 +3638,7 @@ function PaymentRequest() {
                               )
                             }
                             searchable
-                            readOnly={isReadOnly}
+                            readOnly={formFieldsReadOnly}
                             styles={{
                               input: {
                                 fontSize: "13px",
@@ -3508,7 +3656,7 @@ function PaymentRequest() {
                             minSearchLength={1}
                             searchFields={["shipment_id", "job_id", "type"]}
                             displayFormat={jobCreateDropdownDisplayFormat}
-                            readOnly={isReadOnly}
+                            readOnly={formFieldsReadOnly}
                             dropdownZIndex={chargesDropdownZIndex}
                             onChange={(value) =>
                               form.setFieldValue(
@@ -3538,7 +3686,7 @@ function PaymentRequest() {
                         e.target.value,
                       )
                     }
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     styles={{
                       input: {
                         fontSize: "13px",
@@ -3555,7 +3703,7 @@ function PaymentRequest() {
                     placeholder="C/N/R"
                     data={CN_R_OPTIONS}
                     value={charge.cn_r || null}
-                    readOnly={isReadOnly}
+                    readOnly={formFieldsReadOnly}
                     onChange={(value) =>
                       form.setFieldValue(
                         `charges.${index}.cn_r`,
@@ -3575,22 +3723,37 @@ function PaymentRequest() {
                       {/* Charge */}
                       <Grid.Col span={1.2}>
                         <SearchableSelect
-                          placeholder="Type charge name"
+                          placeholder="Search charge"
                           apiEndpoint={(URL as any).chargeMaster}
                           searchFields={["charge_name", "charge_code"]}
-                          displayFormat={(item: Record<string, unknown>) => ({
-                            value: String(item.id ?? ""),
-                            label: String(item.charge_name ?? ""),
-                          })}
+                          displayFormat={(item: Record<string, unknown>) => {
+                            const name = String(item.charge_name ?? "");
+                            const code = String(item.charge_code ?? "").trim();
+                            return {
+                              value: String(item.id ?? ""),
+                              label: formatChargeNameWithCode(name, code) || name,
+                            };
+                          }}
                           value={
                             charge.charge_id != null
                               ? String(charge.charge_id)
                               : null
                           }
-                          displayValue={charge.charge_name || undefined}
-                          onChange={(value, selectedData) => {
+                          displayValue={
+                            formatChargeNameWithCode(
+                              charge.charge_name,
+                              charge.charge_code,
+                            ) || undefined
+                          }
+                          returnOriginalData
+                          onChange={(value, _selectedData, originalData) => {
                             const chargeId = value ? Number(value) : null;
-                            const chargeName = selectedData?.label ?? "";
+                            const chargeCode = String(
+                              originalData?.charge_code ?? "",
+                            ).trim();
+                            const chargeName = String(
+                              originalData?.charge_name ?? "",
+                            ).trim();
                             form.setFieldValue(
                               `charges.${index}.charge_id`,
                               chargeId,
@@ -3598,6 +3761,10 @@ function PaymentRequest() {
                             form.setFieldValue(
                               `charges.${index}.charge_name`,
                               chargeName,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.charge_code`,
+                              chargeId != null ? chargeCode : "",
                             );
                             form.setFieldValue(`charges.${index}.tax_code`, "");
                             if (chargeErrors[index]?.charge_name) {
@@ -3645,7 +3812,7 @@ function PaymentRequest() {
                             }
                           }}
                           withAsterisk
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={chargesDropdownZIndex}
@@ -3762,7 +3929,7 @@ function PaymentRequest() {
                             );
                           }}
                           disabled={
-                            isReadOnly ||
+                            formFieldsReadOnly ||
                             (String(charge.job_no ?? "").trim() !== "" &&
                               charge.charge_id != null)
                           }
@@ -3783,7 +3950,7 @@ function PaymentRequest() {
                           value={charge.subledger_code ?? ""}
                           readOnly
                           disabled={
-                            isReadOnly ||
+                            formFieldsReadOnly ||
                             (String(charge.job_no ?? "").trim() !== "" &&
                               charge.charge_id != null)
                           }
@@ -3798,14 +3965,14 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Currency */}
-                      <Grid.Col span={0.9}>
+                      <Grid.Col span={0.7}>
                         <Dropdown
                           placeholder="Curr."
                           searchable
                           data={currencyOptions}
                           dropdownZIndex={chargesDropdownZIndex}
                           value={charge.currency_id || charge.currency || null}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(
@@ -3854,12 +4021,12 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* ROE */}
-                      <Grid.Col span={0.5}>
+                      <Grid.Col span={0.6}>
                         <NumberInput
                           placeholder="ROE"
                           min={0}
                           hideControls
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.roe || undefined}
                           onChange={(value) => {
                             const roe = value as number | null;
@@ -3890,14 +4057,14 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Unit */}
-                      <Grid.Col span={0.9}>
+                      <Grid.Col span={0.7}>
                         <Dropdown
                           placeholder="Unit"
                           searchable
                           data={unitOptions}
                           dropdownZIndex={chargesDropdownZIndex}
                           value={charge.unit_id || charge.unit_code || null}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(`charges.${index}.unit_id`, v);
@@ -3918,12 +4085,12 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* No of Unit */}
-                      <Grid.Col span={0.65}>
+                      <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Units"
                           min={0}
                           hideControls
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.no_of_unit ?? undefined}
                           onChange={(value) => {
                             const noOfUnit = value as number | null;
@@ -3965,13 +4132,13 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Amount per Unit */}
-                      <Grid.Col span={0.85}>
+                      <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Amt/Unit"
                           min={0}
                           hideControls
                           decimalScale={amountDecimalScale}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.amount_per_unit ?? undefined}
                           onChange={(value) => {
                             const amtPerUnit = value as number | null;
@@ -4019,7 +4186,7 @@ function PaymentRequest() {
                           min={0}
                           hideControls
                           decimalScale={amountDecimalScale}
-                          readOnly={isReadOnly}
+                          readOnly={formFieldsReadOnly}
                           value={charge.amount ?? undefined}
                           onChange={(value) => {
                             const amt = value as number | null;
@@ -4076,7 +4243,7 @@ function PaymentRequest() {
                               String(val ?? "").trim(),
                             )
                           }
-                          disabled={isReadOnly}
+                          disabled={formFieldsReadOnly}
                           dropdownZIndex={chargesDropdownZIndex}
                           styles={{
                             input: {
@@ -4107,7 +4274,7 @@ function PaymentRequest() {
                           e.currentTarget.checked ? "true" : "false",
                         )
                       }
-                      disabled={isReadOnly}
+                      disabled={formFieldsReadOnly}
                       color="#105476"
                       styles={{
                         label: { fontSize: "13px", fontFamily: "Inter" },
@@ -4117,8 +4284,15 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Actions */}
-                      {!isReadOnly && (
-                        <Grid.Col span={0.7}>
+                      {!formFieldsReadOnly && (
+                        <Grid.Col
+                          span={0.77}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-start",
+                          }}
+                        >
                           <Group gap={4} wrap="nowrap">
                             {form.values.charges.length > 1 && (
                               <Button
@@ -4171,8 +4345,17 @@ function PaymentRequest() {
                                         (newChargeCurrency || "").toUpperCase(),
                                     )?.value ??
                                       "");
+                                  const defaultJobNo =
+                                    String(charge.job_no ?? "").trim() ||
+                                    String(
+                                      form.values.charges.find((row) =>
+                                        String(row.job_no ?? "").trim(),
+                                      )?.job_no ?? "",
+                                    ).trim() ||
+                                    prefillJobId;
                                   form.insertListItem("charges", {
                                     ...emptyCharge(),
+                                    job_no: defaultJobNo,
                                     currency: newChargeCurrency,
                                     currency_id: newChargeCurrencyId,
                                     roe,
@@ -4270,7 +4453,7 @@ function PaymentRequest() {
                     chargesTabActive === "tax" &&
                     saveResponse?.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        No GST breakup data.
+                        Click Calculate GST to load tax breakup.
                       </Text>
                     )}
                   {!gstBreakupLoading && gstBreakup && (
@@ -4363,7 +4546,10 @@ function PaymentRequest() {
                                     {row.sac_code ?? "—"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
-                                    {row.charge_name ?? "—"}
+                                    {formatChargeNameWithCode(
+                                      row.charge_name,
+                                      row.charge_code,
+                                    ) || "—"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {formatGstBreakupRate(
@@ -4414,7 +4600,7 @@ function PaymentRequest() {
                     saveResponse &&
                     !saveResponse.id && (
                       <Text size="sm" c="dimmed" py="md">
-                        Save the payment request to load tax breakup.
+                        Click Calculate GST to save and load tax breakup.
                       </Text>
                     )}
                 </Tabs.Panel>
@@ -4436,7 +4622,7 @@ function PaymentRequest() {
                 variant="outline"
                 color="#105476"
                 onClick={() => {
-                  const canAttach = !isReadOnly && !isApprovedStatus;
+                  const canAttach = !formFieldsReadOnly;
                   if (canAttach && supportingDocuments.length === 0) {
                     setSupportingDocuments([{ name: "", file: null }]);
                   }
@@ -4452,13 +4638,13 @@ function PaymentRequest() {
                 }}
                 disabled={isSubmitting}
               >
-                {!isReadOnly && !isApprovedStatus
+                {!formFieldsReadOnly
                   ? "Attach supporting document"
                   : "View supporting document(s)"}
               </Button>
-              {!isReadOnly && !isApprovedStatus && (
+              {!formFieldsReadOnly && (
                 <>
-                  {isEditMode && saveResponse?.id && (
+                  {showApprovalActions && isEditMode && saveResponse?.id && (
                     <>
                       <Button
                         color="red"
@@ -4479,7 +4665,9 @@ function PaymentRequest() {
                     </>
                   )}
                   {/* Keep this as a route-based fallback for existing edit flows. */}
-                  {!saveResponse?.id && isEditMode && (
+                  {showApprovalActions &&
+                    !saveResponse?.id &&
+                    isEditMode && (
                     <Button
                       color="green"
                       leftSection={<IconCheck size={16} />}
@@ -4498,6 +4686,17 @@ function PaymentRequest() {
                     {saveResponse?.id ? "Update" : "Save"}
                   </Button>
                 </>
+              )}
+              {canEditActualInvAfterApproved && (
+                <Button
+                  type="button"
+                  color="#105476"
+                  rightSection={<IconChevronRight size={16} />}
+                  loading={isSubmitting}
+                  onClick={handleUpdateActualInvAfterApproved}
+                >
+                  Update Actual Invoice
+                </Button>
               )}
             </Group>
           </Group>

@@ -1,13 +1,16 @@
-/** Charges on a housing row may be `charges` (air/sea) or `mawb_charges` (air import). */
+/** Charges on a housing row may be `charges`, `mawb_charges` (air), or `mbl_charges` (ocean). */
 export function getHousingChargeArray(
   hawb: Record<string, unknown>,
 ): Record<string, unknown>[] {
   const ch = hawb.charges;
   if (Array.isArray(ch) && ch.length > 0)
     return ch as Record<string, unknown>[];
-  const mc = hawb.mawb_charges;
-  if (Array.isArray(mc) && mc.length > 0)
-    return mc as Record<string, unknown>[];
+  const mawb = hawb.mawb_charges;
+  if (Array.isArray(mawb) && mawb.length > 0)
+    return mawb as Record<string, unknown>[];
+  const mbl = hawb.mbl_charges;
+  if (Array.isArray(mbl) && mbl.length > 0)
+    return mbl as Record<string, unknown>[];
   return [];
 }
 
