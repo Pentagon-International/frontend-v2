@@ -46,6 +46,7 @@ export const URL = {
   currencyMaster: "currency-master/",
   exchangeRateMaster: "exchange-rate-master/",
   exchangeRateMasterFilter: "filter/exchange-rate-master/",
+  exchangeRateMasterUploadDocument: "exchange-rate-master/upload-document/",
   quotation: "quotation/",
   user: "user_master/",
   userByCoordinator: "user_master/by-coordinator/",

@@ -61,6 +61,18 @@ type ExchangeRateGroup = {
   country_name?: string;
   rate_date?: string | null;
   rates?: ExchangeRateItem[];
+  documents?: Array<{
+    id?: number;
+    document_name?: string;
+    document_url?: string;
+    file_size?: number;
+  }>;
+  documents_list?: Array<{
+    id?: number;
+    document_name?: string;
+    document_url?: string;
+    file_size?: number;
+  }>;
   created_at?: string;
   updated_at?: string;
   created_by?: string | null;
@@ -343,13 +355,13 @@ export default function ExchangeRateMasterList() {
         },
       },
       {
-        accessorKey: "sell_rate",
-        header: "Sell Rate",
+        accessorKey: "buy_rate",
+        header: "Buy Rate",
         minSize: 120,
       },
       {
-        accessorKey: "buy_rate",
-        header: "Buy Rate",
+        accessorKey: "sell_rate",
+        header: "Sell Rate",
         minSize: 120,
       },
       {
@@ -699,14 +711,14 @@ export default function ExchangeRateMasterList() {
 
             <Grid.Col span={2.4}>
               <TextInput
-                label="Sell Rate"
-                placeholder="e.g. 80.5"
+                label="Buy Rate"
+                placeholder="e.g. 79.25"
                 size="xs"
-                value={draftFilters.sell_rate}
+                value={draftFilters.buy_rate}
                 onChange={(e) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    sell_rate: e.currentTarget.value,
+                    buy_rate: e.currentTarget.value,
                   }))
                 }
                 styles={{
@@ -728,14 +740,14 @@ export default function ExchangeRateMasterList() {
 
             <Grid.Col span={2.4}>
               <TextInput
-                label="Buy Rate"
-                placeholder="e.g. 79.25"
+                label="Sell Rate"
+                placeholder="e.g. 80.5"
                 size="xs"
-                value={draftFilters.buy_rate}
+                value={draftFilters.sell_rate}
                 onChange={(e) =>
                   setDraftFilters((prev) => ({
                     ...prev,
-                    buy_rate: e.currentTarget.value,
+                    sell_rate: e.currentTarget.value,
                   }))
                 }
                 styles={{
