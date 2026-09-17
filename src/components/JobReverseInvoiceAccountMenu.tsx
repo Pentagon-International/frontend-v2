@@ -73,35 +73,12 @@ type JobReverseInvoiceAccountMenuProps = {
   onRequestDeleteReverseInvoice: (reverseInvoiceId: number) => void;
   readOnly?: boolean;
   navigationStateExtras?: Record<string, unknown>;
+  /** Kept for call-site compatibility; View/Edit always use invoice/reverse. */
   resolveDocumentSegment?: (
     rev: JobReverseInvoiceRow,
     parentRow: JobInvoiceParentRow,
   ) => "invoice" | "credit-note";
 };
-
-function isCreditNoteDocument(
-  rev: JobReverseInvoiceRow,
-  parentRow: JobInvoiceParentRow,
-): boolean {
-  const documentType = String(
-    rev.document_type ?? parentRow.document_type ?? "",
-  )
-    .toUpperCase()
-    .trim();
-  const drCr = String(
-    rev.Dr_Cr ?? rev.dr_cr ?? parentRow.Dr_Cr ?? parentRow.dr_cr ?? "",
-  )
-    .toLowerCase()
-    .trim();
-  const dayBookName = String(
-    rev.day_book_name ?? parentRow.day_book_name ?? "",
-  ).toLowerCase();
-  return (
-    documentType === "CRN" ||
-    drCr === "cr" ||
-    dayBookName.includes("credit")
-  );
-}
 
 export function JobReverseInvoiceAccountMenu({
   rev,
@@ -111,7 +88,6 @@ export function JobReverseInvoiceAccountMenu({
   job,
   deletingReverseId,
   onRequestDeleteReverseInvoice,
-  resolveDocumentSegment,
   navigationStateExtras,
   readOnly = false,
 }: JobReverseInvoiceAccountMenuProps) {
@@ -119,32 +95,15 @@ export function JobReverseInvoiceAccountMenu({
     rev.reverse_invoice_id ?? parentRow.reverse_invoice_id,
   );
   const { isUnposted } = parseInvoiceStatus(rev.status ?? parentRow.status);
-  const documentSegment =
-    resolveDocumentSegment?.(rev, parentRow) ??
-    (isCreditNoteDocument(rev, parentRow) ? "credit-note" : "invoice");
-
-  const mergedRecord = {
-    ...parentRow,
-    ...rev,
-    id: reverseInvoiceId,
-  };
 
   const handleView = () => {
-    navigate(`${jobBasePath}/${documentSegment}/view/${reverseInvoiceId}`, {
+    navigate(`${jobBasePath}/invoice/reverse`, {
       state: {
-        invoiceData: {
-          ...mergedRecord,
-          document_no: getInvoiceDocumentNo(rev, parentRow.document_no),
-          document_date: rev.document_date ?? parentRow.document_date,
-          total:
-            rev.total ??
-            rev.local_total ??
-            parentRow.total ??
-            parentRow.local_total,
-          status: rev.status ?? parentRow.status,
-          day_book_name: rev.day_book_name ?? parentRow.day_book_name,
-        },
-        fromJobLevel: true,
+        reverse_invoice_id: reverseInvoiceId,
+        document_no: parentRow.document_no ?? "",
+        reverse_document_no: getInvoiceDocumentNo(rev, parentRow.document_no),
+        invoice_document_no: parentRow.document_no ?? "",
+        actionType: "view",
         ...(job ? { job } : {}),
         ...(navigationStateExtras ?? {}),
       },
@@ -158,6 +117,7 @@ export function JobReverseInvoiceAccountMenu({
         document_no: parentRow.document_no ?? "",
         reverse_document_no: getInvoiceDocumentNo(rev, parentRow.document_no),
         invoice_document_no: parentRow.document_no ?? "",
+        actionType: "edit",
         ...(job ? { job } : {}),
         ...(navigationStateExtras ?? {}),
       },

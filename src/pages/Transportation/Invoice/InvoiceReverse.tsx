@@ -1590,14 +1590,24 @@ function InvoiceReverse() {
       ? (job.job_id ?? job.id)
       : undefined;
 
-  const isReadOnly = invoiceIsPosted;
-  const reversalPageTitle = saveResponse?.id
+  const isViewMode =
+    String(
+      (location.state as { actionType?: string } | null)?.actionType ?? "",
+    )
+      .toLowerCase()
+      .trim() === "view";
+  const isReadOnly = isViewMode || invoiceIsPosted;
+  const reversalPageTitle = isViewMode
     ? isCreditNoteReversal
-      ? "Edit Credit Note Reversal"
-      : "Edit Invoice Reversal"
-    : isCreditNoteReversal
-      ? "Create Credit Note Reversal"
-      : "Create Invoice Reversal";
+      ? "View Credit Note Reversal"
+      : "View Invoice Reversal"
+    : saveResponse?.id
+      ? isCreditNoteReversal
+        ? "Edit Credit Note Reversal"
+        : "Edit Invoice Reversal"
+      : isCreditNoteReversal
+        ? "Create Credit Note Reversal"
+        : "Create Invoice Reversal";
   const pdfDocumentLabel = isCreditNoteReversal
     ? "Credit Note Reversal"
     : "Invoice Reversal";
