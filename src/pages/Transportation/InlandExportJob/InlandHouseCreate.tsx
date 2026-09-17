@@ -38,7 +38,6 @@ import {
 import {
   useState,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useCallback,
   useRef,
@@ -55,8 +54,17 @@ import {
   Dropdown,
   ToastNotification,
   SingleDateInput,
+  CustomerNameSelect,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  INITIAL_CUSTOMER_SELECTION,
+  type CustomerSelectionState,
+  type CustomerSelectionType,
+  buildShipperTempPayloadFields,
+  hasForwarderParty,
+  isNewCustomerSelection,
+} from "../../../utils/customerSelection";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
@@ -376,10 +384,8 @@ function HouseCreate() {
   const [forwarderAddressOptions, setForwarderAddressOptions] = useState<
     Array<{ value: string; label: string; email?: string }>
   >([]);
-  const shipperTypedNameRef = useRef("");
-  const [shipperFreeTextMode, setShipperFreeTextMode] = useState(false);
-  const shipperTextRef = useRef<HTMLInputElement>(null);
-  const shouldFocusShipperFreeTextRef = useRef(false);
+  const [shipperSelection, setShipperSelection] =
+    useState<CustomerSelectionState>(INITIAL_CUSTOMER_SELECTION);
   const forwarderEmailRef = useRef<HTMLInputElement | null>(null);
 
   // Consignee (shipment-party) search state
@@ -538,19 +544,15 @@ function HouseCreate() {
         ).trim(),
       );
     if (!hasCode && hasName && hasFwd) {
-      setShipperFreeTextMode(true);
+      setShipperSelection({
+        selectionType: "freeText",
+        customerName: String(editData.shipper_name || ""),
+        tempCode: null,
+      });
+    } else if (hasCode) {
+      setShipperSelection(INITIAL_CUSTOMER_SELECTION);
     }
   }, [editData]);
-
-  useLayoutEffect(() => {
-    if (!shipperFreeTextMode || !shouldFocusShipperFreeTextRef.current) return;
-    const input = shipperTextRef.current;
-    if (!input) return;
-    const cursor = input.value.length;
-    input.focus();
-    input.setSelectionRange(cursor, cursor);
-    shouldFocusShipperFreeTextRef.current = false;
-  }, [shipperFreeTextMode]);
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const pendingLeaveActionRef = useRef<(() => void) | null>(null);
@@ -1698,6 +1700,148 @@ function HouseCreate() {
         String(a.address_type || "").toUpperCase() === "PRIMARY" && !!a.address,
     ) || addresses.find((a) => !!a.address);
 
+  const isForwarderSelected = () =>
+    hasForwarderParty({
+      forwarderId: form.values.forwarder_id,
+      forwarderName: form.values.forwarder_name,
+    });
+
+  const clearFreeTextShipper = () => {
+    setShipperSelection(INITIAL_CUSTOMER_SELECTION);
+    form.setFieldValue("shipper_code", "");
+    form.setFieldValue("shipper_name", "");
+    setShipperAddressOptions([]);
+    form.setFieldValue("shipper_address", "");
+    form.setFieldValue("shipper_email", "");
+    form.setFieldValue("shipper_state_id", "");
+  };
+
+  const handleShipperCustomerChange = ({
+    value,
+    customerName,
+    selectionType,
+    tempCode,
+    originalData,
+  }: {
+    value: string;
+    customerName: string;
+    selectionType: CustomerSelectionType;
+    tempCode: string | null;
+    originalData?: Record<string, unknown> | null;
+  }) => {
+    const name = toTitleCase(customerName || value || "");
+    setShipperSelection({
+      selectionType,
+      customerName: name,
+      tempCode,
+    });
+
+    if (!value && selectionType === "master") {
+      form.setFieldValue("shipper_code", "");
+      form.setFieldValue("shipper_name", "");
+      setShipperAddressOptions([]);
+      form.setFieldValue("shipper_address", "");
+      form.setFieldValue("shipper_email", "");
+      form.setFieldValue("shipper_state_id", "");
+      return;
+    }
+
+    if (selectionType === "master") {
+      form.setFieldValue("shipper_code", value || "");
+      form.setFieldValue("shipper_name", name);
+
+      if (
+        value &&
+        originalData &&
+        (originalData as Record<string, unknown>).addresses_data
+      ) {
+        const addressesData = (
+          originalData as Record<string, unknown>
+        ).addresses_data as Array<{
+          id: number;
+          address: string;
+          email?: string;
+          state_id?: number;
+          address_type?: string;
+        }>;
+
+        const addressOptions = addressesData
+          .filter((addr) => addr.address)
+          .map((addr) => ({
+            value: addr.address,
+            label: addr.address,
+            email: String(addr.email || ""),
+          }));
+
+        setShipperAddressOptions(addressOptions);
+
+        const primary =
+          addressesData.find(
+            (a) =>
+              String(a.address_type || "").toUpperCase() === "PRIMARY",
+          ) || addressesData[0];
+
+        if (primary?.address) {
+          form.setFieldValue("shipper_address", primary.address);
+        } else {
+          form.setFieldValue("shipper_address", "");
+        }
+
+        form.setFieldValue(
+          "shipper_email",
+          primary?.email ||
+            getPartyEmail(originalData as Record<string, unknown>) ||
+            "",
+        );
+
+        const addrWithState =
+          (primary?.state_id != null ? primary : null) ||
+          addressesData.find(
+            (a: { state_id?: number }) => a.state_id != null,
+          );
+        if (addrWithState?.state_id != null) {
+          form.setFieldValue(
+            "shipper_state_id",
+            String(addrWithState.state_id),
+          );
+        } else {
+          form.setFieldValue("shipper_state_id", "");
+        }
+      } else {
+        setShipperAddressOptions([]);
+        form.setFieldValue("shipper_address", "");
+        form.setFieldValue("shipper_email", "");
+        form.setFieldValue("shipper_state_id", "");
+      }
+      return;
+    }
+
+    if (!isForwarderSelected()) {
+      clearFreeTextShipper();
+      return;
+    }
+
+    form.setFieldValue(
+      "shipper_code",
+      selectionType === "temp" ? tempCode || value || "" : "",
+    );
+    form.setFieldValue("shipper_name", name);
+    setShipperAddressOptions([]);
+    form.setFieldValue("shipper_state_id", "");
+
+    if (selectionType === "temp" && originalData) {
+      const addr = String(originalData.address || "").trim();
+      const email = String(originalData.email || "").trim();
+      form.setFieldValue("shipper_address", addr);
+      form.setFieldValue("shipper_email", email);
+    } else if (selectionType === "freeText") {
+      if (!name.trim()) {
+        form.setFieldValue("shipper_address", "");
+        form.setFieldValue("shipper_email", "");
+      }
+    }
+  };
+
   // When charge currency matches branch currency, ROE must always be 1
   const chargeCurrenciesKey = chargesForm.values.charges
     .map((c) => `${c.currency ?? ""}|${c.currency_id ?? ""}`)
@@ -2254,6 +2398,7 @@ function HouseCreate() {
       shipper_name: v.shipper_name,
       shipper_address: v.shipper_address,
       shipper_email: v.shipper_email,
+      ...buildShipperTempPayloadFields(shipperSelection),
       shipper_gst_id:
         (v as { shipper_gst_id?: string }).shipper_gst_id ??
         (
@@ -2398,9 +2543,11 @@ function HouseCreate() {
       forwarder_email: currentFormValues.forwarder_email || "",
       cha_name: currentFormValues.cha_name,
       cha_address: currentFormValues.cha_address,
+      shipper_code: currentFormValues.shipper_code,
       shipper_name: currentFormValues.shipper_name,
       shipper_address: currentFormValues.shipper_address,
       shipper_email: currentFormValues.shipper_email,
+      ...buildShipperTempPayloadFields(shipperSelection),
       shipper_state_id: currentFormValues.shipper_state_id
         ? Number(currentFormValues.shipper_state_id)
         : ((
@@ -2562,9 +2709,11 @@ function HouseCreate() {
         forwarder_name: form.values.forwarder_name || "",
         forwarder_address: form.values.forwarder_address || "",
         forwarder_email: form.values.forwarder_email || "",
+        shipper_code: form.values.shipper_code,
         shipper_name: form.values.shipper_name,
         shipper_address: form.values.shipper_address,
         shipper_email: form.values.shipper_email,
+        ...buildShipperTempPayloadFields(shipperSelection),
         shipment_id:
           (editData as { shipment_id?: string } | undefined)?.shipment_id ??
           null,
@@ -3371,30 +3520,7 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                {shipperFreeTextMode ? (
-                  <FormTextInput
-                    ref={shipperTextRef}
-                    label="Shipper Name"
-                    required
-                    placeholder="Enter shipper name"
-                    value={form.values.shipper_name || ""}
-                    onChange={(e) => {
-                      const v = toTitleCase(e.currentTarget.value);
-                      form.setFieldValue("shipper_name", v);
-                      form.setFieldValue("shipper_code", "");
-                      if (!v.trim()) {
-                        setShipperFreeTextMode(false);
-                        form.setFieldValue("shipper_name", "");
-                        setShipperAddressOptions([]);
-                        form.setFieldValue("shipper_address", "");
-                        form.setFieldValue("shipper_email", "");
-                        form.setFieldValue("shipper_state_id", "");
-                      }
-                    }}
-                    error={form.errors.shipper_name as string}
-                  />
-                ) : (
-                <SearchableSelect
+                <CustomerNameSelect
                   label="Shipper Name"
                   required
                   placeholder="Type shipper name"
@@ -3404,134 +3530,24 @@ function HouseCreate() {
                     value: String(item.customer_code),
                     label: String(item.customer_name),
                   })}
-                  value={form.values.shipper_code}
-                  displayValue={form.values.shipper_name}
-                  onChange={(value, selectedData, originalData) => {
-                    const hasForwarder =
-                      form.values.forwarder_id != null ||
-                      Boolean(form.values.forwarder_name?.trim());
-                    form.setFieldValue("shipper_code", value || "");
-                    if (value) {
-                      setShipperFreeTextMode(false);
-                    }
-                    form.setFieldValue(
-                      "shipper_name",
-                      selectedData?.label ||
-                        (hasForwarder
-                          ? toTitleCase(
-                              shipperTypedNameRef.current || value || "",
-                            )
-                          : ""),
-                    );
-
-                    // Use originalData to populate address options and shipper_state_id
-                    if (
-                      value &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      // Create address options from addresses_data
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                        email?: string;
-                        state_id?: number;
-                        address_type?: string;
-                      }>;
-
-                      const addressOptions = addressesData
-                        .filter((addr) => addr.address)
-                        .map((addr) => ({
-                          value: addr.address,
-                          label: addr.address,
-                          email: String(addr.email || ""),
-                        }));
-
-                      setShipperAddressOptions(addressOptions);
-
-                      const primary =
-                        addressesData.find(
-                          (a) =>
-                            String(a.address_type || "").toUpperCase() ===
-                            "PRIMARY",
-                        ) || addressesData[0];
-
-                      // Auto-select primary address (fallback: first)
-                      if (primary?.address) {
-                        form.setFieldValue("shipper_address", primary.address);
-                      } else {
-                        form.setFieldValue("shipper_address", "");
-                      }
-
-                      form.setFieldValue(
-                        "shipper_email",
-                        primary?.email ||
-                          getPartyEmail(
-                            originalData as Record<string, unknown>,
-                          ) ||
-                          "",
-                      );
-
-                      // Prefer primary address state_id when available
-                      const addrWithState =
-                        (primary?.state_id != null ? primary : null) ||
-                        addressesData.find(
-                          (a: { state_id?: number }) => a.state_id != null,
-                        );
-                      if (addrWithState?.state_id != null) {
-                        form.setFieldValue(
-                          "shipper_state_id",
-                          String(addrWithState.state_id),
-                        );
-                      } else {
-                        form.setFieldValue("shipper_state_id", "");
-                      }
-                    } else {
-                      setShipperAddressOptions([]);
-                      form.setFieldValue("shipper_address", "");
-                      form.setFieldValue("shipper_email", "");
-                      form.setFieldValue("shipper_state_id", "");
-                    }
-                  }}
-                  onSearchTextChange={(text) => {
-                    if (
-                      form.values.forwarder_id != null ||
-                      Boolean(form.values.forwarder_name?.trim())
-                    ) {
-                      shipperTypedNameRef.current = text;
-                    }
-                  }}
-                  onSearchComplete={({ searchTerm, hasResults }) => {
-                    const hasForwarder =
-                      form.values.forwarder_id != null ||
-                      Boolean(form.values.forwarder_name?.trim());
-                    if (
-                      hasForwarder &&
-                      !hasResults &&
-                      searchTerm.length >= 2
-                    ) {
-                      const name = toTitleCase(searchTerm);
-                      form.setFieldValue("shipper_code", "");
-                      form.setFieldValue("shipper_name", name);
-                      setShipperAddressOptions([]);
-                      form.setFieldValue("shipper_address", "");
-                      form.setFieldValue("shipper_email", "");
-                      form.setFieldValue("shipper_state_id", "");
-                      shouldFocusShipperFreeTextRef.current = true;
-                      setShipperFreeTextMode(true);
-                    }
-                  }}
-                  returnOriginalData={true}
-                  hideEmptyResultsMessage={
-                    form.values.forwarder_id != null ||
-                    Boolean(form.values.forwarder_name?.trim())
+                  value={
+                    shipperSelection.selectionType === "temp"
+                      ? shipperSelection.tempCode || ""
+                      : shipperSelection.selectionType === "freeText"
+                        ? shipperSelection.customerName ||
+                          form.values.shipper_name ||
+                          ""
+                        : form.values.shipper_code
                   }
+                  displayValue={form.values.shipper_name}
+                  allowFreeText={isForwarderSelected()}
+                  showNewCustomerDetailsAction={false}
+                  selectionType={shipperSelection.selectionType}
+                  onCustomerChange={handleShipperCustomerChange}
+                  returnOriginalData={true}
                   error={form.errors.shipper_name as string}
                   minSearchLength={3}
                 />
-                )}
               </Grid.Col>
               <Grid.Col span={4}>
                 <FormTextInput
@@ -3546,13 +3562,10 @@ function HouseCreate() {
 
               <Grid.Col span={4}>
                 {(() => {
-                  const hasForwarder =
-                    form.values.forwarder_id != null ||
-                    Boolean(form.values.forwarder_name?.trim());
-                  const shipperTyped =
-                    hasForwarder &&
-                    !String(form.values.shipper_code || "").trim();
-                  if (shipperTyped || shipperAddressOptions.length === 0) {
+                  const shipperAddressEditable =
+                    isNewCustomerSelection(shipperSelection) ||
+                    shipperAddressOptions.length === 0;
+                  if (shipperAddressEditable) {
                     return (
                       <FormTextInput
                         label="Shipper Address"
@@ -4186,17 +4199,8 @@ function HouseCreate() {
                       form.setFieldValue("forwarder_address", "");
                       form.setFieldValue("forwarder_email", "");
                       setForwarderAddressOptions([]);
-                      // Free-text shipper is only allowed with a forwarder — clear it.
-                      // Keep master-selected shipper (has shipper_code).
-                      if (!String(form.values.shipper_code || "").trim()) {
-                        setShipperFreeTextMode(false);
-                        shipperTypedNameRef.current = "";
-                        form.setFieldValue("shipper_code", "");
-                        form.setFieldValue("shipper_name", "");
-                        setShipperAddressOptions([]);
-                        form.setFieldValue("shipper_address", "");
-                        form.setFieldValue("shipper_email", "");
-                        form.setFieldValue("shipper_state_id", "");
+                      if (isNewCustomerSelection(shipperSelection)) {
+                        clearFreeTextShipper();
                       }
                       return;
                     }

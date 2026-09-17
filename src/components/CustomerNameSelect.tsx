@@ -52,6 +52,11 @@ type CustomerNameSelectProps = {
   searchFields?: string[];
   apiEndpoint?: string;
   dropdownZIndex?: number | null;
+  /**
+   * When true (default), shows the "complete new customer details" action
+   * (enquiry / call entry). Booking/job shipper free-text should pass false.
+   */
+  showNewCustomerDetailsAction?: boolean;
 };
 
 export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
@@ -72,6 +77,7 @@ export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
   searchFields = ["customer_name", "customer_code"],
   apiEndpoint,
   dropdownZIndex = 5,
+  showNewCustomerDetailsAction = true,
     },
     ref,
   ) {
@@ -191,10 +197,17 @@ export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
   );
 
   const showUnavailableCustomerIcon = useMemo(() => {
+    if (!showNewCustomerDetailsAction) return false;
     if (!allowFreeText || selectionType === "temp") return false;
     if (selectionType === "freeText") return true;
     return inputMode === "freeText" && freeTextValue.trim().length > 0;
-  }, [allowFreeText, selectionType, inputMode, freeTextValue]);
+  }, [
+    showNewCustomerDetailsAction,
+    allowFreeText,
+    selectionType,
+    inputMode,
+    freeTextValue,
+  ]);
 
   const shouldPromptDetailsAction =
     Boolean(error) && error === NEW_CUSTOMER_DETAILS_PENDING_ERROR;
@@ -267,16 +280,31 @@ export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
       customerName: response.customer_name,
       selectionType: "temp",
       tempCode: response.temp_code,
-      originalData: null,
+      // Booking/job shipper can prefill address/email from temp save
+      originalData: {
+        address: response.address,
+        email: response.email,
+        city: response.city,
+        contact_number: response.contact_number,
+        temp_code: response.temp_code,
+        customer_name: response.customer_name,
+      },
     });
   };
 
   const openTempCustomerModal = useCallback(() => {
+    if (!showNewCustomerDetailsAction) return;
     const name = freeTextValue.trim() || resolvedDisplayValue || value || "";
     if (!name.trim()) return;
     setPendingCustomerName(name.trim());
     openTempModal();
-  }, [freeTextValue, resolvedDisplayValue, value, openTempModal]);
+  }, [
+    showNewCustomerDetailsAction,
+    freeTextValue,
+    resolvedDisplayValue,
+    value,
+    openTempModal,
+  ]);
 
   useImperativeHandle(
     ref,
@@ -359,12 +387,14 @@ export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
         )}
       </Flex>
 
-      <TempCustomerModal
-        opened={tempModalOpened}
-        onClose={closeTempModal}
-        customerName={pendingCustomerName}
-        onSaved={handleTempCustomerSaved}
-      />
+      {showNewCustomerDetailsAction && (
+        <TempCustomerModal
+          opened={tempModalOpened}
+          onClose={closeTempModal}
+          customerName={pendingCustomerName}
+          onSaved={handleTempCustomerSaved}
+        />
+      )}
     </>
   );
   },

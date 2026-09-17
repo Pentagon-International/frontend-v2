@@ -174,6 +174,9 @@ export default function SearchableSelect({
   */
   // Track active index for keyboard navigation so Tab can select the highlighted one
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  // When Tab/blur commits an unmatched search as free-text, Mantine may still
+  // reset the search box to "" and fire onChange(null). Skip that clear.
+  const committingUnmatchedRef = useRef(false);
 
   // Default display format if none provided
   const defaultDisplayFormat = (item: Record<string, unknown>) => {
@@ -344,6 +347,22 @@ export default function SearchableSelect({
   const isLinkedLabelEdit =
     linkedLabelEditWithoutSearch && Boolean(value && String(value).trim());
 
+  const commitUnmatchedSearch = useCallback(() => {
+    if (!onSearchComplete || selectedItem) return false;
+    const term = (searchRef.current || search).trim();
+    if (term.length < minSearchLength) return false;
+    // Prefer selecting a master match when options are already available
+    if (data.length > 0) return false;
+
+    // Stay true across Mantine's blur reset (onSearchChange("") + onChange(null))
+    committingUnmatchedRef.current = true;
+    onSearchComplete({ searchTerm: term, hasResults: false });
+    window.setTimeout(() => {
+      committingUnmatchedRef.current = false;
+    }, 0);
+    return true;
+  }, [onSearchComplete, selectedItem, search, minSearchLength, data.length]);
+
   const handleSearchChange = (val: string) => {
     searchRef.current = val;
     setSearch(val);
@@ -368,6 +387,11 @@ export default function SearchableSelect({
       // caused the filter API to fire as soon as the user clicked the column
       // header to open the `SearchableSelect` editor.
       if (!isSearchMode) {
+        return;
+      }
+      // Free-text commit (Tab/blur) triggers a Mantine search reset to "";
+      // do not propagate that as clearing the customer.
+      if (committingUnmatchedRef.current) {
         return;
       }
       setSelected(null);
@@ -420,6 +444,9 @@ export default function SearchableSelect({
         onChange(val); // Pass just value if no item found
       }
     } else {
+      if (committingUnmatchedRef.current) {
+        return;
+      }
       setSelectedItem(null);
       setSearch("");
       setIsSearchMode(false);
@@ -510,6 +537,10 @@ export default function SearchableSelect({
                 setSearch(active.label);
                 setIsSearchMode(false);
               }
+            } else {
+              // No master option to pick (search still loading / no results):
+              // commit typed text as unmatched so free-text customers keep the name
+              commitUnmatchedSearch();
             }
           }
         }}
@@ -587,6 +618,10 @@ export default function SearchableSelect({
             handleChange(pick.value); // This will set selectedItem, selected, etc.
             setSearch(pick.label); // Immediately update the input with label
             setIsSearchMode(false);
+            return;
+          }
+          // No options yet (still fetching) or empty results: keep typed name as free-text
+          if (commitUnmatchedSearch()) {
             return;
           }
           // Previous logic - ensure search text shows selected label:
