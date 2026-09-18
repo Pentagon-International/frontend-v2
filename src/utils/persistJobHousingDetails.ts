@@ -49,6 +49,34 @@ function formatMasterDate(
   return formatDateYmd(value);
 }
 
+/** Prefer first non-null, non-empty-string value (empty string must not mask job data). */
+function firstFilled(...values: unknown[]): unknown {
+  for (const v of values) {
+    if (v == null) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    return v;
+  }
+  return undefined;
+}
+
+function firstFilledString(...values: unknown[]): string {
+  const v = firstFilled(...values);
+  return v != null ? String(v) : "";
+}
+
+/**
+ * Prefer populated nav array; fall back to job array when nav is empty/missing
+ * so house PUT does not wipe master nested rows.
+ */
+function pickPopulatedArray(
+  preferred: unknown,
+  fallback: unknown,
+): unknown[] | null {
+  if (Array.isArray(preferred) && preferred.length > 0) return preferred;
+  if (Array.isArray(fallback) && fallback.length > 0) return fallback;
+  return null;
+}
+
 function mapRoutingForPayload(
   routing: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -123,6 +151,9 @@ function mapContainerForPayload(
       ? String(rawType).trim()
       : null);
 
+  const socFlag = container.soc_flag;
+  const cfsId = toPk(container.cfs_id);
+
   return {
     ...(container.id != null &&
       container.id !== "" && { id: Number(container.id) }),
@@ -132,10 +163,15 @@ function mapContainerForPayload(
     container_no: container.container_no ?? null,
     actual_seal_no: container.actual_seal_no ?? null,
     customs_seal_no: container.customs_seal_no ?? null,
+    soc_flag:
+      socFlag === true ? true : socFlag === false ? false : null,
+    seal_type: container.seal_type ?? null,
     loading_date: formatDateYmd(container.loading_date),
-    unloading_date: formatDateYmd(
+    // API field is uploading_date (master Update); accept unloading_date from forms
+    uploading_date: formatDateYmd(
       container.unloading_date ?? container.uploading_date,
     ),
+    ...(cfsId != null ? { cfs_id: cfsId } : {}),
   };
 }
 
@@ -344,61 +380,83 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     job.booking_ids,
   );
 
+  const itemNoRaw = firstFilled(mbl.item_no, job.item_no);
+  const igmNoRaw = firstFilled(mbl.igm_no, job.igm_no);
+
   const payload: Record<string, unknown> = {
     id: jobId,
-    service: mbl.service ?? job.service,
-    ...(mbl.service_id != null || job.service_id != null
-      ? { service_id: mbl.service_id ?? job.service_id }
+    service: firstFilled(mbl.service, job.service) ?? job.service,
+    ...(firstFilled(mbl.service_id, job.service_id) != null
+      ? { service_id: firstFilled(mbl.service_id, job.service_id) }
       : {}),
-    ...(mbl.service_code != null || job.service_code != null
-      ? { service_code: mbl.service_code ?? job.service_code }
+    ...(firstFilled(mbl.service_code, job.service_code) != null
+      ? { service_code: firstFilled(mbl.service_code, job.service_code) }
       : {}),
-    pp_cc: mbl.pp_cc ?? job.pp_cc ?? "Collect",
-    note: mbl.note ?? job.note ?? "",
+    pp_cc: firstFilledString(mbl.pp_cc, job.pp_cc) || "Collect",
+    note: firstFilledString(mbl.note, job.note),
     ...(job.service_type != null ? { service_type: job.service_type } : {}),
     is_direct: mbl.is_direct ?? job.is_direct ?? false,
     agent:
-      mbl.origin_agent ??
-      mbl.agent_code ??
-      mbl.agent ??
-      job.agent ??
-      null,
-    origin_code: mbl.origin_code ?? job.origin_code ?? null,
-    destination_code: mbl.destination_code ?? job.destination_code ?? null,
+      firstFilled(
+        mbl.origin_agent,
+        mbl.agent_code,
+        mbl.agent,
+        job.agent,
+      ) ?? null,
+    origin_code: firstFilled(mbl.origin_code, job.origin_code) ?? null,
+    destination_code:
+      firstFilled(mbl.destination_code, job.destination_code) ?? null,
     etd: formatMasterDate(etdSrc, isAir) ?? (isAir ? "" : null),
     eta: formatMasterDate(etaSrc, isAir) ?? (isAir ? "" : null),
-    atd: formatMasterDate(mbl.atd ?? job.atd, isAir),
-    ata: formatMasterDate(mbl.ata ?? job.ata, isAir),
+    atd: formatMasterDate(firstFilled(mbl.atd, job.atd), isAir),
+    ata: formatMasterDate(firstFilled(mbl.ata, job.ata), isAir),
     job_date: formatDateYmd(jobDateSrc),
-    shipper_name: mbl.shipper_name ?? job.shipper_name ?? "",
-    shipper_email: mbl.shipper_email ?? job.shipper_email ?? "",
-    shipper_address: mbl.shipper_address ?? job.shipper_address ?? "",
-    consignee_name: mbl.consignee_name ?? job.consignee_name ?? "",
-    consignee_email: mbl.consignee_email ?? job.consignee_email ?? "",
-    consignee_address: mbl.consignee_address ?? job.consignee_address ?? "",
-    carrier_agent_name:
-      mbl.carrier_agent_name ?? job.carrier_agent_name ?? "",
-    carrier_agent_email:
-      mbl.carrier_agent_email ?? job.carrier_agent_email ?? "",
-    carrier_agent_address:
-      mbl.carrier_agent_address ?? job.carrier_agent_address ?? "",
-    carrier_code: carrier.carrier_code ?? job.carrier_code ?? null,
-    vessel_name: carrier.vessel_name ?? job.vessel_name ?? null,
+    shipper_name: firstFilledString(mbl.shipper_name, job.shipper_name),
+    shipper_email: firstFilledString(mbl.shipper_email, job.shipper_email),
+    shipper_address: firstFilledString(
+      mbl.shipper_address,
+      job.shipper_address,
+    ),
+    consignee_name: firstFilledString(mbl.consignee_name, job.consignee_name),
+    consignee_email: firstFilledString(
+      mbl.consignee_email,
+      job.consignee_email,
+    ),
+    consignee_address: firstFilledString(
+      mbl.consignee_address,
+      job.consignee_address,
+    ),
+    carrier_agent_name: firstFilledString(
+      mbl.carrier_agent_name,
+      job.carrier_agent_name,
+    ),
+    carrier_agent_email: firstFilledString(
+      mbl.carrier_agent_email,
+      job.carrier_agent_email,
+    ),
+    carrier_agent_address: firstFilledString(
+      mbl.carrier_agent_address,
+      job.carrier_agent_address,
+    ),
+    carrier_code: firstFilled(carrier.carrier_code, job.carrier_code) ?? null,
+    vessel_name: firstFilled(carrier.vessel_name, job.vessel_name) ?? null,
     voyage_number:
-      carrier.voyage_number ??
-      carrier.flight_number ??
-      job.voyage_number ??
+      firstFilled(
+        carrier.voyage_number,
+        carrier.flight_number,
+        job.voyage_number,
+        job.flightno,
+      ) ?? null,
+    mbl_number: firstFilled(carrier.mbl_number, job.mbl_number) ?? null,
+    mbl_date: formatDateYmd(firstFilled(carrier.mbl_date, job.mbl_date)),
+    flightno:
+      firstFilled(carrier.flight_number, job.flightno, carrier.voyage_number) ??
       null,
-    mbl_number: carrier.mbl_number ?? job.mbl_number ?? null,
-    mbl_date: formatDateYmd(carrier.mbl_date ?? job.mbl_date),
-    flightno: carrier.flight_number ?? job.flightno ?? null,
-    mawb_no: carrier.mawb_number ?? job.mawb_no ?? null,
-    mawb_date: formatDateYmd(carrier.mawb_date ?? job.mawb_date),
-    igm_no:
-      mbl.igm_no != null && String(mbl.igm_no).trim()
-        ? String(mbl.igm_no).trim()
-        : (job.igm_no ?? null),
-    igm_date: formatDateYmd(mbl.igm_date ?? job.igm_date),
+    mawb_no: firstFilled(carrier.mawb_number, job.mawb_no) ?? null,
+    mawb_date: formatDateYmd(firstFilled(carrier.mawb_date, job.mawb_date)),
+    igm_no: igmNoRaw != null ? String(igmNoRaw).trim() : null,
+    igm_date: formatDateYmd(firstFilled(mbl.igm_date, job.igm_date)),
+    item_no: itemNoRaw != null ? String(itemNoRaw).trim() : null,
     ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
     housing_details: sanitizeHousingDetailsForPayload(
       updatedHousingDetails,
@@ -406,48 +464,154 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     ),
   };
 
-  const routings = Array.isArray(state.routings)
-    ? state.routings
-    : Array.isArray(job.ocean_routings)
-      ? job.ocean_routings
-      : null;
+  const routings = pickPopulatedArray(state.routings, job.ocean_routings);
   if (routings) {
     payload.ocean_routings = (routings as Record<string, unknown>[]).map(
       mapRoutingForPayload,
     );
   }
 
-  const containers = Array.isArray(state.containerDetails)
-    ? state.containerDetails
-    : Array.isArray(job.container_details)
-      ? job.container_details
-      : null;
+  const containers = pickPopulatedArray(
+    state.containerDetails,
+    job.container_details,
+  );
   if (containers) {
     payload.container_details = (
       containers as Record<string, unknown>[]
     ).map(mapContainerForPayload);
   }
 
-  const estimatesRaw = Array.isArray(state.estimates)
-    ? state.estimates
-    : Array.isArray(job.estimates)
-      ? job.estimates
-      : null;
-  // Only include estimates when present in nav/job state.
-  // Omitting the key preserves existing JobChargesDetails (backend key-presence sync).
+  const estimatesRaw = pickPopulatedArray(state.estimates, job.estimates);
+  // Only include estimates when populated. Omitting preserves JobChargesDetails.
   if (estimatesRaw) {
     payload.estimates = (estimatesRaw as Record<string, unknown>[])
       .map(mapEstimateForPayload)
       .filter((row): row is Record<string, unknown> => row != null);
   }
 
-  if (Array.isArray(state.document_ids)) {
+  if (Array.isArray(state.document_ids) && state.document_ids.length > 0) {
     payload.document_ids = state.document_ids;
-  } else if (Array.isArray(job.document_ids)) {
+  } else if (Array.isArray(job.document_ids) && job.document_ids.length > 0) {
     payload.document_ids = job.document_ids;
   }
 
   return payload;
+}
+
+/**
+ * After house PUT, refresh master snapshot in nav state from saved job
+ * so subsequent house saves keep populated master fields.
+ */
+export function mergeMasterNavStateFromSavedJob(
+  navState: Record<string, unknown> | null | undefined,
+  savedJob: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const state = { ...(navState ?? {}) } as Record<string, unknown>;
+  if (!savedJob) return state;
+
+  const masterKey =
+    state.mawbDetails != null || savedJob.mawb_no != null
+      ? "mawbDetails"
+      : "mblDetails";
+  const existingMaster = {
+    ...((state[masterKey] as Record<string, unknown> | undefined) ?? {}),
+  };
+  const existingCarrier = {
+    ...((state.carrierDetails as Record<string, unknown> | undefined) ?? {}),
+  };
+
+  state.job = savedJob;
+  state[masterKey] = {
+    ...existingMaster,
+    service: firstFilled(savedJob.service, existingMaster.service),
+    pp_cc: firstFilled(savedJob.pp_cc, existingMaster.pp_cc),
+    note: firstFilled(savedJob.note, existingMaster.note) ?? existingMaster.note,
+    origin_code: firstFilled(savedJob.origin_code, existingMaster.origin_code),
+    origin_name: firstFilled(savedJob.origin_name, existingMaster.origin_name),
+    destination_code: firstFilled(
+      savedJob.destination_code,
+      existingMaster.destination_code,
+    ),
+    destination_name: firstFilled(
+      savedJob.destination_name,
+      existingMaster.destination_name,
+    ),
+    etd: firstFilled(savedJob.etd, existingMaster.etd),
+    eta: firstFilled(savedJob.eta, existingMaster.eta),
+    atd: firstFilled(savedJob.atd, existingMaster.atd),
+    ata: firstFilled(savedJob.ata, existingMaster.ata),
+    job_date: firstFilled(savedJob.job_date, existingMaster.job_date),
+    igm_no: firstFilled(savedJob.igm_no, existingMaster.igm_no),
+    igm_date: firstFilled(savedJob.igm_date, existingMaster.igm_date),
+    item_no: firstFilled(savedJob.item_no, existingMaster.item_no),
+    shipper_name: firstFilled(savedJob.shipper_name, existingMaster.shipper_name),
+    shipper_email: firstFilled(
+      savedJob.shipper_email,
+      existingMaster.shipper_email,
+    ),
+    shipper_address: firstFilled(
+      savedJob.shipper_address,
+      existingMaster.shipper_address,
+    ),
+    consignee_name: firstFilled(
+      savedJob.consignee_name,
+      existingMaster.consignee_name,
+    ),
+    consignee_email: firstFilled(
+      savedJob.consignee_email,
+      existingMaster.consignee_email,
+    ),
+    consignee_address: firstFilled(
+      savedJob.consignee_address,
+      existingMaster.consignee_address,
+    ),
+    carrier_agent_name: firstFilled(
+      savedJob.carrier_agent_name,
+      existingMaster.carrier_agent_name,
+    ),
+    carrier_agent_email: firstFilled(
+      savedJob.carrier_agent_email,
+      existingMaster.carrier_agent_email,
+    ),
+    carrier_agent_address: firstFilled(
+      savedJob.carrier_agent_address,
+      existingMaster.carrier_agent_address,
+    ),
+  };
+
+  state.carrierDetails = {
+    ...existingCarrier,
+    carrier_code: firstFilled(savedJob.carrier_code, existingCarrier.carrier_code),
+    carrier_name: firstFilled(savedJob.carrier_name, existingCarrier.carrier_name),
+    vessel_name: firstFilled(savedJob.vessel_name, existingCarrier.vessel_name),
+    voyage_number: firstFilled(
+      savedJob.voyage_number,
+      existingCarrier.voyage_number,
+    ),
+    flight_number: firstFilled(
+      savedJob.flightno,
+      existingCarrier.flight_number,
+    ),
+    mbl_number: firstFilled(savedJob.mbl_number, existingCarrier.mbl_number),
+    mbl_date: firstFilled(savedJob.mbl_date, existingCarrier.mbl_date),
+    mawb_number: firstFilled(savedJob.mawb_no, existingCarrier.mawb_number),
+    mawb_date: firstFilled(savedJob.mawb_date, existingCarrier.mawb_date),
+  };
+
+  if (Array.isArray(savedJob.ocean_routings) && savedJob.ocean_routings.length > 0) {
+    state.routings = savedJob.ocean_routings;
+  }
+  if (
+    Array.isArray(savedJob.container_details) &&
+    savedJob.container_details.length > 0
+  ) {
+    state.containerDetails = savedJob.container_details;
+  }
+  if (Array.isArray(savedJob.estimates) && savedJob.estimates.length > 0) {
+    state.estimates = savedJob.estimates;
+  }
+
+  return state;
 }
 
 /**

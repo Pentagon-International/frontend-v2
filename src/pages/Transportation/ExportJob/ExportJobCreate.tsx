@@ -439,6 +439,10 @@ type HousingDetail = HouseDocumentFields & {
   forwarder_name?: string;
   forwarder_address?: string;
   forwarder_email?: string;
+  billing_customer_id?: number | null;
+  billing_customer_name?: string;
+  billing_customer_address?: string;
+  billing_customer_email?: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
@@ -452,7 +456,6 @@ type HousingDetail = HouseDocumentFields & {
   marks_no: string;
   note?: string;
   bl_type?: string;
-  item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
@@ -1312,6 +1315,20 @@ function ExportJobCreate() {
               forwarder_email: house.forwarder_email
                 ? String(house.forwarder_email)
                 : "",
+              billing_customer_id:
+                house.billing_customer_id != null &&
+                house.billing_customer_id !== undefined
+                  ? Number(house.billing_customer_id)
+                  : null,
+              billing_customer_name: house.billing_customer_name
+                ? String(house.billing_customer_name)
+                : "",
+              billing_customer_address: house.billing_customer_address
+                ? String(house.billing_customer_address)
+                : "",
+              billing_customer_email: house.billing_customer_email
+                ? String(house.billing_customer_email)
+                : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
               agent_code: house.agent_code ? String(house.agent_code) : "",
@@ -1419,7 +1436,6 @@ function ExportJobCreate() {
                   return "SURRENDERED";
                 return raw;
               })(),
-              item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
               shipment_terms_code: house.shipment_terms_code
@@ -3647,6 +3663,10 @@ function ExportJobCreate() {
           forwarder_name: house.forwarder_name || "",
           forwarder_address: house.forwarder_address || "",
           forwarder_email: house.forwarder_email || "",
+          billing_customer_id: house.billing_customer_id ?? null,
+          billing_customer_name: house.billing_customer_name || "",
+          billing_customer_address: house.billing_customer_address || "",
+          billing_customer_email: house.billing_customer_email || "",
           cha_name: (house as { cha_name?: string }).cha_name || null,
           cha_address: (house as { cha_address?: string }).cha_address || null,
           shipper_name: house.shipper_name,
@@ -3670,7 +3690,6 @@ function ExportJobCreate() {
           marks_no: house.marks_no || "",
           note: house.note || "",
           bl_type: house.bl_type || "",
-          item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
           ref_no: house.ref_no || "",
           ...(house.shipment_terms_code != null &&

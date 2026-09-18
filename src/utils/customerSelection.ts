@@ -72,6 +72,21 @@ export function hasForwarderParty(params: {
   return false;
 }
 
+/** True when a billing customer party is selected (id or name). */
+export function hasBillingCustomerParty(params: {
+  billingCustomerId?: string | number | null;
+  billingCustomerName?: string | null;
+}): boolean {
+  if (
+    params.billingCustomerId != null &&
+    String(params.billingCustomerId).trim() !== ""
+  ) {
+    return true;
+  }
+  if (String(params.billingCustomerName ?? "").trim()) return true;
+  return false;
+}
+
 /** Include temp_code on booking/job shipper payloads when applicable. */
 export function buildShipperTempPayloadFields(
   selection: CustomerSelectionState

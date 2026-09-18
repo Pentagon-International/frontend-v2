@@ -810,6 +810,16 @@ function buildAirHousing(
     forwarder_name: booking.forwarder_name || "",
     forwarder_address: booking.forwarder_address || "",
     forwarder_email: booking.forwarder_email || "",
+    billing_customer_id:
+      booking.billing_customer_id != null
+        ? Number(booking.billing_customer_id)
+        : null,
+    billing_customer_name: booking.billing_customer_name || "",
+    billing_customer_address:
+      booking.billing_customer_address ||
+      booking.billing_customer_address_text ||
+      "",
+    billing_customer_email: booking.billing_customer_email || "",
     shipper_name: booking.shipper_name || booking.customer_name || "",
     shipper_address: booking.shipper_address || "",
     shipper_email: booking.shipper_email || "",
@@ -864,6 +874,16 @@ function buildOceanHousing(
     forwarder_name: booking.forwarder_name || "",
     forwarder_address: booking.forwarder_address || "",
     forwarder_email: booking.forwarder_email || "",
+    billing_customer_id:
+      booking.billing_customer_id != null
+        ? Number(booking.billing_customer_id)
+        : null,
+    billing_customer_name: booking.billing_customer_name || "",
+    billing_customer_address:
+      booking.billing_customer_address ||
+      booking.billing_customer_address_text ||
+      "",
+    billing_customer_email: booking.billing_customer_email || "",
     shipper_name: booking.shipper_name || booking.customer_name || "",
     shipper_address: booking.shipper_address || "",
     shipper_email: booking.shipper_email || "",

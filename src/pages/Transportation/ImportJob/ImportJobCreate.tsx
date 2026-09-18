@@ -212,6 +212,7 @@ type MBLDetailsForm = {
   job_date: Date | null;
   igm_no: string;
   igm_date: Date | null;
+  item_no: string;
   shipper_id: string;
   shipper_name: string;
   shipper_email: string;
@@ -292,6 +293,7 @@ const mblDetailsSchema = yup.object({
   job_date: yup.date().required("Job Date is required"),
   igm_no: yup.string().optional(),
   igm_date: yup.date().nullable(),
+  item_no: yup.string().optional(),
 });
 
 const carrierDetailsSchema = yup.object({
@@ -431,6 +433,10 @@ type HousingDetail = HouseDocumentFields & {
   forwarder_name?: string;
   forwarder_address?: string;
   forwarder_email?: string;
+  billing_customer_id?: number | null;
+  billing_customer_name?: string;
+  billing_customer_address?: string;
+  billing_customer_email?: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
@@ -450,7 +456,6 @@ type HousingDetail = HouseDocumentFields & {
   marks_no: string;
   note?: string;
   bl_type?: string;
-  item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
   hscode?: string;
@@ -536,10 +541,12 @@ const getAddressOptions = (
 ): PartyAddressOption[] => {
   const addresses = Array.isArray(originalData?.addresses_data)
     ? (originalData.addresses_data as Array<Record<string, unknown>>)
-    : [];
+    : Array.isArray(originalData?.addresses)
+      ? (originalData.addresses as Array<Record<string, unknown>>)
+      : [];
   return addresses
     .map((item) => ({
-      value: String(item.id ?? ""),
+      value: String(item.id ?? item.address ?? ""),
       label: String(item.address ?? ""),
       email: String(item.email ?? ""),
       address: String(item.address ?? ""),
@@ -855,6 +862,7 @@ function ImportJobCreate() {
       job_date: null,
       igm_no: "",
       igm_date: null,
+      item_no: "",
       shipper_id: "",
       shipper_name: "",
       shipper_email: "",
@@ -1100,6 +1108,10 @@ function ImportJobCreate() {
             mblData.igm_date && dayjs(mblData.igm_date).isValid()
               ? dayjs(mblData.igm_date).toDate()
               : mblDetailsForm.values.igm_date || null,
+          item_no:
+            mblData.item_no != null
+              ? String(mblData.item_no)
+              : mblDetailsForm.values.item_no || "",
           shipper_id: String(
             mblFlat.shipper_id ?? shipperNest?.id ?? stateMbl.shipper_id ?? "",
           ),
@@ -1253,6 +1265,20 @@ function ImportJobCreate() {
               forwarder_email: house.forwarder_email
                 ? String(house.forwarder_email)
                 : "",
+              billing_customer_id:
+                house.billing_customer_id != null &&
+                house.billing_customer_id !== undefined
+                  ? Number(house.billing_customer_id)
+                  : null,
+              billing_customer_name: house.billing_customer_name
+                ? String(house.billing_customer_name)
+                : "",
+              billing_customer_address: house.billing_customer_address
+                ? String(house.billing_customer_address)
+                : "",
+              billing_customer_email: house.billing_customer_email
+                ? String(house.billing_customer_email)
+                : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
               agent_code: house.agent_code ? String(house.agent_code) : "",
@@ -1359,7 +1385,6 @@ function ImportJobCreate() {
                   return "SURRENDERED";
                 return raw;
               })(),
-              item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
               hscode: house.hscode ? String(house.hscode) : "",
@@ -2090,6 +2115,10 @@ function ImportJobCreate() {
             mblDetails.igm_date && dayjs(mblDetails.igm_date).isValid()
               ? dayjs(mblDetails.igm_date).toDate()
               : mblDetailsForm.values.igm_date || null,
+          item_no:
+            (mblDetails as { item_no?: string } | undefined)?.item_no != null
+              ? String((mblDetails as { item_no?: string }).item_no)
+              : mblDetailsForm.values.item_no || "",
           shipper_id:
             (mblDetails as { shipper_id?: string } | undefined)?.shipper_id ||
             "",
@@ -2667,6 +2696,7 @@ function ImportJobCreate() {
             job_date: mblDetailsForm.values.job_date || null,
             igm_no: mblDetailsForm.values.igm_no || "",
             igm_date: mblDetailsForm.values.igm_date || null,
+            item_no: mblDetailsForm.values.item_no || "",
             shipper_id: mblDetailsForm.values.shipper_id || "",
             shipper_name: mblDetailsForm.values.shipper_name || "",
             shipper_email: mblDetailsForm.values.shipper_email || "",
@@ -3318,6 +3348,7 @@ function ImportJobCreate() {
         service: mblDetailsForm.values.service || "",
         igm_no: mblDetailsForm.values.igm_no || "",
         igm_date: mblDetailsForm.values.igm_date || null,
+        item_no: mblDetailsForm.values.item_no || "",
         eta: mblDetailsForm.values.eta || null,
         mbl_number: carrierDetailsForm.values.mbl_number || "",
         mbl_date: carrierDetailsForm.values.mbl_date || null,
@@ -3337,6 +3368,7 @@ function ImportJobCreate() {
           job_date: mblDetailsForm.values.job_date,
           igm_no: mblDetailsForm.values.igm_no,
           igm_date: mblDetailsForm.values.igm_date,
+          item_no: mblDetailsForm.values.item_no,
         },
         carrierDetails: {
           carrier_code: carrierDetailsForm.values.carrier_code,
@@ -3645,6 +3677,9 @@ function ImportJobCreate() {
             ? dayjs(mblDetailsForm.values.igm_date).format("YYYY-MM-DD")
             : null
           : null,
+        item_no: mblDetailsForm.values.item_no
+          ? mblDetailsForm.values.item_no.trim()
+          : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
         vessel_name: carrierDetailsForm.values.vessel_name || null,
         voyage_number: carrierDetailsForm.values.voyage_number || null,
@@ -3756,6 +3791,10 @@ function ImportJobCreate() {
           forwarder_name: house.forwarder_name || "",
           forwarder_address: house.forwarder_address || "",
           forwarder_email: house.forwarder_email || "",
+          billing_customer_id: house.billing_customer_id ?? null,
+          billing_customer_name: house.billing_customer_name || "",
+          billing_customer_address: house.billing_customer_address || "",
+          billing_customer_email: house.billing_customer_email || "",
           cha_name: (house as { cha_name?: string }).cha_name || null,
           cha_address: (house as { cha_address?: string }).cha_address || null,
           shipper_name: house.shipper_name,
@@ -3778,7 +3817,6 @@ function ImportJobCreate() {
           marks_no: house.marks_no || "",
           note: house.note || "",
           bl_type: house.bl_type || "",
-          item_no: house.item_no || "",
           sub_item_no: house.sub_item_no || "",
           ref_no: house.ref_no || "",
           hscode: house.hscode || "",
@@ -4752,6 +4790,21 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={3}>
+                <FormTextInput
+                  format="capital"
+                  label="Item Number"
+                  placeholder="Enter Item Number"
+                  value={mblDetailsForm.values.item_no}
+                  onChange={(e) =>
+                    mblDetailsForm.setFieldValue(
+                      "item_no",
+                      e.currentTarget.value,
+                    )
+                  }
+                  error={mblDetailsForm.errors.item_no}
+                />
+              </Grid.Col>
+              <Grid.Col span={3}>
                 <SingleDateInput
                   label="IGM Date"
                   placeholder="YYYY-MM-DD"
@@ -4875,9 +4928,9 @@ function ImportJobCreate() {
                   size="sm"
                   label="Shipper Name"
                   dropdownZIndex={10}
-                  apiEndpoint={URL.shipper}
+                  apiEndpoint={URL.shipmentParty}
                   placeholder="Type shipper name"
-                  searchFields={["customer_name", "customer_code"]}
+                  searchFields={["customer_name"]}
                   displayFormat={(item: Record<string, unknown>) => ({
                     value: String(item.id ?? ""),
                     label: String(item.customer_name ?? ""),

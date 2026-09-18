@@ -1045,7 +1045,11 @@ export const generateCargoArrivalNoticePDF = (
     const houseDate = hawbData?.house_date
       ? formatDateForDisplay(hawbData.house_date)
       : "";
-    const itemNo = pickCanField(hawbData?.item_no);
+    const itemNo = pickCanField(
+      jobInfo?.item_no,
+      jobData?.item_no,
+      mawbDetails?.item_no,
+    );
     const subItemNo = pickCanField(hawbData?.sub_item_no);
     const serviceType = String(jobInfo?.service || jobData?.service || "")
       .trim()
