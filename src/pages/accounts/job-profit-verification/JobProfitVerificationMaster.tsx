@@ -11,7 +11,6 @@ import {
   Loader,
   MantineProvider,
   Menu,
-  Modal,
   Select,
   Text,
   TextInput,
@@ -39,7 +38,6 @@ import {
   ERPListPaginationFooter,
   ERPListScreen,
   ERPListStatPill,
-  ERPListJobStatusPill,
   SearchableSelect,
   SingleDateInput,
   ToastNotification,
@@ -71,6 +69,12 @@ import {
 import useDateFormat from "../../../hooks/useDateFormat";
 import { getFilterBranchMasterOptions } from "../../../service/dashboard.service";
 import { getDefaultBranchCurrencyFromUser } from "../../../utils/exchangeRateRoe";
+import {
+  canShowConfirmProfit,
+  canShowVerifyProfit,
+  getProfitStatusLabel,
+  runJobProfitHouseAction,
+} from "../../../utils/jobProfitHouseVerification";
 
 const LIST_KEY = "JOB_PROFIT_VERIFICATION_MASTER";
 
@@ -100,10 +104,12 @@ type HouseRow = {
 type JobProfitRow = {
   sno?: number;
   consol_id?: number;
+  mbl_no?: string;
   job_no?: string;
   job_date?: string;
   trade_code?: string;
   salesperson_name?: string;
+  salesman_name?: string;
   service?: string;
   job_status?: string;
   status?: string;
@@ -111,18 +117,39 @@ type JobProfitRow = {
   origin_name?: string;
   destination_code?: string;
   destination_name?: string;
-  quotation_id?: number;
-  quotation_no?: string;
+  housing_id?: number;
+  subjob_no?: string;
+  house_no?: string;
+  job?: string;
+  party_code?: string;
+  party_name?: string;
+  agent_code?: string;
+  agent_name?: string;
+  house_freight?: string;
+  tos_code?: string;
+  quotation_id?: number | null;
+  quotation_no?: string | null;
+  enquiry_no?: string | null;
+  enquiry_id?: number | null;
   quoted_revenue?: number;
   quoted_cost?: number;
   quoted_profit?: number;
-  our_gp_pct?: number;
+  our_gp_pct?: number | null;
   our_volume?: number;
+  our_teu?: number;
   our_revenue?: number;
+  our_cost?: number;
   our_profit?: number;
+  is_sales?: boolean;
   has_verified_profit?: boolean;
-  verified_by?: string;
-  verified_at?: string;
+  verified?: boolean;
+  brokerage?: number | null;
+  brokerage_remark?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  /** @deprecated Nested houses — API now returns flat house rows. */
   houses?: HouseRow[];
 };
 
@@ -212,6 +239,9 @@ function deserializeFiltersFromStore(
 }
 
 function getUniqueCustomerNames(row: JobProfitRow): string[] {
+  if (row.party_name?.trim()) {
+    return [row.party_name.trim()];
+  }
   const names = (row.houses ?? [])
     .map((house) => house.party_name?.trim())
     .filter((name): name is string => Boolean(name));
@@ -338,11 +368,28 @@ function SignedValueBadge({
   );
 }
 
-function ProfitVerifiedPill({ verified }: { verified?: boolean }) {
-  const label = verified ? "Verified" : "Not Verified";
-  const cfg = verified
-    ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
-    : { dot: "#d97706", bg: "#fef3c7", color: "#b45309" };
+function StatusPill({ status }: { status?: string | null }) {
+  const raw = String(status ?? "").trim();
+  if (!raw) {
+    return (
+      <Text size="sm" c="dimmed">
+        —
+      </Text>
+    );
+  }
+  const key = raw.toLowerCase();
+  const label = getProfitStatusLabel(raw);
+  const cfg =
+    key === "confirmed"
+      ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
+      : key === "verified"
+        ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" }
+        : key === "sent_to_verify"
+          ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" }
+          : key === "hold"
+            ? { dot: "#e11d48", bg: "#fff1f2", color: "#be123c" }
+            : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" };
+
   return (
     <Box
       style={{
@@ -372,18 +419,6 @@ function ProfitVerifiedPill({ verified }: { verified?: boolean }) {
   );
 }
 
-function sumHouseProfit(houses?: HouseRow[]): number {
-  return (houses ?? []).reduce(
-    (sum, house) => sum + (house.our_profit ?? 0),
-    0,
-  );
-}
-
-function readJobStatus(row: JobProfitRow): string | undefined {
-  return row.job_status ?? row.status;
-}
-
-/** Strip service prefix (e.g. FE-/FI-/AE-/AI-) — keep only the job id after the first hyphen. */
 function stripJobIdServicePrefix(jobNo: string): string {
   const trimmed = jobNo.trim();
   const hyphenIndex = trimmed.indexOf("-");
@@ -444,10 +479,6 @@ export default function JobProfitVerificationMaster() {
   >([]);
   const [branchLoading, setBranchLoading] = useState(false);
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
-  const [verifyProfitRow, setVerifyProfitRow] = useState<JobProfitRow | null>(
-    null,
-  );
-  const [isVerifying, setIsVerifying] = useState(false);
 
   const openHeaderEditor = useCallback((id: string) => setEditingHeaderId(id), []);
   const collapseHeaderEditor = useCallback(
@@ -602,21 +633,26 @@ export default function JobProfitVerificationMaster() {
     [appliedFilters, navigate, persistFiltersToStore, search, setShouldRestore],
   );
 
-  const handleOpenJobEdit = useCallback(
+  const handleOpenHouseLedger = useCallback(
     (row: JobProfitRow) => {
       const jobNo = row.job_no?.trim();
-      if (!jobNo) return;
+      const houseNo = row.house_no?.trim();
+      const shipmentId = row.subjob_no?.trim();
+      if (!jobNo || !houseNo) return;
 
       const ledgerJobId = stripJobIdServicePrefix(jobNo);
 
-      // Master-level ledger: job_id only — no service/segment/hbl filters.
+      // House-level ledger: same navigation shape as house action menus.
       persistListAndNavigate("/job-ledger", {
         jobId: ledgerJobId,
         job_id: ledgerJobId,
-        location: "",
-        segment_code: "",
-        segmentCode: "",
-        hbl_hawb_no: "",
+        hbl_hawb_no: houseNo,
+        shipment_id: shipmentId || undefined,
+        is_sales: row.is_sales,
+        status: row.status,
+        brokerage: row.brokerage ?? null,
+        brokerage_remark: row.brokerage_remark ?? null,
+        fromJobProfitVerification: true,
         jobReturnTo: "/job-profit-verification",
       });
     },
@@ -636,63 +672,52 @@ export default function JobProfitVerificationMaster() {
     [navigate, location.pathname],
   );
 
-  const handleConfirmVerifyProfit = useCallback(async () => {
-    if (!verifyProfitRow) return;
+  const refreshProfitList = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["jobProfitVerification"],
+    });
+  }, [queryClient]);
 
-    const jobId = verifyProfitRow.consol_id;
-    if (jobId == null || !Number.isFinite(Number(jobId))) {
-      ToastNotification({ type: "error", message: "Job id is missing." });
-      return;
-    }
-
-    const houseDetails = (verifyProfitRow.houses ?? [])
-      .filter((house) => house.housing_id != null)
-      .map((house) => ({
-        id: Number(house.housing_id),
-        calculated_profit: house.our_profit ?? 0,
-      }));
-
-    if (houseDetails.length === 0) {
-      ToastNotification({
-        type: "error",
-        message: "No house profit details found for this job.",
-      });
-      return;
-    }
-
-    setIsVerifying(true);
-    try {
-      const response = (await apiCallProtected.post(
-        URL.verifyProfit,
-        {
-          job_id: Number(jobId),
-          house_details: houseDetails,
-        },
-        API_HEADER,
-      )) as { success?: boolean; message?: string; detail?: string };
-
-      if (response?.success === false) {
-        throw new Error(
-          response.message ?? response.detail ?? "Profit verification failed.",
-        );
+  const handleVerifyProfit = useCallback(
+    (row: JobProfitRow) => {
+      const shipmentId = row.subjob_no?.trim();
+      if (!shipmentId) {
+        ToastNotification({
+          type: "error",
+          message: "Shipment number not found.",
+        });
+        return;
       }
+      runJobProfitHouseAction({
+        shipmentId,
+        action: "verify",
+        onSuccess: refreshProfitList,
+      });
+    },
+    [refreshProfitList],
+  );
 
-      ToastNotification({
-        type: "success",
-        message: response?.message ?? "Profit verified successfully",
+  const handleConfirmProfit = useCallback(
+    (row: JobProfitRow) => {
+      const shipmentId = row.subjob_no?.trim();
+      if (!shipmentId) {
+        ToastNotification({
+          type: "error",
+          message: "Shipment number not found.",
+        });
+        return;
+      }
+      runJobProfitHouseAction({
+        shipmentId,
+        action: "confirm",
+        askBrokerage: true,
+        initialBrokerage: row.brokerage,
+        initialBrokerageRemark: row.brokerage_remark,
+        onSuccess: refreshProfitList,
       });
-      setVerifyProfitRow(null);
-      await queryClient.invalidateQueries({
-        queryKey: ["jobProfitVerification"],
-      });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to verify profit.";
-      ToastNotification({ type: "error", message });
-    } finally {
-      setIsVerifying(false);
-    }
-  }, [queryClient, verifyProfitRow]);
+    },
+    [refreshProfitList],
+  );
 
   const {
     data: listResult,
@@ -807,23 +832,6 @@ export default function JobProfitVerificationMaster() {
   const listGpPctTdStyle = {
     ...listAmountBadgeTdStyle,
     textAlign: "center" as const,
-  };
-  const modalGpPctThStyle = erpListThStyle(theme, { textAlign: "center" });
-  const modalGpPctTdStyle = {
-    ...tdPad,
-    textAlign: "center" as const,
-  };
-  const modalCustomerColWidth = 240;
-  const modalCustomerThStyle = {
-    ...erpListThStyle(theme),
-    minWidth: modalCustomerColWidth,
-    width: modalCustomerColWidth,
-  };
-  const modalCustomerTdStyle = {
-    ...tdPad,
-    minWidth: modalCustomerColWidth,
-    width: modalCustomerColWidth,
-    whiteSpace: "normal" as const,
   };
 
   return (
@@ -1157,6 +1165,7 @@ export default function JobProfitVerificationMaster() {
                           }
                         />
                       </th>
+                      <th style={mergeTh(180, 180)}>Shipment No</th>
                       <th style={mergeTh(120, 120)}>Quotation No</th>
                       <th style={mergeTh(130, 130)}>Job Date</th>
                       <th style={mergeTh(200, 200)}>
@@ -1236,14 +1245,13 @@ export default function JobProfitVerificationMaster() {
                       ) : (
                         <th style={mergeTh(150, 150)}>Salesperson</th>
                       )}
-                      <th style={mergeTh(120, 120)}>Job Status</th>
                       <th style={listAmountThStyle}>Quoted Revenue</th>
                       <th style={listAmountBadgeThStyle}>Quoted Profit</th>
                       <th style={listAmountThStyle}>Volume</th>
                       <th style={listAmountThStyle}>Revenue</th>
                       <th style={listAmountThStyle}>Profit</th>
                       <th style={listGpPctThStyle}>GP (%)</th>
-                      <th style={mergeTh(140, 140)}>Profit Verified</th>
+                      <th style={mergeTh(140, 140)}>Status</th>
                       <th style={mergeTh(130, 130)}>Verified By</th>
                       <th style={mergeTh(150, 150)}>Verified At</th>
                       <th style={erpListStickyActionThStyle(theme, 96)}>Actions</th>
@@ -1261,7 +1269,7 @@ export default function JobProfitVerificationMaster() {
                     ) : (
                       rows.map((row, rowIndex) => (
                         <tr
-                          key={`${row.job_no ?? "row"}-${rowIndex}`}
+                          key={`${row.housing_id ?? row.subjob_no ?? row.job_no ?? "row"}-${rowIndex}`}
                           {...erpListDataRowProps(theme)}
                         >
                           <td style={tdPad}>
@@ -1273,16 +1281,31 @@ export default function JobProfitVerificationMaster() {
                             className={ERP_LIST_GEIST_MONO_CLASS}
                             style={tdPad}
                           >
+                            <Text size="sm" fw={600} c={fg}>
+                              {row.job_no || "—"}
+                            </Text>
+                          </td>
+                          <td
+                            className={ERP_LIST_GEIST_MONO_CLASS}
+                            style={tdPad}
+                          >
                             <Text
                               size="sm"
                               fw={600}
-                              c={row.job_no ? primary : fg}
+                              c={
+                                row.subjob_no && row.job_no && row.house_no
+                                  ? primary
+                                  : fg
+                              }
                               style={{
-                                cursor: row.job_no ? "pointer" : "default",
+                                cursor:
+                                  row.subjob_no && row.job_no && row.house_no
+                                    ? "pointer"
+                                    : "default",
                               }}
-                              onClick={() => void handleOpenJobEdit(row)}
+                              onClick={() => void handleOpenHouseLedger(row)}
                             >
-                              {row.job_no || "—"}
+                              {row.subjob_no || "—"}
                             </Text>
                           </td>
                           <td
@@ -1297,7 +1320,7 @@ export default function JobProfitVerificationMaster() {
                                 cursor:
                                   row.quotation_id != null ? "pointer" : "default",
                               }}
-                              onClick={() => handleOpenQuotation(row.quotation_id)}
+                              onClick={() => handleOpenQuotation(row.quotation_id ?? undefined)}
                             >
                               {row.quotation_no?.trim() || "—"}
                             </Text>
@@ -1314,9 +1337,6 @@ export default function JobProfitVerificationMaster() {
                             <Text size="sm" c={fg}>
                               {row.salesperson_name || "—"}
                             </Text>
-                          </td>
-                          <td style={tdPad}>
-                            <ERPListJobStatusPill status={readJobStatus(row)} />
                           </td>
                           <td style={listAmountTdStyle}>
                             <Text size="sm" fw={600} c={fg}>
@@ -1351,7 +1371,7 @@ export default function JobProfitVerificationMaster() {
                             />
                           </td>
                           <td style={tdPad}>
-                            <ProfitVerifiedPill verified={row.has_verified_profit} />
+                            <StatusPill status={row.status} />
                           </td>
                           <td style={tdPad}>
                             <Text size="sm" c={fg}>
@@ -1360,37 +1380,61 @@ export default function JobProfitVerificationMaster() {
                           </td>
                           <td style={tdDate}>{fmtDateTime(row.verified_at)}</td>
                           <td style={erpListStickyActionTdStyle(theme)}>
-                            <Menu
-                              withinPortal
-                              position="bottom-end"
-                              shadow="md"
-                              width={180}
-                              styles={erpListGeistMenuDropdownStyles}
-                              classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                            >
-                              <Menu.Target>
-                                <ActionIcon variant="subtle" color="gray" size="sm">
-                                  <IconDotsVertical size={16} />
-                                </ActionIcon>
-                              </Menu.Target>
-                              <Menu.Dropdown>
-                                {!row.has_verified_profit ? (
-                                  <Menu.Item
-                                    leftSection={<IconCircleCheck size={14} />}
-                                    onClick={() => setVerifyProfitRow(row)}
-                                  >
-                                    Verify Profit
-                                  </Menu.Item>
-                                ) : (
-                                  <Menu.Item
-                                    leftSection={<IconCircleCheck size={14} />}
-                                    disabled
-                                  >
-                                    Verify Profit
-                                  </Menu.Item>
-                                )}
-                              </Menu.Dropdown>
-                            </Menu>
+                            {(() => {
+                              const showVerify = canShowVerifyProfit({
+                                is_sales: row.is_sales,
+                                status: row.status,
+                              });
+                              const showConfirm = canShowConfirmProfit({
+                                is_sales: row.is_sales,
+                                status: row.status,
+                              });
+                              if (!showVerify && !showConfirm) return null;
+                              return (
+                                <Menu
+                                  withinPortal
+                                  position="bottom-end"
+                                  shadow="md"
+                                  width={180}
+                                  styles={erpListGeistMenuDropdownStyles}
+                                  classNames={{
+                                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                                  }}
+                                >
+                                  <Menu.Target>
+                                    <ActionIcon
+                                      variant="subtle"
+                                      color="gray"
+                                      size="sm"
+                                    >
+                                      <IconDotsVertical size={16} />
+                                    </ActionIcon>
+                                  </Menu.Target>
+                                  <Menu.Dropdown>
+                                    {showVerify && (
+                                      <Menu.Item
+                                        leftSection={
+                                          <IconCircleCheck size={14} />
+                                        }
+                                        onClick={() => handleVerifyProfit(row)}
+                                      >
+                                        Verify profit
+                                      </Menu.Item>
+                                    )}
+                                    {showConfirm && (
+                                      <Menu.Item
+                                        leftSection={
+                                          <IconCircleCheck size={14} />
+                                        }
+                                        onClick={() => handleConfirmProfit(row)}
+                                      >
+                                        Confirm profit
+                                      </Menu.Item>
+                                    )}
+                                  </Menu.Dropdown>
+                                </Menu>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))
@@ -1401,190 +1445,6 @@ export default function JobProfitVerificationMaster() {
             ),
           }}
         />
-
-        <Modal
-          opened={!!verifyProfitRow}
-          onClose={() => !isVerifying && setVerifyProfitRow(null)}
-          title={
-            <Text fw={600} size="md">
-              Verify Profit
-              {verifyProfitRow?.job_no ? ` — ${verifyProfitRow.job_no}` : ""}
-            </Text>
-          }
-          centered
-          size="xl"
-          classNames={{
-            content: ERP_LIST_GEIST_ROOT_CLASS,
-            body: ERP_LIST_GEIST_ROOT_CLASS,
-            header: ERP_LIST_GEIST_ROOT_CLASS,
-          }}
-        >
-          <Text size="sm" c="dimmed" mb="md">
-            Review house-level profits before confirming verification.
-          </Text>
-          <Box style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {[
-                    "House No",
-                    "Subjob",
-                    "Quotation No",
-                    "Customer",
-                    "Quoted Revenue",
-                    "Quoted Cost",
-                    "Quoted Profit",
-                    "Volume",
-                    "Revenue",
-                    "Cost",
-                    "Profit",
-                    "GP (%)",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      style={
-                        h === "Customer"
-                          ? modalCustomerThStyle
-                          : h === "GP (%)"
-                            ? modalGpPctThStyle
-                            : erpListThStyle(theme)
-                      }
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(verifyProfitRow?.houses ?? []).length === 0 ? (
-                  <tr>
-                    <td colSpan={12} style={tdPad}>
-                      <Text size="sm" c="dimmed">
-                        No house profit details available.
-                      </Text>
-                    </td>
-                  </tr>
-                ) : (
-                  (verifyProfitRow?.houses ?? []).map((house, houseIndex) => (
-                    <tr key={`${house.housing_id ?? houseIndex}`} {...erpListDataRowProps(theme)}>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {house.house_no || "—"}
-                        </Text>
-                      </td>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {house.subjob_no || "—"}
-                        </Text>
-                      </td>
-                      <td
-                        className={ERP_LIST_GEIST_MONO_CLASS}
-                        style={tdPad}
-                      >
-                        <Text
-                          size="sm"
-                          fw={600}
-                          c={house.quotation_id != null ? primary : fg}
-                          style={{
-                            cursor:
-                              house.quotation_id != null ? "pointer" : "default",
-                          }}
-                          onClick={() => handleOpenQuotation(house.quotation_id)}
-                        >
-                          {house.quotation_no?.trim() || "—"}
-                        </Text>
-                      </td>
-                      <td style={modalCustomerTdStyle}>
-                        <Text size="sm" c={fg}>
-                          {house.party_name || "—"}
-                        </Text>
-                      </td>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {formatCurrencyAmount(house.quoted_revenue, currency)}
-                        </Text>
-                      </td>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {formatCurrencyAmount(house.quoted_cost, currency)}
-                        </Text>
-                      </td>
-                      <td style={tdPad}>
-                        <SignedValueBadge
-                          value={house.quoted_profit}
-                          label={formatCurrencyAmount(house.quoted_profit, currency)}
-                        />
-                      </td>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {house.our_volume || "—"}
-                        </Text>
-                      </td>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {formatCurrencyAmount(house.our_revenue, currency)}
-                        </Text>
-                      </td>
-                      <td style={tdPad}>
-                        <Text size="sm" c={fg}>
-                          {formatCurrencyAmount(house.our_cost, currency)}
-                        </Text>
-                      </td>
-                      <td style={{ ...tdPad }}>
-                        <Text size="sm" fw={600} c={fg}>
-                          {formatCurrencyAmount(house.our_profit, currency)}
-                        </Text>
-                      </td>
-                      <td style={modalGpPctTdStyle}>
-                        <SignedValueBadge
-                          value={house.our_gp_pct}
-                          label={formatGpPercent(house.our_gp_pct)}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-                <tr>
-                  <td colSpan={10} style={{ ...tdPad, textAlign: "right" }}>
-                    <Text size="sm" fw={700} c={fg}>
-                      Total Profit
-                    </Text>
-                  </td>
-                  <td style={{ ...tdPad }}>
-                    <Text size="sm" fw={700} c={primary}>
-                      {formatCurrencyAmount(
-                        verifyProfitRow?.our_profit ??
-                          sumHouseProfit(verifyProfitRow?.houses),
-                        currency,
-                      )}
-                    </Text>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </Box>
-          <Group justify="flex-end" gap="xs" mt="md">
-            <Button
-              variant="subtle"
-              onClick={() => setVerifyProfitRow(null)}
-              disabled={isVerifying}
-            >
-              Cancel
-            </Button>
-            <Button
-              color="blue"
-              onClick={() => void handleConfirmVerifyProfit()}
-              loading={isVerifying}
-              disabled={
-                !verifyProfitRow?.consol_id ||
-                (verifyProfitRow?.houses ?? []).length === 0 ||
-                verifyProfitRow?.has_verified_profit === true
-              }
-            >
-              Confirm Verify
-            </Button>
-          </Group>
-        </Modal>
       </Box>
     </MantineProvider>
   );

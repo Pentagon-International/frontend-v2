@@ -139,6 +139,7 @@ import { HouseAutomatePaymentRequestMenuItem } from "../../../components/HouseAu
 import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceAutomationModal";
 import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
+import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
 import {
   JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
   JOB_HOUSE_ACTION_MENU_WIDTH,
@@ -3040,6 +3041,10 @@ function HouseCreate() {
                 </>
               )}
 
+              <SendForVerificationMenuItem
+                jobId={location.state?.job?.id}
+                getShipmentIds={() => [getCurrentHousingDetail().shipment_id]}
+              />
               <HouseJobLedgerMenuItem
                 serviceName="Air Export"
                 getHouseDetail={getCurrentHousingDetail}

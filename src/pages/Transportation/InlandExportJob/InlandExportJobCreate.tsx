@@ -125,6 +125,7 @@ import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
+import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
 import { getMasterShipmentNo } from "../../../utils/vendorInvoiceAutomation";
 import {
@@ -3216,6 +3217,12 @@ function InlandExportJobCreate() {
                         shipmentNo={getMasterShipmentNo(jobData)}
                         onOpen={openPaymentRequestAutomation}
                       />
+                      <SendForVerificationMenuItem
+                        jobId={jobData.id}
+                        getShipmentIds={() =>
+                          hawbDetails.map((hawb) => hawb.shipment_id)
+                        }
+                      />
                     </>
                   )}
 
@@ -5091,6 +5098,10 @@ function InlandExportJobCreate() {
                           getCurrentHousingDetail={() => hawb}
                           jobId={jobData?.id}
                           onOpen={openPaymentRequestAutomation}
+                        />
+                        <SendForVerificationMenuItem
+                          jobId={jobData?.id}
+                          getShipmentIds={() => [hawb.shipment_id]}
                         />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Export"

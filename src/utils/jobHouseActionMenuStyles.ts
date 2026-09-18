@@ -1,4 +1,4 @@
-export const JOB_HOUSE_ACTION_MENU_WIDTH = 250;
+export const JOB_HOUSE_ACTION_MENU_WIDTH = 260;
 
 export const JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES = {
   dropdown: {

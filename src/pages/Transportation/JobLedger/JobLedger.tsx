@@ -25,6 +25,9 @@ import {
   UnstyledButton,
   Menu,
   Center,
+  NumberInput,
+  Textarea,
+  Checkbox,
 } from "@mantine/core";
 import {
   MantineReactTable,
@@ -51,6 +54,16 @@ import {
   openGlobalSearchItem,
   runGlobalSearchQuery,
 } from "../../../utils/globalSearchNavigation";
+import {
+  canShowConfirmProfit,
+  canShowVerifyProfit,
+  canUpdateBrokerage,
+  isProfitFlowComplete,
+  normalizeProfitStatus,
+  resolveApiErrorMessage,
+  runJobProfitHouseAction,
+  saveJobProfitBrokerage,
+} from "../../../utils/jobProfitHouseVerification";
 import useAuthStore from "../../../store/authStore";
 import { getDefaultBranchCurrencyCode } from "../../../utils/userNumberFormat";
 import {
@@ -78,7 +91,16 @@ interface JobLedgerData {
   actualCost: number;
   neutral: number;
   reversed: boolean;
+  documents: JobLedgerDocument[];
 }
+
+type JobLedgerDocument = {
+  id?: number;
+  document_name?: string;
+  document?: string;
+  document_url?: string;
+  document_download_url?: string | null;
+};
 
 interface JobLedgerProps {}
 
@@ -99,7 +121,19 @@ type JobLedgerSummary = {
   total_cost?: number | null;
   total_neutral?: number | null;
   net_profit_Credit_Debit?: number | null;
+  net_profit_credit_debit?: number | null;
   net_profit_revenue_cost?: number | null;
+};
+
+type JobLedgerBrokerageRow = {
+  shipment_id?: string;
+  housing_id?: number;
+  routed_by?: string | null;
+  brokerage?: number | null;
+  brokerage_remark?: string | null;
+  status?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
 };
 
 type JobLedgerApiRow = {
@@ -125,6 +159,7 @@ type JobLedgerApiRow = {
   cost?: number | null;
   neutral?: number | null;
   reversed?: boolean;
+  documents?: JobLedgerDocument[];
 };
 
 type JobLedgerApiResponse = {
@@ -132,6 +167,7 @@ type JobLedgerApiResponse = {
   service_code?: string;
   total?: number;
   summary?: JobLedgerSummary;
+  brokerage?: JobLedgerBrokerageRow[];
   data?: JobLedgerApiRow[];
 };
 
@@ -277,6 +313,98 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
   const jobReturnTo = (navState?.jobReturnTo as string | undefined)?.trim() ?? "";
   const jobReturnToState = navState?.jobReturnToState;
+  const fromProfitVerification =
+    Boolean(navState?.fromJobProfitVerification) ||
+    jobReturnTo.includes("/job-profit-verification");
+
+  const navShipmentId = String(
+    navState?.shipment_id ??
+      (Array.isArray(navState?.housingDetails)
+        ? navState.housingDetails[0]?.shipment_id
+        : "") ??
+      (Array.isArray(navState?.hawbDetails)
+        ? navState.hawbDetails[0]?.shipment_id
+        : "") ??
+      "",
+  ).trim();
+
+  const [profitShipmentId, setProfitShipmentId] = useState(navShipmentId);
+  const [profitIsSales] = useState<boolean | null>(
+    typeof navState?.is_sales === "boolean" ? navState.is_sales : null,
+  );
+  const [profitStatus, setProfitStatus] = useState<string | null>(
+    navState?.status != null ? String(navState.status) : null,
+  );
+  const [brokerageAmount, setBrokerageAmount] = useState<
+    string | number | null
+  >(
+    navState?.brokerage != null && Number.isFinite(Number(navState.brokerage))
+      ? Number(navState.brokerage)
+      : null,
+  );
+  const [brokerageRemark, setBrokerageRemark] = useState(
+    String(navState?.brokerage_remark ?? ""),
+  );
+  const [brokerageSaving, setBrokerageSaving] = useState(false);
+  const [brokerageError, setBrokerageError] = useState<string | null>(null);
+
+  const showBrokerageForm =
+    fromProfitVerification &&
+    Boolean(profitShipmentId) &&
+    canUpdateBrokerage({
+      is_sales: profitIsSales,
+      status: profitStatus,
+    });
+
+  const profitStatusNorm = normalizeProfitStatus(profitStatus);
+  const profitVerifiedOrBeyond =
+    profitStatusNorm === "verified" || isProfitFlowComplete(profitStatus);
+  const profitConfirmed = isProfitFlowComplete(profitStatus);
+  const canVerifyNow = canShowVerifyProfit({
+    is_sales: profitIsSales,
+    status: profitStatus,
+  });
+  const canConfirmNow = canShowConfirmProfit({
+    is_sales: profitIsSales,
+    status: profitStatus,
+  });
+  const showProfitVerifyCheckbox =
+    fromProfitVerification &&
+    Boolean(profitShipmentId) &&
+    (profitIsSales === true || profitIsSales === false);
+  const showProfitConfirmCheckbox =
+    fromProfitVerification &&
+    Boolean(profitShipmentId) &&
+    profitIsSales === true;
+
+  const handleSaveBrokerage = useCallback(async () => {
+    if (!profitShipmentId) {
+      ToastNotification({
+        type: "error",
+        message: "Shipment number not found.",
+      });
+      return;
+    }
+    setBrokerageSaving(true);
+    setBrokerageError(null);
+    try {
+      const response = await saveJobProfitBrokerage({
+        shipmentId: profitShipmentId,
+        brokerage: brokerageAmount,
+        brokerageRemark,
+      });
+      ToastNotification({
+        type: "success",
+        message: response?.message ?? "Brokerage saved successfully",
+      });
+    } catch (err: unknown) {
+      const message = resolveApiErrorMessage(err);
+      setBrokerageError(message);
+      ToastNotification({ type: "error", message });
+    } finally {
+      setBrokerageSaving(false);
+    }
+  }, [brokerageAmount, brokerageRemark, profitShipmentId]);
 
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -724,9 +852,52 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       const apiRows = Array.isArray(result?.data) ? result.data : [];
       setJobLedgerSummary(result?.summary ?? null);
       setJobLedgerJobLabel(formatJobLedgerJobLabel(result));
+
+      const brokerageRows = Array.isArray(result?.brokerage)
+        ? result.brokerage
+        : [];
+      const matchedBrokerage =
+        brokerageRows.find(
+          (row) =>
+            String(row.shipment_id ?? "").trim() ===
+            String(profitShipmentId || navShipmentId).trim(),
+        ) ?? brokerageRows[0];
+      if (matchedBrokerage) {
+        const matchedShipment = String(
+          matchedBrokerage.shipment_id ?? "",
+        ).trim();
+        if (matchedShipment) {
+          setProfitShipmentId(matchedShipment);
+        }
+        if (matchedBrokerage.status != null) {
+          setProfitStatus(String(matchedBrokerage.status));
+        }
+        if (
+          matchedBrokerage.brokerage != null &&
+          Number.isFinite(Number(matchedBrokerage.brokerage))
+        ) {
+          setBrokerageAmount(Number(matchedBrokerage.brokerage));
+        }
+        if (matchedBrokerage.brokerage_remark != null) {
+          setBrokerageRemark(String(matchedBrokerage.brokerage_remark));
+        }
+      }
+
       setTableData(
         apiRows.map((d, idx) => {
           const id = Number(d?.sno ?? idx + 1);
+          const documents = Array.isArray(d?.documents)
+            ? d.documents.filter(
+                (doc) =>
+                  String(doc?.document_name ?? "").trim() &&
+                  String(
+                    doc?.document_url ??
+                      doc?.document ??
+                      doc?.document_download_url ??
+                      "",
+                  ).trim(),
+              )
+            : [];
           return {
             id: Number.isFinite(id) ? id : idx + 1,
             segment: (d?.service ?? "").toString(),
@@ -751,6 +922,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             actualCost: toNumber(d?.cost),
             neutral: toNumber(d?.neutral),
             reversed: Boolean(d?.reversed),
+            documents,
           };
         }),
       );
@@ -1104,16 +1276,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "documentNo",
         header: "Document number",
-        size: 140,
-        minSize: 140,
+        size: 180,
+        minSize: 160,
         grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ row, cell }) => {
           const value = cell.getValue<string>();
-          if (!value) return "-";
+          const documents = row.original.documents ?? [];
 
-          const link = (
+          const docNoLink = value ? (
             <Anchor
               component="button"
               type="button"
@@ -1126,16 +1298,43 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             >
               {value}
             </Anchor>
+          ) : (
+            <Text size="sm">-</Text>
           );
 
-          if (!row.original.reversed) {
-            return link;
-          }
-
           return (
-            <Tooltip label="This document is reversed" withArrow>
-              {link}
-            </Tooltip>
+            <Stack gap={2}>
+              {row.original.reversed ? (
+                <Tooltip label="This document is reversed" withArrow>
+                  <Box>{docNoLink}</Box>
+                </Tooltip>
+              ) : (
+                docNoLink
+              )}
+              {documents.map((doc, docIndex) => {
+                const href = String(
+                  doc.document_url ??
+                    doc.document ??
+                    doc.document_download_url ??
+                    "",
+                ).trim();
+                const name = String(doc.document_name ?? "").trim() || "Document";
+                if (!href) return null;
+                return (
+                  <Anchor
+                    key={`${doc.id ?? docIndex}-${name}`}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    size="xs"
+                    c="#105476"
+                    style={{ fontFamily: "Inter" }}
+                  >
+                    {name}
+                  </Anchor>
+                );
+              })}
+            </Stack>
           );
         },
         mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
@@ -1760,19 +1959,72 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             Job Ledger
           </Text>
           <Group gap="md">
-            <Group gap={6} wrap="nowrap">
-              <Text
-                size="lg"
-                fw={600}
-                c="#105476"
-                style={{ fontFamily: "Inter" }}
-              >
-                Segment:
-              </Text>
-              <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
-                {navState?.service_name}
-              </Text>
-            </Group>
+            {showProfitVerifyCheckbox && (
+              <Checkbox
+                label="Verify"
+                checked={profitVerifiedOrBeyond}
+                disabled={profitVerifiedOrBeyond || !canVerifyNow}
+                styles={{
+                  label: {
+                    fontFamily: "Inter",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#105476",
+                  },
+                }}
+                onChange={() => {
+                  if (!canVerifyNow || !profitShipmentId) return;
+                  runJobProfitHouseAction({
+                    shipmentId: profitShipmentId,
+                    action: "verify",
+                    onSuccess: () => {
+                      setProfitStatus("verified");
+                    },
+                  });
+                }}
+              />
+            )}
+            {showProfitConfirmCheckbox && (
+              <Checkbox
+                label="Confirm"
+                checked={profitConfirmed}
+                disabled={profitConfirmed || !canConfirmNow}
+                styles={{
+                  label: {
+                    fontFamily: "Inter",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#105476",
+                  },
+                }}
+                onChange={() => {
+                  if (!canConfirmNow || !profitShipmentId) return;
+                  runJobProfitHouseAction({
+                    shipmentId: profitShipmentId,
+                    action: "confirm",
+                    askBrokerage: false,
+                    onSuccess: () => {
+                      setProfitStatus("confirmed");
+                    },
+                  });
+                }}
+              />
+            )}
+            {!fromProfitVerification && (
+              <Group gap={6} wrap="nowrap">
+                <Text
+                  size="lg"
+                  fw={600}
+                  c="#105476"
+                  style={{ fontFamily: "Inter" }}
+                >
+                  Segment:
+                </Text>
+                <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
+                  {navState?.service_name}
+                </Text>
+              </Group>
+            )}
             <Group gap={6} wrap="nowrap">
               <Text
                 size="lg"
@@ -1812,7 +2064,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               withinPortal
               position="bottom-end"
               shadow="md"
-              width={220}
+              width={240}
             >
               <Menu.Target>
                 <ActionIcon
@@ -2053,6 +2305,68 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             </Grid>
           </Box>
         )}
+
+        {showBrokerageForm && (
+          <Paper
+            withBorder
+            p="md"
+            mb="md"
+            radius="md"
+            style={{ backgroundColor: "#F8FBFD" }}
+          >
+            <Group align="flex-end" gap="md" wrap="wrap">
+              <NumberInput
+                label="Brokerage Amount"
+                placeholder="Enter Amount"
+                value={brokerageAmount ?? undefined}
+                onChange={(value) =>
+                  setBrokerageAmount(value === "" ? null : value)
+                }
+                min={0}
+                decimalScale={2}
+                thousandSeparator=","
+                hideControls
+                w={200}
+                styles={{
+                  label: { fontFamily: "Inter", fontSize: 13, fontWeight: 500 },
+                  input: { fontFamily: "Inter" },
+                }}
+              />
+              <Textarea
+                label="Brokerage Remark"
+                placeholder="Enter Remark"
+                value={brokerageRemark}
+                onChange={(e) => setBrokerageRemark(e.currentTarget.value)}
+                minRows={1}
+                autosize
+                style={{ flex: 1, minWidth: 220 }}
+                styles={{
+                  label: { fontFamily: "Inter", fontSize: 13, fontWeight: 500 },
+                  input: { fontFamily: "Inter" },
+                }}
+              />
+              <Button
+                color="#105476"
+                loading={brokerageSaving}
+                onClick={() => void handleSaveBrokerage()}
+                styles={{
+                  root: {
+                    fontFamily: "Inter",
+                    fontWeight: 600,
+                  },
+                }}
+              >
+                Save
+              </Button>
+            </Group>
+            {brokerageError ? (
+              <Text size="sm" c="red" mt="xs" style={{ fontFamily: "Inter" }}>
+                {brokerageError}
+              </Text>
+            ) : null}
+          </Paper>
+        )}
+
         <Tabs value={activeTab} onChange={setActiveTab}>
           <Tabs.List>
             <Tabs.Tab value="document">Document Wise</Tabs.Tab>
