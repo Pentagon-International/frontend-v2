@@ -774,7 +774,11 @@ function InlandImportJobCreate() {
           ? dayjs(etaVal).startOf("day").toDate()
           : null;
       })(),
-      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      shipper_id: String(
+        (jobData as { shipper_id?: string | number | null } | undefined)
+          ?.shipper_id ??
+          (location.state?.mawbDetails?.shipper_id || ""),
+      ),
       shipper_name:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
@@ -1069,7 +1073,12 @@ function InlandImportJobCreate() {
               ? dayjs(etaVal).startOf("day").toDate()
               : null;
           })(),
-          shipper_id: "",
+          shipper_id: String(
+            (jobData as { shipper_id?: string | number | null }).shipper_id ??
+              "",
+          )
+            .replace(/^null$/i, "")
+            .replace(/^undefined$/i, ""),
           shipper_name: String(jobData.shipper_name || ""),
           shipper_email: String(jobData.shipper_email || ""),
           shipper_address_id: "",
@@ -1089,6 +1098,27 @@ function InlandImportJobCreate() {
         console.log("?? Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
+
+        {
+          const savedShipperAddr = String(jobData.shipper_address || "").trim();
+          const savedShipperEmail = String(jobData.shipper_email || "");
+          if (savedShipperAddr) {
+            setShipperAddressOptions([
+              {
+                value: savedShipperAddr,
+                label: savedShipperAddr,
+                email: savedShipperEmail,
+                address: savedShipperAddr,
+              },
+            ]);
+            setShipperAddressSearch(savedShipperAddr);
+            setShipperAddressCustom(true);
+          } else {
+            setShipperAddressOptions([]);
+            setShipperAddressSearch("");
+            setShipperAddressCustom(false);
+          }
+        }
 
         // If we are coming back from InlandHouseCreate, preserve the edited MAWB
         // master fields from location.state (e.g., is_direct) instead of
@@ -3860,11 +3890,14 @@ function InlandImportJobCreate() {
         <Tabs.Panel value="1">
           <Box mt="md">
             <JobMasterPartyDetailsPanel
-              idPrefix="air-export-party"
+              idPrefix="inland-import-party"
               disabled={isReadOnly}
               partyDetailsForm={
                 partyDetailsForm as unknown as UseFormReturnType<JobMasterPartyDetailsValues>
               }
+              shipperApiEndpoint={URL.shipmentParty}
+              shipperSearchFields={["customer_name"]}
+              shipperEnableFreeText
               shipperAddressOptions={shipperAddressOptions}
               setShipperAddressOptions={setShipperAddressOptions}
               consigneeAddressOptions={consigneeAddressOptions}

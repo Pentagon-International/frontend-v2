@@ -93,6 +93,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { ImportMasterShipperNameField } from "../ImportMasterShipperNameField";
 import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
@@ -341,15 +342,22 @@ const getAddressOptions = (
     ? (originalData.addresses_data as Array<Record<string, unknown>>)
     : Array.isArray(originalData?.addresses)
       ? (originalData.addresses as Array<Record<string, unknown>>)
-      : [];
+      : Array.isArray(originalData?.address_data)
+        ? (originalData.address_data as Array<Record<string, unknown>>)
+        : [];
   return addresses
-    .map((item) => ({
-      value: String(item.id ?? item.address ?? ""),
-      label: String(item.address ?? ""),
-      email: String(item.email ?? ""),
-      address: String(item.address ?? ""),
-      isPrimary: String(item.address_type ?? "").toLowerCase() === "primary",
-    }))
+    .map((item) => {
+      const address = String(item.address ?? item.address1 ?? "").trim();
+      const value = String(item.id ?? address ?? "").trim();
+      return {
+        value,
+        label: address,
+        email: String(item.email ?? ""),
+        address,
+        isPrimary:
+          String(item.address_type ?? "").toLowerCase() === "primary",
+      };
+    })
     .filter((item) => item.value && item.address)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
     .map(({ value, label, email, address }) => ({
@@ -756,7 +764,11 @@ function AirImportJobCreate() {
         (jobData as { item_no?: string } | undefined)?.item_no ||
         location.state?.mawbDetails?.item_no ||
         "",
-      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      shipper_id: String(
+        (jobData as { shipper_id?: string | number | null } | undefined)
+          ?.shipper_id ??
+          (location.state?.mawbDetails?.shipper_id || ""),
+      ),
       shipper_name:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
@@ -1063,11 +1075,87 @@ function AirImportJobCreate() {
                 ).toDate()
               : null,
           item_no: (jobData as { item_no?: string } | undefined)?.item_no || "",
+          shipper_id: String(
+            (jobData as { shipper_id?: string | number | null }).shipper_id ??
+              "",
+          )
+            .replace(/^null$/i, "")
+            .replace(/^undefined$/i, ""),
+          shipper_name: String(
+            (jobData as { shipper_name?: string | null }).shipper_name || "",
+          ),
+          shipper_email: String(
+            (jobData as { shipper_email?: string | null }).shipper_email || "",
+          ),
+          shipper_address_id: "",
+          shipper_address: String(
+            (jobData as { shipper_address?: string | null }).shipper_address ||
+              "",
+          ),
+          consignee_id: String(
+            (jobData as { consignee_id?: string | number | null }).consignee_id ??
+              "",
+          ),
+          consignee_name: String(
+            (jobData as { consignee_name?: string | null }).consignee_name || "",
+          ),
+          consignee_email: String(
+            (jobData as { consignee_email?: string | null }).consignee_email ||
+              "",
+          ),
+          consignee_address_id: "",
+          consignee_address: String(
+            (jobData as { consignee_address?: string | null })
+              .consignee_address || "",
+          ),
+          carrier_agent_id: String(
+            (jobData as { carrier_agent_id?: string | number | null })
+              .carrier_agent_id ?? "",
+          ),
+          carrier_agent_name: String(
+            (jobData as { carrier_agent_name?: string | null })
+              .carrier_agent_name || "",
+          ),
+          carrier_agent_email: String(
+            (jobData as { carrier_agent_email?: string | null })
+              .carrier_agent_email || "",
+          ),
+          carrier_agent_address_id: "",
+          carrier_agent_address: String(
+            (jobData as { carrier_agent_address?: string | null })
+              .carrier_agent_address || "",
+          ),
         };
 
         console.log("🔧 Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
+
+        {
+          const savedShipperAddr = String(
+            (jobData as { shipper_address?: string | null }).shipper_address ||
+              "",
+          ).trim();
+          const savedShipperEmail = String(
+            (jobData as { shipper_email?: string | null }).shipper_email || "",
+          );
+          if (savedShipperAddr) {
+            setShipperAddressOptions([
+              {
+                value: savedShipperAddr,
+                label: savedShipperAddr,
+                email: savedShipperEmail,
+                address: savedShipperAddr,
+              },
+            ]);
+            setShipperAddressSearch(savedShipperAddr);
+            setShipperAddressCustom(true);
+          } else {
+            setShipperAddressOptions([]);
+            setShipperAddressSearch("");
+            setShipperAddressCustom(false);
+          }
+        }
 
         console.log(
           "✅ MAWB Details initialized - Form values after setValues:",
@@ -4211,26 +4299,28 @@ function AirImportJobCreate() {
                 </Text>
               </Grid.Col>
               <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Shipper Name"
+                <ImportMasterShipperNameField
+                  key={`air-import-master-shipper-${jobData?.id ?? "new"}-${String(partyDetailsForm.values.shipper_id || "none")}`}
+                  size="sm"
                   dropdownZIndex={1000}
-                  apiEndpoint={URL.shipmentParty}
-                  placeholder="Type shipper name"
-                  searchFields={["customer_name"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.id ?? ""),
-                    label: String(item.customer_name ?? ""),
-                  })}
-                  value={partyDetailsForm.values.shipper_id || null}
-                  displayValue={partyDetailsForm.values.shipper_name || null}
-                  onChange={(value, selectedData, originalData) => {
+                  disabled={isReadOnly}
+                  shipperId={String(partyDetailsForm.values.shipper_id || "")}
+                  shipperName={partyDetailsForm.values.shipper_name || ""}
+                  onClear={() => {
+                    partyDetailsForm.setFieldValue("shipper_id", "");
+                    partyDetailsForm.setFieldValue("shipper_name", "");
+                    partyDetailsForm.setFieldValue("shipper_email", "");
+                    partyDetailsForm.setFieldValue("shipper_address_id", "");
+                    partyDetailsForm.setFieldValue("shipper_address", "");
+                    setShipperAddressOptions([]);
+                    setShipperAddressSearch("");
+                    setShipperAddressCustom(false);
+                  }}
+                  onSelect={(id, name, originalData) => {
                     const options = getAddressOptions(originalData);
                     const primary = options[0];
-                    partyDetailsForm.setFieldValue("shipper_id", value || "");
-                    partyDetailsForm.setFieldValue(
-                      "shipper_name",
-                      selectedData?.label || "",
-                    );
+                    partyDetailsForm.setFieldValue("shipper_id", id);
+                    partyDetailsForm.setFieldValue("shipper_name", name);
                     partyDetailsForm.setFieldValue(
                       "shipper_email",
                       primary?.email || "",
@@ -4243,18 +4333,14 @@ function AirImportJobCreate() {
                       "shipper_address",
                       primary?.address || "",
                     );
-                    if (!value) {
-                      partyDetailsForm.setFieldValue("shipper_name", "");
-                      partyDetailsForm.setFieldValue("shipper_email", "");
-                      partyDetailsForm.setFieldValue("shipper_address_id", "");
-                      partyDetailsForm.setFieldValue("shipper_address", "");
-                    }
-                    setShipperAddressOptions(value ? options : []);
-                    setShipperAddressSearch(value ? primary?.label || "" : "");
+                    setShipperAddressOptions(options);
+                    setShipperAddressSearch(primary?.label || "");
                     setShipperAddressCustom(false);
                   }}
-                  minSearchLength={2}
-                  returnOriginalData={true}
+                  onFreeText={(name) => {
+                    partyDetailsForm.setFieldValue("shipper_id", "");
+                    partyDetailsForm.setFieldValue("shipper_name", name);
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -4326,6 +4412,7 @@ function AirImportJobCreate() {
                           "shipper_address",
                           value,
                         );
+                        partyDetailsForm.setFieldValue("shipper_email", "");
                       }
                     }}
                     onChange={(value) => {
@@ -4340,12 +4427,10 @@ function AirImportJobCreate() {
                         "shipper_address",
                         selected?.address || "",
                       );
-                      if (value) {
-                        partyDetailsForm.setFieldValue(
-                          "shipper_email",
-                          selected?.email || "",
-                        );
-                      }
+                      partyDetailsForm.setFieldValue(
+                        "shipper_email",
+                        value ? selected?.email || "" : "",
+                      );
                       setShipperAddressSearch(selected?.label || "");
                       setShipperAddressCustom(false);
                     }}

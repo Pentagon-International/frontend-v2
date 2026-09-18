@@ -3,6 +3,7 @@ import type { UseFormReturnType } from "@mantine/form";
 import { SearchableSelect, Dropdown } from "../../components";
 import FormTextInput from "../../components/FormTextInput";
 import { URL } from "../../api/serverUrls";
+import { ImportMasterShipperNameField } from "./ImportMasterShipperNameField";
 
 export type JobMasterPartyDetailsValues = {
   shipper_id: string;
@@ -34,15 +35,24 @@ export const getJobMasterAddressOptions = (
 ): PartyAddressOption[] => {
   const addresses = Array.isArray(originalData?.addresses_data)
     ? (originalData.addresses_data as Array<Record<string, unknown>>)
-    : [];
+    : Array.isArray(originalData?.addresses)
+      ? (originalData.addresses as Array<Record<string, unknown>>)
+      : Array.isArray(originalData?.address_data)
+        ? (originalData.address_data as Array<Record<string, unknown>>)
+        : [];
   return addresses
-    .map((item) => ({
-      value: String(item.id ?? ""),
-      label: String(item.address ?? ""),
-      email: String(item.email ?? ""),
-      address: String(item.address ?? ""),
-      isPrimary: String(item.address_type ?? "").toLowerCase() === "primary",
-    }))
+    .map((item) => {
+      const address = String(item.address ?? item.address1 ?? "").trim();
+      const value = String(item.id ?? address ?? "").trim();
+      return {
+        value,
+        label: address,
+        email: String(item.email ?? ""),
+        address,
+        isPrimary:
+          String(item.address_type ?? "").toLowerCase() === "primary",
+      };
+    })
     .filter((item) => item.value && item.address)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
     .map(({ value, label, email, address }) => ({
@@ -78,6 +88,11 @@ type JobMasterPartyDetailsPanelProps = {
   idPrefix: string;
   disabled?: boolean;
   partyDetailsForm: UseFormReturnType<JobMasterPartyDetailsValues>;
+  /** Defaults to customer-master shipper. Pass URL.shipmentParty for Import masters. */
+  shipperApiEndpoint?: string;
+  shipperSearchFields?: string[];
+  /** When true, unmatched shipper search commits free-text name (Import house parity). */
+  shipperEnableFreeText?: boolean;
   shipperAddressOptions: PartyAddressOption[];
   setShipperAddressOptions: (options: PartyAddressOption[]) => void;
   consigneeAddressOptions: PartyAddressOption[];
@@ -102,6 +117,9 @@ export function JobMasterPartyDetailsPanel({
   idPrefix,
   disabled = false,
   partyDetailsForm,
+  shipperApiEndpoint = URL.shipper,
+  shipperSearchFields = ["customer_name", "customer_code"],
+  shipperEnableFreeText = false,
   shipperAddressOptions,
   setShipperAddressOptions,
   consigneeAddressOptions,
@@ -121,6 +139,15 @@ export function JobMasterPartyDetailsPanel({
   carrierAgentAddressCustom,
   setCarrierAgentAddressCustom,
 }: JobMasterPartyDetailsPanelProps) {
+  const clearShipperAddressAndEmail = () => {
+    partyDetailsForm.setFieldValue("shipper_email", "");
+    partyDetailsForm.setFieldValue("shipper_address_id", "");
+    partyDetailsForm.setFieldValue("shipper_address", "");
+    setShipperAddressOptions([]);
+    setShipperAddressSearch("");
+    setShipperAddressCustom(false);
+  };
+
   return (
     <fieldset
       disabled={disabled}
@@ -137,51 +164,92 @@ export function JobMasterPartyDetailsPanel({
           </Text>
         </Grid.Col>
         <Grid.Col span={4}>
-          <SearchableSelect
-            key={`${idPrefix}-shipper-${partyDetailsForm.values.shipper_id}:${partyDetailsForm.values.shipper_name ?? "_"}`}
-            size="sm"
-            label="Shipper Name"
-            dropdownZIndex={1000}
-            apiEndpoint={URL.shipper}
-            placeholder="Type shipper name"
-            searchFields={["customer_name", "customer_code"]}
-            displayFormat={PARTY_CUSTOMER_DISPLAY_FORMAT}
-            value={partyDetailsForm.values.shipper_id || null}
-            displayValue={partyDetailsForm.values.shipper_name || null}
-            disabled={disabled}
-            onChange={(value, selectedData, originalData) => {
-              const options = getJobMasterAddressOptions(originalData);
-              const primary = options[0];
-              partyDetailsForm.setFieldValue("shipper_id", value || "");
-              partyDetailsForm.setFieldValue(
-                "shipper_name",
-                selectedData?.label || "",
-              );
-              partyDetailsForm.setFieldValue(
-                "shipper_email",
-                primary?.email || "",
-              );
-              partyDetailsForm.setFieldValue(
-                "shipper_address_id",
-                primary?.value || "",
-              );
-              partyDetailsForm.setFieldValue(
-                "shipper_address",
-                primary?.address || "",
-              );
-              if (!value) {
+          {shipperEnableFreeText ? (
+            <ImportMasterShipperNameField
+              key={`job-master-shipper-${partyDetailsForm.values.shipper_id || "none"}`}
+              size="sm"
+              dropdownZIndex={1000}
+              disabled={disabled}
+              shipperId={String(partyDetailsForm.values.shipper_id || "")}
+              shipperName={partyDetailsForm.values.shipper_name || ""}
+              onClear={() => {
+                partyDetailsForm.setFieldValue("shipper_id", "");
                 partyDetailsForm.setFieldValue("shipper_name", "");
-                partyDetailsForm.setFieldValue("shipper_email", "");
-                partyDetailsForm.setFieldValue("shipper_address_id", "");
-                partyDetailsForm.setFieldValue("shipper_address", "");
-              }
-              setShipperAddressOptions(value ? options : []);
-              setShipperAddressSearch(value ? primary?.label || "" : "");
-              setShipperAddressCustom(false);
-            }}
-            minSearchLength={2}
-            returnOriginalData={true}
-          />
+                clearShipperAddressAndEmail();
+              }}
+              onSelect={(id, name, originalData) => {
+                const options = getJobMasterAddressOptions(originalData);
+                const primary = options[0];
+                partyDetailsForm.setFieldValue("shipper_id", id);
+                partyDetailsForm.setFieldValue("shipper_name", name);
+                partyDetailsForm.setFieldValue(
+                  "shipper_email",
+                  primary?.email || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_address_id",
+                  primary?.value || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_address",
+                  primary?.address || "",
+                );
+                setShipperAddressOptions(options);
+                setShipperAddressSearch(primary?.label || "");
+                setShipperAddressCustom(false);
+              }}
+              onFreeText={(name) => {
+                partyDetailsForm.setFieldValue("shipper_id", "");
+                partyDetailsForm.setFieldValue("shipper_name", name);
+              }}
+            />
+          ) : (
+            <SearchableSelect
+              key={`${idPrefix}-shipper-${partyDetailsForm.values.shipper_id}:${partyDetailsForm.values.shipper_name ?? "_"}`}
+              size="sm"
+              label="Shipper Name"
+              dropdownZIndex={1000}
+              apiEndpoint={shipperApiEndpoint}
+              placeholder="Type shipper name"
+              searchFields={shipperSearchFields}
+              displayFormat={PARTY_CUSTOMER_DISPLAY_FORMAT}
+              value={partyDetailsForm.values.shipper_id || null}
+              displayValue={partyDetailsForm.values.shipper_name || null}
+              disabled={disabled}
+              onChange={(value, selectedData, originalData) => {
+                if (!value) {
+                  partyDetailsForm.setFieldValue("shipper_id", "");
+                  partyDetailsForm.setFieldValue("shipper_name", "");
+                  clearShipperAddressAndEmail();
+                  return;
+                }
+                const options = getJobMasterAddressOptions(originalData);
+                const primary = options[0];
+                partyDetailsForm.setFieldValue("shipper_id", value);
+                partyDetailsForm.setFieldValue(
+                  "shipper_name",
+                  selectedData?.label || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_email",
+                  primary?.email || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_address_id",
+                  primary?.value || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "shipper_address",
+                  primary?.address || "",
+                );
+                setShipperAddressOptions(options);
+                setShipperAddressSearch(primary?.label || "");
+                setShipperAddressCustom(false);
+              }}
+              minSearchLength={2}
+              returnOriginalData={true}
+            />
+          )}
         </Grid.Col>
         <Grid.Col span={4}>
           <FormTextInput
@@ -240,6 +308,7 @@ export function JobMasterPartyDetailsPanel({
                   setShipperAddressCustom(true);
                   partyDetailsForm.setFieldValue("shipper_address_id", "");
                   partyDetailsForm.setFieldValue("shipper_address", value);
+                  partyDetailsForm.setFieldValue("shipper_email", "");
                 }
               }}
               onChange={(value) => {
@@ -254,12 +323,10 @@ export function JobMasterPartyDetailsPanel({
                   "shipper_address",
                   selected?.address || "",
                 );
-                if (value) {
-                  partyDetailsForm.setFieldValue(
-                    "shipper_email",
-                    selected?.email || "",
-                  );
-                }
+                partyDetailsForm.setFieldValue(
+                  "shipper_email",
+                  value ? selected?.email || "" : "",
+                );
                 setShipperAddressSearch(selected?.label || "");
                 setShipperAddressCustom(false);
               }}
