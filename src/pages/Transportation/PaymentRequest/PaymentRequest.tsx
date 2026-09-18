@@ -90,6 +90,7 @@ import {
   findPartyAddressByGst,
   findPrimaryPartyAddress,
   getPartyGstFromPrimaryAddress,
+  isPrqTdsChargeRow,
   type PartyAddressLike,
   recalculatePrqChargeAmounts,
   resolvePartyTdsSectionCode,
@@ -202,6 +203,9 @@ function isChargeTdsRow(charge: {
   is_tds_row?: boolean;
   is_tds_calcualted_record?: unknown;
   is_tds_calculated_record?: unknown;
+  charge_id?: number | null;
+  account_code?: string;
+  charge_name?: string;
 }): boolean {
   if (charge.is_tds_row === true) return true;
   const raw =
@@ -211,7 +215,15 @@ function isChargeTdsRow(charge: {
   const normalized = String(raw ?? "")
     .trim()
     .toLowerCase();
-  return normalized === "true" || normalized === "1" || normalized === "yes";
+  if (normalized === "true" || normalized === "1" || normalized === "yes") {
+    return true;
+  }
+  // API often omits TDS flags; treat account-only rows as TDS.
+  return isPrqTdsChargeRow({
+    charge_id: charge.charge_id,
+    account_code: charge.account_code,
+    charge_name: charge.charge_name,
+  });
 }
 
 function normalizeChargeDrCr(value: unknown): "Dr" | "Cr" {
@@ -738,14 +750,12 @@ function mapPaymentRequestChargeToPayload(
     charge_name: c.charge_name ?? "",
     ...(c.account_id != null ? { account_id: Number(c.account_id) } : {}),
     account_code: c.account_code || undefined,
-    account_name: c.account_name || c.charge_name || undefined,
+    account_name: c.account_name || undefined,
     subledger_code: c.subledger_code || undefined,
     narration: c.narration || undefined,
     cn_r: c.cn_r || undefined,
-    Dr_Cr:
-      isChargeTdsRow(c) || c.is_tax_row === true
-        ? normalizeChargeDrCr(c.Dr_Cr)
-        : "Dr",
+    // Echo each row's Dr_Cr from form/API as-is (PRQ has no Dr/Cr editor).
+    Dr_Cr: c.Dr_Cr === "Cr" ? "Cr" : c.Dr_Cr === "Dr" ? "Dr" : normalizeChargeDrCr(c.Dr_Cr ?? c.cn_r),
     job_id: (c.job_no ?? "") || (c.job_id ?? ""),
     currency_id: c.currency_id ? Number(c.currency_id) : undefined,
     unit_id: c.unit_id ? Number(c.unit_id) : undefined,
@@ -761,20 +771,24 @@ function mapPaymentRequestChargeToPayload(
 function mapApiChargeToChargeItem(
   c: NonNullable<PaymentRequestFromApi["charges"]>[number],
 ): ChargeItem {
+  const drCr = normalizeChargeDrCr(
+    c.Dr_Cr ?? c.cn_r ?? (c as { Dr_cr?: string; dr_cr?: string }).Dr_cr ??
+      (c as { dr_cr?: string }).dr_cr,
+  );
   return {
     id: c.id != null ? Number(c.id) : null,
     charge_id: c.charge_id != null ? Number(c.charge_id) : null,
     charge_code: c.charge_code ?? "",
-    charge_name: c.charge_name ?? c.account_name ?? "",
+    charge_name: c.charge_name ?? "",
     account_id: c.account_id != null ? Number(c.account_id) : null,
     account_code: c.account_code ?? "",
-    account_name: c.account_name ?? c.charge_name ?? "",
+    account_name: c.account_name ?? "",
     subledger_code: c.subledger_code ?? "",
     narration: c.narration ?? "",
     segment: c.segment ?? "",
     job_no: (c.job_no ?? "") || (c.job_id ?? ""),
     sub_job: c.sub_job ?? "",
-    cn_r: c.cn_r ?? "",
+    cn_r: drCr,
     currency: c.currency_code ?? "",
     currency_id: c.currency_id != null ? String(c.currency_id) : "",
     roe: c.roe != null ? Number(c.roe) : null,
@@ -788,10 +802,11 @@ function mapApiChargeToChargeItem(
       c.local_amount != null ? clampAmount(Number(c.local_amount)) : null,
     tax_code: c.sac_code ?? "",
     tax: c.tax === true || c.tax === "true" ? "true" : "false",
-    Dr_Cr: normalizeChargeDrCr(
-      c.Dr_Cr ?? (isChargeTdsRow(c) ? c.cn_r : undefined),
-    ),
-    is_tds_row: isChargeTdsRow(c),
+    Dr_Cr: drCr,
+    is_tds_row: isChargeTdsRow({
+      ...c,
+      is_tds_row: (c as { is_tds_row?: boolean }).is_tds_row,
+    }),
     is_tds_calcualted_record: c.is_tds_calcualted_record,
     is_tds_calculated_record: c.is_tds_calculated_record,
   };
@@ -2180,13 +2195,13 @@ function PaymentRequest() {
               item.charge_id !== undefined && item.charge_id !== null
                 ? Number(item.charge_id)
                 : null,
-            charge_name: String(item.charge_name ?? item.account_name ?? ""),
+            charge_name: String(item.charge_name ?? ""),
             account_id:
               item.account_id !== undefined && item.account_id !== null
                 ? Number(item.account_id)
                 : null,
             account_code: String(item.account_code ?? ""),
-            account_name: String(item.account_name ?? item.charge_name ?? ""),
+            account_name: String(item.account_name ?? ""),
             subledger_code: String(item.subledger_code ?? ""),
             narration: String(item.narration ?? ""),
             job_no: String(item.job_id ?? item.job_no ?? ""),
@@ -2208,8 +2223,7 @@ function PaymentRequest() {
             String(er.account_code ?? "") === String(nr.account_code ?? "") &&
             String(er.subledger_code ?? "") ===
               String(nr.subledger_code ?? "") &&
-            String(er.charge_name ?? er.account_name ?? "") ===
-              String(nr.charge_name ?? nr.account_name ?? "") &&
+            String(er.account_name ?? "") === String(nr.account_name ?? "") &&
             Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
             String(er.cn_r ?? "") === String(nr.cn_r ?? "") &&
             String(er.currency_id ?? "") === String(nr.currency_id ?? ""),
@@ -3639,6 +3653,11 @@ function PaymentRequest() {
                             }
                             searchable
                             readOnly={formFieldsReadOnly}
+                            disabled={
+                              formFieldsReadOnly ||
+                              charge.account_id != null ||
+                              String(charge.account_code ?? "").trim() !== ""
+                            }
                             styles={{
                               input: {
                                 fontSize: "13px",
@@ -3657,6 +3676,11 @@ function PaymentRequest() {
                             searchFields={["shipment_id", "job_id", "type"]}
                             displayFormat={jobCreateDropdownDisplayFormat}
                             readOnly={formFieldsReadOnly}
+                            disabled={
+                              formFieldsReadOnly ||
+                              charge.account_id != null ||
+                              String(charge.account_code ?? "").trim() !== ""
+                            }
                             dropdownZIndex={chargesDropdownZIndex}
                             onChange={(value) =>
                               form.setFieldValue(
@@ -3813,6 +3837,11 @@ function PaymentRequest() {
                           }}
                           withAsterisk
                           readOnly={formFieldsReadOnly}
+                          disabled={
+                            formFieldsReadOnly ||
+                            charge.account_id != null ||
+                            String(charge.account_code ?? "").trim() !== ""
+                          }
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
                           dropdownZIndex={chargesDropdownZIndex}

@@ -2936,9 +2936,7 @@ export default function SupplierInvoiceCreate({
                                   narration: String(r.narration ?? ""),
                                   shipment_no: "",
                                   charge_id: null,
-                                  charge_name: String(
-                                    r.charge_name ?? accountName,
-                                  ),
+                                  charge_name: String(r.charge_name ?? ""),
                                   currency_id:
                                     currencyId != null
                                       ? Number(currencyId)
@@ -2969,12 +2967,8 @@ export default function SupplierInvoiceCreate({
                                   Number(er.amount ?? 0) ===
                                     Number(nr.amount ?? 0) &&
                                   er.Dr_Cr === nr.Dr_Cr &&
-                                  String(
-                                    er.charge_name ?? er.account_name ?? "",
-                                  ) ===
-                                    String(
-                                      nr.charge_name ?? nr.account_name ?? "",
-                                    ),
+                                  String(er.account_name ?? "") ===
+                                    String(nr.account_name ?? ""),
                               );
                             });
 
@@ -3121,7 +3115,12 @@ export default function SupplierInvoiceCreate({
                         placeholder="Shipment No"
                         data={shipmentOptions}
                         value={row.shipment_no || null}
-                        disabled={isReadOnly || reversalFormDisabled}
+                        disabled={
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          row.account_id != null ||
+                          String(row.account_code ?? "").trim() !== ""
+                        }
                         onChange={(v) => {
                           const shipmentNo = v ?? "";
                           form.setFieldValue(
@@ -3203,7 +3202,11 @@ export default function SupplierInvoiceCreate({
                           }
                         }}
                         disabled={
-                          isChargeLoading || isReadOnly || reversalFormDisabled
+                          isChargeLoading ||
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          row.account_id != null ||
+                          String(row.account_code ?? "").trim() !== ""
                         }
                         styles={{
                           input: {

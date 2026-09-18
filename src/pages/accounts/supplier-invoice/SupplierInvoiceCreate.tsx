@@ -555,11 +555,13 @@ function mapPaymentRequestChargeToSupplierRow(
   const isGstRow = isGstChargeRow(chargeName);
   const isTdsRow =
     (c.charge_id == null || c.charge_id === "") && accountCode !== "";
+  const rawDrCr =
+    c.Dr_Cr ?? c.Dr_cr ?? c.dr_cr ?? c.cn_r ?? c.cr_dr ?? c.Cr_Dr;
 
   return {
     CRN: isGstRow ? "Neutral" : isTdsRow ? "" : "Cost",
     account_code: accountCode,
-    account_name: accountName || chargeName,
+    account_name: accountName,
     subledger_code: String(c.subledger_code ?? ""),
     narration: String(c.narration ?? ""),
     shipment_no: String(c.job_no ?? c.job_id ?? ""),
@@ -567,7 +569,7 @@ function mapPaymentRequestChargeToSupplierRow(
       c.charge_id != null && c.charge_id !== ""
         ? Number(c.charge_id)
         : null,
-    charge_name: chargeName || accountName,
+    charge_name: chargeName,
     currency_id: c.currency_id != null ? Number(c.currency_id) : null,
     roe:
       parseRoeForPayload(
@@ -586,8 +588,8 @@ function mapPaymentRequestChargeToSupplierRow(
       c.igst_rate as string | number | null | undefined,
     ),
     igst: toLocalAmount(c.igst as string | number | null | undefined),
-    // PR → Supplier Invoice: keep Cr from payment request; otherwise default Dr.
-    Dr_Cr: normalizeDrCr(c.Dr_Cr ?? c.Dr_cr ?? c.dr_cr),
+    // Preserve Dr/Cr exactly as returned by the payment request.
+    Dr_Cr: normalizeDrCr(rawDrCr),
   };
 }
 
@@ -4220,6 +4222,10 @@ export default function SupplierInvoiceCreate({
                 value={form.values.type}
                 onChange={(v) => {
                   const nextType = v === "CRN" ? "CRN" : "INV";
+                  // Only reset Dr/Cr defaults when the user actually changes Type.
+                  // Spurious onChange (e.g. after vendor prefill enables this field)
+                  // must not overwrite PRQ-mapped charge Dr/Cr values.
+                  if (nextType === form.values.type) return;
                   const defaults = getDrCrDefaultsByType(nextType);
                   form.setFieldValue("type", nextType);
                   form.setFieldValue("Dr_Cr", defaults.header);
@@ -4915,9 +4921,7 @@ export default function SupplierInvoiceCreate({
                                   narration: String(r.narration ?? ""),
                                   shipment_no: "",
                                   charge_id: null,
-                                  charge_name: String(
-                                    r.charge_name ?? accountName,
-                                  ),
+                                  charge_name: String(r.charge_name ?? ""),
                                   currency_id:
                                     currencyId != null
                                       ? Number(currencyId)
@@ -4950,12 +4954,8 @@ export default function SupplierInvoiceCreate({
                                   Number(er.amount ?? 0) ===
                                     Number(nr.amount ?? 0) &&
                                   er.Dr_Cr === nr.Dr_Cr &&
-                                  String(
-                                    er.charge_name ?? er.account_name ?? "",
-                                  ) ===
-                                    String(
-                                      nr.charge_name ?? nr.account_name ?? "",
-                                    ),
+                                  String(er.account_name ?? "") ===
+                                    String(nr.account_name ?? ""),
                               );
                             });
 
@@ -5132,7 +5132,12 @@ export default function SupplierInvoiceCreate({
                             );
                           }}
                           searchable
-                          disabled={isReadOnly || reversalFormDisabled}
+                          disabled={
+                            isReadOnly ||
+                            reversalFormDisabled ||
+                            row.account_id != null ||
+                            String(row.account_code ?? "").trim() !== ""
+                          }
                           styles={{
                             input: {
                               fontSize: "13px",
@@ -5151,7 +5156,12 @@ export default function SupplierInvoiceCreate({
                           minSearchLength={1}
                           searchFields={["shipment_id", "job_id", "type"]}
                           displayFormat={jobCreateDropdownDisplayFormat}
-                          disabled={isReadOnly || reversalFormDisabled}
+                          disabled={
+                            isReadOnly ||
+                            reversalFormDisabled ||
+                            row.account_id != null ||
+                            String(row.account_code ?? "").trim() !== ""
+                          }
                           onChange={(v) => {
                             const shipmentNo = String(v ?? "").trim();
                             form.setFieldValue(
@@ -5232,7 +5242,11 @@ export default function SupplierInvoiceCreate({
                           }
                         }}
                         disabled={
-                          isChargeLoading || isReadOnly || reversalFormDisabled
+                          isChargeLoading ||
+                          isReadOnly ||
+                          reversalFormDisabled ||
+                          row.account_id != null ||
+                          String(row.account_code ?? "").trim() !== ""
                         }
                         styles={{
                           input: {
@@ -5646,12 +5660,13 @@ export default function SupplierInvoiceCreate({
                           { value: "Cr", label: "Cr" },
                         ]}
                         value={row.Dr_Cr}
-                        onChange={(v) =>
+                        onChange={(v) => {
+                          if (v !== "Dr" && v !== "Cr") return;
                           form.setFieldValue(
                             `charges_data.${index}.Dr_Cr`,
-                            (v === "Dr" ? "Dr" : "Cr") as "Cr" | "Dr",
-                          )
-                        }
+                            v,
+                          );
+                        }}
                         disabled={isReadOnly}
                         styles={{
                           input: {
