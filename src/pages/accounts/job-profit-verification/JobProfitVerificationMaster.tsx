@@ -17,12 +17,14 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
+  IconArrowRight,
   IconChartBar,
   IconCircleCheck,
   IconDotsVertical,
   IconFilter,
   IconSearch,
   IconStack2,
+  IconX,
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -73,6 +75,7 @@ import {
   canShowConfirmProfit,
   canShowVerifyProfit,
   getProfitStatusLabel,
+  PROFIT_STATUS_FILTER_OPTIONS,
   runJobProfitHouseAction,
 } from "../../../utils/jobProfitHouseVerification";
 
@@ -159,6 +162,7 @@ type JobProfitVerificationFilters = {
   branch_code: string;
   job_id: string;
   service: string;
+  status: string;
   origin_code: string;
   origin_port_label: string;
   destination_code: string;
@@ -202,6 +206,7 @@ function createDefaultFilters(): JobProfitVerificationFilters {
     branch_code: "",
     job_id: "",
     service: "",
+    status: "",
     origin_code: "",
     origin_port_label: "",
     destination_code: "",
@@ -486,6 +491,12 @@ export default function JobProfitVerificationMaster() {
     [],
   );
 
+  /**
+   * Header-filter writes update BOTH draft and applied state at once
+   * (instant filtering). This keeps the advanced filter section visually in
+   * sync, resets pagination to page 1, and persists filters to the list-filter
+   * store so values survive navigation to Job Ledger and back.
+   */
   const commitHeaderFilters = useCallback(
     (partial: Partial<JobProfitVerificationFilters>) => {
       setDraftFilters((prev) => {
@@ -598,6 +609,7 @@ export default function JobProfitVerificationMaster() {
         country_code: countryCode,
         job_id: filters.job_id?.trim() || "",
         service: filters.service?.trim() || "",
+        status: filters.status?.trim() || "",
         service_type: "",
         trade: "",
         shipment_id: "",
@@ -652,6 +664,10 @@ export default function JobProfitVerificationMaster() {
         status: row.status,
         brokerage: row.brokerage ?? null,
         brokerage_remark: row.brokerage_remark ?? null,
+        verified_by: row.verified_by ?? null,
+        verified_at: row.verified_at ?? null,
+        confirmed_by: row.confirmed_by ?? null,
+        confirmed_at: row.confirmed_at ?? null,
         fromJobProfitVerification: true,
         jobReturnTo: "/job-profit-verification",
       });
@@ -876,6 +892,22 @@ export default function JobProfitVerificationMaster() {
                     persistFiltersToStore(appliedFilters, next);
                   }}
                   leftSection={<IconSearch size={14} />}
+                  rightSection={
+                    search ? (
+                      <ActionIcon
+                        variant="transparent"
+                        size="sm"
+                        aria-label="Clear search"
+                        onClick={() => {
+                          setSearch("");
+                          setPagination((p) => ({ ...p, pageIndex: 0 }));
+                          persistFiltersToStore(appliedFilters, "");
+                        }}
+                      >
+                        <IconX size={14} />
+                      </ActionIcon>
+                    ) : null
+                  }
                   classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                 />
                 <Button
@@ -1012,6 +1044,28 @@ export default function JobProfitVerificationMaster() {
                 </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
+                    <Select
+                      size="xs"
+                      label="Status"
+                      placeholder="All statuses"
+                      data={[...PROFIT_STATUS_FILTER_OPTIONS]}
+                      value={draftFilters.status || null}
+                      onChange={(v) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          status: v ?? "",
+                        }))
+                      }
+                      clearable
+                      searchable
+                      comboboxProps={{ zIndex: 400 }}
+                      classNames={erpListGeistSelectClassNames}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
                       size="xs"
                       label="Origin"
@@ -1140,12 +1194,8 @@ export default function JobProfitVerificationMaster() {
                 }
               />
             ),
-            children: loading ? (
-              <Center py="xl">
-                <Loader color="#105476" size="lg" />
-              </Center>
-            ) : (
-              <Box style={{ overflowX: "auto" }}>
+            children: (
+              <Box style={{ overflowX: "auto", position: "relative" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ height: 45 }}>
@@ -1165,9 +1215,113 @@ export default function JobProfitVerificationMaster() {
                           }
                         />
                       </th>
+                      <th style={mergeTh(100, 100)}>
+                        <ERPListColumnHeaderFilter
+                          label="Service"
+                          value={appliedFilters.service}
+                          displayValue={appliedFilters.service}
+                          theme={theme}
+                          placeholder="Service"
+                          isEditing={editingHeaderId === "service"}
+                          onStartEdit={() => openHeaderEditor("service")}
+                          onStopEdit={() => collapseHeaderEditor("service")}
+                          onChange={() => {}}
+                          renderEditor={({ autoFocus, onClose }) => (
+                            <Select
+                              autoFocus={autoFocus}
+                              placeholder="Service"
+                              searchable
+                              clearable
+                              size="xs"
+                              data={[...SERVICE_OPTIONS]}
+                              value={appliedFilters.service || null}
+                              onChange={(value) => {
+                                commitHeaderFilters({ service: value ?? "" });
+                                onClose();
+                              }}
+                              comboboxProps={{ zIndex: 1000 }}
+                              classNames={erpListGeistSelectClassNames}
+                              styles={filterFieldStyles}
+                            />
+                          )}
+                        />
+                      </th>
                       <th style={mergeTh(180, 180)}>Shipment No</th>
                       <th style={mergeTh(120, 120)}>Quotation No</th>
                       <th style={mergeTh(130, 130)}>Job Date</th>
+                      <th style={mergeTh(220, 220)}>
+                        <ERPListColumnHeaderFilter
+                          label="Route"
+                          value={
+                            (appliedFilters.origin_code || "") +
+                            (appliedFilters.destination_code || "")
+                          }
+                          displayValue={
+                            appliedFilters.origin_code ||
+                            appliedFilters.destination_code
+                              ? `${appliedFilters.origin_code || "—"} → ${appliedFilters.destination_code || "—"}`
+                              : ""
+                          }
+                          theme={theme}
+                          isEditing={editingHeaderId === "route"}
+                          onStartEdit={() => openHeaderEditor("route")}
+                          onStopEdit={() => collapseHeaderEditor("route")}
+                          onChange={() => {}}
+                          renderEditor={({ autoFocus }) => (
+                            <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+                              <Box style={{ flex: 1, minWidth: 0 }}>
+                                <SearchableSelect
+                                  autoFocus={autoFocus}
+                                  size="xs"
+                                  apiEndpoint={URL.portMaster}
+                                  searchFields={["port_code", "port_name"]}
+                                  placeholder="Origin"
+                                  displayFormat={(item: Record<string, unknown>) => ({
+                                    value: String(item.port_code),
+                                    label: `${item.port_name} (${item.port_code})`,
+                                  })}
+                                  value={appliedFilters.origin_code}
+                                  displayValue={appliedFilters.origin_port_label}
+                                  onChange={(value, selectedData) =>
+                                    commitHeaderFilters({
+                                      origin_code: value || "",
+                                      origin_port_label: selectedData?.label || "",
+                                    })
+                                  }
+                                  minSearchLength={1}
+                                  dropdownZIndex={1000}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={filterFieldStyles}
+                                />
+                              </Box>
+                              <Box style={{ flex: 1, minWidth: 0 }}>
+                                <SearchableSelect
+                                  size="xs"
+                                  apiEndpoint={URL.portMaster}
+                                  searchFields={["port_code", "port_name"]}
+                                  placeholder="Destination"
+                                  displayFormat={(item: Record<string, unknown>) => ({
+                                    value: String(item.port_code),
+                                    label: `${item.port_name} (${item.port_code})`,
+                                  })}
+                                  value={appliedFilters.destination_code}
+                                  displayValue={appliedFilters.destination_name}
+                                  onChange={(value, selectedData) =>
+                                    commitHeaderFilters({
+                                      destination_code: value || "",
+                                      destination_name: selectedData?.label || "",
+                                    })
+                                  }
+                                  minSearchLength={1}
+                                  dropdownZIndex={1000}
+                                  classNames={erpListGeistSelectClassNames}
+                                  styles={filterFieldStyles}
+                                />
+                              </Box>
+                            </Group>
+                          )}
+                        />
+                      </th>
                       <th style={mergeTh(200, 200)}>
                         <ERPListColumnHeaderFilter
                           label="Customer Name"
@@ -1251,16 +1405,58 @@ export default function JobProfitVerificationMaster() {
                       <th style={listAmountThStyle}>Revenue</th>
                       <th style={listAmountThStyle}>Profit</th>
                       <th style={listGpPctThStyle}>GP (%)</th>
-                      <th style={mergeTh(140, 140)}>Status</th>
+                      <th style={mergeTh(180, 180)}>
+                        <ERPListColumnHeaderFilter
+                          label="Status"
+                          value={appliedFilters.status}
+                          displayValue={
+                            appliedFilters.status
+                              ? getProfitStatusLabel(appliedFilters.status)
+                              : ""
+                          }
+                          theme={theme}
+                          placeholder="Status"
+                          isEditing={editingHeaderId === "status"}
+                          onStartEdit={() => openHeaderEditor("status")}
+                          onStopEdit={() => collapseHeaderEditor("status")}
+                          onChange={() => {}}
+                          renderEditor={({ autoFocus, onClose }) => (
+                            <Select
+                              autoFocus={autoFocus}
+                              placeholder="Status"
+                              searchable
+                              clearable
+                              size="xs"
+                              data={[...PROFIT_STATUS_FILTER_OPTIONS]}
+                              value={appliedFilters.status || null}
+                              onChange={(value) => {
+                                commitHeaderFilters({ status: value ?? "" });
+                                onClose();
+                              }}
+                              comboboxProps={{ zIndex: 1000 }}
+                              classNames={erpListGeistSelectClassNames}
+                              styles={filterFieldStyles}
+                            />
+                          )}
+                        />
+                      </th>
                       <th style={mergeTh(130, 130)}>Verified By</th>
                       <th style={mergeTh(150, 150)}>Verified At</th>
                       <th style={erpListStickyActionThStyle(theme, 96)}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.length === 0 ? (
+                    {loading ? (
                       <tr>
-                        <td colSpan={17} style={tdPad}>
+                        <td colSpan={19} style={tdPad}>
+                          <Center py="xl">
+                            <Loader color="#105476" size="lg" />
+                          </Center>
+                        </td>
+                      </tr>
+                    ) : rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={19} style={tdPad}>
                           <Center py="xl">
                             <Text c="dimmed">No job profit records found</Text>
                           </Center>
@@ -1283,6 +1479,11 @@ export default function JobProfitVerificationMaster() {
                           >
                             <Text size="sm" fw={600} c={fg}>
                               {row.job_no || "—"}
+                            </Text>
+                          </td>
+                          <td style={tdPad}>
+                            <Text size="sm" c={fg}>
+                              {row.service?.trim() || "—"}
                             </Text>
                           </td>
                           <td
@@ -1326,6 +1527,17 @@ export default function JobProfitVerificationMaster() {
                             </Text>
                           </td>
                           <td style={tdDate}>{fmtDate(row.job_date)}</td>
+                          <td style={tdPad}>
+                            <Group gap={6} wrap="nowrap">
+                              <Text size="sm" fw={600} c={primary}>
+                                {row.origin_code?.trim() || "—"}
+                              </Text>
+                              <IconArrowRight size={12} color={muted} />
+                              <Text size="sm" c={fg}>
+                                {row.destination_code?.trim() || "—"}
+                              </Text>
+                            </Group>
+                          </td>
                           <td style={tdPad}>
                             <CustomerNamesDisplay
                               row={row}

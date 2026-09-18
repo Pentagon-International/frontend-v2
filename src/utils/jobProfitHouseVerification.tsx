@@ -35,6 +35,61 @@ export type JobProfitHousePatchPayload = {
   brokerage_remark?: string;
 };
 
+export type JobProfitHousePatchResult = {
+  success?: boolean;
+  status?: boolean | string;
+  message?: string;
+  detail?: string;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  brokerage?: number | null;
+  brokerage_remark?: string | null;
+  data?: {
+    verified_by?: string | null;
+    verified_at?: string | null;
+    confirmed_by?: string | null;
+    confirmed_at?: string | null;
+    status?: string | null;
+    brokerage?: number | null;
+    brokerage_remark?: string | null;
+  };
+};
+
+/** Pick audit fields from a house PATCH response (top-level or nested `data`). */
+export function pickProfitHouseAuditFields(
+  response?: JobProfitHousePatchResult | null,
+): {
+  verified_by: string | null;
+  verified_at: string | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  status: string | null;
+} {
+  const nested = response?.data;
+  const verified_by =
+    nested?.verified_by ?? response?.verified_by ?? null;
+  const verified_at =
+    nested?.verified_at ?? response?.verified_at ?? null;
+  const confirmed_by =
+    nested?.confirmed_by ?? response?.confirmed_by ?? null;
+  const confirmed_at =
+    nested?.confirmed_at ?? response?.confirmed_at ?? null;
+  const statusRaw = nested?.status ?? response?.status;
+  const status =
+    typeof statusRaw === "string" && statusRaw.trim()
+      ? statusRaw.trim()
+      : null;
+  return {
+    verified_by: verified_by != null ? String(verified_by) : null,
+    verified_at: verified_at != null ? String(verified_at) : null,
+    confirmed_by: confirmed_by != null ? String(confirmed_by) : null,
+    confirmed_at: confirmed_at != null ? String(confirmed_at) : null,
+    status,
+  };
+}
+
 export function normalizeProfitStatus(status?: string | null): string {
   return String(status ?? "")
     .trim()
@@ -47,6 +102,13 @@ const PROFIT_STATUS_LABELS: Record<string, string> = {
   confirmed: "Sales Confirmed",
   hold: "Hold",
 };
+
+export const PROFIT_STATUS_FILTER_OPTIONS = [
+  { value: "sent_to_verify", label: PROFIT_STATUS_LABELS.sent_to_verify },
+  { value: "verified", label: PROFIT_STATUS_LABELS.verified },
+  { value: "confirmed", label: PROFIT_STATUS_LABELS.confirmed },
+  { value: "hold", label: PROFIT_STATUS_LABELS.hold },
+] as const;
 
 /** Human-readable label for job profit verification status keys. */
 export function getProfitStatusLabel(status?: string | null): string {
@@ -162,12 +224,7 @@ export async function patchJobProfitHouse(payload: JobProfitHousePatchPayload) {
     `${URL.jobProfitVerification}house/`,
     payload,
     API_HEADER,
-  )) as {
-    success?: boolean;
-    status?: boolean;
-    message?: string;
-    detail?: string;
-  };
+  )) as JobProfitHousePatchResult;
 
   if (response?.success === false || response?.status === false) {
     throw new Error(
@@ -384,7 +441,7 @@ export function runJobProfitHouseAction(options: {
   askBrokerage?: boolean;
   initialBrokerage?: number | null;
   initialBrokerageRemark?: string | null;
-  onSuccess?: () => void;
+  onSuccess?: (response?: JobProfitHousePatchResult) => void;
 }) {
   const shipmentId = String(options.shipmentId ?? "").trim();
   if (!shipmentId) {
@@ -429,7 +486,7 @@ export function runJobProfitHouseAction(options: {
                       response?.message ?? "Profit verified successfully",
                   });
                   destroy();
-                  options.onSuccess?.();
+                  options.onSuccess?.(response);
                 } catch (err: unknown) {
                   loading = false;
                   error = resolveApiErrorMessage(err);
@@ -483,7 +540,7 @@ export function runJobProfitHouseAction(options: {
                       response?.message ?? "Profit confirmed successfully",
                   });
                   destroy();
-                  options.onSuccess?.();
+                  options.onSuccess?.(response);
                 } catch (err: unknown) {
                   loading = false;
                   error = resolveApiErrorMessage(err);
@@ -547,7 +604,7 @@ export function runJobProfitHouseAction(options: {
                     response?.message ?? "Profit confirmed successfully",
                 });
                 destroy();
-                options.onSuccess?.();
+                options.onSuccess?.(response);
               } catch (err: unknown) {
                 loading = false;
                 error = resolveApiErrorMessage(err);

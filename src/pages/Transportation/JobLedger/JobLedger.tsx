@@ -60,11 +60,14 @@ import {
   canUpdateBrokerage,
   isProfitFlowComplete,
   normalizeProfitStatus,
+  pickProfitHouseAuditFields,
   resolveApiErrorMessage,
   runJobProfitHouseAction,
   saveJobProfitBrokerage,
 } from "../../../utils/jobProfitHouseVerification";
 import useAuthStore from "../../../store/authStore";
+import useDateFormat from "../../../hooks/useDateFormat";
+import dayjs from "dayjs";
 import { getDefaultBranchCurrencyCode } from "../../../utils/userNumberFormat";
 import {
   bindMoneyWholeNumberMode,
@@ -132,6 +135,8 @@ type JobLedgerBrokerageRow = {
   brokerage?: number | null;
   brokerage_remark?: string | null;
   status?: string | null;
+  verified_by?: string | null;
+  verified_at?: string | null;
   confirmed_by?: string | null;
   confirmed_at?: string | null;
 };
@@ -282,6 +287,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const routerLocation = useLocation();
   const navState = (routerLocation.state ?? {}) as any;
   const user = useAuthStore((state) => state.user);
+  const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const activeCurrencyCode = useMemo(
@@ -347,6 +353,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   );
   const [brokerageSaving, setBrokerageSaving] = useState(false);
   const [brokerageError, setBrokerageError] = useState<string | null>(null);
+  const [profitVerifiedBy, setProfitVerifiedBy] = useState<string | null>(
+    navState?.verified_by != null ? String(navState.verified_by) : null,
+  );
+  const [profitVerifiedAt, setProfitVerifiedAt] = useState<string | null>(
+    navState?.verified_at != null ? String(navState.verified_at) : null,
+  );
+  const [profitConfirmedBy, setProfitConfirmedBy] = useState<string | null>(
+    navState?.confirmed_by != null ? String(navState.confirmed_by) : null,
+  );
+  const [profitConfirmedAt, setProfitConfirmedAt] = useState<string | null>(
+    navState?.confirmed_at != null ? String(navState.confirmed_at) : null,
+  );
 
   const showBrokerageForm =
     fromProfitVerification &&
@@ -376,6 +394,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
     profitIsSales === true;
+
+  const formatProfitAuditDateTime = useCallback(
+    (value: string | null | undefined) => {
+      if (!value) return "";
+      const d = dayjs(value);
+      return d.isValid() ? d.format(`${dateFormat} HH:mm`) : value;
+    },
+    [dateFormat],
+  );
 
   const handleSaveBrokerage = useCallback(async () => {
     if (!profitShipmentId) {
@@ -881,21 +908,26 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         if (matchedBrokerage.brokerage_remark != null) {
           setBrokerageRemark(String(matchedBrokerage.brokerage_remark));
         }
+        if (matchedBrokerage.verified_by != null) {
+          setProfitVerifiedBy(String(matchedBrokerage.verified_by));
+        }
+        if (matchedBrokerage.verified_at != null) {
+          setProfitVerifiedAt(String(matchedBrokerage.verified_at));
+        }
+        if (matchedBrokerage.confirmed_by != null) {
+          setProfitConfirmedBy(String(matchedBrokerage.confirmed_by));
+        }
+        if (matchedBrokerage.confirmed_at != null) {
+          setProfitConfirmedAt(String(matchedBrokerage.confirmed_at));
+        }
       }
 
       setTableData(
         apiRows.map((d, idx) => {
           const id = Number(d?.sno ?? idx + 1);
           const documents = Array.isArray(d?.documents)
-            ? d.documents.filter(
-                (doc) =>
-                  String(doc?.document_name ?? "").trim() &&
-                  String(
-                    doc?.document_url ??
-                      doc?.document ??
-                      doc?.document_download_url ??
-                      "",
-                  ).trim(),
+            ? d.documents.filter((doc) =>
+                Boolean(String(doc?.document_name ?? "").trim()),
               )
             : [];
           return {
@@ -1276,14 +1308,13 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "documentNo",
         header: "Document number",
-        size: 180,
-        minSize: 160,
+        size: 160,
+        minSize: 140,
         grow: false,
         enableColumnFilter: false,
         enableSorting: false,
         Cell: ({ row, cell }) => {
           const value = cell.getValue<string>();
-          const documents = row.original.documents ?? [];
 
           const docNoLink = value ? (
             <Anchor
@@ -1302,15 +1333,38 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             <Text size="sm">-</Text>
           );
 
+          return row.original.reversed ? (
+            <Tooltip label="This document is reversed" withArrow>
+              <Box>{docNoLink}</Box>
+            </Tooltip>
+          ) : (
+            docNoLink
+          );
+        },
+        mantineTableBodyCellProps: { style: { padding: "4px 8px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 10px" } },
+      },
+      {
+        id: "documents",
+        accessorKey: "documents",
+        header: "Documents",
+        size: 180,
+        minSize: 140,
+        grow: false,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ row }) => {
+          const documents = row.original.documents ?? [];
+          if (documents.length === 0) {
+            return (
+              <Text size="sm" c="dimmed">
+                —
+              </Text>
+            );
+          }
+
           return (
             <Stack gap={2}>
-              {row.original.reversed ? (
-                <Tooltip label="This document is reversed" withArrow>
-                  <Box>{docNoLink}</Box>
-                </Tooltip>
-              ) : (
-                docNoLink
-              )}
               {documents.map((doc, docIndex) => {
                 const href = String(
                   doc.document_url ??
@@ -1318,20 +1372,32 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     doc.document_download_url ??
                     "",
                 ).trim();
-                const name = String(doc.document_name ?? "").trim() || "Document";
-                if (!href) return null;
+                const name =
+                  String(doc.document_name ?? "").trim() || "Document";
+                if (href) {
+                  return (
+                    <Anchor
+                      key={`${doc.id ?? docIndex}-${name}`}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      size="sm"
+                      c="#105476"
+                      td="underline"
+                      style={{ fontFamily: "Inter", display: "block" }}
+                    >
+                      {name}
+                    </Anchor>
+                  );
+                }
                 return (
-                  <Anchor
+                  <Text
                     key={`${doc.id ?? docIndex}-${name}`}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    size="xs"
-                    c="#105476"
+                    size="sm"
                     style={{ fontFamily: "Inter" }}
                   >
                     {name}
-                  </Anchor>
+                  </Text>
                 );
               })}
             </Stack>
@@ -1958,57 +2024,95 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           <Text size="lg" fw={600} c="#105476">
             Job Ledger
           </Text>
-          <Group gap="md">
-            {showProfitVerifyCheckbox && (
-              <Checkbox
-                label="Verify"
-                checked={profitVerifiedOrBeyond}
-                disabled={profitVerifiedOrBeyond || !canVerifyNow}
-                styles={{
-                  label: {
-                    fontFamily: "Inter",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#105476",
-                  },
-                }}
-                onChange={() => {
-                  if (!canVerifyNow || !profitShipmentId) return;
-                  runJobProfitHouseAction({
-                    shipmentId: profitShipmentId,
-                    action: "verify",
-                    onSuccess: () => {
-                      setProfitStatus("verified");
-                    },
-                  });
-                }}
-              />
-            )}
-            {showProfitConfirmCheckbox && (
-              <Checkbox
-                label="Confirm"
-                checked={profitConfirmed}
-                disabled={profitConfirmed || !canConfirmNow}
-                styles={{
-                  label: {
-                    fontFamily: "Inter",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#105476",
-                  },
-                }}
-                onChange={() => {
-                  if (!canConfirmNow || !profitShipmentId) return;
-                  runJobProfitHouseAction({
-                    shipmentId: profitShipmentId,
-                    action: "confirm",
-                    askBrokerage: false,
-                    onSuccess: () => {
-                      setProfitStatus("confirmed");
-                    },
-                  });
-                }}
-              />
+          <Group gap="md" align="flex-start">
+            {fromProfitVerification && Boolean(profitShipmentId) && (
+              <Stack gap={4}>
+                {(showProfitVerifyCheckbox || showProfitConfirmCheckbox) && (
+                  <Group gap="md">
+                    {showProfitVerifyCheckbox && (
+                      <Checkbox
+                        label="Verify"
+                        checked={profitVerifiedOrBeyond}
+                        disabled={profitVerifiedOrBeyond || !canVerifyNow}
+                        styles={{
+                          label: {
+                            fontFamily: "Inter",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: "#105476",
+                          },
+                        }}
+                        onChange={() => {
+                          if (!canVerifyNow || !profitShipmentId) return;
+                          runJobProfitHouseAction({
+                            shipmentId: profitShipmentId,
+                            action: "verify",
+                            onSuccess: (response) => {
+                              const audit = pickProfitHouseAuditFields(response);
+                              setProfitStatus(audit.status || "verified");
+                              if (audit.verified_by) {
+                                setProfitVerifiedBy(audit.verified_by);
+                              }
+                              if (audit.verified_at) {
+                                setProfitVerifiedAt(audit.verified_at);
+                              }
+                            },
+                          });
+                        }}
+                      />
+                    )}
+                    {showProfitConfirmCheckbox && (
+                      <Checkbox
+                        label="Confirm"
+                        checked={profitConfirmed}
+                        disabled={profitConfirmed || !canConfirmNow}
+                        styles={{
+                          label: {
+                            fontFamily: "Inter",
+                            fontSize: 14,
+                            fontWeight: 600,
+                            color: "#105476",
+                          },
+                        }}
+                        onChange={() => {
+                          if (!canConfirmNow || !profitShipmentId) return;
+                          runJobProfitHouseAction({
+                            shipmentId: profitShipmentId,
+                            action: "confirm",
+                            askBrokerage: false,
+                            onSuccess: (response) => {
+                              const audit = pickProfitHouseAuditFields(response);
+                              setProfitStatus(audit.status || "confirmed");
+                              if (audit.confirmed_by) {
+                                setProfitConfirmedBy(audit.confirmed_by);
+                              }
+                              if (audit.confirmed_at) {
+                                setProfitConfirmedAt(audit.confirmed_at);
+                              }
+                            },
+                          });
+                        }}
+                      />
+                    )}
+                  </Group>
+                )}
+                {profitVerifiedOrBeyond && (
+                  <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                    Verified by {profitVerifiedBy?.trim() || "—"}
+                    {profitVerifiedAt
+                      ? ` · ${formatProfitAuditDateTime(profitVerifiedAt)}`
+                      : ""}
+                  </Text>
+                )}
+                {profitConfirmed && (
+                  <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                    Confirmed by {profitConfirmedBy?.trim() || "—"}
+                    {profitConfirmedAt
+                      ? ` · ${formatProfitAuditDateTime(profitConfirmedAt)}`
+                      : ""}
+                  </Text>
+                )}
+              </Stack>
             )}
             {!fromProfitVerification && (
               <Group gap={6} wrap="nowrap">
