@@ -482,8 +482,9 @@ export const generateDeliveryOrderPDF = (
       : igmNo || igmDate || "";
     
     const itemLineNo =
-      housingData?.item_line_no ||
-      housingData?.item_no ||
+      jobData?.item_no ||
+      jobInfo?.item_no ||
+      mawbDetails?.item_no ||
       "";
     const subItemLineNo =
       housingData?.sub_item_line_no ||

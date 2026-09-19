@@ -1650,7 +1650,6 @@ function InlandImportJobMaster() {
                                               unknown
                                             >,
                                           ),
-                                          jobId: row.id ?? row.job_id,
                                           actionType: "view",
                                           viewMode: true,
                                         },

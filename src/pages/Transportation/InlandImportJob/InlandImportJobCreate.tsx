@@ -269,6 +269,10 @@ type HAWBDetail = HouseDocumentFields & {
   forwarder_name?: string;
   forwarder_address?: string;
   forwarder_email?: string;
+  billing_customer_id?: number | null;
+  billing_customer_name?: string;
+  billing_customer_address?: string;
+  billing_customer_email?: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -283,7 +287,6 @@ type HAWBDetail = HouseDocumentFields & {
   commodity_description?: string;
   marks_no?: string;
   note?: string;
-  item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
@@ -476,6 +479,7 @@ function InlandImportJobCreate() {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
+  const lastFetchedJobIdRef = useRef<number | null>(null);
   const [hawbDetails, setHawbDetails] = useState<HAWBDetail[]>(
     location.state?.hawbDetails && Array.isArray(location.state.hawbDetails)
       ? location.state.hawbDetails
@@ -639,24 +643,16 @@ function InlandImportJobCreate() {
     navigate(jobModuleBasePath);
   };
 
-  // Fetch full job when only jobId is provided, or list row is missing service_code.
+  // Fetch full job only when navigated with jobId and no job payload (e.g. deep link).
+  // Skip when job is already in state (edit/view/list/house return) — avoids multi-API reload.
   useEffect(() => {
-    const jobFromState = location.state?.job as
-      Record<string, unknown> | undefined;
-    const jobId =
-      (location.state?.jobId as number | undefined) ??
-      (jobFromState?.id as number | undefined);
-    if (jobId == null) return;
-
-    const listServiceCode =
-      resolveInlandImportJobServiceFields(jobFromState).service_code;
-    const shouldFetch =
-      location.state?.jobId != null || !location.state?.job || !listServiceCode;
-
-    if (!shouldFetch) return;
+    const jobId = location.state?.jobId as number | undefined;
+    if (jobId == null || location.state?.job) return;
+    if (lastFetchedJobIdRef.current === jobId) return;
 
     let cancelled = false;
     const fetchAndReplace = async () => {
+      lastFetchedJobIdRef.current = jobId;
       setIsFetchingJobById(true);
       try {
         const jobListRes = await getAPICall(
@@ -699,7 +695,8 @@ function InlandImportJobCreate() {
           });
         }
       } finally {
-        if (!cancelled) setIsFetchingJobById(false);
+        // Always clear loader; route replace on success can cancel the effect mid-flight.
+        setIsFetchingJobById(false);
       }
     };
     fetchAndReplace();
@@ -778,7 +775,11 @@ function InlandImportJobCreate() {
           ? dayjs(etaVal).startOf("day").toDate()
           : null;
       })(),
-      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      shipper_id: String(
+        (jobData as { shipper_id?: string | number | null } | undefined)
+          ?.shipper_id ??
+          (location.state?.mawbDetails?.shipper_id || ""),
+      ),
       shipper_name:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
@@ -1073,7 +1074,12 @@ function InlandImportJobCreate() {
               ? dayjs(etaVal).startOf("day").toDate()
               : null;
           })(),
-          shipper_id: "",
+          shipper_id: String(
+            (jobData as { shipper_id?: string | number | null }).shipper_id ??
+              "",
+          )
+            .replace(/^null$/i, "")
+            .replace(/^undefined$/i, ""),
           shipper_name: String(jobData.shipper_name || ""),
           shipper_email: String(jobData.shipper_email || ""),
           shipper_address_id: "",
@@ -1093,6 +1099,27 @@ function InlandImportJobCreate() {
         console.log("?? Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
+
+        {
+          const savedShipperAddr = String(jobData.shipper_address || "").trim();
+          const savedShipperEmail = String(jobData.shipper_email || "");
+          if (savedShipperAddr) {
+            setShipperAddressOptions([
+              {
+                value: savedShipperAddr,
+                label: savedShipperAddr,
+                email: savedShipperEmail,
+                address: savedShipperAddr,
+              },
+            ]);
+            setShipperAddressSearch(savedShipperAddr);
+            setShipperAddressCustom(true);
+          } else {
+            setShipperAddressOptions([]);
+            setShipperAddressSearch("");
+            setShipperAddressCustom(false);
+          }
+        }
 
         // If we are coming back from InlandHouseCreate, preserve the edited MAWB
         // master fields from location.state (e.g., is_direct) instead of
@@ -1289,6 +1316,20 @@ function InlandImportJobCreate() {
               forwarder_email: house.forwarder_email
                 ? String(house.forwarder_email)
                 : "",
+              billing_customer_id:
+                house.billing_customer_id != null &&
+                house.billing_customer_id !== undefined
+                  ? Number(house.billing_customer_id)
+                  : null,
+              billing_customer_name: house.billing_customer_name
+                ? String(house.billing_customer_name)
+                : "",
+              billing_customer_address: house.billing_customer_address
+                ? String(house.billing_customer_address)
+                : "",
+              billing_customer_email: house.billing_customer_email
+                ? String(house.billing_customer_email)
+                : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
               shipper_code: house.shipper_code
@@ -1353,7 +1394,6 @@ function InlandImportJobCreate() {
               note: (house as { note?: unknown }).note
                 ? String((house as { note?: unknown }).note)
                 : "",
-              item_no: house.item_no ? String(house.item_no) : "",
               sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
               ref_no: house.ref_no ? String(house.ref_no) : "",
               shipment_terms_code: house.shipment_terms_code
@@ -2869,6 +2909,10 @@ function InlandImportJobCreate() {
           forwarder_name: hawb.forwarder_name || "",
           forwarder_address: hawb.forwarder_address || "",
           forwarder_email: hawb.forwarder_email || "",
+          billing_customer_id: hawb.billing_customer_id ?? null,
+          billing_customer_name: hawb.billing_customer_name || "",
+          billing_customer_address: hawb.billing_customer_address || "",
+          billing_customer_email: hawb.billing_customer_email || "",
           cha_name: (hawb as { cha_name?: string }).cha_name || null,
           cha_address: (hawb as { cha_address?: string }).cha_address || null,
           shipper_code: hawb.shipper_code,
@@ -2893,7 +2937,6 @@ function InlandImportJobCreate() {
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
           note: hawb.note || "",
-          item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
           ...(hawb.shipment_terms_code != null &&
@@ -3854,11 +3897,14 @@ function InlandImportJobCreate() {
         <Tabs.Panel value="1">
           <Box mt="md">
             <JobMasterPartyDetailsPanel
-              idPrefix="air-export-party"
+              idPrefix="inland-import-party"
               disabled={isReadOnly}
               partyDetailsForm={
                 partyDetailsForm as unknown as UseFormReturnType<JobMasterPartyDetailsValues>
               }
+              shipperApiEndpoint={URL.shipmentParty}
+              shipperSearchFields={["customer_name"]}
+              shipperEnableFreeText
               shipperAddressOptions={shipperAddressOptions}
               setShipperAddressOptions={setShipperAddressOptions}
               consigneeAddressOptions={consigneeAddressOptions}

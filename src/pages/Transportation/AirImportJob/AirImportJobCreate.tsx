@@ -93,6 +93,7 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
+import { ImportMasterShipperNameField } from "../ImportMasterShipperNameField";
 import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
 import {
@@ -192,6 +193,7 @@ type MAWBDetailsForm = {
   job_date: Date | null;
   igm_no: string;
   igm_date: Date | null;
+  item_no: string;
   shipper_id: string;
   shipper_name: string;
   shipper_email: string;
@@ -261,6 +263,10 @@ type HAWBDetail = HouseDocumentFields & {
   forwarder_name?: string;
   forwarder_address?: string;
   forwarder_email?: string;
+  billing_customer_id?: number | null;
+  billing_customer_name?: string;
+  billing_customer_address?: string;
+  billing_customer_email?: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
@@ -282,7 +288,6 @@ type HAWBDetail = HouseDocumentFields & {
   commodity_description?: string;
   marks_no?: string;
   note?: string;
-  item_no?: string;
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
@@ -336,15 +341,24 @@ const getAddressOptions = (
 ): PartyAddressOption[] => {
   const addresses = Array.isArray(originalData?.addresses_data)
     ? (originalData.addresses_data as Array<Record<string, unknown>>)
-    : [];
+    : Array.isArray(originalData?.addresses)
+      ? (originalData.addresses as Array<Record<string, unknown>>)
+      : Array.isArray(originalData?.address_data)
+        ? (originalData.address_data as Array<Record<string, unknown>>)
+        : [];
   return addresses
-    .map((item) => ({
-      value: String(item.id ?? ""),
-      label: String(item.address ?? ""),
-      email: String(item.email ?? ""),
-      address: String(item.address ?? ""),
-      isPrimary: String(item.address_type ?? "").toLowerCase() === "primary",
-    }))
+    .map((item) => {
+      const address = String(item.address ?? item.address1 ?? "").trim();
+      const value = String(item.id ?? address ?? "").trim();
+      return {
+        value,
+        label: address,
+        email: String(item.email ?? ""),
+        address,
+        isPrimary:
+          String(item.address_type ?? "").toLowerCase() === "primary",
+      };
+    })
     .filter((item) => item.value && item.address)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))
     .map(({ value, label, email, address }) => ({
@@ -386,6 +400,7 @@ const mawbDetailsSchema = yup.object({
   job_date: yup.date().required("Job Date is required"),
   igm_no: yup.string().optional(),
   igm_date: yup.date().nullable(),
+  item_no: yup.string().optional(),
 });
 
 const carrierDetailsSchema = yup.object({
@@ -746,7 +761,15 @@ function AirImportJobCreate() {
                 ?.igm_date as string,
             ).toDate()
           : (location.state?.mawbDetails?.igm_date as Date | null) || null,
-      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      item_no:
+        (jobData as { item_no?: string } | undefined)?.item_no ||
+        location.state?.mawbDetails?.item_no ||
+        "",
+      shipper_id: String(
+        (jobData as { shipper_id?: string | number | null } | undefined)
+          ?.shipper_id ??
+          (location.state?.mawbDetails?.shipper_id || ""),
+      ),
       shipper_name:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
@@ -844,6 +867,7 @@ function AirImportJobCreate() {
       job_date: mawbDetailsForm.values.job_date || null,
       igm_no: mawbDetailsForm.values.igm_no || "",
       igm_date: mawbDetailsForm.values.igm_date || null,
+      item_no: mawbDetailsForm.values.item_no || "",
       shipper_id: mawbDetailsForm.values.shipper_id || "",
       shipper_name: mawbDetailsForm.values.shipper_name || "",
       shipper_email: mawbDetailsForm.values.shipper_email || "",
@@ -1051,11 +1075,88 @@ function AirImportJobCreate() {
                     ?.igm_date as string,
                 ).toDate()
               : null,
+          item_no: (jobData as { item_no?: string } | undefined)?.item_no || "",
+          shipper_id: String(
+            (jobData as { shipper_id?: string | number | null }).shipper_id ??
+              "",
+          )
+            .replace(/^null$/i, "")
+            .replace(/^undefined$/i, ""),
+          shipper_name: String(
+            (jobData as { shipper_name?: string | null }).shipper_name || "",
+          ),
+          shipper_email: String(
+            (jobData as { shipper_email?: string | null }).shipper_email || "",
+          ),
+          shipper_address_id: "",
+          shipper_address: String(
+            (jobData as { shipper_address?: string | null }).shipper_address ||
+              "",
+          ),
+          consignee_id: String(
+            (jobData as { consignee_id?: string | number | null }).consignee_id ??
+              "",
+          ),
+          consignee_name: String(
+            (jobData as { consignee_name?: string | null }).consignee_name || "",
+          ),
+          consignee_email: String(
+            (jobData as { consignee_email?: string | null }).consignee_email ||
+              "",
+          ),
+          consignee_address_id: "",
+          consignee_address: String(
+            (jobData as { consignee_address?: string | null })
+              .consignee_address || "",
+          ),
+          carrier_agent_id: String(
+            (jobData as { carrier_agent_id?: string | number | null })
+              .carrier_agent_id ?? "",
+          ),
+          carrier_agent_name: String(
+            (jobData as { carrier_agent_name?: string | null })
+              .carrier_agent_name || "",
+          ),
+          carrier_agent_email: String(
+            (jobData as { carrier_agent_email?: string | null })
+              .carrier_agent_email || "",
+          ),
+          carrier_agent_address_id: "",
+          carrier_agent_address: String(
+            (jobData as { carrier_agent_address?: string | null })
+              .carrier_agent_address || "",
+          ),
         };
 
         console.log("🔧 Setting MAWB form values:", mawbInitialValues);
         // Use setValues to update all fields at once
         mawbDetailsForm.setValues(mawbInitialValues);
+
+        {
+          const savedShipperAddr = String(
+            (jobData as { shipper_address?: string | null }).shipper_address ||
+              "",
+          ).trim();
+          const savedShipperEmail = String(
+            (jobData as { shipper_email?: string | null }).shipper_email || "",
+          );
+          if (savedShipperAddr) {
+            setShipperAddressOptions([
+              {
+                value: savedShipperAddr,
+                label: savedShipperAddr,
+                email: savedShipperEmail,
+                address: savedShipperAddr,
+              },
+            ]);
+            setShipperAddressSearch(savedShipperAddr);
+            setShipperAddressCustom(true);
+          } else {
+            setShipperAddressOptions([]);
+            setShipperAddressSearch("");
+            setShipperAddressCustom(false);
+          }
+        }
 
         console.log(
           "✅ MAWB Details initialized - Form values after setValues:",
@@ -1335,7 +1436,21 @@ function AirImportJobCreate() {
                 forwarder_email: house.forwarder_email
                   ? String(house.forwarder_email)
                   : "",
-                cha_name: house.cha_name ? String(house.cha_name) : "",
+              billing_customer_id:
+                house.billing_customer_id != null &&
+                house.billing_customer_id !== undefined
+                  ? Number(house.billing_customer_id)
+                  : null,
+              billing_customer_name: house.billing_customer_name
+                ? String(house.billing_customer_name)
+                : "",
+              billing_customer_address: house.billing_customer_address
+                ? String(house.billing_customer_address)
+                : "",
+              billing_customer_email: house.billing_customer_email
+                ? String(house.billing_customer_email)
+                : "",
+              cha_name: house.cha_name ? String(house.cha_name) : "",
                 cha_address: house.cha_address ? String(house.cha_address) : "",
                 shipper_code: house.shipper_code
                   ? String(house.shipper_code)
@@ -1398,7 +1513,6 @@ function AirImportJobCreate() {
                 note: (house as { note?: unknown }).note
                   ? String((house as { note?: unknown }).note)
                   : "",
-                item_no: house.item_no ? String(house.item_no) : "",
                 sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
                 ref_no: house.ref_no ? String(house.ref_no) : "",
                 shipment_terms_code: house.shipment_terms_code
@@ -2182,6 +2296,7 @@ function AirImportJobCreate() {
               eta: savedMawbDetails.eta,
               igm_no: savedMawbDetails.igm_no,
               igm_date: savedMawbDetails.igm_date,
+              item_no: savedMawbDetails.item_no,
             })
           : null;
 
@@ -2220,6 +2335,13 @@ function AirImportJobCreate() {
               dayjs(savedMawbDetails.igm_date).isValid()
                 ? dayjs(savedMawbDetails.igm_date).toDate()
                 : mawbDetailsForm.values.igm_date || null,
+            item_no:
+              (savedMawbDetails as { item_no?: string } | undefined)?.item_no !=
+              null
+                ? String(
+                    (savedMawbDetails as { item_no?: string }).item_no,
+                  )
+                : mawbDetailsForm.values.item_no || "",
             shipper_id:
               (savedMawbDetails as { shipper_id?: string } | undefined)
                 ?.shipper_id || "",
@@ -2475,6 +2597,7 @@ function AirImportJobCreate() {
 
       navigate(`${jobModuleBasePath}/house-create`, {
         state: {
+          fromHouseCreate: true,
           hawbDetails: hawbDetails,
           // Support legacy housingDetails key for backward compatibility
           housingDetails: hawbDetails,
@@ -3032,6 +3155,9 @@ function AirImportJobCreate() {
             ? dayjs(mawbDetailsForm.values.igm_date).format("YYYY-MM-DD")
             : null
           : null,
+        item_no: mawbDetailsForm.values.item_no
+          ? mawbDetailsForm.values.item_no.trim()
+          : null,
         carrier_code: carrierDetailsForm.values.carrier_code,
         flightno: carrierDetailsForm.values.flight_number || null,
         mawb_no: carrierDetailsForm.values.mawb_number || null,
@@ -3121,6 +3247,10 @@ function AirImportJobCreate() {
           forwarder_name: hawb.forwarder_name || "",
           forwarder_address: hawb.forwarder_address || "",
           forwarder_email: hawb.forwarder_email || "",
+          billing_customer_id: hawb.billing_customer_id ?? null,
+          billing_customer_name: hawb.billing_customer_name || "",
+          billing_customer_address: hawb.billing_customer_address || "",
+          billing_customer_email: hawb.billing_customer_email || "",
           cha_name: (hawb as { cha_name?: string }).cha_name || null,
           cha_address: (hawb as { cha_address?: string }).cha_address || null,
           shipper_name: hawb.shipper_name,
@@ -3140,7 +3270,6 @@ function AirImportJobCreate() {
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
           note: hawb.note || "",
-          item_no: (hawb as { item_no?: string }).item_no ?? "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
           ...(hawb.shipment_terms_code != null &&
@@ -4052,6 +4181,21 @@ function AirImportJobCreate() {
                   error={mawbDetailsForm.errors.igm_no}
                 />
               </Grid.Col>
+              <Grid.Col span={3}>
+                <FormTextInput
+                  format="capital"
+                  label="Item Number"
+                  placeholder="Enter Item Number"
+                  value={mawbDetailsForm.values.item_no}
+                  onChange={(e) =>
+                    mawbDetailsForm.setFieldValue(
+                      "item_no",
+                      e.currentTarget.value,
+                    )
+                  }
+                  error={mawbDetailsForm.errors.item_no}
+                />
+              </Grid.Col>
 
               <Grid.Col span={3}>
                 <SingleDateInput
@@ -4162,26 +4306,28 @@ function AirImportJobCreate() {
                 </Text>
               </Grid.Col>
               <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Shipper Name"
+                <ImportMasterShipperNameField
+                  key={`air-import-master-shipper-${jobData?.id ?? "new"}-${String(partyDetailsForm.values.shipper_id || "none")}`}
+                  size="sm"
                   dropdownZIndex={1000}
-                  apiEndpoint={URL.shipper}
-                  placeholder="Type shipper name"
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.id ?? ""),
-                    label: String(item.customer_name ?? ""),
-                  })}
-                  value={partyDetailsForm.values.shipper_id || null}
-                  displayValue={partyDetailsForm.values.shipper_name || null}
-                  onChange={(value, selectedData, originalData) => {
+                  disabled={isReadOnly}
+                  shipperId={String(partyDetailsForm.values.shipper_id || "")}
+                  shipperName={partyDetailsForm.values.shipper_name || ""}
+                  onClear={() => {
+                    partyDetailsForm.setFieldValue("shipper_id", "");
+                    partyDetailsForm.setFieldValue("shipper_name", "");
+                    partyDetailsForm.setFieldValue("shipper_email", "");
+                    partyDetailsForm.setFieldValue("shipper_address_id", "");
+                    partyDetailsForm.setFieldValue("shipper_address", "");
+                    setShipperAddressOptions([]);
+                    setShipperAddressSearch("");
+                    setShipperAddressCustom(false);
+                  }}
+                  onSelect={(id, name, originalData) => {
                     const options = getAddressOptions(originalData);
                     const primary = options[0];
-                    partyDetailsForm.setFieldValue("shipper_id", value || "");
-                    partyDetailsForm.setFieldValue(
-                      "shipper_name",
-                      selectedData?.label || "",
-                    );
+                    partyDetailsForm.setFieldValue("shipper_id", id);
+                    partyDetailsForm.setFieldValue("shipper_name", name);
                     partyDetailsForm.setFieldValue(
                       "shipper_email",
                       primary?.email || "",
@@ -4194,18 +4340,14 @@ function AirImportJobCreate() {
                       "shipper_address",
                       primary?.address || "",
                     );
-                    if (!value) {
-                      partyDetailsForm.setFieldValue("shipper_name", "");
-                      partyDetailsForm.setFieldValue("shipper_email", "");
-                      partyDetailsForm.setFieldValue("shipper_address_id", "");
-                      partyDetailsForm.setFieldValue("shipper_address", "");
-                    }
-                    setShipperAddressOptions(value ? options : []);
-                    setShipperAddressSearch(value ? primary?.label || "" : "");
+                    setShipperAddressOptions(options);
+                    setShipperAddressSearch(primary?.label || "");
                     setShipperAddressCustom(false);
                   }}
-                  minSearchLength={2}
-                  returnOriginalData={true}
+                  onFreeText={(name) => {
+                    partyDetailsForm.setFieldValue("shipper_id", "");
+                    partyDetailsForm.setFieldValue("shipper_name", name);
+                  }}
                 />
               </Grid.Col>
               <Grid.Col span={4}>
@@ -4277,6 +4419,7 @@ function AirImportJobCreate() {
                           "shipper_address",
                           value,
                         );
+                        partyDetailsForm.setFieldValue("shipper_email", "");
                       }
                     }}
                     onChange={(value) => {
@@ -4291,12 +4434,10 @@ function AirImportJobCreate() {
                         "shipper_address",
                         selected?.address || "",
                       );
-                      if (value) {
-                        partyDetailsForm.setFieldValue(
-                          "shipper_email",
-                          selected?.email || "",
-                        );
-                      }
+                      partyDetailsForm.setFieldValue(
+                        "shipper_email",
+                        value ? selected?.email || "" : "",
+                      );
                       setShipperAddressSearch(selected?.label || "");
                       setShipperAddressCustom(false);
                     }}

@@ -242,10 +242,8 @@ export async function resolveGlobalSearchItemLocation(
   };
 
   if (module === "job") {
-    const jobId =
-      (record as Record<string, unknown>)?.id ??
-      (record as Record<string, unknown>)?.job_id ??
-      id;
+    // Pass job payload only — job pages fetch by jobId only when job is absent.
+    // Including both caused Inland Import/Export to refetch and remount on open.
     // Closed jobs stay on /edit so Attach Documents can persist.
     // Job pages already lock all other fields when status is CLOSED.
     return {
@@ -253,7 +251,6 @@ export async function resolveGlobalSearchItemLocation(
       state: {
         ...baseState,
         job: record,
-        jobId,
       },
     };
   }

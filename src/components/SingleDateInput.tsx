@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { DateInput } from "@mantine/dates";
 import {
   IconCalendar,
   IconChevronRight,
   IconChevronLeft,
 } from "@tabler/icons-react";
+import dayjs from "dayjs";
 import useDateFormat from "../hooks/useDateFormat";
 import { parseTypedDate } from "../utils/dateFormat";
 
@@ -29,6 +30,16 @@ export interface SingleDateInputProps {
   styles?: Record<string, React.CSSProperties & Record<string, unknown>>;
 }
 
+/** Mantine DateInput requires a real Date; nav/API may pass ISO strings. */
+const toDateOrNull = (value: unknown): Date | null => {
+  if (value == null || value === "") return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const parsed = dayjs(value as string | number | Date);
+  return parsed.isValid() ? parsed.toDate() : null;
+};
+
 const SingleDateInput: React.FC<SingleDateInputProps> = ({
   label,
   placeholder,
@@ -47,6 +58,9 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   styles: stylesOverride,
 }) => {
   const dateFormat = useDateFormat();
+  const dateValue = useMemo(() => toDateOrNull(value), [value]);
+  const minDateValue = useMemo(() => toDateOrNull(minDate), [minDate]);
+  const maxDateValue = useMemo(() => toDateOrNull(maxDate), [maxDate]);
 
   // Helper to check if date is selected
   const isDateSelected = (
@@ -67,10 +81,10 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       // Allow deselection if clicking the same date
       if (
         date &&
-        value &&
-        date.getDate() === value.getDate() &&
-        date.getMonth() === value.getMonth() &&
-        date.getFullYear() === value.getFullYear()
+        dateValue &&
+        date.getDate() === dateValue.getDate() &&
+        date.getMonth() === dateValue.getMonth() &&
+        date.getFullYear() === dateValue.getFullYear()
       ) {
         onChange(null);
         return;
@@ -158,7 +172,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       key={`single-date-${dateFormat}`}
       label={label}
       placeholder={placeholder ?? dateFormat}
-      value={value}
+      value={dateValue}
       onChange={handleDateChange}
       valueFormat={dateFormat}
       dateParser={(input) => parseTypedDate(input, dateFormat)}
@@ -172,14 +186,14 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       hideOutsideDates
       disabled={disabled}
       readOnly={readOnly}
-      minDate={minDate}
-      maxDate={maxDate}
+      minDate={minDateValue ?? undefined}
+      maxDate={maxDateValue ?? undefined}
       error={error}
       withAsterisk={withAsterisk}
       title={title}
       classNames={classNames}
       getDayProps={(date) => {
-        const isSelected = isDateSelected(date, value);
+        const isSelected = isDateSelected(date, dateValue);
         return {
           onMouseEnter: (e: React.MouseEvent) => {
             const target = e.currentTarget as HTMLElement;
@@ -214,7 +228,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
         };
       }}
       getYearControlProps={(year) => {
-        const isSelected = isDateSelected(year, value);
+        const isSelected = isDateSelected(year, dateValue);
         return {
           onMouseEnter: (e: React.MouseEvent) => {
             const target = e.currentTarget as HTMLElement;
@@ -252,7 +266,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
         };
       }}
       getMonthControlProps={(month) => {
-        const isSelected = isDateSelected(month, value);
+        const isSelected = isDateSelected(month, dateValue);
         return {
           onMouseEnter: (e: React.MouseEvent) => {
             const target = e.currentTarget as HTMLElement;
