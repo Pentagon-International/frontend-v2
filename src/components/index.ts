@@ -3,6 +3,7 @@ import Navbar from "./Navbar/Navbar";
 import SearchableSelect from "./SearchableSelect";
 import CustomerNameSelect from "./CustomerNameSelect";
 import Dropdown from "./Dropdown";
+import PartyAddressField from "./PartyAddressField";
 import FormTextInput from "./FormTextInput";
 import FormTextArea from "./FormTextArea";
 import FormMultiSelect from "./FormMultiSelect";
@@ -102,6 +103,7 @@ export {
   SearchableSelect,
   CustomerNameSelect,
   Dropdown,
+  PartyAddressField,
   FormTextInput,
   FormTextArea,
   FormMultiSelect,

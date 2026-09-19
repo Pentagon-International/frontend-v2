@@ -1,10 +1,7 @@
 import { useRef, useEffect, useMemo, useState } from "react";
 import { Select, SelectProps } from "@mantine/core";
 
-type DropdownProps = Omit<
-  SelectProps,
-  "onKeyDown" | "onFocus" | "onBlur"
-> & {
+type DropdownProps = Omit<SelectProps, "onKeyDown"> & {
   searchable?: boolean;
   dropdownZIndex?: number;
   styles?: Record<string, any>; // SAME API as SearchableSelect
@@ -27,6 +24,8 @@ export default function Dropdown({
   onSearchChange: onSearchChangeProp,
   searchValue: searchValueProp,
   comboboxProps: comboboxPropsProp,
+  onFocus: onFocusProp,
+  onBlur: onBlurProp,
   ...props
 }: DropdownProps) {
   const [activeIndex, setActiveIndex] = useState<number>(-1);
@@ -194,9 +193,10 @@ export default function Dropdown({
     } else {
       setActiveIndex(-1);
     }
+    onFocusProp?.(e);
   };
 
-  const handleBlur = () => {
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     // Portal dropdown clicks blur the input before onChange. If a controlled
     // value already matches an option, keep it — never snap back to first/primary.
     if (!selectedItem && value) {
@@ -206,6 +206,7 @@ export default function Dropdown({
         setSearch(matched.label);
         searchRef.current = matched.label;
         setIsSearchMode(false);
+        onBlurProp?.(e);
         return;
       }
     }
@@ -218,12 +219,14 @@ export default function Dropdown({
       handleChange(pick.value);
       setSearch(pick.label);
       setIsSearchMode(false);
+      onBlurProp?.(e);
       return;
     }
     if (selectedItem && search !== selectedItem.label) {
       setSearch(selectedItem.label);
       setIsSearchMode(false);
     }
+    onBlurProp?.(e);
   };
 
   // When value is cleared (null/empty), show empty so placeholder appears instead of stale label

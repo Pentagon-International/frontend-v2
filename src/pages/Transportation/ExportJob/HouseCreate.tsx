@@ -52,6 +52,7 @@ import { apiCallProtected } from "../../../api/axios";
 import {
   SearchableSelect,
   Dropdown,
+  PartyAddressField,
   ToastNotification,
   SingleDateInput,
   CustomerNameSelect,
@@ -72,8 +73,6 @@ import {
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
-  shipmentPartyAddressMatchesSearch,
-  shouldUseCustomShipmentPartyAddress,
 } from "../../../utils/shipmentParty";
 import { applyShipmentTermsSelection } from "../../../utils/shipmentTermsFreight";
 import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
@@ -4246,53 +4245,23 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {(() => {
-                  const shipperAddressEditable =
-                    isNewCustomerSelection(shipperSelection) ||
-                    shipperAddressOptions.length === 0;
-                  if (shipperAddressEditable) {
-                    return (
-                      <FormTextArea
-                        label="Shipper Address"
-                        placeholder="Enter shipper address"
-                        minRows={2}
-                        size="sm"
-                        radius="sm"
-                        value={form.values.shipper_address || ""}
-                        onChange={(e) => {
-                          form.setFieldValue(
-                            "shipper_address",
-                            e.currentTarget.value,
-                          );
-                        }}
-                        error={form.errors.shipper_address}
-                      />
-                    );
-                  }
-                  return (
-                    <Dropdown
-                      key={`shipper-address-${form.values.shipper_code || "none"}`}
-                      label="Shipper Address"
-                      placeholder="Select shipper address"
-                      searchable
-                      data={shipperAddressOptions}
-                      value={form.values.shipper_address || ""}
-                      onChange={(value) => {
-                        form.setFieldValue("shipper_address", value || "");
-                        if (value) {
-                          const selected = shipperAddressOptions.find(
-                            (item) => item.value === value,
-                          );
-                          form.setFieldValue(
-                            "shipper_email",
-                            selected?.email || "",
-                          );
-                        }
-                      }}
-                      error={form.errors.shipper_address}
-                    />
-                  );
-                })()}
+                <PartyAddressField
+                  label="Shipper Address"
+                  placeholder="Enter shipper address"
+                  selectPlaceholder="Select shipper address"
+                  value={form.values.shipper_address || ""}
+                  options={shipperAddressOptions}
+                  partyKey={form.values.shipper_code || form.values.shipper_name || ""}
+                  onChange={(next, option) => {
+                    form.setFieldValue("shipper_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("shipper_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("shipper_email", "");
+                    }
+                  }}
+                  error={form.errors.shipper_address}
+                />
               </Grid.Col>
             </Grid>
 
@@ -4411,68 +4380,25 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {shouldUseCustomShipmentPartyAddress(
-                  consigneeAddressCustom,
-                  form.values.consignee_address || "",
-                  consigneeAddressOptions,
-                ) ? (
-                  <FormTextArea
-                    label="Consignee Address"
-                    placeholder="Enter consignee address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.consignee_address || ""}
-                    onChange={(e) => {
-                      const nextValue = e.currentTarget.value;
-                      form.setFieldValue("consignee_address", nextValue);
-                      if (!nextValue.trim()) {
-                        setConsigneeAddressCustom(false);
-                        setConsigneeAddressSearch("");
-                      }
-                    }}
-                    error={form.errors.consignee_address}
-                  />
-                ) : (
-                  <Dropdown
-                    key={`consignee-address-${form.values.consignee_code || "none"}`}
-                    label="Consignee Address"
-                    placeholder="Select consignee address"
-                    searchable
-                    data={consigneeAddressOptions}
-                    value={form.values.consignee_address || ""}
-                    searchValue={consigneeAddressSearch}
-                    onSearchChange={(value) => {
-                      setConsigneeAddressSearch(value);
-                      if (
-                        value.trim() &&
-                        !shipmentPartyAddressMatchesSearch(
-                          consigneeAddressOptions,
-                          value,
-                        )
-                      ) {
-                        setConsigneeAddressCustom(true);
-                        form.setFieldValue("consignee_address", value);
-                        form.setFieldValue("consignee_email", "");
-                      }
-                    }}
-                    onChange={(value) => {
-                      form.setFieldValue("consignee_address", value || "");
-                      if (value) {
-                        const selected = consigneeAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "consignee_email",
-                          selected?.email || "",
-                        );
-                      }
-                      setConsigneeAddressSearch(value || "");
-                      setConsigneeAddressCustom(false);
-                    }}
-                    error={form.errors.consignee_address}
-                  />
-                )}
+                <PartyAddressField
+                  label="Consignee Address"
+                  placeholder="Enter consignee address"
+                  selectPlaceholder="Select consignee address"
+                  value={form.values.consignee_address || ""}
+                  options={consigneeAddressOptions}
+                  partyKey={form.values.consignee_code || form.values.consignee_name || ""}
+                  onChange={(next, option) => {
+                    form.setFieldValue("consignee_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("consignee_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("consignee_email", "");
+                    }
+                    setConsigneeAddressCustom(false);
+                    setConsigneeAddressSearch(next || "");
+                  }}
+                  error={form.errors.consignee_address}
+                />
               </Grid.Col>
             </Grid>
 
@@ -4594,44 +4520,23 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {forwarderAddressOptions.length > 0 ? (
-                  <Dropdown
-                    label="Forwarder Address"
-                    placeholder="Select forwarder address"
-                    searchable
-                    data={forwarderAddressOptions}
-                    value={form.values.forwarder_address || ""}
-                    onChange={(value) => {
-                      form.setFieldValue("forwarder_address", value || "");
-                      if (value) {
-                        const selected = forwarderAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "forwarder_email",
-                          selected?.email || "",
-                        );
-                      }
-                    }}
-                    error={form.errors.forwarder_address}
-                  />
-                ) : (
-                  <FormTextArea
-                    label="Forwarder Address"
-                    placeholder="Enter Forwarder Address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.forwarder_address}
-                    onChange={(e) => {
-                      form.setFieldValue(
-                        "forwarder_address",
-                        e.currentTarget.value,
-                      );
-                    }}
-                    error={form.errors.forwarder_address}
-                  />
-                )}
+                <PartyAddressField
+                  label="Forwarder Address"
+                  placeholder="Enter Forwarder Address"
+                  selectPlaceholder="Select forwarder address"
+                  value={form.values.forwarder_address || ""}
+                  options={forwarderAddressOptions}
+                  partyKey={form.values.forwarder_id != null ? String(form.values.forwarder_id) : (form.values.forwarder_name || "")}
+                  onChange={(next, option) => {
+                    form.setFieldValue("forwarder_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("forwarder_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("forwarder_email", "");
+                    }
+                  }}
+                  error={form.errors.forwarder_address}
+                />
               </Grid.Col>
             </Grid>
 
@@ -4754,44 +4659,23 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {billingCustomerAddressOptions.length > 0 ? (
-                  <Dropdown
-                    label="Billing Customer Address"
-                    placeholder="Select billing customer address"
-                    searchable
-                    data={billingCustomerAddressOptions}
-                    value={form.values.billing_customer_address || ""}
-                    onChange={(value) => {
-                      form.setFieldValue("billing_customer_address", value || "");
-                      if (value) {
-                        const selected = billingCustomerAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "billing_customer_email",
-                          selected?.email || "",
-                        );
-                      }
-                    }}
-                    error={form.errors.billing_customer_address}
-                  />
-                ) : (
-                  <FormTextArea
-                    label="Billing Customer Address"
-                    placeholder="Enter Billing Customer Address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.billing_customer_address}
-                    onChange={(e) => {
-                      form.setFieldValue(
-                        "billing_customer_address",
-                        e.currentTarget.value,
-                      );
-                    }}
-                    error={form.errors.billing_customer_address}
-                  />
-                )}
+                <PartyAddressField
+                  label="Billing Customer Address"
+                  placeholder="Enter Billing Customer Address"
+                  selectPlaceholder="Select billing customer address"
+                  value={form.values.billing_customer_address || ""}
+                  options={billingCustomerAddressOptions}
+                  partyKey={form.values.billing_customer_id != null ? String(form.values.billing_customer_id) : (form.values.billing_customer_name || "")}
+                  onChange={(next, option) => {
+                    form.setFieldValue("billing_customer_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("billing_customer_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("billing_customer_email", "");
+                    }
+                  }}
+                  error={form.errors.billing_customer_address}
+                />
               </Grid.Col>
             </Grid>
 
@@ -4860,13 +4744,13 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={8}>
-                <FormTextArea
+                <PartyAddressField
                   label="CHA Address"
                   placeholder="Enter CHA Address"
-                  minRows={2}
-                  value={form.values.cha_address}
-                  onChange={(e) => {
-                    form.setFieldValue("cha_address", e.currentTarget.value);
+                  value={form.values.cha_address || ""}
+                  options={[]}
+                  onChange={(next) => {
+                    form.setFieldValue("cha_address", next);
                   }}
                 />
               </Grid.Col>
@@ -4957,41 +4841,23 @@ function HouseCreate() {
               </Grid.Col>
 
               <Grid.Col span={4}>
-                {agentAddressOptions.length > 0 ? (
-                  <Dropdown
-                    label="Destination Agent Address"
-                    placeholder="Select destination agent address"
-                    searchable
-                    data={agentAddressOptions}
-                    value={form.values.agent_address || ""}
-                    onChange={(value) => {
-                      form.setFieldValue("agent_address", value || "");
-                      if (value) {
-                        const selected = agentAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue("agent_email", selected?.email || "");
-                      }
-                    }}
-                    error={form.errors.agent_address}
-                  />
-                ) : (
-                  <FormTextArea
-                    label="Destination Agent Address"
-                    placeholder="Enter Destination Agent Address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.agent_address}
-                    onChange={(e) => {
-                      form.setFieldValue(
-                        "agent_address",
-                        e.currentTarget.value,
-                      );
-                    }}
-                    error={form.errors.agent_address}
-                  />
-                )}
+                <PartyAddressField
+                  label="Destination Agent Address"
+                  placeholder="Enter Destination Agent Address"
+                  selectPlaceholder="Select destination agent address"
+                  value={form.values.agent_address || ""}
+                  options={agentAddressOptions}
+                  partyKey={form.values.agent_name || ""}
+                  onChange={(next, option) => {
+                    form.setFieldValue("agent_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("agent_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("agent_email", "");
+                    }
+                  }}
+                  error={form.errors.agent_address}
+                />
               </Grid.Col>
             </Grid>
 
@@ -5112,71 +4978,25 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {shouldUseCustomShipmentPartyAddress(
-                  notifyCustomerAddressCustom,
-                  form.values.notify1_customer_address || "",
-                  notifyCustomerAddressOptions,
-                ) ? (
-                  <FormTextArea
-                    label="Notify Customer 1 Address"
-                    placeholder="Enter Notify Customer 1 Address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.notify1_customer_address}
-                    onChange={(e) => {
-                      const nextValue = e.currentTarget.value;
-                      form.setFieldValue("notify1_customer_address", nextValue);
-                      if (!nextValue.trim()) {
-                        setNotifyCustomerAddressCustom(false);
-                        setNotifyCustomerAddressSearch("");
-                      }
-                    }}
-                    error={form.errors.notify1_customer_address}
-                  />
-                ) : (
-                  <Dropdown
-                    key={`notify1-address-${notifyCustomerSelectedId || "none"}`}
-                    label="Notify Customer 1 Address"
-                    placeholder="Select notify address"
-                    searchable
-                    data={notifyCustomerAddressOptions}
-                    value={form.values.notify1_customer_address || ""}
-                    searchValue={notifyCustomerAddressSearch}
-                    onSearchChange={(value) => {
-                      setNotifyCustomerAddressSearch(value);
-                      if (
-                        value.trim() &&
-                        !shipmentPartyAddressMatchesSearch(
-                          notifyCustomerAddressOptions,
-                          value,
-                        )
-                      ) {
-                        setNotifyCustomerAddressCustom(true);
-                        form.setFieldValue("notify1_customer_address", value);
-                        form.setFieldValue("notify1_customer_email", "");
-                      }
-                    }}
-                    onChange={(value) => {
-                      form.setFieldValue(
-                        "notify1_customer_address",
-                        value || "",
-                      );
-                      if (value) {
-                        const selected = notifyCustomerAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "notify1_customer_email",
-                          selected?.email || "",
-                        );
-                      }
-                      setNotifyCustomerAddressSearch(value || "");
-                      setNotifyCustomerAddressCustom(false);
-                    }}
-                    error={form.errors.notify1_customer_address}
-                  />
-                )}
+                <PartyAddressField
+                  label="Notify Customer 1 Address"
+                  placeholder="Enter Notify Customer 1 Address"
+                  selectPlaceholder="Select notify address"
+                  value={form.values.notify1_customer_address || ""}
+                  options={notifyCustomerAddressOptions}
+                  partyKey={notifyCustomerSelectedId || form.values.notify1_customer_name || ""}
+                  onChange={(next, option) => {
+                    form.setFieldValue("notify1_customer_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("notify1_customer_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("notify1_customer_email", "");
+                    }
+                    setNotifyCustomerAddressCustom(false);
+                    setNotifyCustomerAddressSearch(next || "");
+                  }}
+                  error={form.errors.notify1_customer_address}
+                />
               </Grid.Col>
             </Grid>
 
@@ -5297,71 +5117,25 @@ function HouseCreate() {
                 />
               </Grid.Col>
               <Grid.Col span={4}>
-                {shouldUseCustomShipmentPartyAddress(
-                  notify2CustomerAddressCustom,
-                  form.values.notify2_customer_address || "",
-                  notify2CustomerAddressOptions,
-                ) ? (
-                  <FormTextArea
-                    label="Notify Customer 2 Address"
-                    placeholder="Enter Notify Customer 2 Address"
-                    minRows={2}
-                    size="sm"
-                    radius="sm"
-                    value={form.values.notify2_customer_address}
-                    onChange={(e) => {
-                      const nextValue = e.currentTarget.value;
-                      form.setFieldValue("notify2_customer_address", nextValue);
-                      if (!nextValue.trim()) {
-                        setNotify2CustomerAddressCustom(false);
-                        setNotify2CustomerAddressSearch("");
-                      }
-                    }}
-                    error={form.errors.notify2_customer_address}
-                  />
-                ) : (
-                  <Dropdown
-                    key={`notify2-address-${notify2CustomerSelectedId || "none"}`}
-                    label="Notify Customer 2 Address"
-                    placeholder="Select notify address"
-                    searchable
-                    data={notify2CustomerAddressOptions}
-                    value={form.values.notify2_customer_address || ""}
-                    searchValue={notify2CustomerAddressSearch}
-                    onSearchChange={(value) => {
-                      setNotify2CustomerAddressSearch(value);
-                      if (
-                        value.trim() &&
-                        !shipmentPartyAddressMatchesSearch(
-                          notify2CustomerAddressOptions,
-                          value,
-                        )
-                      ) {
-                        setNotify2CustomerAddressCustom(true);
-                        form.setFieldValue("notify2_customer_address", value);
-                        form.setFieldValue("notify2_customer_email", "");
-                      }
-                    }}
-                    onChange={(value) => {
-                      form.setFieldValue(
-                        "notify2_customer_address",
-                        value || "",
-                      );
-                      if (value) {
-                        const selected = notify2CustomerAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "notify2_customer_email",
-                          selected?.email || "",
-                        );
-                      }
-                      setNotify2CustomerAddressSearch(value || "");
-                      setNotify2CustomerAddressCustom(false);
-                    }}
-                    error={form.errors.notify2_customer_address}
-                  />
-                )}
+                <PartyAddressField
+                  label="Notify Customer 2 Address"
+                  placeholder="Enter Notify Customer 2 Address"
+                  selectPlaceholder="Select notify address"
+                  value={form.values.notify2_customer_address || ""}
+                  options={notify2CustomerAddressOptions}
+                  partyKey={notify2CustomerSelectedId || form.values.notify2_customer_name || ""}
+                  onChange={(next, option) => {
+                    form.setFieldValue("notify2_customer_address", next);
+                    if (option?.email) {
+                      form.setFieldValue("notify2_customer_email", option.email);
+                    } else if (!next) {
+                      form.setFieldValue("notify2_customer_email", "");
+                    }
+                    setNotify2CustomerAddressCustom(false);
+                    setNotify2CustomerAddressSearch(next || "");
+                  }}
+                  error={form.errors.notify2_customer_address}
+                />
               </Grid.Col>
             </Grid>
 
