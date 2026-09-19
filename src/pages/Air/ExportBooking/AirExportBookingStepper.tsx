@@ -5167,7 +5167,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SearchableSelect
                     label="Billing Customer Name"
                     placeholder="Type billing customer name"
-                    apiEndpoint={URL.allCustomers}
+                    apiEndpoint={URL.customer}
                     searchFields={["customer_name", "customer_code"]}
                     displayFormat={(item: Record<string, unknown>) => ({
                       value: String(item.customer_code),
