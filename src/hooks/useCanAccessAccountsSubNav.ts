@@ -1,9 +1,8 @@
 import useAuthStore from "../store/authStore";
 import { isVietnamBranchFromUser } from "../utils/nonDecimalMoneyAmount";
 import {
-  getDefaultUserBranch,
   isIndianOutstandingBranch,
-  isIndianUserFromProfile,
+  type BranchCurrencyContext,
 } from "../utils/userNumberFormat";
 
 /** Vietnam Accounts team — matched against login/display identity fields. */
@@ -78,12 +77,23 @@ function isAccountsTeamMember(
   );
 }
 
-/** India branch: default branch or profile country is India. */
+/**
+ * India branch: active working branch (`is_default`) is India.
+ * Does not use profile country — users on non-India branches keep Accounts access
+ * even when their home/profile country is India.
+ */
 export function isIndiaBranchFromUser(
   user: ReturnType<typeof useAuthStore.getState>["user"],
 ): boolean {
-  const branch = getDefaultUserBranch(user?.branches);
-  if (
+  // Login payload includes country/currency on branches; store typing is narrower.
+  const branches = user?.branches as BranchCurrencyContext[] | undefined;
+  if (!branches?.length) return false;
+
+  // Active branch is `is_default` (not `main_default` / home branch).
+  const branch =
+    branches.find((b) => b.is_default === true) ?? branches[0];
+
+  return (
     isIndianOutstandingBranch(
       branch?.country?.country_code,
       branch?.currency?.currency_code,
@@ -91,11 +101,7 @@ export function isIndiaBranchFromUser(
     String(branch?.country?.country_name ?? "")
       .toLowerCase()
       .includes("india")
-  ) {
-    return true;
-  }
-
-  return isIndianUserFromProfile(user?.country);
+  );
 }
 
 /** Vietnam branch: Accounts sub-nav is limited to the Accounts team. */
@@ -122,8 +128,9 @@ function isAdminUser(
 /**
  * Accounts module sub-nav access.
  * Admin (is_staff) users always see all Accounts modules.
- * Vietnam / India branches are otherwise limited to their Accounts teams;
- * other countries keep full access. Job-page navigation remains available for everyone.
+ * Vietnam / India restrictions apply only while the active branch is that country;
+ * users not on those Accounts teams still get full access on other branches.
+ * Job-page navigation remains available for everyone.
  */
 export function canAccessAccountsSubNav(
   user: ReturnType<typeof useAuthStore.getState>["user"],
@@ -134,6 +141,7 @@ export function canAccessAccountsSubNav(
     return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
   }
 
+  // Restrict only when the current (active) branch is India.
   if (isIndiaBranchFromUser(user)) {
     return isAccountsTeamMember(user, INDIA_ACCOUNTS_TEAM_NAMES);
   }
