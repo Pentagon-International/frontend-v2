@@ -12,9 +12,11 @@ import {
   Grid,
   Group,
   Loader,
+  MantineProvider,
   Menu,
   Modal,
   ScrollArea,
+  Select,
   SimpleGrid,
   Stack,
   Text,
@@ -37,11 +39,6 @@ import {
   IconUsers,
   IconX,
 } from "@tabler/icons-react";
-import {
-  MantineReactTable,
-  MRT_ColumnDef,
-  useMantineReactTable,
-} from "mantine-react-table";
 import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -52,7 +49,25 @@ import {
   SingleDateInput,
   ToastNotification,
 } from "../../../components";
-import PaginationBar from "../../../components/PaginationBar/PaginationBar";
+import {
+  ERPListColumnHeaderFilter,
+  ERPListFilterActionsFooter,
+  ERPListPaginationFooter,
+  ERPListScreen,
+  erpListDataRowProps,
+  erpListFilterFieldCellStyle,
+  erpListFilterUnifiedMantineStyles,
+  erpListGeistMantineTheme,
+  erpListGeistMenuDropdownStyles,
+  erpListGeistRootTypography,
+  erpListGeistSelectClassNames,
+  erpListStickyActionTdStyle,
+  erpListStickyActionThStyle,
+  erpListThStyle,
+  erpToolbarOutlineButtonStyles,
+  ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER,
+  ERP_LIST_GEIST_ROOT_CLASS,
+} from "../../../components/ERPListPage";
 import { URL } from "../../../api/serverUrls";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -65,7 +80,6 @@ import {
   rejectCustomerPan,
   updateCustomerVerification,
   type CustomerPanApprovalAddress,
-  type CustomerPanApprovalFilters,
   type CustomerPanApprovalRow,
   type RelatedCustomer,
 } from "../../../service/customerPanApproval.service";
@@ -86,6 +100,14 @@ import {
   type BranchCurrencyContext,
   type UserCountryProfile,
 } from "../../../utils/userNumberFormat";
+import {
+  buildCustomerPanListApiFilters,
+  CUSTOMER_PAN_APPROVAL_LIST_THEME,
+  CUSTOMER_PAN_STATUS_FILTER_OPTIONS,
+  customerPanStatusFilterLabel,
+  DEFAULT_CUSTOMER_PAN_LIST_FILTERS,
+  type CustomerPanListFilterState,
+} from "./customerPanApprovalListShared";
 
 export type ForeignBranchProfile = {
   isDubaiUser: boolean;
@@ -320,22 +342,11 @@ function buildCustomerVerificationPayload(
   };
 }
 
-type FilterFormState = {
-  customer_name: string;
-  status: string;
-};
+type FilterFormState = CustomerPanListFilterState;
 
-const DEFAULT_FILTERS: FilterFormState = {
-  customer_name: "",
-  status: "",
-};
+const DEFAULT_FILTERS = DEFAULT_CUSTOMER_PAN_LIST_FILTERS;
 
-const STATUS_FILTER_OPTIONS = [
-  { value: "", label: "All" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
-  { value: "active", label: "Active" },
-];
+const STATUS_FILTER_OPTIONS = CUSTOMER_PAN_STATUS_FILTER_OPTIONS;
 
 export function getStatusBadgeColor(status?: string): string {
   const normalized = String(status ?? "")
@@ -424,6 +435,91 @@ function DetailSection({
 }
 
 export type ApprovalPartyType = "customer" | "vendor" | "agent";
+
+type ApproveListRowActionsProps = {
+  item: CustomerPanApprovalRow;
+  entityLabel: string;
+  onView: (row: CustomerPanApprovalRow) => void;
+  onApprove: (row: CustomerPanApprovalRow) => void;
+  onReject: (row: CustomerPanApprovalRow) => void;
+};
+
+function ApproveListRowActions({
+  item,
+  entityLabel,
+  onView,
+  onApprove,
+  onReject,
+}: ApproveListRowActionsProps) {
+  const [menuOpened, setMenuOpened] = useState(false);
+  const isFinalized = isFinalizedCustomerStatus(item.status);
+
+  return (
+    <Menu
+      withinPortal
+      position="bottom-end"
+      shadow="sm"
+      radius="md"
+      opened={menuOpened}
+      onChange={setMenuOpened}
+      classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+      styles={erpListGeistMenuDropdownStyles}
+    >
+      <Menu.Target>
+        <ActionIcon variant="subtle" color="gray">
+          <IconDotsVertical size={16} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        {isFinalized ? (
+          <Box px={10} py={5}>
+            <UnstyledButton
+              onClick={() => {
+                setMenuOpened(false);
+                onView(item);
+              }}
+            >
+              <Group gap="sm">
+                <IconEye size={16} style={{ color: "#105476" }} />
+                <Text size="sm">View {entityLabel}</Text>
+              </Group>
+            </UnstyledButton>
+          </Box>
+        ) : (
+          <>
+            <Box px={10} py={5}>
+              <UnstyledButton
+                onClick={() => {
+                  setMenuOpened(false);
+                  onApprove(item);
+                }}
+              >
+                <Group gap="sm">
+                  <IconCheck size={16} style={{ color: "#2f9e44" }} />
+                  <Text size="sm">Approve</Text>
+                </Group>
+              </UnstyledButton>
+            </Box>
+            <Menu.Divider />
+            <Box px={10} py={5}>
+              <UnstyledButton
+                onClick={() => {
+                  setMenuOpened(false);
+                  onReject(item);
+                }}
+              >
+                <Group gap="sm">
+                  <IconX size={16} style={{ color: "#e03131" }} />
+                  <Text size="sm">Reject</Text>
+                </Group>
+              </UnstyledButton>
+            </Box>
+          </>
+        )}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
 
 export function CustomerPanApprovalDetails({
   row,
@@ -1814,10 +1910,12 @@ export default function ApproveCustomerPanMaster({
     () => getForeignBranchProfile(user?.country, user?.branches),
     [user?.country, user?.branches],
   );
+  const isAdminUser = Boolean(user?.is_staff);
   const hasCustomerApprovalScreen = Boolean(
     user?.screen_permissions?.customer_approval_screen,
   );
-  const canAccessApproval = hasCustomerApprovalScreen;
+  // Admins bypass maker/checker mapping — full access to approve pages.
+  const canAccessApproval = isAdminUser || hasCustomerApprovalScreen;
   const entityLabel =
     partyType === "vendor"
       ? "Vendor"
@@ -1827,6 +1925,11 @@ export default function ApproveCustomerPanMaster({
   const entityLabelLower = partyType;
 
   const queryClient = useQueryClient();
+  const erpTheme = CUSTOMER_PAN_APPROVAL_LIST_THEME;
+  const filterFieldStyles = useMemo(
+    () => erpListFilterUnifiedMantineStyles(erpTheme),
+    [erpTheme],
+  );
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
@@ -1851,6 +1954,7 @@ export default function ApproveCustomerPanMaster({
     useState<FilterFormState>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
     useState<FilterFormState>(DEFAULT_FILTERS);
+  const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
   const [similarModalOpen, setSimilarModalOpen] = useState(false);
   const [similarLoading, setSimilarLoading] = useState(false);
   const [similarCustomers, setSimilarCustomers] = useState<RelatedCustomer[]>(
@@ -1858,15 +1962,13 @@ export default function ApproveCustomerPanMaster({
   );
   const [similarSearchName, setSimilarSearchName] = useState("");
 
-  const apiFilters = useMemo<CustomerPanApprovalFilters>(
-    () => ({
-      customer_name:
-        appliedFilters.customer_name.trim() ||
-        debouncedSearch.trim() ||
-        undefined,
-      status: appliedFilters.status.trim() || undefined,
-      customer_type: partyType,
-    }),
+  const apiFilters = useMemo(
+    () =>
+      buildCustomerPanListApiFilters({
+        appliedFilters,
+        debouncedSearch,
+        partyType,
+      }),
     [appliedFilters, partyType, debouncedSearch],
   );
 
@@ -1883,6 +1985,8 @@ export default function ApproveCustomerPanMaster({
       pageSize,
       apiFilters.customer_name,
       apiFilters.status,
+      apiFilters.created_by,
+      apiFilters.approved_by,
     ],
     queryFn: async () => {
       const index = pageIndex * pageSize;
@@ -1908,20 +2012,18 @@ export default function ApproveCustomerPanMaster({
     setPageIndex(0);
   }, [debouncedSearch]);
 
-  const rawRows = listResult?.rows ?? [];
-
-  const displayRows = useMemo<TableRow[]>(
-    () =>
-      rawRows.map((row, index) => ({
-        ...row,
-        sno: row.sno ?? pageIndex * pageSize + index + 1,
-      })),
-    [rawRows, pageIndex, pageSize],
-  );
+  const displayRows = useMemo<TableRow[]>(() => {
+    const rawRows = listResult?.rows ?? [];
+    return rawRows.map((row, index) => ({
+      ...row,
+      sno: row.sno ?? pageIndex * pageSize + index + 1,
+    }));
+  }, [listResult?.rows, pageIndex, pageSize]);
 
   const applyFilters = () => {
     setAppliedFilters({ ...draftFilters });
     setPageIndex(0);
+    setShowFilters(false);
   };
 
   const clearFilters = () => {
@@ -1930,6 +2032,26 @@ export default function ApproveCustomerPanMaster({
     setSearch("");
     setPageIndex(0);
   };
+
+  const commitHeaderFilters = useCallback(
+    (updater: (prev: FilterFormState) => FilterFormState) => {
+      setAppliedFilters((prev) => {
+        const next = updater(prev);
+        setDraftFilters(next);
+        return next;
+      });
+      setPageIndex(0);
+    },
+    [],
+  );
+
+  const openHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId(id);
+  }, []);
+
+  const collapseHeaderEditor = useCallback((id: string) => {
+    setEditingHeaderId((current) => (current === id ? null : current));
+  }, []);
 
   const handleShowSimilarCustomers = useCallback(
     async (customerName: string) => {
@@ -1953,15 +2075,6 @@ export default function ApproveCustomerPanMaster({
     },
     [],
   );
-
-  const handlePageSizeChange = (newPageSize: number) => {
-    setPageSize(newPageSize);
-    setPageIndex(0);
-  };
-
-  const handlePageChange = (newPage: number) => {
-    setPageIndex(newPage - 1);
-  };
 
   const refreshList = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: ["customerPanPending"] });
@@ -2089,249 +2202,54 @@ export default function ApproveCustomerPanMaster({
     }
   };
 
-  const columns = useMemo<MRT_ColumnDef<TableRow>[]>(
-    () => [
-      {
-        accessorKey: "sno",
-        header: "S.No",
-        size: 60,
-        minSize: 50,
-        maxSize: 70,
-        enableColumnFilter: false,
-        enableSorting: false,
-      },
-      {
-        accessorKey: "customer_name",
-        header: `${entityLabel} Name`,
-        size: 300,
-        Cell: ({ row }) => {
-          const customerName = row.original.customer_name;
-          return (
-            <Group gap={4} wrap="nowrap" align="flex-start">
-              <Text
-                size="sm"
-                fw={600}
-                c="#105476"
-                lineClamp={2}
-                style={{ flex: 1, minWidth: 0 }}
-              >
-                {customerName || "—"}
-              </Text>
-              {customerName && (
-                <Tooltip
-                  label={`Show similar ${entityLabelLower}s`}
-                  withArrow
-                >
-                  <ActionIcon
-                    variant="subtle"
-                    color="#105476"
-                    size="sm"
-                    aria-label={`Show similar ${entityLabelLower}s`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleShowSimilarCustomers(customerName);
-                    }}
-                  >
-                    <IconUsers size={14} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
-            </Group>
-          );
-        },
-      },
-      {
-        accessorKey: "term_code",
-        header: "Term Code",
-        size: 110,
-        Cell: ({ cell }) => (
-          <Text size="sm">{cell.getValue<string>() || "—"}</Text>
-        ),
-      },
-      {
-        accessorKey: "created_by",
-        header: "Assign To",
-        size: 200,
-        Cell: ({ row }) => (
-          <Text size="sm" lineClamp={2}>
-            {row.original.created_by || "—"}
-          </Text>
-        ),
-      },
-      {
-        accessorKey: "status",
-        header: "Status",
-        size: 130,
-        Cell: ({ row }) => {
-          const status = row.original.status;
-          const label = status?.trim() || "—";
-          return (
-            <Badge
-              color={getStatusBadgeColor(status)}
-              size="sm"
-              variant="light"
-            >
-              {label}
-            </Badge>
-          );
-        },
-      },
-      {
-        accessorKey: "approved_by",
-        header: "Approved By",
-        size: 180,
-        Cell: ({ row }) => (
-          <Text size="sm" lineClamp={2}>
-            {row.original.approved_by?.trim() || "—"}
-          </Text>
-        ),
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 50,
-        Cell: ({ row }) => {
-          const [menuOpened, setMenuOpened] = useState(false);
-          const item = row.original;
-          const isFinalized = isFinalizedCustomerStatus(item.status);
-
-          return (
-            <Menu
-              withinPortal
-              position="bottom-end"
-              shadow="sm"
-              radius="md"
-              opened={menuOpened}
-              onChange={setMenuOpened}
-            >
-              <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
-                  <IconDotsVertical size={16} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                {isFinalized ? (
-                  <Box px={10} py={5}>
-                    <UnstyledButton
-                      onClick={() => {
-                        setMenuOpened(false);
-                        setEditableApprovalRow(null);
-                        setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
-                        closeDocumentsModal();
-                        setPendingAction({ row: item, type: "view" });
-                      }}
-                    >
-                      <Group gap="sm">
-                        <IconEye size={16} style={{ color: "#105476" }} />
-                        <Text size="sm">View {entityLabel}</Text>
-                      </Group>
-                    </UnstyledButton>
-                  </Box>
-                ) : (
-                  <>
-                    <Box px={10} py={5}>
-                      <UnstyledButton
-                        onClick={() => {
-                          setMenuOpened(false);
-                          setEditableApprovalRow(cloneApprovalRow(item));
-                          setSupportingDocuments(
-                            supportingDocumentsFromApprovalRow(item),
-                          );
-                          setPendingAction({ row: item, type: "approve" });
-                        }}
-                      >
-                        <Group gap="sm">
-                          <IconCheck size={16} style={{ color: "#2f9e44" }} />
-                          <Text size="sm">Approve</Text>
-                        </Group>
-                      </UnstyledButton>
-                    </Box>
-                    <Menu.Divider />
-                    <Box px={10} py={5}>
-                      <UnstyledButton
-                        onClick={() => {
-                          setMenuOpened(false);
-                          setEditableApprovalRow(null);
-                          setSupportingDocuments([
-                            { ...EMPTY_SUPPORTING_DOCUMENT },
-                          ]);
-                          closeDocumentsModal();
-                          setPendingAction({ row: item, type: "reject" });
-                        }}
-                      >
-                        <Group gap="sm">
-                          <IconX size={16} style={{ color: "#e03131" }} />
-                          <Text size="sm">Reject</Text>
-                        </Group>
-                      </UnstyledButton>
-                    </Box>
-                  </>
-                )}
-              </Menu.Dropdown>
-            </Menu>
-          );
-        },
-      },
-    ],
-    [entityLabel, entityLabelLower, handleShowSimilarCustomers, closeDocumentsModal],
-  );
-
-  const table = useMantineReactTable<TableRow>({
-    columns,
-    data: displayRows,
-    enableColumnFilters: false,
-    enablePagination: false,
-    enableTopToolbar: false,
-    enableColumnActions: false,
-    enableSorting: false,
-    enableBottomToolbar: false,
-    enableColumnPinning: true,
-    enableStickyHeader: true,
-    initialState: {
-      columnPinning: { right: ["actions"] },
-    },
-    layoutMode: "grid",
-    mantineTableProps: {
-      striped: false,
-      highlightOnHover: true,
-      withTableBorder: false,
-      withColumnBorders: false,
-      style: { width: "100%" },
-    },
-    mantinePaperProps: {
-      shadow: "sm",
-      p: "md",
-      radius: "md",
-    },
-    mantineTableBodyCellProps: {
-      style: {
-        padding: "8px 12px",
-        fontSize: "13px",
-        backgroundColor: "#ffffff",
-      },
-    },
-    mantineTableHeadCellProps: {
-      style: {
-        padding: "6px 12px",
-        fontSize: "12px",
-        backgroundColor: "#ffffff",
-        top: 0,
-        zIndex: 3,
-        borderBottom: "1px solid #e9ecef",
-      },
-    },
-    mantineTableContainerProps: {
-      style: {
-        fontSize: "13px",
-        width: "100%",
-        minHeight: "300px",
-        maxHeight: "59vh",
-        overflowY: "auto",
-        overflowX: "auto",
-        position: "relative",
-      },
-    },
+  const theme = erpTheme;
+  const tdPad = { padding: "10px 12px" as const };
+  const mergeTh = (minW: number, widthPx?: number) => ({
+    ...erpListThStyle(theme),
+    minWidth: minW,
+    ...(widthPx != null ? { width: widthPx } : {}),
   });
+  /** Equal share of leftover table width (table-layout: fixed). */
+  const equalShareTh = {
+    ...erpListThStyle(theme),
+    minWidth: 120,
+  };
+  const actionsThStyle = {
+    ...erpListStickyActionThStyle(theme, 72),
+    width: 72,
+    minWidth: 72,
+    maxWidth: 72,
+    padding: "6px 8px",
+    textAlign: "center" as const,
+  };
+  const actionsTdStyle = {
+    ...erpListStickyActionTdStyle(theme, { paddingInline: "8px" }),
+    width: 72,
+    minWidth: 72,
+    maxWidth: 72,
+    padding: "8px 6px",
+    textAlign: "center" as const,
+  };
+
+  const openApproveRow = useCallback((row: CustomerPanApprovalRow) => {
+    setEditableApprovalRow(cloneApprovalRow(row));
+    setSupportingDocuments(supportingDocumentsFromApprovalRow(row));
+    setPendingAction({ row, type: "approve" });
+  }, []);
+
+  const openRejectRow = useCallback((row: CustomerPanApprovalRow) => {
+    setEditableApprovalRow(null);
+    setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+    closeDocumentsModal();
+    setPendingAction({ row, type: "reject" });
+  }, [closeDocumentsModal]);
+
+  const openViewRow = useCallback((row: CustomerPanApprovalRow) => {
+    setEditableApprovalRow(null);
+    setSupportingDocuments([{ ...EMPTY_SUPPORTING_DOCUMENT }]);
+    closeDocumentsModal();
+    setPendingAction({ row, type: "view" });
+  }, [closeDocumentsModal]);
 
   const tableLoading = isLoading || isFetching;
 
@@ -2347,240 +2265,378 @@ export default function ApproveCustomerPanMaster({
 
   return (
     <>
-      <Card
-        shadow="sm"
-        pt="md"
-        pb="sm"
-        px="md"
-        radius="md"
-        withBorder
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          overflow: "hidden",
-          flex: 1,
-        }}
-      >
-        <Box>
-          <Group justify="space-between" align="center" pb="sm">
-            <Text
-              size="md"
-              fw={600}
-              c="#1E293B"
-              style={{ fontFamily: "Inter", fontSize: "16px" }}
-            >
-              Approve {entityLabel}s
-            </Text>
-
-            <Group gap="xs" wrap="nowrap">
-              <TextInput
-                placeholder="Search..."
-                leftSection={<IconSearch size={16} />}
-                rightSection={
-                  search ? (
-                    <ActionIcon
-                      variant="transparent"
-                      size="sm"
-                      onClick={() => setSearch("")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <IconX size={16} />
-                    </ActionIcon>
-                  ) : null
-                }
-                w={248}
-                size="sm"
-                value={search}
-                onChange={(e) => setSearch(e.currentTarget.value)}
-                styles={{
-                  input: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontstyle: "regular",
-                    color: "#334155",
-                    minWidth: "24px",
-                    minHeight: "24px",
-                    width: "248px",
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    "&:focus": {
-                      border: "1px solid #105476",
-                    },
-                  },
-                }}
-              />
-              <ActionIcon
-                variant={showFilters ? "filled" : "outline"}
-                size={36}
-                color={showFilters ? "#E0F5FF" : "gray"}
-                onClick={() => setShowFilters(!showFilters)}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    backgroundColor: showFilters ? "#E0F5FF" : "#FFFFFF",
-                    border: showFilters
-                      ? "1px solid #105476"
-                      : "1px solid #737780",
-                    color: showFilters ? "#105476" : "#737780",
-                    "&:active": {
-                      border: "1px solid #105476",
-                      color: "#FFFFFF",
-                    },
-                  },
-                }}
-              >
-                <IconFilter size={18} />
-              </ActionIcon>
-            </Group>
-          </Group>
-        </Box>
-
-        {showFilters && (
-          <Box
-            tt="capitalize"
-            mb="sm"
-            p="sm"
-            style={{
-              borderRadius: "8px",
-              border: "1px solid #E0E0E0",
-              flexShrink: 0,
-              height: "fit-content",
+      <MantineProvider theme={erpListGeistMantineTheme}>
+        <Box
+          className={ERP_LIST_GEIST_ROOT_CLASS}
+          style={erpListGeistRootTypography}
+        >
+          <ERPListScreen
+            theme={theme}
+            className={ERP_LIST_GEIST_ROOT_CLASS}
+            toolbar={{
+              leading: (
+                <Text fw={600} size="sm" c={theme.fg}>
+                  Approve {entityLabel}s
+                </Text>
+              ),
+              actions: (
+                <>
+                  <TextInput
+                    size="xs"
+                    w={220}
+                    placeholder="Search…"
+                    value={search}
+                    onChange={(e) => setSearch(e.currentTarget.value)}
+                    leftSection={<IconSearch size={14} />}
+                    rightSection={
+                      search ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          onClick={() => setSearch("")}
+                          aria-label="Clear search"
+                        >
+                          <IconX size={14} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    styles={{
+                      input: {
+                        fontFamily: theme.fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: theme.border,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="default"
+                    size="xs"
+                    styles={erpToolbarOutlineButtonStyles(theme)}
+                    leftSection={<IconFilter size={14} />}
+                    onClick={() => setShowFilters((s) => !s)}
+                  >
+                    {showFilters ? "Hide filters" : "Filters"}
+                  </Button>
+                </>
+              ),
             }}
-          >
-            <Group
-              justify="space-between"
-              align="center"
-              mb="sm"
-              px="md"
-              style={{
-                backgroundColor: "#F8FAFC",
-                padding: "4px 8px",
-              }}
-            >
-              <Text
-                size="sm"
-                fw={600}
-                c="#1E293B"
-                style={{ fontFamily: "Inter", fontSize: "14px" }}
-              >
-                Filter
-              </Text>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => setShowFilters(false)}
-                aria-label="Close filters"
-                size="sm"
-              >
-                <IconX size={18} />
-              </ActionIcon>
-            </Group>
-
-            <Grid gutter="sm" px="md" pt="xs" pb="sm">
-              <Grid.Col span={2.4}>
-                <FormTextInput
-                  format="normal"
-                  label={`${entityLabel} Name`}
-                  placeholder={`Enter ${entityLabelLower} name`}
-                  size="xs"
-                  value={draftFilters.customer_name}
-                  onChange={(event) =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      customer_name: event.currentTarget.value,
-                    }))
-                  }
+            filters={{
+              opened: showFilters,
+              title: "Filters",
+              subtitle: `${entityLabel} name, assign to, status, and approve by`,
+              onClose: () => setShowFilters(false),
+              footer: (
+                <ERPListFilterActionsFooter
+                  theme={theme}
+                  onClear={clearFilters}
+                  onApply={applyFilters}
+                  applyLoading={tableLoading}
+                  applyDisabled={tableLoading}
                 />
-              </Grid.Col>
-
-              <Grid.Col span={2.4}>
-                <Dropdown
-                  label="Status"
-                  placeholder="Select status"
-                  size="xs"
-                  data={STATUS_FILTER_OPTIONS}
-                  value={draftFilters.status}
-                  onChange={(value) =>
-                    setDraftFilters((prev) => ({
-                      ...prev,
-                      status: value ?? "",
-                    }))
-                  }
+              ),
+              children: (
+                <Grid gutter={{ base: "sm", md: "md" }} align="stretch">
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <FormTextInput
+                        format="normal"
+                        label={`${entityLabel} Name`}
+                        placeholder={`Enter ${entityLabelLower} name`}
+                        size="xs"
+                        value={draftFilters.customer_name}
+                        onChange={(event) =>
+                          setDraftFilters((prev) => ({
+                            ...prev,
+                            customer_name: event.currentTarget.value,
+                          }))
+                        }
+                        styles={filterFieldStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <FormTextInput
+                        format="normal"
+                        label="Assign To"
+                        placeholder="Filter by assign to"
+                        size="xs"
+                        value={draftFilters.assigned_to}
+                        onChange={(event) =>
+                          setDraftFilters((prev) => ({
+                            ...prev,
+                            assigned_to: event.currentTarget.value,
+                          }))
+                        }
+                        styles={filterFieldStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <Dropdown
+                        label="Status"
+                        placeholder="Select status"
+                        size="xs"
+                        data={STATUS_FILTER_OPTIONS}
+                        value={draftFilters.status}
+                        onChange={(value) =>
+                          setDraftFilters((prev) => ({
+                            ...prev,
+                            status: value ?? "",
+                          }))
+                        }
+                        styles={filterFieldStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN_QUARTER}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <FormTextInput
+                        format="normal"
+                        label="Approve By"
+                        placeholder="Filter by approve by"
+                        size="xs"
+                        value={draftFilters.approved_by}
+                        onChange={(event) =>
+                          setDraftFilters((prev) => ({
+                            ...prev,
+                            approved_by: event.currentTarget.value,
+                          }))
+                        }
+                        styles={filterFieldStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                </Grid>
+              ),
+            }}
+            table={{
+              footer: (
+                <ERPListPaginationFooter
+                  theme={theme}
+                  pageIndex={pageIndex}
+                  pageSize={pageSize}
+                  totalRecords={totalCount}
+                  onPageIndexChange={(idx) => setPageIndex(idx)}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPageIndex(0);
+                  }}
                 />
-              </Grid.Col>
-            </Grid>
-
-            <Group justify="flex-end" gap="sm" style={{ margin: "8px 8px" }}>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={clearFilters}
-                leftSection={<IconX size={16} />}
-                styles={{
-                  root: {
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    border: "1px solid #D0D1D4",
-                    color: "#1E293B",
-                  },
-                }}
-              >
-                Clear Filters
-              </Button>
-              <Button
-                size="sm"
-                onClick={applyFilters}
-                loading={tableLoading}
-                disabled={tableLoading}
-                leftSection={<IconFilter size={16} />}
-                styles={{
-                  root: {
-                    backgroundColor: "#105476",
-                    borderRadius: "4px",
-                    fontSize: "14px",
-                    fontFamily: "Inter",
-                    fontWeight: 600,
-                    height: "36px",
-                    "&:hover": {
-                      backgroundColor: "#0d4261",
-                    },
-                  },
-                }}
-              >
-                Apply Filters
-              </Button>
-            </Group>
-          </Box>
-        )}
-
-        {tableLoading ? (
-          <Center py="xl" style={{ flex: 1 }}>
-            <Stack align="center" gap="md">
-              <Loader size="lg" color="#105476" />
-              <Text c="dimmed">
-                Loading pending {entityLabelLower} verification records...
-              </Text>
-            </Stack>
-          </Center>
-        ) : (
-          <>
-            <MantineReactTable table={table} />
-            <PaginationBar
-              pageSize={pageSize}
-              currentPage={pageIndex + 1}
-              totalRecords={totalCount}
-              onPageSizeChange={handlePageSizeChange}
-              onPageChange={handlePageChange}
-              pageSizeOptions={["10", "25", "50"]}
-            />
-          </>
-        )}
-      </Card>
+              ),
+              children: (
+                <table
+                  style={{
+                    width: "100%",
+                    tableLayout: "fixed",
+                    borderCollapse: "collapse",
+                    fontSize: 14,
+                    backgroundColor: theme.cardBg,
+                    fontFamily: theme.fontSans,
+                  }}
+                >
+                  <thead>
+                    <tr style={{ height: 45 }}>
+                      <th style={mergeTh(56, 56)}>S.No</th>
+                      <th style={mergeTh(280, 280)}>
+                        <ERPListColumnHeaderFilter
+                          label={`${entityLabel} Name`}
+                          value={appliedFilters.customer_name}
+                          theme={theme}
+                          placeholder={`Filter ${entityLabelLower} name`}
+                          isEditing={editingHeaderId === "customer_name"}
+                          onStartEdit={() => openHeaderEditor("customer_name")}
+                          onStopEdit={() =>
+                            collapseHeaderEditor("customer_name")
+                          }
+                          onChange={(next) =>
+                            commitHeaderFilters((prev) => ({
+                              ...prev,
+                              customer_name: next,
+                            }))
+                          }
+                        />
+                      </th>
+                      <th style={mergeTh(110, 110)}>Term Code</th>
+                      <th style={equalShareTh}>
+                        <ERPListColumnHeaderFilter
+                          label="Assign To"
+                          value={appliedFilters.assigned_to}
+                          theme={theme}
+                          placeholder="Filter assign to"
+                          isEditing={editingHeaderId === "assigned_to"}
+                          onStartEdit={() => openHeaderEditor("assigned_to")}
+                          onStopEdit={() =>
+                            collapseHeaderEditor("assigned_to")
+                          }
+                          onChange={(next) =>
+                            commitHeaderFilters((prev) => ({
+                              ...prev,
+                              assigned_to: next,
+                            }))
+                          }
+                        />
+                      </th>
+                      <th style={equalShareTh}>
+                        <ERPListColumnHeaderFilter
+                          label="Status"
+                          value={appliedFilters.status}
+                          displayValue={
+                            appliedFilters.status
+                              ? customerPanStatusFilterLabel(
+                                  appliedFilters.status,
+                                )
+                              : undefined
+                          }
+                          theme={theme}
+                          onChange={() => {}}
+                          isEditing={editingHeaderId === "status"}
+                          onStartEdit={() => openHeaderEditor("status")}
+                          onStopEdit={() => collapseHeaderEditor("status")}
+                          renderEditor={({ autoFocus, onClose }) => (
+                            <Select
+                              autoFocus={autoFocus}
+                              placeholder="Select status"
+                              size="xs"
+                              data={STATUS_FILTER_OPTIONS}
+                              value={appliedFilters.status}
+                              onChange={(value) => {
+                                commitHeaderFilters((prev) => ({
+                                  ...prev,
+                                  status: value ?? "",
+                                }));
+                                onClose();
+                              }}
+                              comboboxProps={{ zIndex: 1000 }}
+                              classNames={erpListGeistSelectClassNames}
+                              styles={filterFieldStyles}
+                            />
+                          )}
+                        />
+                      </th>
+                      <th style={equalShareTh}>
+                        <ERPListColumnHeaderFilter
+                          label="Approved By"
+                          value={appliedFilters.approved_by}
+                          theme={theme}
+                          placeholder="Filter approved by"
+                          isEditing={editingHeaderId === "approved_by"}
+                          onStartEdit={() => openHeaderEditor("approved_by")}
+                          onStopEdit={() =>
+                            collapseHeaderEditor("approved_by")
+                          }
+                          onChange={(next) =>
+                            commitHeaderFilters((prev) => ({
+                              ...prev,
+                              approved_by: next,
+                            }))
+                          }
+                        />
+                      </th>
+                      <th style={actionsThStyle}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableLoading ? (
+                      <tr>
+                        <td colSpan={7} style={{ padding: 48 }}>
+                          <Group justify="center">
+                            <Loader color="#105476" size="lg" />
+                          </Group>
+                        </td>
+                      </tr>
+                    ) : displayRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} style={{ padding: 48 }}>
+                          <Text ta="center" c="dimmed">
+                            No pending {entityLabelLower} verification records
+                            found
+                          </Text>
+                        </td>
+                      </tr>
+                    ) : (
+                      displayRows.map((row) => (
+                        <tr key={row.id} {...erpListDataRowProps(theme)}>
+                          <td style={tdPad}>
+                            <Text size="sm">{row.sno}</Text>
+                          </td>
+                          <td style={tdPad}>
+                            <Group gap={4} wrap="nowrap" align="flex-start">
+                              <Text
+                                size="sm"
+                                fw={600}
+                                c={theme.primary}
+                                lineClamp={2}
+                                style={{ flex: 1, minWidth: 0 }}
+                              >
+                                {row.customer_name || "—"}
+                              </Text>
+                              {row.customer_name ? (
+                                <Tooltip
+                                  label={`Show similar ${entityLabelLower}s`}
+                                  withArrow
+                                >
+                                  <ActionIcon
+                                    variant="subtle"
+                                    color="#105476"
+                                    size="sm"
+                                    aria-label={`Show similar ${entityLabelLower}s`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleShowSimilarCustomers(
+                                        row.customer_name || "",
+                                      );
+                                    }}
+                                  >
+                                    <IconUsers size={14} />
+                                  </ActionIcon>
+                                </Tooltip>
+                              ) : null}
+                            </Group>
+                          </td>
+                          <td style={tdPad}>
+                            <Text size="sm">{row.term_code || "—"}</Text>
+                          </td>
+                          <td style={tdPad}>
+                            <Text size="sm" lineClamp={2}>
+                              {row.created_by?.trim() || "—"}
+                            </Text>
+                          </td>
+                          <td style={tdPad}>
+                            <Badge
+                              color={getStatusBadgeColor(row.status)}
+                              size="sm"
+                              variant="light"
+                            >
+                              {row.status?.trim() || "—"}
+                            </Badge>
+                          </td>
+                          <td style={tdPad}>
+                            <Text size="sm" lineClamp={2}>
+                              {row.approved_by?.trim() || "—"}
+                            </Text>
+                          </td>
+                          <td style={actionsTdStyle}>
+                            <ApproveListRowActions
+                              item={row}
+                              entityLabel={entityLabel}
+                              onView={openViewRow}
+                              onApprove={openApproveRow}
+                              onReject={openRejectRow}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ),
+            }}
+          />
+        </Box>
+      </MantineProvider>
 
       <Modal
         opened={pendingAction !== null}

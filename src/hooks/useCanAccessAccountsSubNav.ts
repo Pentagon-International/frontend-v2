@@ -1,5 +1,10 @@
 import useAuthStore from "../store/authStore";
 import { isVietnamBranchFromUser } from "../utils/nonDecimalMoneyAmount";
+import {
+  getDefaultUserBranch,
+  isIndianOutstandingBranch,
+  isIndianUserFromProfile,
+} from "../utils/userNumberFormat";
 
 /** Vietnam Accounts team — matched against login/display identity fields. */
 const VIETNAM_ACCOUNTS_TEAM_NAMES = [
@@ -10,7 +15,16 @@ const VIETNAM_ACCOUNTS_TEAM_NAMES = [
   "linal",
 ] as const;
 
-type AccountsTeamName = (typeof VIETNAM_ACCOUNTS_TEAM_NAMES)[number];
+/** India Accounts team — Mumbai, Delhi, Pune, Bangalore, Chennai, and other Indian branches. */
+const INDIA_ACCOUNTS_TEAM_NAMES = [
+  "dipali",
+  "akash",
+  "ganesh",
+  "yogita",
+  "linal",
+  "aakansha",
+  "praful",
+] as const;
 
 function normalizeIdentity(value: string | null | undefined): string {
   return String(value ?? "").trim().toLowerCase();
@@ -52,7 +66,7 @@ function identityMatchesTeamMember(
 
 function isAccountsTeamMember(
   user: ReturnType<typeof useAuthStore.getState>["user"],
-  teamNames: readonly AccountsTeamName[],
+  teamNames: readonly string[],
 ): boolean {
   if (!user) return false;
 
@@ -64,6 +78,26 @@ function isAccountsTeamMember(
   );
 }
 
+/** India branch: default branch or profile country is India. */
+export function isIndiaBranchFromUser(
+  user: ReturnType<typeof useAuthStore.getState>["user"],
+): boolean {
+  const branch = getDefaultUserBranch(user?.branches);
+  if (
+    isIndianOutstandingBranch(
+      branch?.country?.country_code,
+      branch?.currency?.currency_code,
+    ) ||
+    String(branch?.country?.country_name ?? "")
+      .toLowerCase()
+      .includes("india")
+  ) {
+    return true;
+  }
+
+  return isIndianUserFromProfile(user?.country);
+}
+
 /** Vietnam branch: Accounts sub-nav is limited to the Accounts team. */
 export function isVietnamAccountsAllowedUser(
   user: ReturnType<typeof useAuthStore.getState>["user"],
@@ -71,13 +105,40 @@ export function isVietnamAccountsAllowedUser(
   return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
 }
 
+/** India branch: Accounts sub-nav is limited to the Accounts team. */
+export function isIndiaAccountsAllowedUser(
+  user: ReturnType<typeof useAuthStore.getState>["user"],
+): boolean {
+  return isAccountsTeamMember(user, INDIA_ACCOUNTS_TEAM_NAMES);
+}
+
+/** Admin / staff users bypass country Accounts-team restrictions. */
+function isAdminUser(
+  user: ReturnType<typeof useAuthStore.getState>["user"],
+): boolean {
+  return Boolean(user?.is_staff);
+}
+
+/**
+ * Accounts module sub-nav access.
+ * Admin (is_staff) users always see all Accounts modules.
+ * Vietnam / India branches are otherwise limited to their Accounts teams;
+ * other countries keep full access. Job-page navigation remains available for everyone.
+ */
 export function canAccessAccountsSubNav(
   user: ReturnType<typeof useAuthStore.getState>["user"],
 ): boolean {
-  if (user?.is_staff) return true;
+  if (isAdminUser(user)) return true;
 
-  if (!isVietnamBranchFromUser(user)) return true;
-  return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
+  if (isVietnamBranchFromUser(user)) {
+    return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
+  }
+
+  if (isIndiaBranchFromUser(user)) {
+    return isAccountsTeamMember(user, INDIA_ACCOUNTS_TEAM_NAMES);
+  }
+
+  return true;
 }
 
 export function useCanAccessAccountsSubNav(): boolean {

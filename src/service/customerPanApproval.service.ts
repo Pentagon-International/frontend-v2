@@ -75,6 +75,8 @@ export type CustomerPanApprovalFilters = {
   term_code?: string;
   status?: string;
   assigned_to?: string;
+  approved_by?: string;
+  created_by?: string;
   /** `"customer"` | `"vendor"` | `"agent"` — scopes verification list */
   customer_type?: "customer" | "vendor" | "agent";
 };
@@ -186,12 +188,16 @@ function buildCustomerPanApprovalFiltersPayload(
   const termCode = String(filters?.term_code ?? "").trim();
   const status = String(filters?.status ?? "").trim();
   const assignedTo = String(filters?.assigned_to ?? "").trim();
+  const approvedBy = String(filters?.approved_by ?? "").trim();
+  const createdBy = String(filters?.created_by ?? "").trim();
   const customerType = String(filters?.customer_type ?? "").trim();
 
   if (customerName) payload.customer_name = customerName;
   if (termCode) payload.term_code = termCode;
   if (status) payload.status = status;
   if (assignedTo) payload.assigned_to = assignedTo;
+  if (approvedBy) payload.approved_by = approvedBy;
+  if (createdBy) payload.created_by = createdBy;
   if (customerType) payload.customer_type = customerType;
 
   return payload;

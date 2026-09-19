@@ -37,9 +37,10 @@ export default function MastersPage() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isIndiaUser = isIndianUserFromProfile(user?.country);
-  const hasCustomerApprovalScreen = Boolean(
-    user?.screen_permissions?.customer_approval_screen,
-  );
+  const isAdminUser = Boolean(user?.is_staff);
+  const hasCustomerApprovalScreen =
+    isAdminUser ||
+    Boolean(user?.screen_permissions?.customer_approval_screen);
 
   const formatRoute = (label: string) => {
     if (label === "Customer for Approval") return "create-customer";
