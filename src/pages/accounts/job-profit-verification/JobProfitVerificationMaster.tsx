@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MRT_PaginationState } from "mantine-react-table";
 import {
   ActionIcon,
   Badge,
   Box,
   Button,
-  Center,
   Grid,
   Group,
   Loader,
@@ -484,6 +483,20 @@ export default function JobProfitVerificationMaster() {
   >([]);
   const [branchLoading, setBranchLoading] = useState(false);
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  /** Visible width of the ERPListTableCard scrollport — keeps loader/empty centered while the table is wider. */
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [scrollPortWidth, setScrollPortWidth] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const scrollParent = tableWrapRef.current?.parentElement;
+    if (!scrollParent) return;
+
+    const update = () => setScrollPortWidth(scrollParent.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(scrollParent);
+    return () => observer.disconnect();
+  }, []);
 
   const openHeaderEditor = useCallback((id: string) => setEditingHeaderId(id), []);
   const collapseHeaderEditor = useCallback(
@@ -849,6 +862,20 @@ export default function JobProfitVerificationMaster() {
     ...listAmountBadgeTdStyle,
     textAlign: "center" as const,
   };
+  /** Stick to the scrollport so loader/empty center in the visible window, not mid-table. */
+  const scrollPortCenteredStyle = {
+    position: "sticky" as const,
+    left: 0,
+    width: scrollPortWidth ?? undefined,
+    maxWidth: "100%",
+    boxSizing: "border-box" as const,
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 80,
+    paddingBottom: 80,
+    backgroundColor: theme.cardBg,
+  };
 
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
@@ -1195,7 +1222,7 @@ export default function JobProfitVerificationMaster() {
               />
             ),
             children: (
-              <Box style={{ overflowX: "auto", position: "relative" }}>
+              <Box ref={tableWrapRef}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ height: 45 }}>
@@ -1440,26 +1467,26 @@ export default function JobProfitVerificationMaster() {
                           )}
                         />
                       </th>
-                      <th style={mergeTh(130, 130)}>Verified By</th>
-                      <th style={mergeTh(150, 150)}>Verified At</th>
+                      <th style={mergeTh(150, 150)}>Verified By</th>
+                      <th style={mergeTh(150, 150)}>Confirmed By</th>
                       <th style={erpListStickyActionThStyle(theme, 96)}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={19} style={tdPad}>
-                          <Center py="xl">
+                        <td colSpan={19} style={{ padding: 0 }}>
+                          <Box style={scrollPortCenteredStyle}>
                             <Loader color="#105476" size="lg" />
-                          </Center>
+                          </Box>
                         </td>
                       </tr>
                     ) : rows.length === 0 ? (
                       <tr>
-                        <td colSpan={19} style={tdPad}>
-                          <Center py="xl">
+                        <td colSpan={19} style={{ padding: 0 }}>
+                          <Box style={scrollPortCenteredStyle}>
                             <Text c="dimmed">No job profit records found</Text>
-                          </Center>
+                          </Box>
                         </td>
                       </tr>
                     ) : (
@@ -1589,8 +1616,22 @@ export default function JobProfitVerificationMaster() {
                             <Text size="sm" c={fg}>
                               {row.verified_by?.trim() || "—"}
                             </Text>
+                            {row.verified_at ? (
+                              <Text size="xs" c={muted} mt={2}>
+                                {fmtDateTime(row.verified_at)}
+                              </Text>
+                            ) : null}
                           </td>
-                          <td style={tdDate}>{fmtDateTime(row.verified_at)}</td>
+                          <td style={tdPad}>
+                            <Text size="sm" c={fg}>
+                              {row.confirmed_by?.trim() || "—"}
+                            </Text>
+                            {row.confirmed_at ? (
+                              <Text size="xs" c={muted} mt={2}>
+                                {fmtDateTime(row.confirmed_at)}
+                              </Text>
+                            ) : null}
+                          </td>
                           <td style={erpListStickyActionTdStyle(theme)}>
                             {(() => {
                               const showVerify = canShowVerifyProfit({

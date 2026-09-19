@@ -58,6 +58,7 @@ import {
   canShowConfirmProfit,
   canShowVerifyProfit,
   canUpdateBrokerage,
+  hasExistingBrokerage,
   isProfitFlowComplete,
   normalizeProfitStatus,
   pickProfitHouseAuditFields,
@@ -351,6 +352,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const [brokerageRemark, setBrokerageRemark] = useState(
     String(navState?.brokerage_remark ?? ""),
   );
+  /** True only when brokerage is already persisted — not while the user is typing. */
+  const [brokerageAlreadySaved, setBrokerageAlreadySaved] = useState(() =>
+    hasExistingBrokerage(navState?.brokerage),
+  );
   const [brokerageSaving, setBrokerageSaving] = useState(false);
   const [brokerageError, setBrokerageError] = useState<string | null>(null);
   const [profitVerifiedBy, setProfitVerifiedBy] = useState<string | null>(
@@ -372,7 +377,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     canUpdateBrokerage({
       is_sales: profitIsSales,
       status: profitStatus,
-    });
+    }) &&
+    !brokerageAlreadySaved;
 
   const profitStatusNorm = normalizeProfitStatus(profitStatus);
   const profitVerifiedOrBeyond =
@@ -420,6 +426,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         brokerage: brokerageAmount,
         brokerageRemark,
       });
+      const audit = pickProfitHouseAuditFields(response, profitShipmentId);
+      const savedBrokerage = audit.brokerage ?? brokerageAmount;
+      if (hasExistingBrokerage(savedBrokerage)) {
+        setBrokerageAmount(
+          Number.isFinite(Number(savedBrokerage))
+            ? Number(savedBrokerage)
+            : savedBrokerage,
+        );
+        setBrokerageAlreadySaved(true);
+      }
+      if (audit.brokerage_remark != null) {
+        setBrokerageRemark(audit.brokerage_remark);
+      }
       ToastNotification({
         type: "success",
         message: response?.message ?? "Brokerage saved successfully",
@@ -904,6 +923,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
           Number.isFinite(Number(matchedBrokerage.brokerage))
         ) {
           setBrokerageAmount(Number(matchedBrokerage.brokerage));
+          setBrokerageAlreadySaved(
+            hasExistingBrokerage(matchedBrokerage.brokerage),
+          );
         }
         if (matchedBrokerage.brokerage_remark != null) {
           setBrokerageRemark(String(matchedBrokerage.brokerage_remark));
@@ -2028,89 +2050,160 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             {fromProfitVerification && Boolean(profitShipmentId) && (
               <Stack gap={4}>
                 {(showProfitVerifyCheckbox || showProfitConfirmCheckbox) && (
-                  <Group gap="md">
+                  <Group gap="md" align="flex-start">
                     {showProfitVerifyCheckbox && (
-                      <Checkbox
-                        label="Verify"
-                        checked={profitVerifiedOrBeyond}
-                        disabled={profitVerifiedOrBeyond || !canVerifyNow}
-                        styles={{
-                          label: {
-                            fontFamily: "Inter",
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: "#105476",
-                          },
-                        }}
-                        onChange={() => {
-                          if (!canVerifyNow || !profitShipmentId) return;
-                          runJobProfitHouseAction({
-                            shipmentId: profitShipmentId,
-                            action: "verify",
-                            onSuccess: (response) => {
-                              const audit = pickProfitHouseAuditFields(response);
-                              setProfitStatus(audit.status || "verified");
-                              if (audit.verified_by) {
-                                setProfitVerifiedBy(audit.verified_by);
-                              }
-                              if (audit.verified_at) {
-                                setProfitVerifiedAt(audit.verified_at);
-                              }
+                      <Stack gap={4}>
+                        <Checkbox
+                          label="Verify"
+                          checked={profitVerifiedOrBeyond}
+                          disabled={profitVerifiedOrBeyond || !canVerifyNow}
+                          styles={{
+                            label: {
+                              fontFamily: "Inter",
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: "#105476",
                             },
-                          });
-                        }}
-                      />
+                          }}
+                          onChange={() => {
+                            if (!canVerifyNow || !profitShipmentId) return;
+                            runJobProfitHouseAction({
+                              shipmentId: profitShipmentId,
+                              action: "verify",
+                              onSuccess: (response) => {
+                                const audit = pickProfitHouseAuditFields(
+                                  response,
+                                  profitShipmentId,
+                                );
+                                setProfitStatus(audit.status || "verified");
+                                if (audit.verified_by) {
+                                  setProfitVerifiedBy(audit.verified_by);
+                                }
+                                if (audit.verified_at) {
+                                  setProfitVerifiedAt(audit.verified_at);
+                                }
+                                if (audit.confirmed_by) {
+                                  setProfitConfirmedBy(audit.confirmed_by);
+                                }
+                                if (audit.confirmed_at) {
+                                  setProfitConfirmedAt(audit.confirmed_at);
+                                }
+                              },
+                            });
+                          }}
+                        />
+                        {profitVerifiedOrBeyond && (
+                          <Stack gap={0}>
+                            <Text
+                              size="xs"
+                              c="dimmed"
+                              style={{ fontFamily: "Inter" }}
+                            >
+                              Verified by {profitVerifiedBy?.trim() || "—"}
+                            </Text>
+                            {profitVerifiedAt ? (
+                              <Text
+                                size="xs"
+                                c="dimmed"
+                                style={{ fontFamily: "Inter" }}
+                              >
+                                {formatProfitAuditDateTime(profitVerifiedAt)}
+                              </Text>
+                            ) : null}
+                          </Stack>
+                        )}
+                      </Stack>
                     )}
                     {showProfitConfirmCheckbox && (
-                      <Checkbox
-                        label="Confirm"
-                        checked={profitConfirmed}
-                        disabled={profitConfirmed || !canConfirmNow}
-                        styles={{
-                          label: {
-                            fontFamily: "Inter",
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: "#105476",
-                          },
-                        }}
-                        onChange={() => {
-                          if (!canConfirmNow || !profitShipmentId) return;
-                          runJobProfitHouseAction({
-                            shipmentId: profitShipmentId,
-                            action: "confirm",
-                            askBrokerage: false,
-                            onSuccess: (response) => {
-                              const audit = pickProfitHouseAuditFields(response);
-                              setProfitStatus(audit.status || "confirmed");
-                              if (audit.confirmed_by) {
-                                setProfitConfirmedBy(audit.confirmed_by);
-                              }
-                              if (audit.confirmed_at) {
-                                setProfitConfirmedAt(audit.confirmed_at);
-                              }
+                      <Stack gap={4}>
+                        <Checkbox
+                          label="Confirm"
+                          checked={profitConfirmed}
+                          disabled={profitConfirmed || !canConfirmNow}
+                          styles={{
+                            label: {
+                              fontFamily: "Inter",
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: "#105476",
                             },
-                          });
-                        }}
-                      />
+                          }}
+                          onChange={() => {
+                            if (!canConfirmNow || !profitShipmentId) return;
+                            runJobProfitHouseAction({
+                              shipmentId: profitShipmentId,
+                              action: "confirm",
+                              askBrokerage: false,
+                              onSuccess: (response) => {
+                                const audit = pickProfitHouseAuditFields(
+                                  response,
+                                  profitShipmentId,
+                                );
+                                setProfitStatus(audit.status || "confirmed");
+                                if (audit.verified_by) {
+                                  setProfitVerifiedBy(audit.verified_by);
+                                }
+                                if (audit.verified_at) {
+                                  setProfitVerifiedAt(audit.verified_at);
+                                }
+                                if (audit.confirmed_by) {
+                                  setProfitConfirmedBy(audit.confirmed_by);
+                                }
+                                if (audit.confirmed_at) {
+                                  setProfitConfirmedAt(audit.confirmed_at);
+                                }
+                              },
+                            });
+                          }}
+                        />
+                        {profitConfirmed && (
+                          <Stack gap={0}>
+                            <Text
+                              size="xs"
+                              c="dimmed"
+                              style={{ fontFamily: "Inter" }}
+                            >
+                              Confirmed by {profitConfirmedBy?.trim() || "—"}
+                            </Text>
+                            {profitConfirmedAt ? (
+                              <Text
+                                size="xs"
+                                c="dimmed"
+                                style={{ fontFamily: "Inter" }}
+                              >
+                                {formatProfitAuditDateTime(profitConfirmedAt)}
+                              </Text>
+                            ) : null}
+                          </Stack>
+                        )}
+                      </Stack>
                     )}
                   </Group>
                 )}
-                {profitVerifiedOrBeyond && (
-                  <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-                    Verified by {profitVerifiedBy?.trim() || "—"}
-                    {profitVerifiedAt
-                      ? ` · ${formatProfitAuditDateTime(profitVerifiedAt)}`
-                      : ""}
-                  </Text>
+                {/* Keep audit lines when checkboxes are no longer shown (e.g. after confirm). */}
+                {!showProfitVerifyCheckbox && profitVerifiedOrBeyond && (
+                  <Stack gap={0}>
+                    <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Verified by {profitVerifiedBy?.trim() || "—"}
+                    </Text>
+                    {profitVerifiedAt ? (
+                      <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                        {formatProfitAuditDateTime(profitVerifiedAt)}
+                      </Text>
+                    ) : null}
+                  </Stack>
                 )}
-                {profitConfirmed && (
-                  <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-                    Confirmed by {profitConfirmedBy?.trim() || "—"}
-                    {profitConfirmedAt
-                      ? ` · ${formatProfitAuditDateTime(profitConfirmedAt)}`
-                      : ""}
-                  </Text>
+                {!showProfitConfirmCheckbox && profitConfirmed && (
+                  <Stack gap={0}>
+                    <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      Confirmed by {profitConfirmedBy?.trim() || "—"}
+                    </Text>
+                    {profitConfirmedAt ? (
+                      <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                        {formatProfitAuditDateTime(profitConfirmedAt)}
+                      </Text>
+                    ) : null}
+                  </Stack>
                 )}
               </Stack>
             )}

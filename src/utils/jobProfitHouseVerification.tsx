@@ -25,6 +25,10 @@ export type JobProfitHouseNavContext = {
   status?: string | null;
   brokerage?: number | null;
   brokerage_remark?: string | null;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
 };
 
 export type JobProfitHousePatchPayload = {
@@ -33,6 +37,17 @@ export type JobProfitHousePatchPayload = {
   confirmed?: boolean;
   brokerage?: number;
   brokerage_remark?: string;
+};
+
+export type JobProfitHouseAuditRecord = {
+  verified_by?: string | null;
+  verified_at?: string | null;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  status?: string | null;
+  brokerage?: number | null;
+  brokerage_remark?: string | null;
+  shipment_id?: string | null;
 };
 
 export type JobProfitHousePatchResult = {
@@ -46,28 +61,44 @@ export type JobProfitHousePatchResult = {
   confirmed_at?: string | null;
   brokerage?: number | null;
   brokerage_remark?: string | null;
-  data?: {
-    verified_by?: string | null;
-    verified_at?: string | null;
-    confirmed_by?: string | null;
-    confirmed_at?: string | null;
-    status?: string | null;
-    brokerage?: number | null;
-    brokerage_remark?: string | null;
-  };
+  /** API may return a single house object or a list of house rows. */
+  data?: JobProfitHouseAuditRecord | JobProfitHouseAuditRecord[] | null;
 };
+
+/** Unwrap the house row from a PATCH response (`data` object or array). */
+export function pickProfitHouseRecord(
+  response?: JobProfitHousePatchResult | null,
+  shipmentId?: string | null,
+): JobProfitHouseAuditRecord | null {
+  const raw = response?.data;
+  if (Array.isArray(raw)) {
+    const wanted = String(shipmentId ?? "").trim();
+    if (wanted) {
+      const matched = raw.find(
+        (row) => String(row?.shipment_id ?? "").trim() === wanted,
+      );
+      if (matched) return matched;
+    }
+    return raw[0] ?? null;
+  }
+  if (raw && typeof raw === "object") return raw;
+  return null;
+}
 
 /** Pick audit fields from a house PATCH response (top-level or nested `data`). */
 export function pickProfitHouseAuditFields(
   response?: JobProfitHousePatchResult | null,
+  shipmentId?: string | null,
 ): {
   verified_by: string | null;
   verified_at: string | null;
   confirmed_by: string | null;
   confirmed_at: string | null;
   status: string | null;
+  brokerage: number | null;
+  brokerage_remark: string | null;
 } {
-  const nested = response?.data;
+  const nested = pickProfitHouseRecord(response, shipmentId);
   const verified_by =
     nested?.verified_by ?? response?.verified_by ?? null;
   const verified_at =
@@ -81,12 +112,22 @@ export function pickProfitHouseAuditFields(
     typeof statusRaw === "string" && statusRaw.trim()
       ? statusRaw.trim()
       : null;
+  const brokerageRaw = nested?.brokerage ?? response?.brokerage ?? null;
+  const brokerage =
+    brokerageRaw != null && Number.isFinite(Number(brokerageRaw))
+      ? Number(brokerageRaw)
+      : null;
+  const brokerage_remark =
+    nested?.brokerage_remark ?? response?.brokerage_remark ?? null;
   return {
     verified_by: verified_by != null ? String(verified_by) : null,
     verified_at: verified_at != null ? String(verified_at) : null,
     confirmed_by: confirmed_by != null ? String(confirmed_by) : null,
     confirmed_at: confirmed_at != null ? String(confirmed_at) : null,
     status,
+    brokerage,
+    brokerage_remark:
+      brokerage_remark != null ? String(brokerage_remark) : null,
   };
 }
 
@@ -178,14 +219,22 @@ export function resolveApiErrorMessage(
   return fallback;
 }
 
+/** True when the API `brokerage` amount is already set (non-null, non-empty). */
+export function hasExistingBrokerage(
+  brokerage?: number | string | null,
+): boolean {
+  return (
+    brokerage !== null &&
+    brokerage !== undefined &&
+    String(brokerage).trim() !== ""
+  );
+}
+
 function hasBrokerageValues(options: {
   brokerage?: number | string | null;
   brokerageRemark?: string | null;
 }): boolean {
-  const hasAmount =
-    options.brokerage !== null &&
-    options.brokerage !== undefined &&
-    String(options.brokerage).trim() !== "";
+  const hasAmount = hasExistingBrokerage(options.brokerage);
   const hasRemark = String(options.brokerageRemark ?? "").trim() !== "";
   return hasAmount || hasRemark;
 }
@@ -503,9 +552,13 @@ export function runJobProfitHouseAction(options: {
     return;
   }
 
-  const askBrokerage = options.askBrokerage !== false;
+  // Skip brokerage fields when amount is already on the record (salesperson sees them once).
+  const askBrokerage =
+    options.askBrokerage !== false &&
+    !hasExistingBrokerage(options.initialBrokerage);
 
-  // Confirm without brokerage prompt (e.g. Job Ledger menu when form is separate).
+  // Confirm without brokerage prompt (e.g. Job Ledger menu when form is separate,
+  // or brokerage was already saved earlier).
   if (!askBrokerage) {
     let loading = false;
     let error: string | null = null;
