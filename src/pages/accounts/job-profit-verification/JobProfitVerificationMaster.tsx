@@ -397,18 +397,21 @@ function StatusPill({ status }: { status?: string | null }) {
   }
   const key = raw.toLowerCase();
   const label = getProfitStatusLabel(raw);
+  // Distinct colors per status so Approved / Confirmed / Hold / Rejected are not confused.
   const cfg =
-    key === "confirmed" || key === "approved" || key === "hold_confirmed"
-      ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
+    key === "sent_to_verify"
+      ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" } // amber
       : key === "verified"
-        ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" }
-        : key === "sent_to_verify"
-          ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" }
+        ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" } // blue
+        : key === "confirmed"
+          ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" } // green
           : key === "hold"
-            ? { dot: "#e11d48", bg: "#fff1f2", color: "#be123c" }
-            : key === "rejected" || key === "hold_rejected"
-              ? { dot: "#dc2626", bg: "#fef2f2", color: "#b91c1c" }
-              : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" };
+            ? { dot: "#7c3aed", bg: "#f5f3ff", color: "#6d28d9" } // violet
+            : key === "approved" || key === "hold_confirmed"
+              ? { dot: "#4f46e5", bg: "#eef2ff", color: "#3730a3" } // indigo — distinct from green Confirmed
+              : key === "rejected" || key === "hold_rejected"
+                ? { dot: "#dc2626", bg: "#fef2f2", color: "#b91c1c" } // red
+                : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" }; // gray
 
   return (
     <Box

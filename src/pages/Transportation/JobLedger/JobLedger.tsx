@@ -61,7 +61,7 @@ import {
   hasExistingBrokerage,
   isProfitConfirmed,
   isProfitFlowComplete,
-  isProfitHoldFromResponse,
+  isProfitOnHold,
   normalizeProfitStatus,
   pickProfitHouseAuditFields,
   resolveApiErrorMessage,
@@ -338,11 +338,6 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const [profitStatus, setProfitStatus] = useState<string | null>(
     navState?.status != null ? String(navState.status) : null,
   );
-  const [profitHoldRemark, setProfitHoldRemark] = useState<string | null>(
-    null,
-  );
-  /** Keeps Confirm blocked after a local hold even if a late ledger fetch returns stale status. */
-  const profitOnHoldRef = useRef(false);
   const [brokerageAmount, setBrokerageAmount] = useState<
     string | number | null
   >(
@@ -392,8 +387,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const canConfirmNow = canShowConfirmProfit({
     is_sales: profitIsSales,
     status: profitStatus,
-    holdRemark: profitHoldRemark,
   });
+  const profitOnHold = isProfitOnHold(profitStatus);
   const showProfitVerifyCheckbox =
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
@@ -441,35 +436,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       if (audit.brokerage_remark != null) {
         setBrokerageRemark(audit.brokerage_remark);
       }
-      // hold_remark on the brokerage response means margin rules put profit on hold —
-      // always force hold status so Confirm cannot stay enabled.
-      const holdRemarkText = audit.hold_remark?.trim() || "";
-      const placedOnHold = isProfitHoldFromResponse({
-        status: audit.status,
-        holdRemark: holdRemarkText,
-      });
-      if (placedOnHold) {
-        profitOnHoldRef.current = true;
-        setProfitStatus("hold");
-        setProfitHoldRemark(holdRemarkText || "Profit placed on hold.");
-        ToastNotification({
-          type: "warning",
-          message:
-            holdRemarkText ||
-            response?.message ||
-            "Profit placed on hold. Confirmation is not allowed.",
-        });
-      } else {
-        profitOnHoldRef.current = false;
-        setProfitHoldRemark(null);
-        if (audit.status) {
-          setProfitStatus(audit.status);
-        }
-        ToastNotification({
-          type: "success",
-          message: response?.message ?? "Brokerage saved successfully",
-        });
+      // Brokerage save may return hold_remark for margin checks, but hold status
+      // only applies after the salesperson confirms — keep Confirm enabled.
+      if (
+        audit.status &&
+        normalizeProfitStatus(audit.status) !== "hold"
+      ) {
+        setProfitStatus(audit.status);
       }
+      ToastNotification({
+        type: "success",
+        message: response?.message ?? "Brokerage saved successfully",
+      });
     } catch (err: unknown) {
       const message = resolveApiErrorMessage(err);
       setBrokerageError(message);
@@ -942,22 +920,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         if (matchedShipment) {
           setProfitShipmentId(matchedShipment);
         }
-        const matchedHoldRemark = String(
-          matchedBrokerage.hold_remark ?? "",
-        ).trim();
-        const matchedOnHold = isProfitHoldFromResponse({
-          status: matchedBrokerage.status,
-          holdRemark: matchedHoldRemark,
-        });
-        if (matchedOnHold) {
-          profitOnHoldRef.current = true;
-          setProfitStatus("hold");
-          setProfitHoldRemark(
-            matchedHoldRemark || "Profit placed on hold.",
-          );
-        } else if (!profitOnHoldRef.current && matchedBrokerage.status != null) {
+        if (matchedBrokerage.status != null) {
           setProfitStatus(String(matchedBrokerage.status));
-          setProfitHoldRemark(null);
         }
         if (
           matchedBrokerage.brokerage != null &&
@@ -2159,7 +2123,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       <Stack gap={4}>
                         <Tooltip
                           label="Job profit status is hold. Sent for Approval"
-                          disabled={!profitHoldRemark}
+                          disabled={!profitOnHold}
                           withArrow
                           position="top"
                         >
@@ -2177,12 +2141,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                                 },
                               }}
                               onChange={() => {
-                                if (
-                                  !canConfirmNow ||
-                                  !profitShipmentId ||
-                                  profitOnHoldRef.current ||
-                                  Boolean(profitHoldRemark?.trim())
-                                ) {
+                                if (!canConfirmNow || !profitShipmentId) {
                                   return;
                                 }
                                 runJobProfitHouseAction({
@@ -2194,9 +2153,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                                       response,
                                       profitShipmentId,
                                     );
-                                    setProfitStatus(
-                                      audit.status || "confirmed",
-                                    );
+                                    const nextStatus =
+                                      audit.status || "confirmed";
+                                    setProfitStatus(nextStatus);
                                     if (audit.verified_by) {
                                       setProfitVerifiedBy(audit.verified_by);
                                     }

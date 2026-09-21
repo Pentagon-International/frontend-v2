@@ -121,14 +121,10 @@ export function pickProfitHouseAuditFields(
     hold_remarkRaw != null ? String(hold_remarkRaw).trim() || null : null;
   // Prefer nested house status; never treat a boolean top-level `status` as profit status.
   const statusRaw = nested?.status;
-  let status =
+  const status =
     typeof statusRaw === "string" && statusRaw.trim()
       ? statusRaw.trim()
       : null;
-  // If margin rules returned a hold remark, treat the row as hold even when status lags.
-  if (hold_remark) {
-    status = "hold";
-  }
   return {
     verified_by: verified_by != null ? String(verified_by) : null,
     verified_at: verified_at != null ? String(verified_at) : null,
@@ -188,11 +184,12 @@ export function isProfitFlowComplete(status?: string | null): boolean {
   );
 }
 
-/** True when sales confirm (or a hold decision) has already been applied — not plain hold. */
+/** True when salesperson confirm (or a hold/approval decision) has been applied. */
 export function isProfitConfirmed(status?: string | null): boolean {
   const s = normalizeProfitStatus(status);
   return (
     s === "confirmed" ||
+    s === "hold" ||
     s === "approved" ||
     s === "rejected" ||
     s === "hold_confirmed" ||
@@ -344,18 +341,10 @@ export function canShowVerifyProfit(params: {
 export function canShowConfirmProfit(params: {
   is_sales?: boolean | null;
   status?: string | null;
-  holdRemark?: string | null;
 }): boolean {
   // Confirm is only for sales users (is_sales=true), after verify.
+  // Hold applies only after salesperson confirms — do not block on hold_remark alone.
   if (params.is_sales !== true) return false;
-  if (
-    isProfitHoldFromResponse({
-      status: params.status,
-      holdRemark: params.holdRemark,
-    })
-  ) {
-    return false;
-  }
   if (isProfitFlowComplete(params.status)) return false;
   return normalizeProfitStatus(params.status) === "verified";
 }
@@ -815,34 +804,11 @@ export function runJobProfitHouseAction(options: {
                     brokerageRemark: values.brokerageRemark,
                   })
                 ) {
-                  const brokerageResponse = await saveJobProfitBrokerage({
+                  await saveJobProfitBrokerage({
                     shipmentId,
                     brokerage: values.brokerage,
                     brokerageRemark: values.brokerageRemark,
                   });
-                  const brokerageAudit = pickProfitHouseAuditFields(
-                    brokerageResponse,
-                    shipmentId,
-                  );
-                  // Margin rules can place the job on hold — confirm is not allowed.
-                  if (
-                    isProfitHoldFromResponse({
-                      status: brokerageAudit.status,
-                      holdRemark: brokerageAudit.hold_remark,
-                    })
-                  ) {
-                    const holdMessage =
-                      brokerageAudit.hold_remark?.trim() ||
-                      brokerageResponse?.message ||
-                      "Profit placed on hold. Confirmation is not allowed.";
-                    ToastNotification({
-                      type: "warning",
-                      message: holdMessage,
-                    });
-                    destroy();
-                    options.onSuccess?.(brokerageResponse);
-                    return;
-                  }
                 }
 
                 const response = await patchJobProfitHouse({

@@ -4199,17 +4199,18 @@ function ExportJobCreate() {
                         shipmentNo={getMasterShipmentNo(jobData)}
                         onOpen={openPaymentRequestAutomation}
                       />
+                    </>
+                  )}
+
+                  {jobData?.id != null && (
+                    <>
                       <SendForVerificationMenuItem
                         jobId={jobData.id}
                         getShipmentIds={() =>
                           housingDetails.map((house) => house.shipment_id)
                         }
                       />
-                    </>
-                  )}
-
-                  {jobData?.id != null && (
-                    <Menu.Item
+                      <Menu.Item
                       leftSection={
                         <Box
                           style={{
@@ -4256,6 +4257,7 @@ function ExportJobCreate() {
                     >
                       Job Ledger
                     </Menu.Item>
+                    </>
                   )}
                 </Menu.Dropdown>
               </Menu>

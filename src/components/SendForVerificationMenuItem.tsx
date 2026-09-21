@@ -74,8 +74,8 @@ function ConfirmSendForVerificationModal({
 }) {
   const confirmMessage =
     shipmentIds.length === 1
-      ? `Send house ${shipmentIds[0]} for verification?`
-      : `Send ${shipmentIds.length} houses for verification?`;
+      ? `Send house ${shipmentIds[0]} to Accounts?`
+      : `Send ${shipmentIds.length} houses to Accounts?`;
 
   return (
     <Modal
@@ -83,7 +83,7 @@ function ConfirmSendForVerificationModal({
       onClose={onClose}
       title={
         <Text fw={600} size="md" style={{ fontFamily: "Inter" }}>
-          Send for verification
+          Send to Accounts
         </Text>
       }
       centered
@@ -128,7 +128,7 @@ async function sendHousesForVerification(shipmentIds: string[]) {
     throw new Error(
       response.message ??
         response.detail ??
-        "Failed to send for verification.",
+        "Failed to send to Accounts.",
     );
   }
 
@@ -175,8 +175,8 @@ function runSendForVerificationFlow(shipmentIds: string[]) {
                     message:
                       response?.message ??
                       (shipmentIds.length === 1
-                        ? "House sent for verification successfully"
-                        : "Houses sent for verification successfully"),
+                        ? "House sent to Accounts successfully"
+                        : "Houses sent to Accounts successfully"),
                   });
                   destroy();
                 } catch (err: unknown) {
@@ -187,7 +187,7 @@ function runSendForVerificationFlow(shipmentIds: string[]) {
                     message:
                       err instanceof Error
                         ? err.message
-                        : "Failed to send for verification.",
+                        : "Failed to send to Accounts.",
                   });
                 }
               })();
@@ -229,14 +229,14 @@ export function SendForVerificationMenuItem({
         if (ids.length === 0) {
           ToastNotification({
             type: "error",
-            message: "Shipment number not found for verification.",
+            message: "Shipment number not found to send to Accounts.",
           });
           return;
         }
         runSendForVerificationFlow(ids);
       }}
     >
-      Send for verification
+      Send to Accounts
     </Menu.Item>
   );
 }
