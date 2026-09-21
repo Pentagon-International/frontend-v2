@@ -69,6 +69,7 @@ import {
   isNewCustomerSelection,
   resolveCustomerMasterCode,
 } from "../../../utils/customerSelection";
+import { resolveExportHouseInvoiceBillTo } from "../../../utils/houseInvoiceBillTo";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
@@ -100,6 +101,7 @@ import {
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
 import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
+import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -1417,27 +1419,25 @@ function HouseCreate() {
     const updatedCharges = chargesForm.values.charges.map((charge) => {
       const next = { ...charge };
 
-      // Recalculate amount from no_of_unit and amount_per_unit
+      // Recalculate amount from no_of_unit and amount_per_unit (0 allowed)
       if (
         charge.amount_per_unit !== null &&
-        charge.amount_per_unit !== undefined &&
-        charge.amount_per_unit > 0
+        charge.amount_per_unit !== undefined
       ) {
         const noOfUnit = charge.no_of_unit || 0;
         const amountPerUnit = charge.amount_per_unit || 0;
         const calculatedAmount = clampCurrencyMoneyAmountBound(
           noOfUnit * amountPerUnit,
         );
-        if (calculatedAmount > 0 && calculatedAmount !== next.amount) {
+        if (calculatedAmount !== next.amount) {
           next.amount = calculatedAmount;
         }
       }
 
-      // Recalculate local_amount (sell) from amount and roe
+      // Recalculate local_amount (sell) from amount and roe (0 allowed)
       if (
         next.amount !== null &&
         next.amount !== undefined &&
-        next.amount > 0 &&
         next.roe !== null &&
         next.roe !== undefined &&
         next.roe > 0
@@ -1452,11 +1452,10 @@ function HouseCreate() {
         }
       }
 
-      // Recalculate cost_local_amount from total_cost and roe
+      // Recalculate cost_local_amount from total_cost and roe (0 allowed)
       if (
         next.total_cost !== null &&
         next.total_cost !== undefined &&
-        next.total_cost > 0 &&
         next.roe !== null &&
         next.roe !== undefined &&
         next.roe > 0
@@ -5095,6 +5094,108 @@ function HouseCreate() {
                     variant="outline"
                     color="#105476"
                     onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const fullDetail = getCurrentHousingDetail();
+                      const houseShipmentNo = toStr(
+                        (fullDetail as { shipment_id?: unknown }).shipment_id ??
+                          (
+                            editData as { shipment_id?: unknown } | undefined
+                          )?.shipment_id,
+                      );
+                      if (!houseShipmentNo) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Shipment ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
+
+                      const houseCharges = Array.isArray(
+                        chargesForm.values.charges,
+                      )
+                        ? chargesForm.values.charges
+                        : [];
+
+                      const withChargeAndSupplier = houseCharges.filter(
+                        (c) =>
+                          c?.charge_id != null &&
+                          (toStr(c.supplier_code) || toStr(c.supplier_name)),
+                      );
+
+                      if (withChargeAndSupplier.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Select a supplier/vendor to create supplier invoice",
+                        });
+                        return;
+                      }
+
+                      const charges = withChargeAndSupplier
+                        .map((c) => ({
+                          shipment_no: houseShipmentNo,
+                          charge_id:
+                            c.charge_id != null ? Number(c.charge_id) : null,
+                          charge_name: toStr(c.charge_name),
+                          currency_id:
+                            (c as { currency_id?: unknown }).currency_id ??
+                            (c as { currency?: unknown }).currency ??
+                            null,
+                          roe: (c as { roe?: unknown }).roe ?? null,
+                          amount: resolveSupplierInvoiceHouseCostAmount(
+                            c as Record<string, unknown>,
+                          ),
+                          supplier_code: toStr(c.supplier_code),
+                          supplier_name: toStr(c.supplier_name),
+                        }))
+                        .filter(
+                          (x) =>
+                            x.charge_id != null &&
+                            x.amount != null &&
+                            String(x.amount).trim() !== "",
+                        );
+
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Fill cost values on the charge(s) to create supplier invoice",
+                        });
+                        return;
+                      }
+
+                      navigate("/supplier-invoice/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            job_id: toStr(
+                              (
+                                location.state?.job as {
+                                  job_id?: unknown;
+                                  shipment_id?: unknown;
+                                } | null
+                              )?.job_id ??
+                                (
+                                  location.state?.job as {
+                                    shipment_id?: unknown;
+                                  } | null
+                                )?.shipment_id ??
+                                location.state?.job?.id ??
+                                houseShipmentNo,
+                            ),
+                            charges,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier Invoice
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
                       const charges = Array.isArray(fullDetail.charges)
                         ? fullDetail.charges
@@ -5197,6 +5298,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
+                          billToFrom: resolveExportHouseInvoiceBillTo(
+                            fullDetail as Record<string, unknown>,
+                          ),
                           ...(location.state?.job && {
                             job: location.state.job,
                           }),
@@ -5234,7 +5338,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
-                          billToFrom: "shipper",
+                          billToFrom: resolveExportHouseInvoiceBillTo(
+                            fullDetail as Record<string, unknown>,
+                          ),
                           ...(location.state?.job && {
                             job: location.state.job,
                           }),
@@ -5641,9 +5747,8 @@ function HouseCreate() {
                               chargesForm.values.charges[index];
                             if (
                               currentCharge.amount_per_unit != null &&
-                              currentCharge.amount_per_unit > 0 &&
-                              noOfUnit != null &&
-                              noOfUnit > 0
+                              currentCharge.amount_per_unit != null &&
+                              noOfUnit != null
                             ) {
                               chargesForm.setFieldValue(
                                 `charges.${index}.amount`,
@@ -5659,9 +5764,8 @@ function HouseCreate() {
                             }
                             if (
                               currentCharge.cost_per_unit != null &&
-                              currentCharge.cost_per_unit > 0 &&
-                              noOfUnit != null &&
-                              noOfUnit > 0
+                              currentCharge.cost_per_unit != null &&
+                              noOfUnit != null
                             ) {
                               chargesForm.setFieldValue(
                                 `charges.${index}.total_cost`,
@@ -5686,7 +5790,7 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.amount_per_unit || undefined}
+                      value={charge.amount_per_unit ?? undefined}
                       onChange={(value) => {
                         const amountPerUnit = value as number | null;
                         chargesForm.setFieldValue(
@@ -5731,7 +5835,7 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.amount || undefined}
+                      value={charge.amount ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.amount`,
@@ -5757,7 +5861,7 @@ function HouseCreate() {
                       hideControls
                       groupThousands
                       decimalScale={localAmountDecimalScale}
-                      value={charge.local_amount || undefined}
+                      value={charge.local_amount ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.local_amount`,
@@ -5772,7 +5876,7 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.cost_per_unit || undefined}
+                      value={charge.cost_per_unit ?? undefined}
                       onChange={(value) => {
                         const costPerUnit = value as number | null;
                         chargesForm.setFieldValue(
@@ -5782,9 +5886,7 @@ function HouseCreate() {
                         const currentCharge = chargesForm.values.charges[index];
                         if (
                           costPerUnit != null &&
-                          costPerUnit > 0 &&
-                          currentCharge.no_of_unit != null &&
-                          currentCharge.no_of_unit > 0
+                          currentCharge.no_of_unit != null
                         ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.total_cost`,
@@ -5808,7 +5910,7 @@ function HouseCreate() {
                       hideControls
                       groupThousands
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.total_cost || undefined}
+                      value={charge.total_cost ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.total_cost`,
@@ -5824,7 +5926,7 @@ function HouseCreate() {
                       hideControls
                       groupThousands
                       decimalScale={localAmountDecimalScale}
-                      value={charge.cost_local_amount || undefined}
+                      value={charge.cost_local_amount ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.cost_local_amount`,
