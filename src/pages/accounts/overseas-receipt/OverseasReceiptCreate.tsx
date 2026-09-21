@@ -201,6 +201,8 @@ type AdjustmentRow = {
   invoice_id?: number | null;
   location: string;
   type: string;
+  /** GL account code from the allocated document; sent on allocation payload. */
+  account_code: string;
   subledger: string;
   subledger_display: string;
   daybook_id: string;
@@ -235,6 +237,7 @@ type InvoiceCombinedItem = {
   day_book_document_type?: string;
   currency_id?: number | string;
   currency_code?: string;
+  account_code?: string;
   roe?: number | string;
   Dr_Cr?: string | null;
   [key: string]: unknown;
@@ -462,6 +465,7 @@ type ReceiptListItem = {
     invoice_id?: number;
     invoice_roe?: string | number;
     subledger_id?: number;
+    account_code?: string;
     subledger_code?: string;
     subledger_name?: string;
     location?: string;
@@ -538,6 +542,7 @@ const getDefaultAdjustmentRow = (
 ): AdjustmentRow => ({
   location: "",
   type: "",
+  account_code: "",
   subledger: "",
   subledger_display: "",
   daybook_id: "",
@@ -800,10 +805,12 @@ export default function OverseasReceiptCreate({
   const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
     useState<{ account_code: string; subledger_code: string } | null>(null);
   const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
-    const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
-      Set<number>
-    >(new Set());
-    const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
+    Set<number>
+  >(new Set());
+  const [isOpeningInvoiceFromModal, setIsOpeningInvoiceFromModal] =
+    useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
@@ -1041,6 +1048,7 @@ export default function OverseasReceiptCreate({
               invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
               location: (a.location ?? "").toString(),
               type: typeVal,
+              account_code: (a.account_code ?? "").toString(),
               subledger: (a.subledger_code ?? "").toString(),
               subledger_display: (a.subledger_name ?? "").toString(),
               daybook_id: a.day_book_id != null ? String(a.day_book_id) : "",
@@ -1431,7 +1439,89 @@ export default function OverseasReceiptCreate({
     });
   };
 
-    const handleSelectInvoice = () => {
+  const openInvoiceFromAllocationRow = async (inv: InvoiceCombinedItem) => {
+    const docType = String(
+      inv.day_book_document_type ?? inv.day_book_type ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (docType !== "INV") return;
+
+    const docIdRaw = inv.doc_id;
+    const docId = docIdRaw != null ? Number(docIdRaw) : NaN;
+    if (!Number.isFinite(docId) || docId <= 0) {
+      ToastNotification({
+        type: "warning",
+        message: "Invoice not found",
+      });
+      return;
+    }
+
+    // Open the tab immediately (popup blockers allow this on user gesture).
+    // Never navigate away from the Overseas Receipt page.
+    const newTab = window.open("about:blank", "_blank");
+    if (!newTab) {
+      ToastNotification({
+        type: "warning",
+        message:
+          "Popup blocked. Please allow popups to open the invoice in a new tab.",
+      });
+      return;
+    }
+
+    try {
+      setIsOpeningInvoiceFromModal(true);
+      const res = await apiCallProtected.get(
+        `${URL.invoice}${docId}/`,
+        API_HEADER,
+      );
+      const rawData = (res as { data?: unknown })?.data ?? res;
+      const record =
+        rawData &&
+        typeof rawData === "object" &&
+        "data" in (rawData as Record<string, unknown>) &&
+        (rawData as { data?: unknown }).data &&
+        typeof (rawData as { data?: unknown }).data === "object"
+          ? ((rawData as { data?: Record<string, unknown> }).data ?? null)
+          : rawData && typeof rawData === "object"
+            ? (rawData as Record<string, unknown>)
+            : null;
+
+      const statusUpper = record
+        ? String(record.status ?? "")
+            .trim()
+            .toUpperCase()
+        : "";
+      const mode = statusUpper === "POSTED" ? "view" : "edit";
+
+      setIsOpeningInvoiceFromModal(false);
+      const invoicePath = `/invoice/${mode}/${docId}`;
+      const invoiceUrl = new window.URL(
+        invoicePath,
+        window.location.origin,
+      ).toString();
+      newTab.location.href = invoiceUrl;
+      try {
+        newTab.opener = null;
+      } catch {
+        // ignore
+      }
+    } catch (e: unknown) {
+      console.error("Failed to open invoice", e);
+      ToastNotification({
+        type: "error",
+        message: "Unable to open invoice details.",
+      });
+      try {
+        newTab.close();
+      } catch {
+        // ignore
+      }
+      setIsOpeningInvoiceFromModal(false);
+    }
+  };
+
+  const handleSelectInvoice = () => {
     if (invoiceModalDetailRowIndex == null) return;
     const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
     if (sorted.length === 0) {
@@ -1503,6 +1593,9 @@ export default function OverseasReceiptCreate({
           (inv.day_book_document_type as string) ??
           (inv.day_book_type as string) ??
           "",
+        account_code: String(
+          inv.account_code ?? detailRow?.account_code ?? "",
+        ).trim(),
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
@@ -1630,6 +1723,7 @@ export default function OverseasReceiptCreate({
       allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
         location: a.location ?? "",
+        account_code: a.account_code ?? "",
         subledger_code: a.subledger ?? "",
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
@@ -1713,6 +1807,7 @@ export default function OverseasReceiptCreate({
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
+        account_code: a.account_code ?? "",
         subledger_code: a.subledger ?? "",
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
@@ -3598,6 +3693,7 @@ export default function OverseasReceiptCreate({
               setInvoiceModalAllocationFilter(null);
               setInvoiceList([]);
               setSelectedInvoiceIndices(new Set());
+              setIsOpeningInvoiceFromModal(false);
             }}
             title="Select Document"
             size="lg"
@@ -3606,6 +3702,26 @@ export default function OverseasReceiptCreate({
               body: { position: "relative" },
             }}
           >
+            {isOpeningInvoiceFromModal && (
+              <Box
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundColor: "rgba(255,255,255,0.75)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="#105476" />
+                  <Text size="sm" c="#105476" fw={600}>
+                    Opening invoice…
+                  </Text>
+                </Group>
+              </Box>
+            )}
             {filterInvoiceLoading || filterInvoiceFetching ? (
               <Text size="sm" c="dimmed">
                 Loading invoices...
@@ -3640,9 +3756,32 @@ export default function OverseasReceiptCreate({
                           />
                         </Table.Td>
                         <Table.Td>
-                          <Text component="span">
-                            {inv.document_no ?? "—"}
-                          </Text>
+                          {String(
+                            inv.day_book_document_type ??
+                              inv.day_book_type ??
+                              "",
+                          )
+                            .trim()
+                            .toUpperCase() === "INV" ? (
+                            <Text
+                              component="span"
+                              style={{
+                                color: "#105476",
+                                textDecoration: "underline",
+                                cursor: "pointer",
+                              }}
+                              onClick={() =>
+                                void openInvoiceFromAllocationRow(inv)
+                              }
+                              title="Open invoice"
+                            >
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          ) : (
+                            <Text component="span">
+                              {inv.document_no ?? "—"}
+                            </Text>
+                          )}
                         </Table.Td>
                         <Table.Td>
                           {formatDocumentDateDisplay(
@@ -3689,6 +3828,7 @@ export default function OverseasReceiptCreate({
                       setInvoiceModalAllocationFilter(null);
                       setInvoiceList([]);
                       setSelectedInvoiceIndices(new Set());
+                      setIsOpeningInvoiceFromModal(false);
                     }}
                   >
                     Cancel

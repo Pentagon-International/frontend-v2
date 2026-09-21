@@ -201,6 +201,8 @@ type AdjustmentRow = {
   invoice_id?: number | null;
   location: string;
   type: string;
+  /** GL account code from the allocated document; sent on allocation payload. */
+  account_code: string;
   subledger: string;
   subledger_display: string;
   daybook_id: string;
@@ -231,6 +233,7 @@ type InvoiceCombinedItem = {
   day_book_document_type?: string;
   currency_id?: number | string;
   currency_code?: string;
+  account_code?: string;
   roe?: number | string;
   amount?: number | string;
   amount_in_local?: number | string;
@@ -498,6 +501,7 @@ type PaymentListItem = {
     supplier_invoice_id?: number;
     invoice_roe?: string | number;
     subledger_id?: number;
+    account_code?: string;
     subledger_code?: string;
     subledger_name?: string;
     location?: string;
@@ -595,6 +599,7 @@ const getDefaultAdjustmentRow = (
 ): AdjustmentRow => ({
   location: "",
   type: "",
+  account_code: "",
   subledger: "",
   subledger_display: "",
   daybook_id: "",
@@ -1069,6 +1074,7 @@ export default function OverseasPaymentCreate({
               location?: string;
               type?: string;
               type_name?: string;
+              account_code?: string;
               subledger_code?: string;
               subledger_name?: string;
               subledger?: string;
@@ -1093,6 +1099,7 @@ export default function OverseasPaymentCreate({
                     : null,
               location: String(aAny.location ?? "").trim(),
               type: String(aAny.type ?? aAny.type_name ?? "").trim(),
+              account_code: String(aAny.account_code ?? "").trim(),
               subledger: String(
                 aAny.subledger_code ?? aAny.subledger ?? "",
               ).trim(),
@@ -1752,6 +1759,9 @@ export default function OverseasPaymentCreate({
         type: ((inv.day_book_document_type as string) ??
           (inv.day_book_type as string) ??
           "") as string,
+        account_code: String(
+          inv.account_code ?? detailRow?.account_code ?? "",
+        ).trim(),
         subledger: detailRow?.customer_code ?? "",
         subledger_display: detailRow?.customer_display ?? "",
         daybook_id: daybookId != null ? String(daybookId) : "",
@@ -1877,6 +1887,7 @@ export default function OverseasPaymentCreate({
       allocations: nonEmptyAdjustments.map((a) => ({
         ...(a.id != null && a.id > 0 ? { id: a.id } : {}),
         location: a.location ?? "",
+        account_code: a.account_code ?? "",
         subledger_code: a.subledger ?? a.subledger_display ?? "",
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
@@ -1960,6 +1971,7 @@ export default function OverseasPaymentCreate({
       })),
       allocations: nonEmptyAdjustments.map((a) => ({
         location: a.location ?? "",
+        account_code: a.account_code ?? "",
         subledger_code: a.subledger ?? a.subledger_display ?? "",
         day_book_id: Number(a.daybook_id) || 0,
         type: a.type ?? "",
