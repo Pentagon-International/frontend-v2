@@ -256,6 +256,7 @@ import BankReconciliationCreate from "../pages/accounts/bank-reconciliation/Bank
 import ServiceJobMaster from "../pages/accounts/service-job/ServiceJobMaster";
 import ServiceJobCreate from "../pages/accounts/service-job/ServiceJobCreate";
 import JobProfitVerificationMaster from "../pages/accounts/job-profit-verification/JobProfitVerificationMaster";
+import JobProfitVerificationApprovalMaster from "../pages/accounts/job-profit-verification/JobProfitVerificationApprovalMaster";
 import JobProfit from "../pages/reports/JobProfit/JobProfit";
 import TrialBalance from "../pages/reports/trialBalance/TrailBalance";
 import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding";
@@ -789,6 +790,10 @@ const NavigationRoutes = () => {
         <Route
           path="/job-profit-verification"
           element={<JobProfitVerificationMaster />}
+        />
+        <Route
+          path="/job-profit-verification-approval"
+          element={<JobProfitVerificationApprovalMaster />}
         />
         <Route path="/job-reopen" element={<JobOpen />} />
         <Route path="/bank-reconciliation" element={<Outlet />}>

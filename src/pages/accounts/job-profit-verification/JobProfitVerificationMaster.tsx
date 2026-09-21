@@ -19,6 +19,7 @@ import {
   IconArrowRight,
   IconChartBar,
   IconCircleCheck,
+  IconCircleX,
   IconDotsVertical,
   IconFilter,
   IconSearch,
@@ -75,10 +76,18 @@ import {
   canShowVerifyProfit,
   getProfitStatusLabel,
   PROFIT_STATUS_FILTER_OPTIONS,
+  runJobProfitHoldDecision,
   runJobProfitHouseAction,
 } from "../../../utils/jobProfitHouseVerification";
 
-const LIST_KEY = "JOB_PROFIT_VERIFICATION_MASTER";
+const LIST_KEY_VERIFICATION = "JOB_PROFIT_VERIFICATION_MASTER";
+const LIST_KEY_APPROVAL = "JOB_PROFIT_VERIFICATION_APPROVAL";
+
+type JobProfitVerificationMode = "verification" | "approval";
+
+type JobProfitVerificationListProps = {
+  mode?: JobProfitVerificationMode;
+};
 
 const SERVICE_OPTIONS = [
   { value: "AIR", label: "AIR" },
@@ -151,6 +160,7 @@ type JobProfitRow = {
   confirmed_at?: string | null;
   verified_by?: string | null;
   verified_at?: string | null;
+  hold_remark?: string | null;
   /** @deprecated Nested houses — API now returns flat house rows. */
   houses?: HouseRow[];
 };
@@ -198,14 +208,16 @@ type UserWithSalespersonFlag = {
   is_salesperson?: boolean;
 };
 
-function createDefaultFilters(): JobProfitVerificationFilters {
+function createDefaultFilters(
+  mode: JobProfitVerificationMode = "verification",
+): JobProfitVerificationFilters {
   return {
     date_from: dayjs().startOf("month").toDate(),
     date_to: dayjs().toDate(),
     branch_code: "",
     job_id: "",
     service: "",
-    status: "",
+    status: mode === "approval" ? "hold" : "",
     origin_code: "",
     origin_port_label: "",
     destination_code: "",
@@ -230,8 +242,9 @@ function serializeFiltersForStore(
 
 function deserializeFiltersFromStore(
   stored: StoredFilters,
+  mode: JobProfitVerificationMode = "verification",
 ): JobProfitVerificationFilters {
-  const defaults = createDefaultFilters();
+  const defaults = createDefaultFilters(mode);
   return {
     ...defaults,
     ...stored,
@@ -239,6 +252,7 @@ function deserializeFiltersFromStore(
       ? dayjs(stored.date_from).toDate()
       : defaults.date_from,
     date_to: stored.date_to ? dayjs(stored.date_to).toDate() : defaults.date_to,
+    status: mode === "approval" ? "hold" : (stored.status ?? defaults.status),
   };
 }
 
@@ -384,7 +398,7 @@ function StatusPill({ status }: { status?: string | null }) {
   const key = raw.toLowerCase();
   const label = getProfitStatusLabel(raw);
   const cfg =
-    key === "confirmed"
+    key === "confirmed" || key === "approved" || key === "hold_confirmed"
       ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" }
       : key === "verified"
         ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" }
@@ -392,7 +406,9 @@ function StatusPill({ status }: { status?: string | null }) {
           ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" }
           : key === "hold"
             ? { dot: "#e11d48", bg: "#fff1f2", color: "#be123c" }
-            : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" };
+            : key === "rejected" || key === "hold_rejected"
+              ? { dot: "#dc2626", bg: "#fef2f2", color: "#b91c1c" }
+              : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" };
 
   return (
     <Box
@@ -431,7 +447,18 @@ function stripJobIdServicePrefix(jobNo: string): string {
   return withoutPrefix || trimmed;
 }
 
-export default function JobProfitVerificationMaster() {
+export default function JobProfitVerificationMaster({
+  mode = "verification",
+}: JobProfitVerificationListProps = {}) {
+  const isApprovalMode = mode === "approval";
+  const LIST_KEY = isApprovalMode ? LIST_KEY_APPROVAL : LIST_KEY_VERIFICATION;
+  const listQueryKey = isApprovalMode
+    ? "jobProfitVerificationApproval"
+    : "jobProfitVerification";
+  const listReturnPath = isApprovalMode
+    ? "/job-profit-verification-approval"
+    : "/job-profit-verification";
+
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -473,10 +500,10 @@ export default function JobProfitVerificationMaster() {
   const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFilters, setDraftFilters] = useState<JobProfitVerificationFilters>(
-    () => createDefaultFilters(),
+    () => createDefaultFilters(mode),
   );
   const [appliedFilters, setAppliedFilters] =
-    useState<JobProfitVerificationFilters>(() => createDefaultFilters());
+    useState<JobProfitVerificationFilters>(() => createDefaultFilters(mode));
   const [isRestoring, setIsRestoring] = useState(true);
   const [branchOptions, setBranchOptions] = useState<
     { value: string; label: string }[]
@@ -513,14 +540,18 @@ export default function JobProfitVerificationMaster() {
   const commitHeaderFilters = useCallback(
     (partial: Partial<JobProfitVerificationFilters>) => {
       setDraftFilters((prev) => {
-        const next = { ...prev, ...partial };
+        const next = {
+          ...prev,
+          ...partial,
+          ...(isApprovalMode ? { status: "hold" } : {}),
+        };
         setAppliedFilters(next);
         setStoreFilters(LIST_KEY, serializeFiltersForStore(next));
         return next;
       });
       setPagination((p) => ({ ...p, pageIndex: 0 }));
     },
-    [setStoreFilters],
+    [LIST_KEY, isApprovalMode, setStoreFilters],
   );
 
   useEffect(() => {
@@ -529,15 +560,20 @@ export default function JobProfitVerificationMaster() {
     if (stored?.filters && typeof stored.filters === "object") {
       const restored = deserializeFiltersFromStore(
         stored.filters as StoredFilters,
+        mode,
       );
       setDraftFilters(restored);
       setAppliedFilters(restored);
+    } else if (isApprovalMode) {
+      const defaults = createDefaultFilters(mode);
+      setDraftFilters(defaults);
+      setAppliedFilters(defaults);
     }
     if (typeof stored?.search === "string") {
       setSearch(stored.search);
     }
     setIsRestoring(false);
-  }, [clearAllExcept, getState, location.key]);
+  }, [LIST_KEY, clearAllExcept, getState, isApprovalMode, location.key, mode]);
 
   useEffect(() => {
     if (!isStaff || !countryCode) {
@@ -622,7 +658,7 @@ export default function JobProfitVerificationMaster() {
         country_code: countryCode,
         job_id: filters.job_id?.trim() || "",
         service: filters.service?.trim() || "",
-        status: filters.status?.trim() || "",
+        status: isApprovalMode ? "hold" : filters.status?.trim() || "",
         service_type: "",
         trade: "",
         shipment_id: "",
@@ -638,7 +674,7 @@ export default function JobProfitVerificationMaster() {
         ordering: "-job_date",
       };
     },
-    [countryCode, defaultBranch, isSalesperson, isStaff],
+    [countryCode, defaultBranch, isApprovalMode, isSalesperson, isStaff],
   );
 
   const persistFiltersToStore = useCallback(
@@ -646,7 +682,7 @@ export default function JobProfitVerificationMaster() {
       setStoreFilters(LIST_KEY, serializeFiltersForStore(filters));
       setStoreSearch(LIST_KEY, searchValue);
     },
-    [setStoreFilters, setStoreSearch],
+    [LIST_KEY, setStoreFilters, setStoreSearch],
   );
 
   const persistListAndNavigate = useCallback(
@@ -655,7 +691,7 @@ export default function JobProfitVerificationMaster() {
       setShouldRestore(LIST_KEY, true);
       navigate(path, { state });
     },
-    [appliedFilters, navigate, persistFiltersToStore, search, setShouldRestore],
+    [LIST_KEY, appliedFilters, navigate, persistFiltersToStore, search, setShouldRestore],
   );
 
   const handleOpenHouseLedger = useCallback(
@@ -682,10 +718,10 @@ export default function JobProfitVerificationMaster() {
         confirmed_by: row.confirmed_by ?? null,
         confirmed_at: row.confirmed_at ?? null,
         fromJobProfitVerification: true,
-        jobReturnTo: "/job-profit-verification",
+        jobReturnTo: listReturnPath,
       });
     },
-    [persistListAndNavigate],
+    [listReturnPath, persistListAndNavigate],
   );
 
   const handleOpenQuotation = useCallback(
@@ -703,9 +739,9 @@ export default function JobProfitVerificationMaster() {
 
   const refreshProfitList = useCallback(() => {
     void queryClient.invalidateQueries({
-      queryKey: ["jobProfitVerification"],
+      queryKey: [listQueryKey],
     });
-  }, [queryClient]);
+  }, [listQueryKey, queryClient]);
 
   const handleVerifyProfit = useCallback(
     (row: JobProfitRow) => {
@@ -748,13 +784,51 @@ export default function JobProfitVerificationMaster() {
     [refreshProfitList],
   );
 
+  const handleApproveHold = useCallback(
+    (row: JobProfitRow) => {
+      const shipmentId = row.subjob_no?.trim();
+      if (!shipmentId) {
+        ToastNotification({
+          type: "error",
+          message: "Shipment number not found.",
+        });
+        return;
+      }
+      runJobProfitHoldDecision({
+        shipmentId,
+        decision: "approve",
+        onSuccess: refreshProfitList,
+      });
+    },
+    [refreshProfitList],
+  );
+
+  const handleRejectHold = useCallback(
+    (row: JobProfitRow) => {
+      const shipmentId = row.subjob_no?.trim();
+      if (!shipmentId) {
+        ToastNotification({
+          type: "error",
+          message: "Shipment number not found.",
+        });
+        return;
+      }
+      runJobProfitHoldDecision({
+        shipmentId,
+        decision: "reject",
+        onSuccess: refreshProfitList,
+      });
+    },
+    [refreshProfitList],
+  );
+
   const {
     data: listResult,
     isLoading,
     isFetching,
   } = useQuery({
     queryKey: [
-      "jobProfitVerification",
+      listQueryKey,
       pageIndex,
       pageSize,
       JSON.stringify(appliedFilters),
@@ -797,7 +871,7 @@ export default function JobProfitVerificationMaster() {
   };
 
   const clearAllFilters = () => {
-    const reset = createDefaultFilters();
+    const reset = createDefaultFilters(mode);
     setDraftFilters(reset);
     setAppliedFilters(reset);
     setSearch("");
@@ -894,17 +968,17 @@ export default function JobProfitVerificationMaster() {
                 label="Total"
               />
             ),
-            secondary: (
-              <Group gap={8} wrap="nowrap" align="center">
-                <IconChartBar size={16} color={muted} />
-                <Text fw={600} size="sm" c={fg}>
-                  {totalRecords.toLocaleString()}
-                </Text>
-                <Text size="xs" c={muted}>
-                  job profit rows
-                </Text>
-              </Group>
-            ),
+            // secondary: isApprovalMode ? undefined : (
+            //   <Group gap={8} wrap="nowrap" align="center">
+            //     <IconChartBar size={16} color={muted} />
+            //     <Text fw={600} size="sm" c={fg}>
+            //       {totalRecords.toLocaleString()}
+            //     </Text>
+            //     <Text size="xs" c={muted}>
+            //       job profit rows
+            //     </Text>
+            //   </Group>
+            // ),
             actions: (
               <>
                 <TextInput
@@ -952,7 +1026,9 @@ export default function JobProfitVerificationMaster() {
           filters={{
             opened: showFilters,
             title: "Filters",
-            subtitle: "Refine job profit verification",
+            subtitle: isApprovalMode
+              ? "Refine job profit verification approval"
+              : "Refine job profit verification",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1069,28 +1145,30 @@ export default function JobProfitVerificationMaster() {
                     />
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <Select
-                      size="xs"
-                      label="Status"
-                      placeholder="All statuses"
-                      data={[...PROFIT_STATUS_FILTER_OPTIONS]}
-                      value={draftFilters.status || null}
-                      onChange={(v) =>
-                        setDraftFilters((prev) => ({
-                          ...prev,
-                          status: v ?? "",
-                        }))
-                      }
-                      clearable
-                      searchable
-                      comboboxProps={{ zIndex: 400 }}
-                      classNames={erpListGeistSelectClassNames}
-                      styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
+                {!isApprovalMode ? (
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <Select
+                        size="xs"
+                        label="Status"
+                        placeholder="All statuses"
+                        data={[...PROFIT_STATUS_FILTER_OPTIONS]}
+                        value={draftFilters.status || null}
+                        onChange={(v) =>
+                          setDraftFilters((prev) => ({
+                            ...prev,
+                            status: v ?? "",
+                          }))
+                        }
+                        clearable
+                        searchable
+                        comboboxProps={{ zIndex: 400 }}
+                        classNames={erpListGeistSelectClassNames}
+                        styles={filterFieldStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                ) : null}
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
@@ -1432,43 +1510,52 @@ export default function JobProfitVerificationMaster() {
                       <th style={listAmountThStyle}>Revenue</th>
                       <th style={listAmountThStyle}>Profit</th>
                       <th style={listGpPctThStyle}>GP (%)</th>
-                      <th style={mergeTh(180, 180)}>
-                        <ERPListColumnHeaderFilter
-                          label="Status"
-                          value={appliedFilters.status}
-                          displayValue={
-                            appliedFilters.status
-                              ? getProfitStatusLabel(appliedFilters.status)
-                              : ""
-                          }
-                          theme={theme}
-                          placeholder="Status"
-                          isEditing={editingHeaderId === "status"}
-                          onStartEdit={() => openHeaderEditor("status")}
-                          onStopEdit={() => collapseHeaderEditor("status")}
-                          onChange={() => {}}
-                          renderEditor={({ autoFocus, onClose }) => (
-                            <Select
-                              autoFocus={autoFocus}
-                              placeholder="Status"
-                              searchable
-                              clearable
-                              size="xs"
-                              data={[...PROFIT_STATUS_FILTER_OPTIONS]}
-                              value={appliedFilters.status || null}
-                              onChange={(value) => {
-                                commitHeaderFilters({ status: value ?? "" });
-                                onClose();
-                              }}
-                              comboboxProps={{ zIndex: 1000 }}
-                              classNames={erpListGeistSelectClassNames}
-                              styles={filterFieldStyles}
-                            />
-                          )}
-                        />
+                      <th style={mergeTh(isApprovalMode ? 90 : 180, isApprovalMode ? 90 : 180)}>
+                        {isApprovalMode ? (
+                          "Status"
+                        ) : (
+                          <ERPListColumnHeaderFilter
+                            label="Status"
+                            value={appliedFilters.status}
+                            displayValue={
+                              appliedFilters.status
+                                ? getProfitStatusLabel(appliedFilters.status)
+                                : ""
+                            }
+                            theme={theme}
+                            placeholder="Status"
+                            isEditing={editingHeaderId === "status"}
+                            onStartEdit={() => openHeaderEditor("status")}
+                            onStopEdit={() => collapseHeaderEditor("status")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <Select
+                                autoFocus={autoFocus}
+                                placeholder="Status"
+                                searchable
+                                clearable
+                                size="xs"
+                                data={[...PROFIT_STATUS_FILTER_OPTIONS]}
+                                value={appliedFilters.status || null}
+                                onChange={(value) => {
+                                  commitHeaderFilters({ status: value ?? "" });
+                                  onClose();
+                                }}
+                                comboboxProps={{ zIndex: 1000 }}
+                                classNames={erpListGeistSelectClassNames}
+                                styles={filterFieldStyles}
+                              />
+                            )}
+                          />
+                        )}
                       </th>
+                      {isApprovalMode ? (
+                        <th style={mergeTh(220, 220)}>Remark</th>
+                      ) : null}
                       <th style={mergeTh(150, 150)}>Verified By</th>
-                      <th style={mergeTh(150, 150)}>Confirmed By</th>
+                      {!isApprovalMode ? (
+                        <th style={mergeTh(150, 150)}>Confirmed By</th>
+                      ) : null}
                       <th style={erpListStickyActionThStyle(theme, 96)}>Actions</th>
                     </tr>
                   </thead>
@@ -1609,9 +1696,65 @@ export default function JobProfitVerificationMaster() {
                               label={formatGpPercent(row.our_gp_pct)}
                             />
                           </td>
-                          <td style={tdPad}>
+                          <td
+                            style={{
+                              ...tdPad,
+                              ...(isApprovalMode
+                                ? {
+                                    width: 90,
+                                    minWidth: 90,
+                                    maxWidth: 90,
+                                    whiteSpace: "nowrap" as const,
+                                  }
+                                : {}),
+                            }}
+                          >
                             <StatusPill status={row.status} />
                           </td>
+                          {isApprovalMode ? (
+                            <td style={tdPad}>
+                              {(() => {
+                                const holdRemark =
+                                  row.hold_remark?.trim() || "";
+                                const brokerageRemark =
+                                  row.brokerage_remark?.trim() || "";
+                                const remarkNode = (
+                                  <Text
+                                    size="sm"
+                                    c={holdRemark ? fg : muted}
+                                    style={{
+                                      maxWidth: 280,
+                                      whiteSpace: "normal",
+                                      wordBreak: "break-word",
+                                      cursor: brokerageRemark
+                                        ? "default"
+                                        : undefined,
+                                    }}
+                                  >
+                                    {holdRemark || "—"}
+                                  </Text>
+                                );
+                                if (!brokerageRemark) return remarkNode;
+                                return (
+                                  <Tooltip
+                                    label={brokerageRemark}
+                                    multiline
+                                    maw={360}
+                                    withArrow
+                                    styles={{
+                                      tooltip: {
+                                        fontFamily: theme.fontSans,
+                                        fontSize: 12,
+                                        whiteSpace: "pre-wrap",
+                                      },
+                                    }}
+                                  >
+                                    {remarkNode}
+                                  </Tooltip>
+                                );
+                              })()}
+                            </td>
+                          ) : null}
                           <td style={tdPad}>
                             <Text size="sm" c={fg}>
                               {row.verified_by?.trim() || "—"}
@@ -1622,18 +1765,62 @@ export default function JobProfitVerificationMaster() {
                               </Text>
                             ) : null}
                           </td>
-                          <td style={tdPad}>
-                            <Text size="sm" c={fg}>
-                              {row.confirmed_by?.trim() || "—"}
-                            </Text>
-                            {row.confirmed_at ? (
-                              <Text size="xs" c={muted} mt={2}>
-                                {fmtDateTime(row.confirmed_at)}
+                          {!isApprovalMode ? (
+                            <td style={tdPad}>
+                              <Text size="sm" c={fg}>
+                                {row.confirmed_by?.trim() || "—"}
                               </Text>
-                            ) : null}
-                          </td>
+                              {row.confirmed_at ? (
+                                <Text size="xs" c={muted} mt={2}>
+                                  {fmtDateTime(row.confirmed_at)}
+                                </Text>
+                              ) : null}
+                            </td>
+                          ) : null}
                           <td style={erpListStickyActionTdStyle(theme)}>
                             {(() => {
+                              if (isApprovalMode) {
+                                return (
+                                  <Menu
+                                    withinPortal
+                                    position="bottom-end"
+                                    shadow="md"
+                                    width={180}
+                                    styles={erpListGeistMenuDropdownStyles}
+                                    classNames={{
+                                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                                    }}
+                                  >
+                                    <Menu.Target>
+                                      <ActionIcon
+                                        variant="subtle"
+                                        color="gray"
+                                        size="sm"
+                                      >
+                                        <IconDotsVertical size={16} />
+                                      </ActionIcon>
+                                    </Menu.Target>
+                                    <Menu.Dropdown>
+                                      <Menu.Item
+                                        leftSection={
+                                          <IconCircleCheck size={14} />
+                                        }
+                                        onClick={() => handleApproveHold(row)}
+                                      >
+                                        Approve
+                                      </Menu.Item>
+                                      <Menu.Item
+                                        color="red"
+                                        leftSection={<IconCircleX size={14} />}
+                                        onClick={() => handleRejectHold(row)}
+                                      >
+                                        Reject
+                                      </Menu.Item>
+                                    </Menu.Dropdown>
+                                  </Menu>
+                                );
+                              }
+
                               const showVerify = canShowVerifyProfit({
                                 is_sales: row.is_sales,
                                 status: row.status,

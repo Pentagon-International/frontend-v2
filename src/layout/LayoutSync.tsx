@@ -59,6 +59,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/pipeline")) {
       setActiveNav("Sales");
       setActiveSubNav("Pipeline");
+    } else if (path.startsWith("/job-profit-verification-approval")) {
+      setActiveNav("Sales");
+      setActiveSubNav("Job Profit Verification Approval");
     } else if (path.startsWith("/job-profit-verification")) {
       setActiveNav("Sales");
       setActiveSubNav("Job Profit Verification");
@@ -231,8 +234,8 @@ export const LayoutSync = () => {
       setActiveNav("Desk");
       setActiveSubNav("Debit/Credit Note Non Trade");
     } else if (path.startsWith("/service-job")) {
-      setActiveNav("Desk");
-      setActiveSubNav("Service Job");
+      setActiveNav("Transportation");
+      setActiveSubNav("Service Jobs");
     } else if (path.startsWith("/job-closure")) {
       setActiveNav("Desk");
       setActiveSubNav("Job Closure");

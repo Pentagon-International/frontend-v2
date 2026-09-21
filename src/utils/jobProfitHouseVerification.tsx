@@ -47,6 +47,7 @@ export type JobProfitHouseAuditRecord = {
   status?: string | null;
   brokerage?: number | null;
   brokerage_remark?: string | null;
+  hold_remark?: string | null;
   shipment_id?: string | null;
 };
 
@@ -97,6 +98,7 @@ export function pickProfitHouseAuditFields(
   status: string | null;
   brokerage: number | null;
   brokerage_remark: string | null;
+  hold_remark: string | null;
 } {
   const nested = pickProfitHouseRecord(response, shipmentId);
   const verified_by =
@@ -107,11 +109,6 @@ export function pickProfitHouseAuditFields(
     nested?.confirmed_by ?? response?.confirmed_by ?? null;
   const confirmed_at =
     nested?.confirmed_at ?? response?.confirmed_at ?? null;
-  const statusRaw = nested?.status ?? response?.status;
-  const status =
-    typeof statusRaw === "string" && statusRaw.trim()
-      ? statusRaw.trim()
-      : null;
   const brokerageRaw = nested?.brokerage ?? response?.brokerage ?? null;
   const brokerage =
     brokerageRaw != null && Number.isFinite(Number(brokerageRaw))
@@ -119,6 +116,19 @@ export function pickProfitHouseAuditFields(
       : null;
   const brokerage_remark =
     nested?.brokerage_remark ?? response?.brokerage_remark ?? null;
+  const hold_remarkRaw = nested?.hold_remark ?? null;
+  const hold_remark =
+    hold_remarkRaw != null ? String(hold_remarkRaw).trim() || null : null;
+  // Prefer nested house status; never treat a boolean top-level `status` as profit status.
+  const statusRaw = nested?.status;
+  let status =
+    typeof statusRaw === "string" && statusRaw.trim()
+      ? statusRaw.trim()
+      : null;
+  // If margin rules returned a hold remark, treat the row as hold even when status lags.
+  if (hold_remark) {
+    status = "hold";
+  }
   return {
     verified_by: verified_by != null ? String(verified_by) : null,
     verified_at: verified_at != null ? String(verified_at) : null,
@@ -128,6 +138,7 @@ export function pickProfitHouseAuditFields(
     brokerage,
     brokerage_remark:
       brokerage_remark != null ? String(brokerage_remark) : null,
+    hold_remark,
   };
 }
 
@@ -142,6 +153,10 @@ const PROFIT_STATUS_LABELS: Record<string, string> = {
   verified: "Pricing verified pending for sales confirmation",
   confirmed: "Sales Confirmed",
   hold: "Hold",
+  approved: "Approved",
+  rejected: "Rejected",
+  hold_confirmed: "Approved",
+  hold_rejected: "Rejected",
 };
 
 export const PROFIT_STATUS_FILTER_OPTIONS = [
@@ -149,6 +164,8 @@ export const PROFIT_STATUS_FILTER_OPTIONS = [
   { value: "verified", label: PROFIT_STATUS_LABELS.verified },
   { value: "confirmed", label: PROFIT_STATUS_LABELS.confirmed },
   { value: "hold", label: PROFIT_STATUS_LABELS.hold },
+  { value: "approved", label: PROFIT_STATUS_LABELS.approved },
+  { value: "rejected", label: PROFIT_STATUS_LABELS.rejected },
 ] as const;
 
 /** Human-readable label for job profit verification status keys. */
@@ -158,10 +175,159 @@ export function getProfitStatusLabel(status?: string | null): string {
   return PROFIT_STATUS_LABELS[key] ?? String(status ?? "").trim();
 }
 
-/** No further verify/confirm/brokerage actions after confirm (or legacy hold). */
+/** No further verify/confirm/brokerage actions after confirm, hold, or hold decision. */
 export function isProfitFlowComplete(status?: string | null): boolean {
   const s = normalizeProfitStatus(status);
-  return s === "confirmed" || s === "hold";
+  return (
+    s === "confirmed" ||
+    s === "hold" ||
+    s === "approved" ||
+    s === "rejected" ||
+    s === "hold_confirmed" ||
+    s === "hold_rejected"
+  );
+}
+
+/** True when sales confirm (or a hold decision) has already been applied — not plain hold. */
+export function isProfitConfirmed(status?: string | null): boolean {
+  const s = normalizeProfitStatus(status);
+  return (
+    s === "confirmed" ||
+    s === "approved" ||
+    s === "rejected" ||
+    s === "hold_confirmed" ||
+    s === "hold_rejected"
+  );
+}
+
+export function isProfitOnHold(status?: string | null): boolean {
+  return normalizeProfitStatus(status) === "hold";
+}
+
+/** Hold from status and/or a non-empty hold_remark on the brokerage/house response. */
+export function isProfitHoldFromResponse(options: {
+  status?: string | null;
+  holdRemark?: string | null;
+}): boolean {
+  return (
+    isProfitOnHold(options.status) ||
+    Boolean(String(options.holdRemark ?? "").trim())
+  );
+}
+
+export type JobProfitHoldDecision = "approve" | "reject";
+
+export type JobProfitHoldDecisionPayload = {
+  items: Array<{
+    shipment_id: string;
+    hold_confirmed?: boolean;
+    hold_rejected?: boolean;
+  }>;
+};
+
+export function buildHoldDecisionPayload(
+  shipmentId: string,
+  decision: JobProfitHoldDecision,
+): JobProfitHoldDecisionPayload {
+  const shipment_id = String(shipmentId ?? "").trim();
+  if (decision === "approve") {
+    return { items: [{ shipment_id, hold_confirmed: true }] };
+  }
+  return { items: [{ shipment_id, hold_rejected: true }] };
+}
+
+export async function patchJobProfitHoldDecision(
+  payload: JobProfitHoldDecisionPayload,
+) {
+  const response = (await apiCallProtected.patch(
+    `${URL.jobProfitVerification}house/`,
+    payload,
+    API_HEADER,
+  )) as JobProfitHousePatchResult;
+
+  if (response?.success === false || response?.status === false) {
+    throw new Error(
+      response.message ??
+        response.detail ??
+        "Failed to update hold decision.",
+    );
+  }
+
+  return response;
+}
+
+/** Approve / Reject hold dialogs outside Menu trees so they survive dropdown unmount. */
+export function runJobProfitHoldDecision(options: {
+  shipmentId: string;
+  decision: JobProfitHoldDecision;
+  onSuccess?: (response?: JobProfitHousePatchResult) => void;
+}) {
+  const shipmentId = String(options.shipmentId ?? "").trim();
+  if (!shipmentId) {
+    ToastNotification({
+      type: "error",
+      message: "Shipment number not found.",
+    });
+    return;
+  }
+
+  const isApprove = options.decision === "approve";
+  let loading = false;
+  let error: string | null = null;
+
+  mountPortal(({ update, destroy }) => {
+    const render = () => {
+      update(
+        <ConfirmActionModal
+          title={isApprove ? "Approve" : "Reject"}
+          message={
+            isApprove
+              ? `Approve for shipment ${shipmentId}?`
+              : `Reject for shipment ${shipmentId}?`
+          }
+          confirmLabel={isApprove ? "Approve" : "Reject"}
+          loading={loading}
+          error={error}
+          onClose={() => {
+            if (!loading) destroy();
+          }}
+          onConfirm={() => {
+            if (loading) return;
+            loading = true;
+            error = null;
+            render();
+
+            void (async () => {
+              try {
+                const response = await patchJobProfitHoldDecision(
+                  buildHoldDecisionPayload(shipmentId, options.decision),
+                );
+                ToastNotification({
+                  type: "success",
+                  message:
+                    response?.message ??
+                    (isApprove
+                      ? "Hold approved successfully"
+                      : "Hold rejected successfully"),
+                });
+                destroy();
+                options.onSuccess?.(response);
+              } catch (err: unknown) {
+                loading = false;
+                error = resolveApiErrorMessage(
+                  err,
+                  "Failed to update hold decision.",
+                );
+                ToastNotification({ type: "error", message: error });
+                render();
+              }
+            })();
+          }}
+        />,
+      );
+    };
+    render();
+  });
 }
 
 export function canShowVerifyProfit(params: {
@@ -178,9 +344,18 @@ export function canShowVerifyProfit(params: {
 export function canShowConfirmProfit(params: {
   is_sales?: boolean | null;
   status?: string | null;
+  holdRemark?: string | null;
 }): boolean {
   // Confirm is only for sales users (is_sales=true), after verify.
   if (params.is_sales !== true) return false;
+  if (
+    isProfitHoldFromResponse({
+      status: params.status,
+      holdRemark: params.holdRemark,
+    })
+  ) {
+    return false;
+  }
   if (isProfitFlowComplete(params.status)) return false;
   return normalizeProfitStatus(params.status) === "verified";
 }
@@ -640,11 +815,34 @@ export function runJobProfitHouseAction(options: {
                     brokerageRemark: values.brokerageRemark,
                   })
                 ) {
-                  await saveJobProfitBrokerage({
+                  const brokerageResponse = await saveJobProfitBrokerage({
                     shipmentId,
                     brokerage: values.brokerage,
                     brokerageRemark: values.brokerageRemark,
                   });
+                  const brokerageAudit = pickProfitHouseAuditFields(
+                    brokerageResponse,
+                    shipmentId,
+                  );
+                  // Margin rules can place the job on hold — confirm is not allowed.
+                  if (
+                    isProfitHoldFromResponse({
+                      status: brokerageAudit.status,
+                      holdRemark: brokerageAudit.hold_remark,
+                    })
+                  ) {
+                    const holdMessage =
+                      brokerageAudit.hold_remark?.trim() ||
+                      brokerageResponse?.message ||
+                      "Profit placed on hold. Confirmation is not allowed.";
+                    ToastNotification({
+                      type: "warning",
+                      message: holdMessage,
+                    });
+                    destroy();
+                    options.onSuccess?.(brokerageResponse);
+                    return;
+                  }
                 }
 
                 const response = await patchJobProfitHouse({

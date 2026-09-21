@@ -105,6 +105,9 @@ const Navbar = ({
   );
   const showQuotationApproval =
     isManagerOrAdmin && hasQuotationApprovalPermission;
+  const showJobProfitApproval =
+    Boolean(user?.is_staff) ||
+    Boolean(user?.screen_permissions?.job_profit_approval);
   const showFinanceDashboard =
     Boolean(user?.is_staff) ||
     Boolean(user?.screen_permissions?.finance_dashboard);
@@ -145,7 +148,6 @@ const Navbar = ({
       location.pathname.startsWith("/document-allocation") ||
       location.pathname.startsWith("/debit-credit-note-trade") ||
       location.pathname.startsWith("/debit-credit-note-non-trade") ||
-      location.pathname.startsWith("/service-job") ||
       location.pathname.startsWith("/job-closure") ||
       location.pathname.startsWith("/job-reopen") ||
       location.pathname.startsWith("/bank-reconciliation") ||
@@ -558,6 +560,21 @@ const Navbar = ({
                       setIsAccountsOpen,
                     }}
                   />
+                  {showJobProfitApproval && (
+                    <SubNavLink
+                      parent="Sales"
+                      label="Job Profit Verification Approval"
+                      icon={IconCircleCheck}
+                      path="/job-profit-verification-approval"
+                      collapsibles={{
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                        setIsAccountsOpen,
+                      }}
+                    />
+                  )}
 
                   {/* Tariff collapsible submenu */}
                   <CollapsibleNav
@@ -823,6 +840,21 @@ const Navbar = ({
                       setIsChaOpen,
                     }}
                   />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Service Jobs"
+                    icon={IconBriefcase}
+                    path="/service-job"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                      setIsChaOpen,
+                    }}
+                  />
                 </CollapsibleNav>
               </Box>
               <Box>
@@ -1041,6 +1073,21 @@ const Navbar = ({
                     label="Ocean Import to Export Booking"
                     icon={IconShip}
                     path="/SeaExport/import-to-export-booking"
+                    collapsibles={{
+                      setIsSalesOpen,
+                      setIsTariffOpen,
+                      setIsCustomerServiceOpen,
+                      setIsAirOpen,
+                      setIsInlandOpen,
+                      setIsSeaExportOpen,
+                      setIsChaOpen,
+                    }}
+                  />
+                  <SubNavLink
+                    parent="Transportation"
+                    label="Service Jobs"
+                    icon={IconBriefcase}
+                    path="/service-job"
                     collapsibles={{
                       setIsSalesOpen,
                       setIsTariffOpen,
@@ -1382,19 +1429,6 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
-                    <SubNavLink
-                    parent="Accounts"
-                    label="Service Job"
-                    icon={IconBriefcase}
-                    path="/service-job"
-                    collapsibles={{
-                      setIsSalesOpen,
-                      setIsTariffOpen,
-                      setIsCustomerServiceOpen,
-                      setIsAirOpen,
-                      setIsSeaExportOpen,
-                    }}
-                  />
                     <SubNavLink
                       parent="Accounts"
                       label="Job Closure"
