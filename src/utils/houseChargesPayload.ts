@@ -146,18 +146,8 @@ export function validateMeaningfulHouseCharges(
         }
       }
     }
-    if (charge.amount === null || charge.amount === undefined) {
-      chargeError.amount = "Amount is required";
-      hasErrors = true;
-    }
-    if (
-      (charge.amount_per_unit && !charge.no_of_unit) ||
-      (charge.no_of_unit && !charge.amount_per_unit)
-    ) {
-      chargeError.amount_per_unit =
-        "Both Amount Per Unit and No of Unit must be set together";
-      hasErrors = true;
-    }
+    // Sell Amount/Unit, Amount, and Local Amount are optional (cost-only rows allowed).
+    // Zero is a valid sell value when entered.
 
     if (Object.keys(chargeError).length > 0) {
       errors[index] = chargeError;

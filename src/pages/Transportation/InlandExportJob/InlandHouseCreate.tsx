@@ -67,6 +67,7 @@ import {
   hasBillingCustomerParty,
   isNewCustomerSelection,
 } from "../../../utils/customerSelection";
+import { resolveExportHouseInvoiceBillTo } from "../../../utils/houseInvoiceBillTo";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
@@ -1361,26 +1362,24 @@ function HouseCreate() {
     const updatedCharges = chargesForm.values.charges.map((charge) => {
       const next = { ...charge };
 
-      // Recalculate amount from no_of_unit and amount_per_unit
+      // Recalculate amount from no_of_unit and amount_per_unit (0 allowed)
       if (
         charge.amount_per_unit !== null &&
-        charge.amount_per_unit !== undefined &&
-        charge.amount_per_unit > 0
+        charge.amount_per_unit !== undefined
       ) {
         const noOfUnit = charge.no_of_unit || 0;
         const amountPerUnit = charge.amount_per_unit || 0;
         const calculatedAmount =
           clampCurrencyMoneyAmountBound(noOfUnit * amountPerUnit) ?? 0;
-        if (calculatedAmount > 0 && calculatedAmount !== next.amount) {
+        if (calculatedAmount !== next.amount) {
           next.amount = calculatedAmount;
         }
       }
 
-      // Recalculate local_amount (sell) from amount and roe
+      // Recalculate local_amount (sell) from amount and roe (0 allowed)
       if (
         next.amount !== null &&
         next.amount !== undefined &&
-        next.amount > 0 &&
         next.roe !== null &&
         next.roe !== undefined &&
         next.roe > 0
@@ -1395,11 +1394,10 @@ function HouseCreate() {
         }
       }
 
-      // Recalculate cost_local_amount from total_cost and roe
+      // Recalculate cost_local_amount from total_cost and roe (0 allowed)
       if (
         next.total_cost !== null &&
         next.total_cost !== undefined &&
-        next.total_cost > 0 &&
         next.roe !== null &&
         next.roe !== undefined &&
         next.roe > 0
@@ -4947,6 +4945,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
+                          billToFrom: resolveExportHouseInvoiceBillTo(
+                            fullDetail as Record<string, unknown>,
+                          ),
                           ...(location.state?.job && {
                             job: location.state.job,
                           }),
@@ -4984,6 +4985,9 @@ function HouseCreate() {
                           hawbDetails: [detailForInvoice],
                           housingDetails: [detailForInvoice],
                           is_agent: false,
+                          billToFrom: resolveExportHouseInvoiceBillTo(
+                            fullDetail as Record<string, unknown>,
+                          ),
                           ...(location.state?.job && {
                             job: location.state.job,
                           }),
@@ -5390,9 +5394,8 @@ function HouseCreate() {
                               chargesForm.values.charges[index];
                             if (
                               currentCharge.amount_per_unit != null &&
-                              currentCharge.amount_per_unit > 0 &&
-                              noOfUnit != null &&
-                              noOfUnit > 0
+                              currentCharge.amount_per_unit != null &&
+                              noOfUnit != null
                             ) {
                               chargesForm.setFieldValue(
                                 `charges.${index}.amount`,
@@ -5408,9 +5411,8 @@ function HouseCreate() {
                             }
                             if (
                               currentCharge.cost_per_unit != null &&
-                              currentCharge.cost_per_unit > 0 &&
-                              noOfUnit != null &&
-                              noOfUnit > 0
+                              currentCharge.cost_per_unit != null &&
+                              noOfUnit != null
                             ) {
                               chargesForm.setFieldValue(
                                 `charges.${index}.total_cost`,
@@ -5435,7 +5437,7 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.amount_per_unit || undefined}
+                      value={charge.amount_per_unit ?? undefined}
                       onChange={(value) => {
                         const amountPerUnit = value as number | null;
                         chargesForm.setFieldValue(
@@ -5480,7 +5482,7 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.amount || undefined}
+                      value={charge.amount ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.amount`,
@@ -5506,7 +5508,7 @@ function HouseCreate() {
                       hideControls
                       groupThousands
                       decimalScale={localAmountDecimalScale}
-                      value={charge.local_amount || undefined}
+                      value={charge.local_amount ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.local_amount`,
@@ -5521,7 +5523,7 @@ function HouseCreate() {
                       min={0}
                       hideControls
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.cost_per_unit || undefined}
+                      value={charge.cost_per_unit ?? undefined}
                       onChange={(value) => {
                         const costPerUnit = value as number | null;
                         chargesForm.setFieldValue(
@@ -5531,9 +5533,7 @@ function HouseCreate() {
                         const currentCharge = chargesForm.values.charges[index];
                         if (
                           costPerUnit != null &&
-                          costPerUnit > 0 &&
-                          currentCharge.no_of_unit != null &&
-                          currentCharge.no_of_unit > 0
+                          currentCharge.no_of_unit != null
                         ) {
                           chargesForm.setFieldValue(
                             `charges.${index}.total_cost`,
@@ -5557,7 +5557,7 @@ function HouseCreate() {
                       hideControls
                       groupThousands
                       decimalScale={currencyAmountDecimalScale}
-                      value={charge.total_cost || undefined}
+                      value={charge.total_cost ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.total_cost`,
@@ -5573,7 +5573,7 @@ function HouseCreate() {
                       hideControls
                       groupThousands
                       decimalScale={localAmountDecimalScale}
-                      value={charge.cost_local_amount || undefined}
+                      value={charge.cost_local_amount ?? undefined}
                       onChange={(value) => {
                         chargesForm.setFieldValue(
                           `charges.${index}.cost_local_amount`,

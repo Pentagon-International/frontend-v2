@@ -3700,13 +3700,15 @@ function AirImportJobCreate() {
                             shipmentNo={getMasterShipmentNo(jobData)}
                             onOpen={openPaymentRequestAutomation}
                           />
-                          <SendForVerificationMenuItem
-                            jobId={jobData.id}
-                            getShipmentIds={() =>
-                              hawbDetails.map((hawb) => hawb.shipment_id)
-                            }
-                          />
                         </>
+                      )}
+                      {jobData?.id != null && (
+                        <SendForVerificationMenuItem
+                          jobId={jobData.id}
+                          getShipmentIds={() =>
+                            hawbDetails.map((hawb) => hawb.shipment_id)
+                          }
+                        />
                       )}
                       <Menu.Item
                         leftSection={

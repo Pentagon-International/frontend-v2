@@ -58,7 +58,9 @@ import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import {
   isCustomerMasterCode,
   pickCustomerMasterCodeFromRecords,
+  resolveCustomerMasterCode,
 } from "../../../utils/customerSelection";
+import type { HouseInvoiceBillToParty } from "../../../utils/houseInvoiceBillTo";
 import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import FormNumberInput from "../../../components/FormNumberInput";
@@ -1304,28 +1306,38 @@ function resolveCurrencyIdByCode(
   return item?.id != null ? Number(item.id) : fallbackCurrencyId;
 }
 
-/** Map job/house party to master state_id for invoice State dropdown. */
+/** Map job/house party to master state_id for invoice State dropdown.
+ * Only the selected Bill To party's own state_id — no cross-party fallbacks.
+ * Prefer addresses_data.state_id from conditional-list after Bill To resolve.
+ */
 function resolvePartyStateIdFromHousing(
   isAgent: boolean,
-  useConsigneeForBillTo: boolean,
+  billToParty: HouseInvoiceBillToParty,
   firstHawb: Record<string, unknown>,
   jobHouse0?: Record<string, unknown>,
   jobRoot?: Record<string, unknown> | null,
 ): number | null {
-  const raw = isAgent
-    ? (firstHawb["agent_state_id"] ??
-      jobHouse0?.["agent_state_id"] ??
-      jobRoot?.["agent_state_id"] ??
-      null)
-    : useConsigneeForBillTo
-      ? (firstHawb["consignee_state_id"] ??
-        jobHouse0?.["consignee_state_id"] ??
-        jobRoot?.["consignee_state_id"] ??
-        null)
-      : (firstHawb["shipper_state_id"] ??
-        jobHouse0?.["shipper_state_id"] ??
-        jobRoot?.["shipper_state_id"] ??
-        null);
+  const stateKeysByParty: Record<HouseInvoiceBillToParty, string[]> = {
+    billing_customer: ["billing_customer_state_id"],
+    notify: ["notify1_customer_state_id", "notify_customer1_state_id"],
+    consignee: ["consignee_state_id"],
+    forwarder: ["forwarder_state_id"],
+    shipper: ["shipper_state_id"],
+  };
+  const keys = isAgent
+    ? ["agent_state_id"]
+    : stateKeysByParty[billToParty] ?? [];
+  const sources = [firstHawb, jobHouse0, jobRoot];
+  let raw: unknown = null;
+  for (const key of keys) {
+    for (const src of sources) {
+      if (src?.[key] != null && String(src[key]).trim() !== "") {
+        raw = src[key];
+        break;
+      }
+    }
+    if (raw != null) break;
+  }
   if (
     raw === null ||
     raw === undefined ||
@@ -1336,12 +1348,21 @@ function resolvePartyStateIdFromHousing(
   return Number(raw);
 }
 
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const s = String(value ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
 type BillToAddressRow = {
   id: number;
   address: string;
   state_id?: number;
   address_type?: string | null;
   gst_id?: string | null;
+  pan_no?: string | null;
 };
 
 function normalizeAddressText(value: string): string {
@@ -1844,21 +1865,32 @@ function InvoiceCreate({
     );
   }, [isFromAirExportJob, isFromHouseLevel, isAgentInvoice, location.pathname]);
 
-  // Import customer invoice: Bill To/state from consignee when billToFrom is omitted.
-  const invoiceUsesConsigneeParty = useMemo(() => {
+  // House customer invoice: Bill To party from navigation (billing → notify/forwarder → consignee/shipper).
+  const invoiceBillToParty = useMemo((): HouseInvoiceBillToParty => {
     const isAgentFlow =
       (location.state as { is_agent?: boolean } | null)?.is_agent === true;
-    if (isAgentFlow) return false;
+    if (isAgentFlow) return "shipper";
     const bt = (
-      location.state as { billToFrom?: "shipper" | "consignee" } | null
+      location.state as { billToFrom?: HouseInvoiceBillToParty } | null
     )?.billToFrom;
-    if (bt === "consignee") return true;
-    if (bt === "shipper") return false;
-    return (
+    if (
+      bt === "billing_customer" ||
+      bt === "notify" ||
+      bt === "consignee" ||
+      bt === "forwarder" ||
+      bt === "shipper"
+    ) {
+      return bt;
+    }
+    // Import routes default to consignee when billToFrom is omitted.
+    if (
       location.pathname.includes("/SeaExport/import-job/invoice") ||
       location.pathname.includes("/air/import-job/invoice") ||
       location.pathname.includes("/inland/import-job/invoice")
-    );
+    ) {
+      return "consignee";
+    }
+    return "shipper";
   }, [location.pathname, location.state?.is_agent, location.state?.billToFrom]);
 
   // Active branch local currency (ROE = 1 when billing/charge currency matches)
@@ -2357,9 +2389,13 @@ function InvoiceCreate({
 
     if (!firstHawb || !isGstInvoiceUser) return;
 
+    // State for customer invoices comes from conditional-list addresses_data only
+    // (no house shipper/consignee/billing fallbacks). Agent still uses agent_state_id.
+    if (!isAgent) return;
+
     const stateIdNum = resolvePartyStateIdFromHousing(
       isAgent,
-      invoiceUsesConsigneeParty,
+      invoiceBillToParty,
       firstHawb as Record<string, unknown>,
       jobHouse0,
       (job ?? null) as Record<string, unknown> | null,
@@ -2379,7 +2415,7 @@ function InvoiceCreate({
     isGstInvoiceUser,
     location.key,
     location.state?.is_agent,
-    invoiceUsesConsigneeParty,
+    invoiceBillToParty,
     location.state?.hawbDetails,
     location.state?.housingDetails,
     location.state?.job,
@@ -2701,9 +2737,15 @@ function InvoiceCreate({
           selectedAddress?.gst_id != null
             ? selectedAddress
             : primaryAddress ||
-              addressesData.find((a) => a.gst_id != null);
-        if (addrForGst?.gst_id) {
-          form.setFieldValue("gstn", String(addrForGst.gst_id));
+              addressesData.find((a) => a.gst_id != null || a.pan_no != null);
+        const gstOrPan =
+          addrForGst?.gst_id != null && String(addrForGst.gst_id).trim() !== ""
+            ? String(addrForGst.gst_id)
+            : addrForGst?.pan_no != null && String(addrForGst.pan_no).trim() !== ""
+              ? String(addrForGst.pan_no)
+              : "";
+        if (gstOrPan) {
+          form.setFieldValue("gstn", gstOrPan);
         }
       }
     },
@@ -2711,8 +2753,7 @@ function InvoiceCreate({
   );
 
   // When Bill To is set from job/house invoice navigation (no SearchableSelect
-  // originalData), fetch agent/customer master and show all addresses for selection.
-  // Covers every job module including CHA (same InvoiceCreate route).
+  // originalData), fetch via conditional-list and apply addresses_data state/GSTN.
   // Always search by customer_code (never bare numeric PK / id).
   useEffect(() => {
     const billTo = String(form.values.bill_to ?? "").trim();
@@ -2720,32 +2761,16 @@ function InvoiceCreate({
     if (!isCustomerMasterCode(billTo)) return;
     if (billToAddressesLoadedForRef.current === billTo) return;
 
-    const endpoint = isCreditNoteFlow
-      ? URL.customer
-      : isAgentInvoice
-        ? URL.agent
-        : invoiceUsesConsigneeParty
-          ? URL.consignee
-          : URL.shipper;
+    // Same endpoint as Bill To SearchableSelect (clear + search again).
+    const endpoint = isAgentInvoice ? URL.agent : URL.allCustomers;
     let cancelled = false;
 
     void (async () => {
       try {
-        let results = await commonSearchAPI({
+        const results = await commonSearchAPI({
           endpoint,
           query: billTo,
         });
-        // Fallback: conditional-list when party-type endpoint returns nothing
-        if (
-          (!Array.isArray(results) || results.length === 0) &&
-          !isAgentInvoice &&
-          !isCreditNoteFlow
-        ) {
-          results = await commonSearchAPI({
-            endpoint: URL.allCustomers,
-            query: billTo,
-          });
-        }
         if (cancelled) return;
         if (!Array.isArray(results) || results.length === 0) return;
 
@@ -2780,7 +2805,6 @@ function InvoiceCreate({
     form.values.bill_to,
     isAgentInvoice,
     isCreditNoteFlow,
-    invoiceUsesConsigneeParty,
     location.key,
     applyBillToAddressesFromParty,
   ]);
@@ -2878,142 +2902,176 @@ function InvoiceCreate({
               }
             });
           }
-          if (invoiceUsesConsigneeParty) {
-            // Ocean import customer invoice: Bill To / address from consignee
-            console.log(
-              "[InvoiceCreate] Ocean import - using consignee for Bill To. Raw firstHawb:",
-              firstHawb,
-            );
-            const consigneeAddr = firstHawbRec["consignee_address"];
-            if (
-              typeof consigneeAddr === "string" &&
-              consigneeAddr.trim() !== ""
-            ) {
-              form.setFieldValue("address", consigneeAddr);
-            }
-            const consigneeCode = pickCustomerMasterCodeFromRecords(
-              [
-                firstHawbRec,
-                jobHouse0,
-                (job ?? null) as Record<string, unknown> | null,
-              ],
-              ["consignee_code", "customer_code"],
-            );
-            console.log(
-              "[InvoiceCreate] Consignee mapping - extracted consignee_code:",
-              consigneeCode,
-            );
-            if (consigneeCode) {
-              billToAddressesLoadedForRef.current = "";
-              setAddressOptions([]);
-              form.setFieldValue("bill_to", consigneeCode);
-              console.log(
-                "[InvoiceCreate] Consignee mapping - set form.bill_to to consignee_code",
-              );
-            }
-            const consigneeName = (
-              firstHawb as {
-                consignee_name?: string;
-                bill_to_name?: string;
-              }
-            ).consignee_name;
-            if (consigneeName) {
-              console.log(
-                "[InvoiceCreate] Consignee mapping - extracted consignee_name:",
-                consigneeName,
-              );
-              setBillToDisplayName(
-                String(
-                  consigneeName ||
-                    (firstHawb as { bill_to_name?: string }).bill_to_name,
-                ),
-              );
-              console.log(
-                "[InvoiceCreate] Consignee mapping - set billToDisplayName",
-              );
+
+          const partyRecords = [
+            firstHawbRec,
+            jobHouse0,
+            (job ?? null) as Record<string, unknown> | null,
+          ];
+
+          const applyCustomerBillTo = (opts: {
+            address?: unknown;
+            codeKeys: string[];
+            name?: unknown;
+            nameLookupQuery?: string;
+          }) => {
+            // House supplies Bill To code/name + address text only.
+            // State / GSTN / PAN come from conditional-list addresses_data (no house fallbacks).
+            const addr = opts.address;
+            if (typeof addr === "string" && addr.trim() !== "") {
+              form.setFieldValue("address", addr);
             }
 
-            // Populate GSTN / PIN from consignee tax id (India GST, Kenya PIN)
-            const consigneeGstRaw = (
-              firstHawb as { consignee_gst_id?: string | null }
-            ).consignee_gst_id;
-            if (consigneeGstRaw && (isGstInvoiceUser || isKenyaUser)) {
-              form.setFieldValue("gstn", String(consigneeGstRaw));
-            } else if (
-              job &&
-              Array.isArray(
-                (
-                  job as {
-                    housing_details?: Array<{
-                      consignee_gst_id?: string | null;
-                    }>;
+            const code = pickCustomerMasterCodeFromRecords(
+              partyRecords,
+              opts.codeKeys,
+            );
+
+            if (opts.name) {
+              setBillToDisplayName(String(opts.name));
+            }
+
+            // Do not carry house GST/state — wait for conditional-list addresses_data.
+            if (isGstInvoiceUser) form.setFieldValue("state", "");
+            if (isGstInvoiceUser || isKenyaUser) form.setFieldValue("gstn", "");
+
+            const applyMatchedParty = (matched: Record<string, unknown>) => {
+              const lookedUp = resolveCustomerMasterCode(matched?.customer_code);
+              if (!lookedUp) return;
+              billToAddressesLoadedForRef.current = "";
+              setAddressOptions([]);
+              form.setFieldValue("bill_to", lookedUp);
+              const lookedUpName = String(
+                matched?.customer_name ?? opts.name ?? "",
+              ).trim();
+              if (lookedUpName) setBillToDisplayName(lookedUpName);
+              const addressesData = readAddressesDataFromParty(matched);
+              if (addressesData.length > 0) {
+                applyBillToAddressesFromParty(
+                  lookedUp,
+                  addressesData,
+                  "preserve",
+                  typeof addr === "string" ? addr : form.values.address,
+                );
+              }
+            };
+
+            if (code) {
+              billToAddressesLoadedForRef.current = "";
+              setAddressOptions([]);
+              form.setFieldValue("bill_to", code);
+              // Address list + state/GSTN loaded by Bill To conditional-list effect.
+            } else if (opts.nameLookupQuery) {
+              const query = opts.nameLookupQuery.trim();
+              if (query) {
+                void (async () => {
+                  try {
+                    const results = await commonSearchAPI({
+                      endpoint: URL.allCustomers,
+                      query,
+                    });
+                    if (!Array.isArray(results) || results.length === 0) return;
+                    const normalized = query.toLowerCase();
+                    const matched =
+                      (results as Record<string, unknown>[]).find(
+                        (row) =>
+                          String(row.customer_name ?? "")
+                            .trim()
+                            .toLowerCase() === normalized,
+                      ) ?? (results[0] as Record<string, unknown>);
+                    if (
+                      String(form.values.bill_to ?? "").trim() !== "" &&
+                      isCustomerMasterCode(form.values.bill_to)
+                    ) {
+                      return;
+                    }
+                    applyMatchedParty(matched);
+                  } catch (err) {
+                    console.error(
+                      "Error resolving Bill To customer code from party name:",
+                      err,
+                    );
                   }
-                ).housing_details,
-              )
-            ) {
-              const jobHousing = (
-                job as {
-                  housing_details?: Array<{ consignee_gst_id?: string | null }>;
-                }
-              ).housing_details;
-              const fromJobGst = jobHousing?.[0]?.consignee_gst_id;
-              if (fromJobGst && (isGstInvoiceUser || isKenyaUser)) {
-                form.setFieldValue("gstn", String(fromJobGst));
+                })();
               }
             }
+          };
+
+          if (invoiceBillToParty === "billing_customer") {
+            const name = firstNonEmptyString(
+              firstHawbRec.billing_customer_name,
+              jobHouse0?.billing_customer_name,
+            );
+            applyCustomerBillTo({
+              address: firstNonEmptyString(
+                firstHawbRec.billing_customer_address,
+                jobHouse0?.billing_customer_address,
+              ),
+              codeKeys: [
+                "billing_customer_code",
+                "customer_code",
+              ],
+              name,
+              nameLookupQuery: name,
+            });
+          } else if (invoiceBillToParty === "notify") {
+            const name = firstNonEmptyString(
+              firstHawbRec.notify1_customer_name,
+              firstHawbRec.notify_customer1_name,
+              firstHawbRec.notify_customer_name,
+              firstHawbRec.notify_customer,
+              jobHouse0?.notify1_customer_name,
+              jobHouse0?.notify_customer1_name,
+            );
+            applyCustomerBillTo({
+              address: firstNonEmptyString(
+                firstHawbRec.notify1_customer_address,
+                firstHawbRec.notify_customer1_address,
+                firstHawbRec.notify_customer_address,
+                jobHouse0?.notify1_customer_address,
+                jobHouse0?.notify_customer1_address,
+              ),
+              codeKeys: [
+                "notify1_customer_code",
+                "notify_customer1_code",
+                "notify_customer_code",
+                "customer_code",
+              ],
+              name,
+              nameLookupQuery: name,
+            });
+          } else if (invoiceBillToParty === "consignee") {
+            applyCustomerBillTo({
+              address: firstHawbRec.consignee_address,
+              codeKeys: ["consignee_code", "customer_code"],
+              name: (firstHawb as { consignee_name?: string }).consignee_name,
+              nameLookupQuery: (firstHawb as { consignee_name?: string })
+                .consignee_name,
+            });
+          } else if (invoiceBillToParty === "forwarder") {
+            const name = firstNonEmptyString(
+              firstHawbRec.forwarder_name,
+              jobHouse0?.forwarder_name,
+            );
+            applyCustomerBillTo({
+              address: firstNonEmptyString(
+                firstHawbRec.forwarder_address,
+                jobHouse0?.forwarder_address,
+              ),
+              codeKeys: ["forwarder_code", "customer_code"],
+              name,
+              nameLookupQuery: name,
+            });
           } else {
-            // Default customer invoice: Bill To / address from shipper (export / non-consignee flows)
-            if (firstHawb.shipper_address) {
-              form.setFieldValue("address", firstHawb.shipper_address);
-            }
-            const shipperCode = pickCustomerMasterCodeFromRecords(
-              [
-                firstHawbRec,
-                jobHouse0,
-                (job ?? null) as Record<string, unknown> | null,
-              ],
-              ["shipper_code", "customer_code"],
-            );
-            if (shipperCode) {
-              billToAddressesLoadedForRef.current = "";
-              setAddressOptions([]);
-              form.setFieldValue("bill_to", shipperCode);
-            }
-            if (firstHawb.shipper_name) {
-              setBillToDisplayName(
-                String(
-                  firstHawb.shipper_name ||
-                    (firstHawb as { bill_to_name?: string }).bill_to_name,
-                ),
-              );
-            }
-
-            // Populate GSTN / PIN from shipper tax id (India GST, Kenya PIN)
-            const shipperGstRaw = (
-              firstHawb as { shipper_gst_id?: string | null }
-            ).shipper_gst_id;
-            if (shipperGstRaw && (isGstInvoiceUser || isKenyaUser)) {
-              form.setFieldValue("gstn", String(shipperGstRaw));
-            } else if (
-              job &&
-              Array.isArray(
-                (
-                  job as {
-                    housing_details?: Array<{ shipper_gst_id?: string | null }>;
-                  }
-                ).housing_details,
-              )
-            ) {
-              const jobHousing = (
-                job as {
-                  housing_details?: Array<{ shipper_gst_id?: string | null }>;
-                }
-              ).housing_details;
-              const fromJobGst = jobHousing?.[0]?.shipper_gst_id;
-              if (fromJobGst && (isGstInvoiceUser || isKenyaUser)) {
-                form.setFieldValue("gstn", String(fromJobGst));
-              }
-            }
+            // Default / shipper
+            applyCustomerBillTo({
+              address: firstHawb.shipper_address,
+              codeKeys: ["shipper_code", "customer_code"],
+              name: firstHawb.shipper_name,
+              nameLookupQuery: firstHawb.shipper_name
+                ? String(firstHawb.shipper_name)
+                : undefined,
+            });
           }
         }
 
@@ -3440,7 +3498,7 @@ function InvoiceCreate({
   }, [
     location.key,
     location.state?.is_agent,
-    invoiceUsesConsigneeParty,
+    invoiceBillToParty,
     location.state?.job,
     location.state?.hawbDetails,
     location.state?.housingDetails,
@@ -4244,8 +4302,9 @@ function InvoiceCreate({
       billToAddressesRef.current = [];
       billToAddressesLoadedForRef.current = "";
       form.setFieldValue("address", "");
-      // Do not clear state or GSTN here — they may have been set from house data.
-      // Address list will be fetched by the Bill To effect when search row lacks addresses_data.
+      // Clear house/stale state/GSTN; Bill To effect will refill from conditional-list.
+      if (isGstInvoiceUser) form.setFieldValue("state", "");
+      if (isGstInvoiceUser || isKenyaUser) form.setFieldValue("gstn", "");
     }
   };
 
@@ -6220,8 +6279,16 @@ function InvoiceCreate({
                     if (isGstInvoiceUser && selected.state_id != null) {
                       form.setFieldValue("state", String(selected.state_id));
                     }
-                    if ((isGstInvoiceUser || isKenyaUser) && selected.gst_id) {
-                      form.setFieldValue("gstn", String(selected.gst_id));
+                    if (isGstInvoiceUser || isKenyaUser) {
+                      const gstOrPan =
+                        selected.gst_id != null &&
+                        String(selected.gst_id).trim() !== ""
+                          ? String(selected.gst_id)
+                          : selected.pan_no != null &&
+                              String(selected.pan_no).trim() !== ""
+                            ? String(selected.pan_no)
+                            : "";
+                      if (gstOrPan) form.setFieldValue("gstn", gstOrPan);
                     }
                   }}
                   searchable

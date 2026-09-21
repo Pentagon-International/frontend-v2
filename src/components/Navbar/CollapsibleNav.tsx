@@ -72,9 +72,11 @@ export const CollapsibleNav = ({
     (label === "Air" &&
       activeSubNav.startsWith("Air") &&
       !activeSubNav.startsWith("CHA")) ||
+    (label === "Air" && activeSubNav === "Service Jobs") ||
     (label === "Ocean" && activeSubNav.startsWith("Ocean")) ||
     (label === "Ocean" && activeSubNav.startsWith("FCL")) ||
     (label === "Ocean" && activeSubNav.startsWith("LCL")) ||
+    (label === "Ocean" && activeSubNav === "Service Jobs") ||
     (label === "Inland" && activeSubNav.startsWith("Inland")) ||
     (label === "CHA" && activeSubNav.startsWith("CHA")) ||
     (label === "Accounts" &&

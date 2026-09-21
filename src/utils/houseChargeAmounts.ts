@@ -30,22 +30,44 @@ export function roundLocalChargeAmount(value: number): number {
   return roundMoneyAmountBound(value);
 }
 
-/** Resolve sell amount from amount or no_of_unit × amount_per_unit. */
+/**
+ * Amount from qty × amount/unit.
+ * Returns null when amount/unit is not entered; returns 0 when amount/unit is 0.
+ */
+export function calcAmountFromUnits(
+  noOfUnit: unknown,
+  amountPerUnit: unknown,
+): number | null {
+  const cpu = toChargeNumber(amountPerUnit);
+  if (cpu == null) return null;
+  const qty = toChargeNumber(noOfUnit) ?? 0;
+  return roundChargeAmount(qty * cpu);
+}
+
+/**
+ * Total cost from qty × unit cost.
+ * Returns null when unit cost is not entered; returns 0 when unit cost is 0.
+ */
+export function calcTotalCostFromUnits(
+  noOfUnit: unknown,
+  unitCost: unknown,
+): number | null {
+  const cpu = toChargeNumber(unitCost);
+  if (cpu == null) return null;
+  const qty = toChargeNumber(noOfUnit) ?? 0;
+  return roundChargeAmount(qty * cpu);
+}
+
+/** Resolve sell amount from amount or no_of_unit × amount_per_unit (0 allowed). */
 export function resolveSellAmount(
   amount: unknown,
   noOfUnit: unknown,
   amountPerUnit: unknown,
 ): number | null {
   const direct = toChargeNumber(amount);
-  if (direct != null && direct > 0) return roundChargeAmount(direct);
+  if (direct != null) return roundChargeAmount(direct);
 
-  const qty = toChargeNumber(noOfUnit);
-  const cpu = toChargeNumber(amountPerUnit);
-  if (qty != null && cpu != null && qty > 0 && cpu > 0) {
-    return roundChargeAmount(qty * cpu);
-  }
-
-  return direct != null && direct > 0 ? roundChargeAmount(direct) : null;
+  return calcAmountFromUnits(noOfUnit, amountPerUnit);
 }
 
 export function calcSellLocalAmount(
@@ -56,7 +78,7 @@ export function calcSellLocalAmount(
 ): number | null {
   const sellAmount = resolveSellAmount(amount, noOfUnit, amountPerUnit);
   const rate = toChargeNumber(roe) ?? 1;
-  if (sellAmount == null || sellAmount <= 0 || rate <= 0) return null;
+  if (sellAmount == null || rate <= 0) return null;
   return roundLocalChargeAmount(sellAmount * rate);
 }
 
@@ -66,7 +88,7 @@ export function calcCostLocalAmount(
 ): number | null {
   const cost = toChargeNumber(totalCost);
   const rate = toChargeNumber(roe) ?? 1;
-  if (cost == null || cost <= 0 || rate <= 0) return null;
+  if (cost == null || rate <= 0) return null;
   return roundLocalChargeAmount(cost * rate);
 }
 
@@ -107,7 +129,7 @@ export function resolveSupplierInvoiceEstimateCostAmount(
 ): number | null {
   const qty = toChargeNumber(row.no_of_unit);
   const cpu = toChargeNumber(row.cost_per_unit);
-  if (qty != null && cpu != null && qty > 0) {
+  if (qty != null && cpu != null) {
     return roundChargeAmount(qty * cpu);
   }
 

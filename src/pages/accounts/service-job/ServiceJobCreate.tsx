@@ -707,19 +707,16 @@ function ServiceJobChargesSection({
       const next = { ...charge };
       if (
         charge.amount_per_unit != null &&
-        charge.amount_per_unit > 0 &&
-        charge.no_of_unit != null &&
-        charge.no_of_unit > 0
+        charge.no_of_unit != null
       ) {
         const calculatedAmount =
           clampCurrencyMoneyAmountBound(
             charge.no_of_unit * charge.amount_per_unit,
           ) ?? 0;
-        if (calculatedAmount > 0) next.amount = calculatedAmount;
+        next.amount = calculatedAmount;
       }
       if (
         next.amount != null &&
-        next.amount > 0 &&
         next.roe != null &&
         next.roe > 0
       ) {
@@ -730,7 +727,6 @@ function ServiceJobChargesSection({
       }
       if (
         next.total_cost != null &&
-        next.total_cost > 0 &&
         next.roe != null &&
         next.roe > 0
       ) {
@@ -1071,9 +1067,7 @@ function ServiceJobChargesSection({
                 const current = form.values.charges[index];
                 if (
                   current.amount_per_unit != null &&
-                  current.amount_per_unit > 0 &&
-                  noOfUnit != null &&
-                  noOfUnit > 0
+                  noOfUnit != null
                 ) {
                   form.setFieldValue(
                     `charges.${index}.amount`,
@@ -1082,9 +1076,7 @@ function ServiceJobChargesSection({
                 }
                 if (
                   current.cost_per_unit != null &&
-                  current.cost_per_unit > 0 &&
-                  noOfUnit != null &&
-                  noOfUnit > 0
+                  noOfUnit != null
                 ) {
                   form.setFieldValue(
                     `charges.${index}.total_cost`,
@@ -1101,7 +1093,7 @@ function ServiceJobChargesSection({
               hideControls
               decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
-              value={charge.amount_per_unit || undefined}
+              value={charge.amount_per_unit ?? undefined}
               onChange={(value) => {
                 const amountPerUnit = value as number | null;
                 form.setFieldValue(
@@ -1111,9 +1103,7 @@ function ServiceJobChargesSection({
                 const current = form.values.charges[index];
                 if (
                   amountPerUnit != null &&
-                  amountPerUnit > 0 &&
-                  current.no_of_unit != null &&
-                  current.no_of_unit > 0
+                  current.no_of_unit != null
                 ) {
                   form.setFieldValue(
                     `charges.${index}.amount`,
@@ -1130,7 +1120,7 @@ function ServiceJobChargesSection({
               hideControls
               decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
-              value={charge.amount || undefined}
+              value={charge.amount ?? undefined}
               onChange={(value) => {
                 form.setFieldValue(
                   `charges.${index}.amount`,
@@ -1147,7 +1137,7 @@ function ServiceJobChargesSection({
               groupThousands
               decimalScale={localAmountDecimalScale}
               readOnly={readOnly}
-              value={charge.local_amount || undefined}
+              value={charge.local_amount ?? undefined}
               onChange={(value) => {
                 form.setFieldValue(
                   `charges.${index}.local_amount`,
@@ -1163,7 +1153,7 @@ function ServiceJobChargesSection({
               hideControls
               decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
-              value={charge.cost_per_unit || undefined}
+              value={charge.cost_per_unit ?? undefined}
               onChange={(value) => {
                 const costPerUnit = value as number | null;
                 form.setFieldValue(
@@ -1171,16 +1161,13 @@ function ServiceJobChargesSection({
                   costPerUnit,
                 );
                 const current = form.values.charges[index];
-                if (
-                  costPerUnit != null &&
-                  costPerUnit > 0 &&
-                  current.no_of_unit != null &&
-                  current.no_of_unit > 0
-                ) {
+                if (costPerUnit != null && current.no_of_unit != null) {
                   form.setFieldValue(
                     `charges.${index}.total_cost`,
                     current.no_of_unit * costPerUnit,
                   );
+                } else {
+                  form.setFieldValue(`charges.${index}.total_cost`, null);
                 }
               }}
             />
@@ -1193,7 +1180,7 @@ function ServiceJobChargesSection({
               groupThousands
               decimalScale={currencyAmountDecimalScale}
               readOnly={readOnly}
-              value={charge.total_cost || undefined}
+              value={charge.total_cost ?? undefined}
               onChange={(value) => {
                 form.setFieldValue(
                   `charges.${index}.total_cost`,
@@ -1210,7 +1197,7 @@ function ServiceJobChargesSection({
               groupThousands
               decimalScale={localAmountDecimalScale}
               readOnly={readOnly}
-              value={charge.cost_local_amount || undefined}
+              value={charge.cost_local_amount ?? undefined}
               onChange={(value) => {
                 form.setFieldValue(
                   `charges.${index}.cost_local_amount`,
