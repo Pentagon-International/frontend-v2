@@ -585,7 +585,7 @@ export default function CustomerApprovalStatusMaster({
                           </td>
                           <td style={tdPad}>
                             <Text size="sm" lineClamp={2}>
-                              {row.created_by?.trim() || "—"}
+                              {row.assigned_to_display?.trim() || row.created_by?.trim() || "—"}
                             </Text>
                           </td>
                           <td style={tdPad}>
