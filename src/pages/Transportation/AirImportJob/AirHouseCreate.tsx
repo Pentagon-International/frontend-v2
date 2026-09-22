@@ -2288,6 +2288,9 @@ function HouseCreate() {
     if (!form.values.consignee_name?.trim()) {
       errors.consignee_name = "Consignee Name is required";
     }
+    if (!form.values.billing_customer_name?.trim()) {
+      errors.billing_customer_name = "Billing Customer Name is required";
+    }
     // Email validations
     if (
       form.values.shipper_email &&
@@ -4234,6 +4237,7 @@ function HouseCreate() {
                 <SearchableSelect
                   label="Billing Customer Name"
                   placeholder="Type billing customer name"
+                  required
                   apiEndpoint={URL.customer}
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}

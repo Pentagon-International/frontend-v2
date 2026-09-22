@@ -197,6 +197,11 @@ const EMPTY_PARTY_DETAILS: JobMasterPartyDetailsValues = {
   carrier_agent_email: "",
   carrier_agent_address_id: "",
   carrier_agent_address: "",
+  billing_customer_id: "",
+  billing_customer_name: "",
+  billing_customer_email: "",
+  billing_customer_address_id: "",
+  billing_customer_address: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -1450,13 +1455,19 @@ export default function ServiceJobCreate() {
   const [carrierAgentAddressOptions, setCarrierAgentAddressOptions] = useState<
     PartyAddressOption[]
   >([]);
+  const [billingCustomerAddressOptions, setBillingCustomerAddressOptions] =
+    useState<PartyAddressOption[]>([]);
   const [shipperAddressSearch, setShipperAddressSearch] = useState("");
   const [consigneeAddressSearch, setConsigneeAddressSearch] = useState("");
   const [carrierAgentAddressSearch, setCarrierAgentAddressSearch] =
     useState("");
+  const [billingCustomerAddressSearch, setBillingCustomerAddressSearch] =
+    useState("");
   const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
   const [consigneeAddressCustom, setConsigneeAddressCustom] = useState(false);
   const [carrierAgentAddressCustom, setCarrierAgentAddressCustom] =
+    useState(false);
+  const [billingCustomerAddressCustom, setBillingCustomerAddressCustom] =
     useState(false);
 
   const chargesForm = useForm<{ charges: ServiceJobChargeDetail[] }>({
@@ -1708,6 +1719,25 @@ export default function ServiceJobCreate() {
         carrier_agent_address: String(
           house?.carrier_agent_address ?? job.carrier_agent_address ?? "",
         ),
+        billing_customer_id: String(
+          house?.billing_customer_id ?? job.billing_customer_id ?? "",
+        ),
+        billing_customer_name: String(
+          house?.billing_customer_name ?? job.billing_customer_name ?? "",
+        ),
+        billing_customer_email: String(
+          house?.billing_customer_email ?? job.billing_customer_email ?? "",
+        ),
+        billing_customer_address_id: String(
+          house?.billing_customer_address_id ??
+            job.billing_customer_address_id ??
+            "",
+        ),
+        billing_customer_address: String(
+          house?.billing_customer_address ??
+            job.billing_customer_address ??
+            "",
+        ),
       });
       const shipperSeed = seedSavedPartyAddress(
         String(house?.shipper_address_id ?? job.shipper_address_id ?? ""),
@@ -1735,6 +1765,24 @@ export default function ServiceJobCreate() {
       setCarrierAgentAddressOptions(carrierSeed.options);
       setCarrierAgentAddressSearch(carrierSeed.search);
       setCarrierAgentAddressCustom(carrierSeed.custom);
+      const billingSeed = seedSavedPartyAddress(
+        String(
+          house?.billing_customer_address_id ??
+            job.billing_customer_address_id ??
+            "",
+        ),
+        String(
+          house?.billing_customer_address ??
+            job.billing_customer_address ??
+            "",
+        ),
+        String(
+          house?.billing_customer_email ?? job.billing_customer_email ?? "",
+        ),
+      );
+      setBillingCustomerAddressOptions(billingSeed.options);
+      setBillingCustomerAddressSearch(billingSeed.search);
+      setBillingCustomerAddressCustom(billingSeed.custom);
 
       if (house) {
         const chargeRows = readChargesFromHouse(house, mode).map((c) =>
@@ -1905,6 +1953,25 @@ export default function ServiceJobCreate() {
         partyDetailsForm.values.carrier_agent_address || "",
     };
 
+    const billingCustomerIdRaw = String(
+      partyDetailsForm.values.billing_customer_id || "",
+    ).trim();
+    const billingCustomerId = billingCustomerIdRaw
+      ? Number(billingCustomerIdRaw)
+      : null;
+    const houseBillingCustomerBlock = {
+      billing_customer_id:
+        billingCustomerId != null && !Number.isNaN(billingCustomerId)
+          ? billingCustomerId
+          : null,
+      billing_customer_name:
+        partyDetailsForm.values.billing_customer_name || "",
+      billing_customer_address:
+        partyDetailsForm.values.billing_customer_address || "",
+      billing_customer_email:
+        partyDetailsForm.values.billing_customer_email || "",
+    };
+
     const cargoDetailsPayload = mapCargoDetailsForPayload(
       cargoDetails,
       containers,
@@ -1921,6 +1988,7 @@ export default function ServiceJobCreate() {
       origin_code: form.values.origin_code || null,
       destination_code: form.values.destination_code || null,
       ...housePartyBlock,
+      ...houseBillingCustomerBlock,
       hbl_number: form.values.hbl_number || null,
       commodity_description: commodityDescription || null,
       marks_no: marksNo || null,
@@ -1980,6 +2048,13 @@ export default function ServiceJobCreate() {
       carrier_agent_name: partyDetailsForm.values.carrier_agent_name,
       carrier_agent_email: partyDetailsForm.values.carrier_agent_email,
       carrier_agent_address: partyDetailsForm.values.carrier_agent_address,
+      billing_customer_id: partyDetailsForm.values.billing_customer_id
+        ? Number(partyDetailsForm.values.billing_customer_id)
+        : null,
+      billing_customer_name: partyDetailsForm.values.billing_customer_name,
+      billing_customer_email: partyDetailsForm.values.billing_customer_email,
+      billing_customer_address:
+        partyDetailsForm.values.billing_customer_address,
       hbl_number: form.values.hbl_number,
       mbl_number: form.values.mbl_number,
       mbl_date: form.values.mbl_date,
@@ -2270,6 +2345,18 @@ export default function ServiceJobCreate() {
   const handleSubmit = async () => {
     const validation = form.validate();
     if (validation.hasErrors) {
+      return;
+    }
+    if (!partyDetailsForm.values.billing_customer_name?.trim()) {
+      partyDetailsForm.setFieldError(
+        "billing_customer_name",
+        "Billing Customer Name is required",
+      );
+      setActiveTab(PARTY_DETAILS_TAB);
+      ToastNotification({
+        type: "error",
+        message: "Billing Customer Name is required",
+      });
       return;
     }
     setIsSubmitting(true);
@@ -2851,6 +2938,7 @@ export default function ServiceJobCreate() {
             <JobMasterPartyDetailsPanel
               idPrefix="service-job-party"
               disabled={isReadOnly}
+              showBillingCustomer
               partyDetailsForm={partyDetailsForm}
               shipperAddressOptions={shipperAddressOptions}
               setShipperAddressOptions={setShipperAddressOptions}
@@ -2858,18 +2946,30 @@ export default function ServiceJobCreate() {
               setConsigneeAddressOptions={setConsigneeAddressOptions}
               carrierAgentAddressOptions={carrierAgentAddressOptions}
               setCarrierAgentAddressOptions={setCarrierAgentAddressOptions}
+              billingCustomerAddressOptions={billingCustomerAddressOptions}
+              setBillingCustomerAddressOptions={
+                setBillingCustomerAddressOptions
+              }
               shipperAddressSearch={shipperAddressSearch}
               setShipperAddressSearch={setShipperAddressSearch}
               consigneeAddressSearch={consigneeAddressSearch}
               setConsigneeAddressSearch={setConsigneeAddressSearch}
               carrierAgentAddressSearch={carrierAgentAddressSearch}
               setCarrierAgentAddressSearch={setCarrierAgentAddressSearch}
+              billingCustomerAddressSearch={billingCustomerAddressSearch}
+              setBillingCustomerAddressSearch={
+                setBillingCustomerAddressSearch
+              }
               shipperAddressCustom={shipperAddressCustom}
               setShipperAddressCustom={setShipperAddressCustom}
               consigneeAddressCustom={consigneeAddressCustom}
               setConsigneeAddressCustom={setConsigneeAddressCustom}
               carrierAgentAddressCustom={carrierAgentAddressCustom}
               setCarrierAgentAddressCustom={setCarrierAgentAddressCustom}
+              billingCustomerAddressCustom={billingCustomerAddressCustom}
+              setBillingCustomerAddressCustom={
+                setBillingCustomerAddressCustom
+              }
             />
           </Box>
         </Tabs.Panel>

@@ -21,6 +21,12 @@ export type JobMasterPartyDetailsValues = {
   carrier_agent_email: string;
   carrier_agent_address_id: string;
   carrier_agent_address: string;
+  /** Present when billing customer is shown (e.g. Service Jobs). */
+  billing_customer_id?: string;
+  billing_customer_name?: string;
+  billing_customer_email?: string;
+  billing_customer_address_id?: string;
+  billing_customer_address?: string;
 };
 
 export type PartyAddressOption = {
@@ -93,24 +99,32 @@ type JobMasterPartyDetailsPanelProps = {
   shipperSearchFields?: string[];
   /** When true, unmatched shipper search commits free-text name (Import house parity). */
   shipperEnableFreeText?: boolean;
+  /** Service Jobs: show mandatory Billing Customer among master party details. */
+  showBillingCustomer?: boolean;
   shipperAddressOptions: PartyAddressOption[];
   setShipperAddressOptions: (options: PartyAddressOption[]) => void;
   consigneeAddressOptions: PartyAddressOption[];
   setConsigneeAddressOptions: (options: PartyAddressOption[]) => void;
   carrierAgentAddressOptions: PartyAddressOption[];
   setCarrierAgentAddressOptions: (options: PartyAddressOption[]) => void;
+  billingCustomerAddressOptions?: PartyAddressOption[];
+  setBillingCustomerAddressOptions?: (options: PartyAddressOption[]) => void;
   shipperAddressSearch: string;
   setShipperAddressSearch: (value: string) => void;
   consigneeAddressSearch: string;
   setConsigneeAddressSearch: (value: string) => void;
   carrierAgentAddressSearch: string;
   setCarrierAgentAddressSearch: (value: string) => void;
+  billingCustomerAddressSearch?: string;
+  setBillingCustomerAddressSearch?: (value: string) => void;
   shipperAddressCustom: boolean;
   setShipperAddressCustom: (value: boolean) => void;
   consigneeAddressCustom: boolean;
   setConsigneeAddressCustom: (value: boolean) => void;
   carrierAgentAddressCustom: boolean;
   setCarrierAgentAddressCustom: (value: boolean) => void;
+  billingCustomerAddressCustom?: boolean;
+  setBillingCustomerAddressCustom?: (value: boolean) => void;
 };
 
 export function JobMasterPartyDetailsPanel({
@@ -120,24 +134,31 @@ export function JobMasterPartyDetailsPanel({
   shipperApiEndpoint = URL.shipper,
   shipperSearchFields = ["customer_name", "customer_code"],
   shipperEnableFreeText = false,
+  showBillingCustomer = false,
   shipperAddressOptions,
   setShipperAddressOptions,
   consigneeAddressOptions,
   setConsigneeAddressOptions,
   carrierAgentAddressOptions,
   setCarrierAgentAddressOptions,
+  billingCustomerAddressOptions = [],
+  setBillingCustomerAddressOptions,
   shipperAddressSearch,
   setShipperAddressSearch,
   consigneeAddressSearch,
   setConsigneeAddressSearch,
   carrierAgentAddressSearch,
   setCarrierAgentAddressSearch,
+  billingCustomerAddressSearch = "",
+  setBillingCustomerAddressSearch,
   shipperAddressCustom,
   setShipperAddressCustom,
   consigneeAddressCustom,
   setConsigneeAddressCustom,
   carrierAgentAddressCustom,
   setCarrierAgentAddressCustom,
+  billingCustomerAddressCustom = false,
+  setBillingCustomerAddressCustom,
 }: JobMasterPartyDetailsPanelProps) {
   const clearShipperAddressAndEmail = () => {
     partyDetailsForm.setFieldValue("shipper_email", "");
@@ -146,6 +167,15 @@ export function JobMasterPartyDetailsPanel({
     setShipperAddressOptions([]);
     setShipperAddressSearch("");
     setShipperAddressCustom(false);
+  };
+
+  const clearBillingCustomerAddressAndEmail = () => {
+    partyDetailsForm.setFieldValue("billing_customer_email", "");
+    partyDetailsForm.setFieldValue("billing_customer_address_id", "");
+    partyDetailsForm.setFieldValue("billing_customer_address", "");
+    setBillingCustomerAddressOptions?.([]);
+    setBillingCustomerAddressSearch?.("");
+    setBillingCustomerAddressCustom?.(false);
   };
 
   return (
@@ -630,6 +660,175 @@ export function JobMasterPartyDetailsPanel({
           )}
         </Grid.Col>
       </Grid>
+
+      {showBillingCustomer && (
+        <Grid gutter="sm" mb="md">
+          <Grid.Col span={12}>
+            <Text fw={600} c="#105476">
+              Billing Customer Details
+            </Text>
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <SearchableSelect
+              key={`${idPrefix}-billing-customer-${partyDetailsForm.values.billing_customer_id}:${partyDetailsForm.values.billing_customer_name ?? "_"}`}
+              size="sm"
+              label="Billing Customer Name"
+              required
+              dropdownZIndex={1000}
+              apiEndpoint={URL.customer}
+              placeholder="Type billing customer name"
+              searchFields={["customer_name", "customer_code"]}
+              displayFormat={PARTY_CUSTOMER_DISPLAY_FORMAT}
+              value={partyDetailsForm.values.billing_customer_id || null}
+              displayValue={partyDetailsForm.values.billing_customer_name || null}
+              disabled={disabled}
+              error={
+                partyDetailsForm.errors.billing_customer_name as
+                  | string
+                  | undefined
+              }
+              onChange={(value, selectedData, originalData) => {
+                if (!value) {
+                  partyDetailsForm.setFieldValue("billing_customer_id", "");
+                  partyDetailsForm.setFieldValue("billing_customer_name", "");
+                  clearBillingCustomerAddressAndEmail();
+                  return;
+                }
+                const options = getJobMasterAddressOptions(originalData);
+                const primary = options[0];
+                partyDetailsForm.setFieldValue("billing_customer_id", value);
+                partyDetailsForm.setFieldValue(
+                  "billing_customer_name",
+                  selectedData?.label || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "billing_customer_email",
+                  primary?.email || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "billing_customer_address_id",
+                  primary?.value || "",
+                );
+                partyDetailsForm.setFieldValue(
+                  "billing_customer_address",
+                  primary?.address || "",
+                );
+                setBillingCustomerAddressOptions?.(options);
+                setBillingCustomerAddressSearch?.(primary?.label || "");
+                setBillingCustomerAddressCustom?.(false);
+                partyDetailsForm.clearFieldError("billing_customer_name");
+              }}
+              minSearchLength={2}
+              returnOriginalData={true}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <FormTextInput
+              format="normal"
+              label="Billing Customer Email"
+              readOnly={disabled}
+              value={partyDetailsForm.values.billing_customer_email || ""}
+              onChange={(e) =>
+                partyDetailsForm.setFieldValue(
+                  "billing_customer_email",
+                  e.currentTarget.value,
+                )
+              }
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            {billingCustomerAddressCustom ||
+            (!!partyDetailsForm.values.billing_customer_address &&
+              (!partyDetailsForm.values.billing_customer_address_id ||
+                !billingCustomerAddressOptions.some(
+                  (item) =>
+                    item.value ===
+                    partyDetailsForm.values.billing_customer_address_id,
+                ))) ? (
+              <FormTextInput
+                label="Billing Customer Address"
+                readOnly={disabled}
+                value={partyDetailsForm.values.billing_customer_address || ""}
+                onChange={(e) => {
+                  const nextValue = e.currentTarget.value;
+                  partyDetailsForm.setFieldValue(
+                    "billing_customer_address",
+                    nextValue,
+                  );
+                  if (!nextValue.trim()) {
+                    setBillingCustomerAddressCustom?.(false);
+                    setBillingCustomerAddressSearch?.("");
+                    partyDetailsForm.setFieldValue(
+                      "billing_customer_address_id",
+                      "",
+                    );
+                  }
+                }}
+              />
+            ) : (
+              <Dropdown
+                size="sm"
+                label="Billing Customer Address"
+                dropdownZIndex={1000}
+                disabled={disabled}
+                data={billingCustomerAddressOptions.map((item) => ({
+                  value: item.value,
+                  label: item.label,
+                }))}
+                value={
+                  partyDetailsForm.values.billing_customer_address_id || null
+                }
+                searchValue={billingCustomerAddressSearch}
+                onSearchChange={(value) => {
+                  setBillingCustomerAddressSearch?.(value);
+                  if (
+                    value.trim() &&
+                    !addressSearchMatchesOption(
+                      billingCustomerAddressOptions,
+                      value,
+                    )
+                  ) {
+                    setBillingCustomerAddressCustom?.(true);
+                    partyDetailsForm.setFieldValue(
+                      "billing_customer_address_id",
+                      "",
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "billing_customer_address",
+                      value,
+                    );
+                    partyDetailsForm.setFieldValue(
+                      "billing_customer_email",
+                      "",
+                    );
+                  }
+                }}
+                onChange={(value) => {
+                  const selected = billingCustomerAddressOptions.find(
+                    (item) => item.value === value,
+                  );
+                  partyDetailsForm.setFieldValue(
+                    "billing_customer_address_id",
+                    value || "",
+                  );
+                  partyDetailsForm.setFieldValue(
+                    "billing_customer_address",
+                    selected?.address || "",
+                  );
+                  partyDetailsForm.setFieldValue(
+                    "billing_customer_email",
+                    value ? selected?.email || "" : "",
+                  );
+                  setBillingCustomerAddressSearch?.(selected?.label || "");
+                  setBillingCustomerAddressCustom?.(false);
+                }}
+                searchable
+                clearable
+              />
+            )}
+          </Grid.Col>
+        </Grid>
+      )}
     </fieldset>
   );
 }
