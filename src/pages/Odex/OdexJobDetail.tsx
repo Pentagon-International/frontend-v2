@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Alert,
   Anchor,
@@ -204,6 +204,27 @@ export default function OdexJobDetail() {
       String(job.status).toLowerCase(),
     );
 
+  // Smooth the ring/bar toward the latest reported % so it doesn't sit still between updates.
+  const [displayProgress, setDisplayProgress] = useState(0);
+  useEffect(() => {
+    const target = Math.max(0, Math.min(100, Number(progressValue) || 0));
+    if (!isActiveJob) {
+      setDisplayProgress(
+        String(job?.status || "").toLowerCase() === "completed" ? 100 : target,
+      );
+      return;
+    }
+    setDisplayProgress((prev) => (prev > target ? target : prev));
+    const timer = window.setInterval(() => {
+      setDisplayProgress((prev) => {
+        if (prev >= target) return prev;
+        const gap = target - prev;
+        return Math.min(target, prev + Math.max(1, Math.ceil(gap / 4)));
+      });
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [progressValue, isActiveJob, job?.status]);
+
   const durationLabel = useMemo(() => {
     if (job?.duration_seconds != null) return `${job.duration_seconds}s`;
     if (job?.started_at && job?.completed_at) {
@@ -401,18 +422,18 @@ export default function OdexJobDetail() {
                     </Text>
                   </Group>
                 ) : null}
-                {isActiveJob && progressValue > 0 ? (
+                {isActiveJob && displayProgress > 0 ? (
                   <Box maw={480}>
                     <Group justify="space-between" mb={6}>
                       <Text size="xs" fw={500} c="dimmed">
                         Progress
                       </Text>
                       <Text size="xs" fw={600} c={PRIMARY}>
-                        {Math.round(progressValue)}%
+                        {Math.round(displayProgress)}%
                       </Text>
                     </Group>
                     <Progress
-                      value={progressValue}
+                      value={displayProgress}
                       color={PRIMARY}
                       size="md"
                       radius="xl"
@@ -621,12 +642,12 @@ export default function OdexJobDetail() {
                             size={100}
                             thickness={10}
                             sections={[
-                              { value: progressValue, color: PRIMARY },
+                              { value: displayProgress, color: PRIMARY },
                             ]}
                             label={
                               <Center>
                                 <Text size="sm" fw={700} c={PRIMARY}>
-                                  {Math.round(progressValue)}%
+                                  {Math.round(displayProgress)}%
                                 </Text>
                               </Center>
                             }
