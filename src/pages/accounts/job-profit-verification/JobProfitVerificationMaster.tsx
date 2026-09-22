@@ -5,12 +5,14 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Grid,
   Group,
   Loader,
   MantineProvider,
   Menu,
   Select,
+  Stack,
   Text,
   TextInput,
   Tooltip,
@@ -72,12 +74,15 @@ import useDateFormat from "../../../hooks/useDateFormat";
 import { getFilterBranchMasterOptions } from "../../../service/dashboard.service";
 import { getDefaultBranchCurrencyFromUser } from "../../../utils/exchangeRateRoe";
 import {
-  canShowConfirmProfit,
-  canShowVerifyProfit,
+  canShowSalespersonVerify,
   getProfitStatusLabel,
+  isAccountsProfitVerified,
+  isSalespersonProfitVerified,
+  pickProfitHouseRecord,
   PROFIT_STATUS_FILTER_OPTIONS,
+  runJobProfitAccountsVerify,
   runJobProfitHoldDecision,
-  runJobProfitHouseAction,
+  runJobProfitSalespersonVerify,
 } from "../../../utils/jobProfitHouseVerification";
 
 const LIST_KEY_VERIFICATION = "JOB_PROFIT_VERIFICATION_MASTER";
@@ -152,6 +157,10 @@ type JobProfitRow = {
   our_cost?: number;
   our_profit?: number;
   is_sales?: boolean;
+  accounts_verified?: boolean;
+  accounts_by?: string | null;
+  accounts_at?: string | null;
+  salesperson_verified?: boolean;
   has_verified_profit?: boolean;
   verified?: boolean;
   brokerage?: number | null;
@@ -399,7 +408,9 @@ function StatusPill({ status }: { status?: string | null }) {
   const label = getProfitStatusLabel(raw);
   // Distinct colors per status so Approved / Confirmed / Hold / Rejected are not confused.
   const cfg =
-    key === "sent_to_verify"
+    key === "sent_to_accounts"
+      ? { dot: "#0ea5e9", bg: "#e0f2fe", color: "#0369a1" } // sky
+      : key === "sent_to_verify"
       ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" } // amber
       : key === "verified"
         ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" } // blue
@@ -716,6 +727,11 @@ export default function JobProfitVerificationMaster({
         status: row.status,
         brokerage: row.brokerage ?? null,
         brokerage_remark: row.brokerage_remark ?? null,
+        accounts_verified: row.accounts_verified ?? null,
+        accounts_by: row.accounts_by ?? null,
+        accounts_at: row.accounts_at ?? null,
+        salesperson_verified: row.salesperson_verified ?? null,
+        verified: row.verified ?? null,
         verified_by: row.verified_by ?? null,
         verified_at: row.verified_at ?? null,
         confirmed_by: row.confirmed_by ?? null,
@@ -743,29 +759,66 @@ export default function JobProfitVerificationMaster({
   const refreshProfitList = useCallback(() => {
     void queryClient.invalidateQueries({
       queryKey: [listQueryKey],
+      refetchType: "active",
     });
   }, [listQueryKey, queryClient]);
 
-  const handleVerifyProfit = useCallback(
-    (row: JobProfitRow) => {
-      const shipmentId = row.subjob_no?.trim();
-      if (!shipmentId) {
-        ToastNotification({
-          type: "error",
-          message: "Shipment number not found.",
-        });
-        return;
-      }
-      runJobProfitHouseAction({
-        shipmentId,
-        action: "verify",
-        onSuccess: refreshProfitList,
-      });
+  const mergeHouseProfitPatchIntoList = useCallback(
+    (shipmentId: string, patchRow?: Record<string, unknown> | null) => {
+      if (!patchRow) return;
+      queryClient.setQueriesData(
+        { queryKey: [listQueryKey] },
+        (prev: { data: JobProfitRow[]; total: number } | undefined) => {
+          if (!prev?.data) return prev;
+          const wanted = String(shipmentId ?? "").trim();
+          return {
+            ...prev,
+            data: prev.data.map((row) => {
+              if (String(row.subjob_no ?? "").trim() !== wanted) return row;
+              return {
+                ...row,
+                ...(typeof patchRow.accounts_verified === "boolean"
+                  ? { accounts_verified: patchRow.accounts_verified }
+                  : {}),
+                ...(patchRow.accounts_by != null
+                  ? { accounts_by: String(patchRow.accounts_by) }
+                  : {}),
+                ...(patchRow.accounts_at != null
+                  ? { accounts_at: String(patchRow.accounts_at) }
+                  : {}),
+                ...(typeof patchRow.verified === "boolean"
+                  ? { verified: patchRow.verified }
+                  : {}),
+                ...(typeof patchRow.salesperson_verified === "boolean"
+                  ? {
+                      salesperson_verified: patchRow.salesperson_verified,
+                    }
+                  : {}),
+                ...(typeof patchRow.status === "string"
+                  ? { status: patchRow.status }
+                  : {}),
+                ...(patchRow.verified_by != null
+                  ? { verified_by: String(patchRow.verified_by) }
+                  : {}),
+                ...(patchRow.verified_at != null
+                  ? { verified_at: String(patchRow.verified_at) }
+                  : {}),
+                ...(patchRow.confirmed_by != null
+                  ? { confirmed_by: String(patchRow.confirmed_by) }
+                  : {}),
+                ...(patchRow.confirmed_at != null
+                  ? { confirmed_at: String(patchRow.confirmed_at) }
+                  : {}),
+              };
+            }),
+          };
+        },
+      );
     },
-    [refreshProfitList],
+    [listQueryKey, queryClient],
   );
 
-  const handleConfirmProfit = useCallback(
+  const handleAccountsVerify = useCallback(
     (row: JobProfitRow) => {
       const shipmentId = row.subjob_no?.trim();
       if (!shipmentId) {
@@ -775,16 +828,49 @@ export default function JobProfitVerificationMaster({
         });
         return;
       }
-      runJobProfitHouseAction({
+      runJobProfitAccountsVerify({
         shipmentId,
-        action: "confirm",
-        askBrokerage: true,
-        initialBrokerage: row.brokerage,
-        initialBrokerageRemark: row.brokerage_remark,
-        onSuccess: refreshProfitList,
+        onSuccess: (response) => {
+          const nested = pickProfitHouseRecord(response, shipmentId);
+          mergeHouseProfitPatchIntoList(
+            shipmentId,
+            (nested as Record<string, unknown> | null | undefined) ?? {
+              accounts_verified: true,
+              status: "sent_to_verify",
+            },
+          );
+          refreshProfitList();
+        },
       });
     },
-    [refreshProfitList],
+    [mergeHouseProfitPatchIntoList, refreshProfitList],
+  );
+
+  const handleSalespersonVerify = useCallback(
+    (row: JobProfitRow) => {
+      const shipmentId = row.subjob_no?.trim();
+      if (!shipmentId) {
+        ToastNotification({
+          type: "error",
+          message: "Shipment number not found.",
+        });
+        return;
+      }
+      runJobProfitSalespersonVerify({
+        shipmentId,
+        onSuccess: (response) => {
+          const nested = pickProfitHouseRecord(response, shipmentId);
+          mergeHouseProfitPatchIntoList(
+            shipmentId,
+            (nested as Record<string, unknown> | null | undefined) ?? {
+              verified: true,
+            },
+          );
+          refreshProfitList();
+        },
+      });
+    },
+    [mergeHouseProfitPatchIntoList, refreshProfitList],
   );
 
   const handleApproveHold = useCallback(
@@ -1555,6 +1641,12 @@ export default function JobProfitVerificationMaster({
                       {isApprovalMode ? (
                         <th style={mergeTh(220, 220)}>Remark</th>
                       ) : null}
+                      {!isApprovalMode ? (
+                        <>
+                          <th style={mergeTh(130, 130)}>Accounts Verify</th>
+                          <th style={mergeTh(140, 140)}>Salesperson Verify</th>
+                        </>
+                      ) : null}
                       <th style={mergeTh(150, 150)}>Verified By</th>
                       {!isApprovalMode ? (
                         <th style={mergeTh(150, 150)}>Confirmed By</th>
@@ -1565,7 +1657,7 @@ export default function JobProfitVerificationMaster({
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={19} style={{ padding: 0 }}>
+                        <td colSpan={isApprovalMode ? 19 : 21} style={{ padding: 0 }}>
                           <Box style={scrollPortCenteredStyle}>
                             <Loader color="#105476" size="lg" />
                           </Box>
@@ -1573,7 +1665,7 @@ export default function JobProfitVerificationMaster({
                       </tr>
                     ) : rows.length === 0 ? (
                       <tr>
-                        <td colSpan={19} style={{ padding: 0 }}>
+                        <td colSpan={isApprovalMode ? 19 : 21} style={{ padding: 0 }}>
                           <Box style={scrollPortCenteredStyle}>
                             <Text c="dimmed">No job profit records found</Text>
                           </Box>
@@ -1758,6 +1850,113 @@ export default function JobProfitVerificationMaster({
                               })()}
                             </td>
                           ) : null}
+                          {!isApprovalMode ? (
+                            <>
+                              <td style={tdPad}>
+                                {(() => {
+                                  const accountsChecked =
+                                    isAccountsProfitVerified({
+                                      accounts_verified: row.accounts_verified,
+                                    });
+                                  return (
+                                    <Stack gap={4}>
+                                      <Checkbox
+                                        label="Accounts Verify"
+                                        checked={accountsChecked}
+                                        disabled={accountsChecked}
+                                        styles={{
+                                          label: {
+                                            fontFamily: theme.fontSans,
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                          },
+                                        }}
+                                        onChange={() =>
+                                          handleAccountsVerify(row)
+                                        }
+                                      />
+                                      {accountsChecked ? (
+                                        <Stack gap={0}>
+                                          <Text size="xs" c={muted}>
+                                            {row.accounts_by?.trim() || "—"}
+                                          </Text>
+                                          {row.accounts_at ? (
+                                            <Text size="xs" c={muted}>
+                                              {fmtDateTime(row.accounts_at)}
+                                            </Text>
+                                          ) : null}
+                                        </Stack>
+                                      ) : null}
+                                    </Stack>
+                                  );
+                                })()}
+                              </td>
+                              <td style={tdPad}>
+                                {(() => {
+                                  const salespersonChecked =
+                                    isSalespersonProfitVerified({
+                                      salesperson_verified:
+                                        row.salesperson_verified,
+                                      verified: row.verified,
+                                      status: row.status,
+                                    });
+                                  const canSalespersonVerify =
+                                    canShowSalespersonVerify({
+                                      is_sales: row.is_sales,
+                                      status: row.status,
+                                      accounts_verified: row.accounts_verified,
+                                    });
+                                  if (row.is_sales !== true) {
+                                    return (
+                                      <Text size="sm" c={muted}>
+                                        —
+                                      </Text>
+                                    );
+                                  }
+                                  return (
+                                    <Stack gap={4}>
+                                      <Checkbox
+                                        label="Salesperson Verify"
+                                        checked={salespersonChecked}
+                                        disabled={
+                                          salespersonChecked ||
+                                          !canSalespersonVerify
+                                        }
+                                        styles={{
+                                          label: {
+                                            fontFamily: theme.fontSans,
+                                            fontSize: 12,
+                                            fontWeight: 600,
+                                          },
+                                        }}
+                                        onChange={() =>
+                                          handleSalespersonVerify(row)
+                                        }
+                                      />
+                                      {salespersonChecked ? (
+                                        <Stack gap={0}>
+                                          <Text size="xs" c={muted}>
+                                            {row.verified_by?.trim() ||
+                                              row.confirmed_by?.trim() ||
+                                              "—"}
+                                          </Text>
+                                          {(row.verified_at ||
+                                            row.confirmed_at) && (
+                                            <Text size="xs" c={muted}>
+                                              {fmtDateTime(
+                                                row.verified_at ||
+                                                  row.confirmed_at,
+                                              )}
+                                            </Text>
+                                          )}
+                                        </Stack>
+                                      ) : null}
+                                    </Stack>
+                                  );
+                                })()}
+                              </td>
+                            </>
+                          ) : null}
                           <td style={tdPad}>
                             <Text size="sm" c={fg}>
                               {row.verified_by?.trim() || "—"}
@@ -1824,59 +2023,7 @@ export default function JobProfitVerificationMaster({
                                 );
                               }
 
-                              const showVerify = canShowVerifyProfit({
-                                is_sales: row.is_sales,
-                                status: row.status,
-                              });
-                              const showConfirm = canShowConfirmProfit({
-                                is_sales: row.is_sales,
-                                status: row.status,
-                              });
-                              if (!showVerify && !showConfirm) return null;
-                              return (
-                                <Menu
-                                  withinPortal
-                                  position="bottom-end"
-                                  shadow="md"
-                                  width={180}
-                                  styles={erpListGeistMenuDropdownStyles}
-                                  classNames={{
-                                    dropdown: ERP_LIST_GEIST_ROOT_CLASS,
-                                  }}
-                                >
-                                  <Menu.Target>
-                                    <ActionIcon
-                                      variant="subtle"
-                                      color="gray"
-                                      size="sm"
-                                    >
-                                      <IconDotsVertical size={16} />
-                                    </ActionIcon>
-                                  </Menu.Target>
-                                  <Menu.Dropdown>
-                                    {showVerify && (
-                                      <Menu.Item
-                                        leftSection={
-                                          <IconCircleCheck size={14} />
-                                        }
-                                        onClick={() => handleVerifyProfit(row)}
-                                      >
-                                        Verify profit
-                                      </Menu.Item>
-                                    )}
-                                    {showConfirm && (
-                                      <Menu.Item
-                                        leftSection={
-                                          <IconCircleCheck size={14} />
-                                        }
-                                        onClick={() => handleConfirmProfit(row)}
-                                      >
-                                        Confirm profit
-                                      </Menu.Item>
-                                    )}
-                                  </Menu.Dropdown>
-                                </Menu>
-                              );
+                              return null;
                             })()}
                           </td>
                         </tr>

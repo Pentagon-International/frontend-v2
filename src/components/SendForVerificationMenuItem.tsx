@@ -113,7 +113,7 @@ async function sendHousesForVerification(shipmentIds: string[]) {
     {
       items: shipmentIds.map((shipment_id) => ({
         shipment_id,
-        send_to_verify: true,
+        sent_to_accounts: true,
       })),
     },
     API_HEADER,

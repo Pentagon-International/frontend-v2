@@ -25,6 +25,11 @@ export type JobProfitHouseNavContext = {
   status?: string | null;
   brokerage?: number | null;
   brokerage_remark?: string | null;
+  accounts_verified?: boolean | null;
+  accounts_by?: string | null;
+  accounts_at?: string | null;
+  salesperson_verified?: boolean | null;
+  verified?: boolean | null;
   verified_by?: string | null;
   verified_at?: string | null;
   confirmed_by?: string | null;
@@ -40,6 +45,11 @@ export type JobProfitHousePatchPayload = {
 };
 
 export type JobProfitHouseAuditRecord = {
+  accounts_verified?: boolean | null;
+  accounts_by?: string | null;
+  accounts_at?: string | null;
+  salesperson_verified?: boolean | null;
+  verified?: boolean | null;
   verified_by?: string | null;
   verified_at?: string | null;
   confirmed_by?: string | null;
@@ -49,6 +59,16 @@ export type JobProfitHouseAuditRecord = {
   brokerage_remark?: string | null;
   hold_remark?: string | null;
   shipment_id?: string | null;
+};
+
+export type JobProfitHouseItemsPayload = {
+  items: Array<{
+    shipment_id: string;
+    sent_to_accounts?: boolean;
+    accounts_verified?: boolean;
+    salesperson_verified?: boolean;
+    verified?: boolean;
+  }>;
 };
 
 export type JobProfitHousePatchResult = {
@@ -99,6 +119,11 @@ export function pickProfitHouseAuditFields(
   brokerage: number | null;
   brokerage_remark: string | null;
   hold_remark: string | null;
+  accounts_verified: boolean;
+  accounts_by: string | null;
+  accounts_at: string | null;
+  salesperson_verified: boolean;
+  verified: boolean;
 } {
   const nested = pickProfitHouseRecord(response, shipmentId);
   const verified_by =
@@ -109,6 +134,8 @@ export function pickProfitHouseAuditFields(
     nested?.confirmed_by ?? response?.confirmed_by ?? null;
   const confirmed_at =
     nested?.confirmed_at ?? response?.confirmed_at ?? null;
+  const accounts_byRaw = nested?.accounts_by ?? null;
+  const accounts_atRaw = nested?.accounts_at ?? null;
   const brokerageRaw = nested?.brokerage ?? response?.brokerage ?? null;
   const brokerage =
     brokerageRaw != null && Number.isFinite(Number(brokerageRaw))
@@ -135,6 +162,13 @@ export function pickProfitHouseAuditFields(
     brokerage_remark:
       brokerage_remark != null ? String(brokerage_remark) : null,
     hold_remark,
+    accounts_verified: nested?.accounts_verified === true,
+    accounts_by:
+      accounts_byRaw != null ? String(accounts_byRaw).trim() || null : null,
+    accounts_at:
+      accounts_atRaw != null ? String(accounts_atRaw).trim() || null : null,
+    salesperson_verified: nested?.salesperson_verified === true,
+    verified: nested?.verified === true,
   };
 }
 
@@ -145,6 +179,7 @@ export function normalizeProfitStatus(status?: string | null): string {
 }
 
 const PROFIT_STATUS_LABELS: Record<string, string> = {
+  sent_to_accounts: "Sent to Accounts",
   sent_to_verify: "Pending for verification",
   verified: "Pricing verified pending for sales confirmation",
   confirmed: "Sales Confirmed",
@@ -156,6 +191,7 @@ const PROFIT_STATUS_LABELS: Record<string, string> = {
 };
 
 export const PROFIT_STATUS_FILTER_OPTIONS = [
+  { value: "sent_to_accounts", label: PROFIT_STATUS_LABELS.sent_to_accounts },
   { value: "sent_to_verify", label: PROFIT_STATUS_LABELS.sent_to_verify },
   { value: "verified", label: PROFIT_STATUS_LABELS.verified },
   { value: "confirmed", label: PROFIT_STATUS_LABELS.confirmed },
@@ -236,6 +272,12 @@ export function buildHoldDecisionPayload(
 export async function patchJobProfitHoldDecision(
   payload: JobProfitHoldDecisionPayload,
 ) {
+  return patchJobProfitHouseItems(payload);
+}
+
+export async function patchJobProfitHouseItems(
+  payload: JobProfitHouseItemsPayload | JobProfitHoldDecisionPayload,
+) {
   const response = (await apiCallProtected.patch(
     `${URL.jobProfitVerification}house/`,
     payload,
@@ -246,11 +288,204 @@ export async function patchJobProfitHoldDecision(
     throw new Error(
       response.message ??
         response.detail ??
-        "Failed to update hold decision.",
+        "Failed to update profit verification.",
     );
   }
 
   return response;
+}
+
+/** Accounts verify is only true when the API flag is set — never inferred from status. */
+export function isAccountsProfitVerified(options: {
+  accounts_verified?: boolean | null;
+}): boolean {
+  return options.accounts_verified === true;
+}
+
+export function isSalespersonProfitVerified(options: {
+  salesperson_verified?: boolean | null;
+  verified?: boolean | null;
+  status?: string | null;
+}): boolean {
+  if (options.salesperson_verified === true || options.verified === true) {
+    return true;
+  }
+  return isProfitConfirmed(options.status);
+}
+
+/** Salesperson can verify after accounts has verified (status sent_to_verify). */
+export function canShowSalespersonVerify(params: {
+  is_sales?: boolean | null;
+  status?: string | null;
+  accounts_verified?: boolean | null;
+}): boolean {
+  if (params.is_sales !== true) return false;
+  if (isProfitFlowComplete(params.status)) return false;
+  if (isSalespersonProfitVerified({ status: params.status })) return false;
+  const status = normalizeProfitStatus(params.status);
+  return (
+    params.accounts_verified === true ||
+    status === "sent_to_verify" ||
+    status === "verified"
+  );
+}
+
+export function buildAccountsVerifyPayload(
+  shipmentId: string,
+): JobProfitHouseItemsPayload {
+  return {
+    items: [
+      {
+        shipment_id: String(shipmentId ?? "").trim(),
+        accounts_verified: true,
+      },
+    ],
+  };
+}
+
+export function buildSalespersonVerifyPayload(
+  shipmentId: string,
+): JobProfitHouseItemsPayload {
+  return {
+    items: [
+      {
+        shipment_id: String(shipmentId ?? "").trim(),
+        salesperson_verified: true,
+      },
+    ],
+  };
+}
+
+/** Confirm + PATCH accounts verification (items payload). */
+export function runJobProfitAccountsVerify(options: {
+  shipmentId: string;
+  onSuccess?: (response?: JobProfitHousePatchResult) => void;
+}) {
+  const shipmentId = String(options.shipmentId ?? "").trim();
+  if (!shipmentId) {
+    ToastNotification({
+      type: "error",
+      message: "Shipment number not found.",
+    });
+    return;
+  }
+
+  let loading = false;
+  let error: string | null = null;
+
+  mountPortal(({ update, destroy }) => {
+    const render = () => {
+      update(
+        <ConfirmActionModal
+          title="Accounts Verify"
+          message={`Mark accounts verification complete for shipment ${shipmentId}?`}
+          confirmLabel="Accounts Verify"
+          loading={loading}
+          error={error}
+          onClose={() => {
+            if (!loading) destroy();
+          }}
+          onConfirm={() => {
+            if (loading) return;
+            loading = true;
+            error = null;
+            render();
+
+            void (async () => {
+              try {
+                const response = await patchJobProfitHouseItems(
+                  buildAccountsVerifyPayload(shipmentId),
+                );
+                ToastNotification({
+                  type: "success",
+                  message:
+                    response?.message ??
+                    "Accounts verification completed successfully",
+                });
+                destroy();
+                options.onSuccess?.(response);
+              } catch (err: unknown) {
+                loading = false;
+                error = resolveApiErrorMessage(
+                  err,
+                  "Failed to complete accounts verification.",
+                );
+                ToastNotification({ type: "error", message: error });
+                render();
+              }
+            })();
+          }}
+        />,
+      );
+    };
+    render();
+  });
+}
+
+/** Confirm + PATCH salesperson verification (items payload). */
+export function runJobProfitSalespersonVerify(options: {
+  shipmentId: string;
+  onSuccess?: (response?: JobProfitHousePatchResult) => void;
+}) {
+  const shipmentId = String(options.shipmentId ?? "").trim();
+  if (!shipmentId) {
+    ToastNotification({
+      type: "error",
+      message: "Shipment number not found.",
+    });
+    return;
+  }
+
+  let loading = false;
+  let error: string | null = null;
+
+  mountPortal(({ update, destroy }) => {
+    const render = () => {
+      update(
+        <ConfirmActionModal
+          title="Salesperson Verify"
+          message={`Mark salesperson verification complete for shipment ${shipmentId}?`}
+          confirmLabel="Salesperson Verify"
+          loading={loading}
+          error={error}
+          onClose={() => {
+            if (!loading) destroy();
+          }}
+          onConfirm={() => {
+            if (loading) return;
+            loading = true;
+            error = null;
+            render();
+
+            void (async () => {
+              try {
+                const response = await patchJobProfitHouseItems(
+                  buildSalespersonVerifyPayload(shipmentId),
+                );
+                ToastNotification({
+                  type: "success",
+                  message:
+                    response?.message ??
+                    "Salesperson verification completed successfully",
+                });
+                destroy();
+                options.onSuccess?.(response);
+              } catch (err: unknown) {
+                loading = false;
+                error = resolveApiErrorMessage(
+                  err,
+                  "Failed to complete salesperson verification.",
+                );
+                ToastNotification({ type: "error", message: error });
+                render();
+              }
+            })();
+          }}
+        />,
+      );
+    };
+    render();
+  });
 }
 
 /** Approve / Reject hold dialogs outside Menu trees so they survive dropdown unmount. */
