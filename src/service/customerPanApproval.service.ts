@@ -49,6 +49,7 @@ export type CustomerPanApprovalRow = {
   own_office?: boolean;
   status?: string;
   assigned_to?: string;
+  assigned_to_display?: string | null;
   network_id?: number | null;
   network_name?: string | null;
   credit_day?: number;
@@ -60,6 +61,7 @@ export type CustomerPanApprovalRow = {
   approved_at?: string | null;
   customer_code?: string | null;
   customer_types?: unknown[];
+  account_codes?: string[];
   addresses_data?: CustomerPanApprovalAddress[];
   documents_list?: CustomerDocumentListItem[];
   tds_section_data?: Array<Record<string, unknown>>;

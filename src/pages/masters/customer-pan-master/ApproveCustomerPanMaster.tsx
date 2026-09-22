@@ -43,6 +43,7 @@ import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dropdown,
+  FormMultiSelect,
   FormTextArea,
   FormTextInput,
   SearchableSelect,
@@ -70,6 +71,7 @@ import {
 } from "../../../components/ERPListPage";
 import { URL } from "../../../api/serverUrls";
 import { getAPICall } from "../../../service/getApiCall";
+import { postAPICall } from "../../../service/postApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import {
   approveCustomerPan,
@@ -174,7 +176,86 @@ const TERM_CODE_OPTIONS = [
   { label: "Prepaid", value: "PREPAID" },
 ];
 
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: "1103010005", label: "Local Debtor - 1103010005" },
+  { value: "1203010002", label: "Local Creditor - 1203010002" },
+  { value: "1103010003", label: "Overseas Debtor - 1103010003" },
+  { value: "1203010007", label: "Overseas Creditor - 1203010007" },
+] as const;
+
+const ACCOUNT_TYPE_CODES = new Set<string>(
+  ACCOUNT_TYPE_OPTIONS.map((option) => option.value),
+);
+
 const MODAL_DROPDOWN_Z_INDEX = 1000;
+
+type SalespersonOption = {
+  value: string;
+  label: string;
+};
+
+type SalespersonsResponse = {
+  success?: boolean;
+  data?: Array<{ sales_person?: string | null }>;
+};
+
+function normalizeAccountCodes(source: {
+  account_codes?: unknown;
+}): string[] {
+  const raw = source.account_codes;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        return String(item).trim();
+      }
+      if (item && typeof item === "object") {
+        const record = item as { account_code?: unknown; code?: unknown };
+        return String(record.account_code ?? record.code ?? "").trim();
+      }
+      return "";
+    })
+    .filter((code) => ACCOUNT_TYPE_CODES.has(code));
+}
+
+function formatAccountTypesDisplay(codes: string[] | undefined): string {
+  const normalized = normalizeAccountCodes({ account_codes: codes });
+  if (!normalized.length) return "—";
+  return normalized
+    .map(
+      (code) =>
+        ACCOUNT_TYPE_OPTIONS.find((option) => option.value === code)?.label ??
+        code,
+    )
+    .join(", ");
+}
+
+function resolveAssignedToDropdownValue(
+  assignedTo: string | null | undefined,
+  assignedToDisplay: string | null | undefined,
+  options: SalespersonOption[],
+): string | null {
+  if (!options.length) return null;
+
+  const assigned = String(assignedTo ?? "").trim();
+  const displayName = String(assignedToDisplay ?? "").trim();
+  if (!assigned && !displayName) return null;
+
+  const norm = (value: string) => value.trim().toLowerCase();
+  const matchOption = (candidate: string) => {
+    if (!candidate) return undefined;
+    return options.find(
+      (option) =>
+        norm(option.value) === norm(candidate) ||
+        norm(option.label) === norm(candidate),
+    )?.value;
+  };
+
+  // Prefer assigned_to when it already matches an option (user just selected a
+  // name). Fall back to assigned_to_display (API-resolved name from email).
+  // Never return a raw email that is not in the options list.
+  return matchOption(assigned) ?? matchOption(displayName) ?? null;
+}
 
 type GeoCountry = {
   country_code: string;
@@ -314,6 +395,7 @@ function buildCustomerVerificationPayload(
     own_office: Boolean(row.own_office),
     status: row.status ?? "ACTIVE",
     assigned_to: row.assigned_to ?? row.created_by ?? "",
+    account_codes: normalizeAccountCodes(row),
     network_id: row.network_id ?? null,
     network_name: row.network_name ?? null,
     credit_day:
@@ -557,6 +639,30 @@ export function CustomerPanApprovalDetails({
         : "Customer";
   const tdsSections = row.tds_section_data ?? [];
   const bankDetails = row.bank_details_data ?? [];
+  const accountCodes = normalizeAccountCodes(row);
+
+  const { data: salespersonOptions = [] } = useQuery({
+    queryKey: ["salespersons", "approval-details"],
+    queryFn: async () => {
+      const response = (await postAPICall(
+        URL.salespersons,
+        { customer_code: "" },
+        API_HEADER,
+      )) as SalespersonsResponse;
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      return rows
+        .map((item) => String(item.sales_person ?? "").trim())
+        .filter(Boolean)
+        .map((person) => ({ value: person, label: person }));
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const assignedToDropdownValue = resolveAssignedToDropdownValue(
+    row.assigned_to,
+    row.assigned_to_display,
+    salespersonOptions,
+  );
 
   const updateRow = (patch: Partial<CustomerPanApprovalRow>) => {
     onChange?.({ ...row, ...patch });
@@ -609,7 +715,14 @@ export function CustomerPanApprovalDetails({
                       { label: "TDS Type", value: row.tds_type },
                       { label: "Own Office", value: row.own_office },
                       { label: `${entityLabel} Status`, value: row.status },
-                      { label: "Assign To", value: row.created_by },
+                      {
+                        label: "Assign To",
+                        value: row.assigned_to_display ?? row.created_by,
+                      },
+                      {
+                        label: "Account type",
+                        value: formatAccountTypesDisplay(accountCodes),
+                      },
                       { label: "Network", value: row.network_name },
                     ]
                   : [
@@ -622,7 +735,11 @@ export function CustomerPanApprovalDetails({
                       { label: "Network Name", value: row.network_name },
                       {
                         label: "Assign To",
-                        value: row.assigned_to ?? row.created_by,
+                        value: row.assigned_to_display ?? row.created_by,
+                      },
+                      {
+                        label: "Account type",
+                        value: formatAccountTypesDisplay(accountCodes),
                       },
                     ]
               }
@@ -825,11 +942,50 @@ export function CustomerPanApprovalDetails({
                 )}
               </>
             )}
-            <FormTextInput
-              format="normal"
+            <Dropdown
               label="Assign To"
-              value={row.assigned_to ?? row.created_by ?? ""}
-              onChange={(e) => updateRow({ assigned_to: e.target.value })}
+              placeholder="Select Salesperson"
+              searchable
+              key={`assign-to-options-${salespersonOptions.length}`}
+              data={salespersonOptions}
+              nothingFoundMessage="No salespersons found"
+              value={assignedToDropdownValue}
+              onChange={(value) =>
+                updateRow({
+                  assigned_to: value || "",
+                  assigned_to_display: value || null,
+                })
+              }
+              dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
+              clearable
+            />
+            <FormMultiSelect
+              label="Account type"
+              placeholder="Select account type"
+              searchable
+              data={[...ACCOUNT_TYPE_OPTIONS]}
+              value={accountCodes}
+              onChange={(value) =>
+                updateRow({
+                  account_codes: normalizeAccountCodes({
+                    account_codes: value,
+                  }),
+                })
+              }
+              dropdownZIndex={MODAL_DROPDOWN_Z_INDEX}
+              styles={{
+                input: {
+                  minHeight: "36px",
+                  maxHeight: "72px",
+                  overflowY: "auto",
+                  alignContent: "flex-start",
+                },
+                pillsList: {
+                  flexWrap: "wrap",
+                  maxHeight: "60px",
+                  overflowY: "auto",
+                },
+              }}
             />
             <SearchableSelect
               label="Network Name"
@@ -2601,7 +2757,7 @@ export default function ApproveCustomerPanMaster({
                           </td>
                           <td style={tdPad}>
                             <Text size="sm" lineClamp={2}>
-                              {row.created_by?.trim() || "—"}
+                              {row.assigned_to_display?.trim() || row.created_by?.trim() || "—"}
                             </Text>
                           </td>
                           <td style={tdPad}>

@@ -3045,7 +3045,9 @@ function CustomerCreate() {
       const payload = {
         customer_name: values.customer_name,
         customer_type_code: values.customer_type_code,
-        account_codes: values.account_codes ?? [],
+        ...(isVerificationCreateRoute
+          ? {}
+          : { account_codes: values.account_codes ?? [] }),
         term_code: values.term_code,
         own_office: values.own_office === "true",
         status: "ACTIVE",
@@ -3852,29 +3854,31 @@ function CustomerCreate() {
                         </Grid.Col>
                       )}
 
-                      <Grid.Col span={4}>
-                        <FormMultiSelect
-                          label="Account type"
-                          placeholder="Select account type"
-                          searchable
-                          data={[...ACCOUNT_TYPE_OPTIONS]}
-                          disabled={!!isViewMode}
-                          {...customerForm.getInputProps("account_codes")}
-                          styles={{
-                            input: {
-                              minHeight: "36px",
-                              maxHeight: "72px",
-                              overflowY: "auto",
-                              alignContent: "flex-start",
-                            },
-                            pillsList: {
-                              flexWrap: "wrap",
-                              maxHeight: "60px",
-                              overflowY: "auto",
-                            },
-                          }}
-                        />
-                      </Grid.Col>
+                      {!isVerificationCreateRoute && (
+                        <Grid.Col span={4}>
+                          <FormMultiSelect
+                            label="Account type"
+                            placeholder="Select account type"
+                            searchable
+                            data={[...ACCOUNT_TYPE_OPTIONS]}
+                            disabled={!!isViewMode}
+                            {...customerForm.getInputProps("account_codes")}
+                            styles={{
+                              input: {
+                                minHeight: "36px",
+                                maxHeight: "72px",
+                                overflowY: "auto",
+                                alignContent: "flex-start",
+                              },
+                              pillsList: {
+                                flexWrap: "wrap",
+                                maxHeight: "60px",
+                                overflowY: "auto",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                      )}
                     </Grid>
                   </Card>
                 </Box>
