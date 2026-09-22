@@ -16,6 +16,7 @@ import {
   Loader,
   Center,
   ScrollArea,
+  PasswordInput,
 } from "@mantine/core";
 import {
   carrierDisplayFormat,
@@ -2915,6 +2916,13 @@ function AirImportJobCreate() {
   // EDI checklist preview state (Air Import Job)
   const [ediChecklistOpen, setEdiChecklistOpen] = useState(false);
   const [ediChecklistLoading, setEdiChecklistLoading] = useState(false);
+  const [ediDownloadLoading, setEdiDownloadLoading] = useState(false);
+  const [ediPinModalOpen, setEdiPinModalOpen] = useState(false);
+  const [ediTokenPin, setEdiTokenPin] = useState("");
+  const [ediPinError, setEdiPinError] = useState<string | null>(null);
+  const [ediUsbStatusMessage, setEdiUsbStatusMessage] = useState<string | null>(
+    null,
+  );
   type EdiChecklistMasterDetails = {
     code?: string;
     igm_no?: string;
@@ -3021,6 +3029,96 @@ function AirImportJobCreate() {
     }
   };
 
+  const downloadEdiFile = async (tokenPin?: string) => {
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Job not found for EDI download",
+      });
+      return;
+    }
+
+    const res = await postAPICall(
+      `${URL.edi}${jobData.id}/`,
+      tokenPin ? { token_pin: tokenPin } : {},
+      {
+        ...API_HEADER,
+        // Download returns plain text EDI content.
+        responseType: "text",
+      },
+    );
+
+    const payload =
+      res &&
+      typeof res === "object" &&
+      "data" in (res as Record<string, unknown>)
+        ? (res as { data?: unknown }).data
+        : res;
+
+    const ediText =
+      typeof payload === "string" ? payload : String(payload ?? "");
+    if (!ediText.trim()) {
+      throw new Error("Empty EDI response");
+    }
+
+    const blob = new Blob([ediText], { type: "text/plain;charset=utf-8" });
+    const fileUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = fileUrl;
+
+    const suggestedName =
+      ediChecklistData?.data?.filename ||
+      `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.edi`;
+    link.download = String(suggestedName);
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(fileUrl);
+
+    ToastNotification({
+      type: "success",
+      message: tokenPin
+        ? "Signed EDI file downloaded successfully"
+        : "EDI file downloaded successfully",
+    });
+  };
+
+  const getEdiDownloadErrorMessage = (error: unknown): string => {
+    const err = error as {
+      response?: { data?: unknown };
+      message?: string;
+    };
+    const data = err?.response?.data;
+
+    if (typeof data === "string" && data.trim()) {
+      try {
+        const parsed = JSON.parse(data) as { message?: string };
+        if (typeof parsed?.message === "string" && parsed.message.trim()) {
+          return parsed.message.trim();
+        }
+      } catch {
+        return data.trim();
+      }
+    }
+
+    if (data && typeof data === "object") {
+      const obj = data as { message?: unknown; detail?: unknown };
+      if (typeof obj.message === "string" && obj.message.trim()) {
+        return obj.message.trim();
+      }
+      if (typeof obj.detail === "string" && obj.detail.trim()) {
+        return obj.detail.trim();
+      }
+    }
+
+    if (typeof err?.message === "string" && err.message.trim()) {
+      return err.message.trim();
+    }
+
+    return "Failed to download EDI file";
+  };
+
   const handleDownloadEdiFromChecklist = async () => {
     if (!jobData?.id) {
       ToastNotification({
@@ -3030,55 +3128,84 @@ function AirImportJobCreate() {
       return;
     }
 
+    setEdiDownloadLoading(true);
     try {
-      const res = await postAPICall(
-        `${URL.edi}${jobData.id}/`,
-        {},
-        {
-          ...API_HEADER,
-          // Download returns plain text EDI content.
-          responseType: "text",
-        },
-      );
+      const usbStatusRes = await getAPICall(URL.ediUsbStatus, API_HEADER);
+      const usbStatusPayload =
+        usbStatusRes &&
+        typeof usbStatusRes === "object" &&
+        "data" in (usbStatusRes as Record<string, unknown>) &&
+        typeof (usbStatusRes as { status?: unknown }).status === "number"
+          ? (usbStatusRes as { data?: unknown }).data
+          : usbStatusRes;
 
-      const payload =
-        res &&
-        typeof res === "object" &&
-        "data" in (res as Record<string, unknown>)
-          ? (res as { data?: unknown }).data
-          : res;
+      const usbStatus =
+        usbStatusPayload && typeof usbStatusPayload === "object"
+          ? (usbStatusPayload as {
+              usb_present?: boolean;
+              message?: string;
+            })
+          : {};
 
-      const ediText =
-        typeof payload === "string" ? payload : String(payload ?? "");
-      if (!ediText.trim()) {
-        throw new Error("Empty EDI response");
+      const usbPresent = Boolean(usbStatus.usb_present);
+      const statusMessage =
+        typeof usbStatus.message === "string" ? usbStatus.message : null;
+
+      setEdiUsbStatusMessage(statusMessage);
+
+      if (usbPresent) {
+        setEdiTokenPin("");
+        setEdiPinError(null);
+        setEdiPinModalOpen(true);
+        return;
       }
 
-      const blob = new Blob([ediText], { type: "text/plain;charset=utf-8" });
-      const fileUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = fileUrl;
+      if (statusMessage) {
+        ToastNotification({
+          type: "warning",
+          message: statusMessage,
+        });
+      }
 
-      const suggestedName =
-        ediChecklistData?.data?.filename ||
-        `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.edi`;
-      link.download = String(suggestedName);
-
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(fileUrl);
-
-      ToastNotification({
-        type: "success",
-        message: "EDI file downloaded successfully",
-      });
+      try {
+        await downloadEdiFile();
+      } catch (error) {
+        console.error("Error downloading EDI file:", error);
+        ToastNotification({
+          type: "error",
+          message: getEdiDownloadErrorMessage(error),
+        });
+      }
     } catch (error) {
-      console.error("Error downloading EDI file:", error);
+      console.error("Error checking USB status for EDI:", error);
       ToastNotification({
         type: "error",
-        message: "Failed to download EDI file",
+        message: "Failed to check USB token status",
       });
+    } finally {
+      setEdiDownloadLoading(false);
+    }
+  };
+
+  const handleConfirmEdiPinDownload = async () => {
+    const pin = ediTokenPin.trim();
+    if (!pin) {
+      setEdiPinError("Please enter the USB token PIN");
+      return;
+    }
+
+    setEdiDownloadLoading(true);
+    setEdiPinError(null);
+    try {
+      await downloadEdiFile(pin);
+      setEdiPinModalOpen(false);
+      setEdiTokenPin("");
+      setEdiUsbStatusMessage(null);
+    } catch (error) {
+      console.error("Error downloading signed EDI file:", error);
+      setEdiPinError(getEdiDownloadErrorMessage(error));
+    } finally {
+      setEdiDownloadLoading(false);
     }
   };
 
@@ -6382,9 +6509,15 @@ function AirImportJobCreate() {
             </Button>
             <Button
               onClick={handleDownloadEdiFromChecklist}
-              leftSection={<IconDownload size={16} />}
+              leftSection={
+                ediDownloadLoading ? (
+                  <Loader size={16} color="white" />
+                ) : (
+                  <IconDownload size={16} />
+                )
+              }
               color="#105476"
-              disabled={ediChecklistLoading}
+              disabled={ediChecklistLoading || ediDownloadLoading}
               styles={{
                 root: {
                   background: "#0B7285",
@@ -6394,6 +6527,79 @@ function AirImportJobCreate() {
               }}
             >
               Download EDI
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={ediPinModalOpen}
+        onClose={() => {
+          if (ediDownloadLoading) return;
+          setEdiPinModalOpen(false);
+          setEdiTokenPin("");
+          setEdiPinError(null);
+          setEdiUsbStatusMessage(null);
+        }}
+        title={
+          <Text size="lg" fw={600} c="#105476">
+            USB Token PIN
+          </Text>
+        }
+        size="sm"
+        centered
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            {ediUsbStatusMessage ||
+              "HyperPKI USB detected. Enter the token PIN to download a signed EDI file."}
+          </Text>
+          <PasswordInput
+            label="Token PIN"
+            placeholder="Enter USB token PIN"
+            value={ediTokenPin}
+            onChange={(event) => {
+              setEdiTokenPin(event.currentTarget.value);
+              if (ediPinError) setEdiPinError(null);
+            }}
+            error={ediPinError}
+            disabled={ediDownloadLoading}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void handleConfirmEdiPinDownload();
+              }
+            }}
+            autoFocus
+          />
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEdiPinModalOpen(false);
+                setEdiTokenPin("");
+                setEdiPinError(null);
+                setEdiUsbStatusMessage(null);
+              }}
+              disabled={ediDownloadLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleConfirmEdiPinDownload()}
+              loading={ediDownloadLoading}
+              color="#105476"
+              styles={{
+                root: {
+                  background: "#0B7285",
+                },
+              }}
+            >
+              Download Signed EDI
             </Button>
           </Group>
         </Stack>

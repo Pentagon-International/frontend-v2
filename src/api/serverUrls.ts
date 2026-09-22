@@ -221,6 +221,7 @@ export const URL = {
 
   // EDI download for jobs
   edi: "edi/",
+  ediUsbStatus: "edi/usb-status/",
 
   // Dashboard APIs
   dashboard: {
