@@ -627,18 +627,28 @@ const fetchCheckSezStatus = async (payload: {
   customer_code: string;
   address: string;
   document_date?: string;
+  service_id?: number | null;
+  branch_id?: number | null;
 }): Promise<SezStatusResult> => {
   try {
     const body: {
       customer_code: string;
       address: string;
       document_date?: string;
+      service_id?: number;
+      branch_id?: number;
     } = {
       customer_code: payload.customer_code,
       address: payload.address,
     };
     if (payload.document_date) {
       body.document_date = payload.document_date;
+    }
+    if (payload.service_id != null && Number.isFinite(Number(payload.service_id))) {
+      body.service_id = Number(payload.service_id);
+    }
+    if (payload.branch_id != null && Number.isFinite(Number(payload.branch_id))) {
+      body.branch_id = Number(payload.branch_id);
     }
     const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
     const root = response as {
@@ -2093,6 +2103,7 @@ function InvoiceCreate({
   // India: Bill To + address + document date → check SEZ.
   // Vietnam: Bill To + address only (no document_date).
   // Stores credit_day; applies due date only when pendingApplyDueDateFromCreditRef.
+  // Credit resolves via CRM using service_id (job/shipment) + active branch_id when available.
   useEffect(() => {
     if (isAgentInvoice || (!isIndiaUser && !isVietnamUser)) {
       setHasSez(false);
@@ -2129,33 +2140,62 @@ function InvoiceCreate({
       pendingApplyDueDateFromCreditRef.current = false;
     };
 
-    if (isIndiaUser) {
-      const documentDate = formatDateYYYYMMDD(form.values.document_date);
-      if (!documentDate) {
-        setHasSez(false);
-        return;
+    const activeBranchId = (() => {
+      const b =
+        user?.branches?.find((br) => br.is_default === true) ??
+        user?.branches?.[0];
+      const id = b?.branch_id;
+      return id != null && Number.isFinite(Number(id)) ? Number(id) : null;
+    })();
+
+    let cancelled = false;
+    void (async () => {
+      let serviceIdForCredit = parseNumericServiceId(
+        (location.state as { job?: { service_id?: number } } | null)?.job
+          ?.service_id ?? null,
+      );
+      const headerNo = String(form.values.shipment_no ?? "").trim();
+      if (serviceIdForCredit == null && headerNo) {
+        try {
+          const results = await commonSearchAPI({
+            endpoint: URL.filterJobCreate,
+            query: headerNo,
+          });
+          const arr = Array.isArray(results)
+            ? (results as Array<Record<string, unknown>>)
+            : [];
+          serviceIdForCredit = serviceIdFromJobCreateRow(
+            findJobCreateDropdownRow(arr, headerNo),
+          );
+        } catch {
+          // keep null → resolver falls back to Common CRM credit
+        }
       }
-      let cancelled = false;
-      void (async () => {
+
+      if (isIndiaUser) {
+        const documentDate = formatDateYYYYMMDD(form.values.document_date);
+        if (!documentDate) {
+          if (!cancelled) setHasSez(false);
+          return;
+        }
         const result = await fetchCheckSezStatus({
           customer_code: customerCode,
           address: addressLabel,
           document_date: documentDate,
+          service_id: serviceIdForCredit,
+          branch_id: activeBranchId,
         });
         if (cancelled) return;
         setHasSez(result.sez);
         applyCreditDueDateIfPending(result.credit_day);
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
+        return;
+      }
 
-    let cancelled = false;
-    void (async () => {
       const result = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
+        service_id: serviceIdForCredit,
+        branch_id: activeBranchId,
       });
       if (cancelled) return;
       setHasSez(result.sez);
@@ -2174,7 +2214,10 @@ function InvoiceCreate({
     form.values.bill_to,
     form.values.address,
     form.values.document_date,
+    form.values.shipment_no,
     addressOptions,
+    user?.branches,
+    location.state,
   ]);
 
   // Clear GST rates when Bill To becomes SEZ (SAC codes remain)

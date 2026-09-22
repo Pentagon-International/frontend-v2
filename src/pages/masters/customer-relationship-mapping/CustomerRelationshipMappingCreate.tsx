@@ -16,6 +16,7 @@ import {
   Loader,
   Tooltip,
   Flex,
+  TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -33,12 +34,16 @@ import { SearchableSelect } from "../../../components";
 import { apiCallProtected } from "../../../api/axios";
 import { getAPICall } from "../../../service/getApiCall";
 
+const COMMON_SERVICE_CODE = "0";
+
 type RelationshipDetail = {
   id?: number; // Optional - only exists for existing entries in edit mode
   emp_id_input: string;
   relationship_type: string;
   service_id: number | null;
   branch_id: number | null;
+  credit_day: string;
+  credit_amount: string;
 };
 
 type CustomerRelationshipMappingFormData = {
@@ -46,11 +51,39 @@ type CustomerRelationshipMappingFormData = {
   customer_relationship_details: RelationshipDetail[];
 };
 
+const emptyRelationshipDetail = (): RelationshipDetail => ({
+  emp_id_input: "",
+  relationship_type: "Sales",
+  service_id: null,
+  branch_id: null,
+  credit_day: "",
+  credit_amount: "",
+});
+
 const relationshipDetailSchema = yup.object({
   emp_id_input: yup.string().required("Salesperson Name is required"),
   relationship_type: yup.string().required("Relationship Type is required"),
   service_id: yup.number().nullable(),
   branch_id: yup.number().nullable(),
+  credit_day: yup
+    .string()
+    .optional()
+    .test(
+      "valid-credit-day",
+      "Enter a valid number of days",
+      (v) => !v || /^\d+$/.test(String(v).trim()),
+    ),
+  credit_amount: yup
+    .string()
+    .optional()
+    .test(
+      "valid-credit-amount",
+      "Enter a valid credit amount",
+      (v) =>
+        !v ||
+        /^\d+(\.\d{1,2})?$/.test(String(v).trim()) ||
+        /^\d+$/.test(String(v).trim()),
+    ),
 });
 
 const validationSchema = yup.object({
@@ -60,6 +93,26 @@ const validationSchema = yup.object({
     .of(relationshipDetailSchema)
     .min(1, "At least one relationship detail is required"),
 });
+
+function serviceBranchKey(serviceId: number | null, branchId: number | null) {
+  return `${serviceId ?? "null"}::${branchId ?? "null"}`;
+}
+
+function findDuplicateServiceBranchIndexes(
+  details: RelationshipDetail[],
+): number[] {
+  const seen = new Map<string, number>();
+  const dupes: number[] = [];
+  details.forEach((detail, index) => {
+    const key = serviceBranchKey(detail.service_id, detail.branch_id);
+    if (seen.has(key)) {
+      dupes.push(index);
+    } else {
+      seen.set(key, index);
+    }
+  });
+  return dupes;
+}
 
 type EditResponseItem = {
   sno: number;
@@ -76,6 +129,8 @@ type EditResponseItem = {
   branch_id: number | null;
   branch_code: string | null;
   branch_name: string | null;
+  credit_day?: number | null;
+  credit_amount?: number | string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -152,65 +207,152 @@ function CustomerRelationshipMappingCreate() {
 
   // Custom validation function that allows null customer_id when fromCustomerMaster
   const validateForm = useMemo(() => {
+    const validateDetails = (
+      values: CustomerRelationshipMappingFormData,
+      errors: Record<string, string>,
+    ) => {
+      if (
+        !values.customer_relationship_details ||
+        values.customer_relationship_details.length === 0
+      ) {
+        errors.customer_relationship_details =
+          "At least one relationship detail is required";
+        return;
+      }
+
+      values.customer_relationship_details.forEach((detail, index) => {
+        if (!detail.emp_id_input) {
+          errors[`customer_relationship_details.${index}.emp_id_input`] =
+            "Salesperson Name is required";
+        }
+        if (!detail.relationship_type) {
+          errors[`customer_relationship_details.${index}.relationship_type`] =
+            "Relationship Type is required";
+        }
+        if (
+          detail.credit_day &&
+          !/^\d+$/.test(String(detail.credit_day).trim())
+        ) {
+          errors[`customer_relationship_details.${index}.credit_day`] =
+            "Enter a valid number of days";
+        }
+        if (
+          detail.credit_amount &&
+          !/^\d+(\.\d{1,2})?$/.test(String(detail.credit_amount).trim()) &&
+          !/^\d+$/.test(String(detail.credit_amount).trim())
+        ) {
+          errors[`customer_relationship_details.${index}.credit_amount`] =
+            "Enter a valid credit amount";
+        }
+      });
+
+      findDuplicateServiceBranchIndexes(
+        values.customer_relationship_details,
+      ).forEach((index) => {
+        errors[`customer_relationship_details.${index}.service_id`] =
+          "Same service cannot be duplicated for a single branch";
+      });
+    };
+
     if (fromCustomerMaster) {
-      // When from customer master, customer_id can be null (will be created on submit)
       return (values: CustomerRelationshipMappingFormData) => {
         const errors: Record<string, string> = {};
-
-        // Validate customer_relationship_details
-        if (
-          !values.customer_relationship_details ||
-          values.customer_relationship_details.length === 0
-        ) {
-          errors.customer_relationship_details =
-            "At least one relationship detail is required";
-        } else {
-          values.customer_relationship_details.forEach((detail, index) => {
-            if (!detail.emp_id_input) {
-              errors[`customer_relationship_details.${index}.emp_id_input`] =
-                "Salesperson Name is required";
-            }
-            if (!detail.relationship_type) {
-              errors[
-                `customer_relationship_details.${index}.relationship_type`
-              ] = "Relationship Type is required";
-            }
-          });
-        }
-
+        validateDetails(values, errors);
         return errors;
       };
-    } else {
-      // Normal validation - customer_id is required
-      return yupResolver(validationSchema) as unknown as (
-        values: CustomerRelationshipMappingFormData,
-      ) => Record<string, string>;
     }
+
+    return (values: CustomerRelationshipMappingFormData) => {
+      const yupErrors =
+        (yupResolver(validationSchema) as unknown as (
+          values: CustomerRelationshipMappingFormData,
+        ) => Record<string, string>)(values) || {};
+      const errors: Record<string, string> = { ...yupErrors };
+      validateDetails(values, errors);
+      return errors;
+    };
   }, [fromCustomerMaster]);
 
   const form = useForm<CustomerRelationshipMappingFormData>({
     validate: validateForm,
     initialValues: {
       customer_id: null,
-      customer_relationship_details: [
-        {
-          emp_id_input: "",
-          relationship_type: "Sales",
-          service_id: null,
-          branch_id: null,
-        },
-      ],
+      customer_relationship_details: [emptyRelationshipDetail()],
     },
   });
+
+  const [commonServiceId, setCommonServiceId] = useState<number | null>(null);
+
+  // Resolve Common service (service_code = 0) for labels / optional prefill
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = (await getAPICall(
+          `${URL.serviceMaster}?service_code=${COMMON_SERVICE_CODE}`,
+          API_HEADER,
+        )) as
+          | Array<Record<string, unknown>>
+          | { data?: Array<Record<string, unknown>>; results?: Array<Record<string, unknown>> };
+        const rows = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response?.results)
+              ? response.results
+              : [];
+        const match = rows.find(
+          (r) => String(r.service_code ?? "") === COMMON_SERVICE_CODE,
+        );
+        if (!cancelled && match?.id != null) {
+          setCommonServiceId(Number(match.id));
+        }
+      } catch {
+        // Common service may not exist yet; user can still pick after seed
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Initialize customer name when coming from customer master
   useEffect(() => {
     if (fromCustomerMaster && customerFormDataFromState) {
       // Pre-fill customer name from customer master form data
       setCustomerDisplayName(customerFormDataFromState.customer_name || null);
-      // Note: customer_id will be null initially, will be set after customer creation
+      // Prefill first row credit from legacy customer form (transition / verification carry-over)
+      const creditDay =
+        customerFormDataFromState.credit_day != null
+          ? String(customerFormDataFromState.credit_day)
+          : "";
+      const creditAmount =
+        customerFormDataFromState.credit_amount != null
+          ? String(customerFormDataFromState.credit_amount)
+          : "";
+      if (creditDay || creditAmount) {
+        form.setFieldValue(
+          "customer_relationship_details.0.credit_day",
+          creditDay,
+        );
+        form.setFieldValue(
+          "customer_relationship_details.0.credit_amount",
+          creditAmount,
+        );
+        if (commonServiceId != null) {
+          form.setFieldValue(
+            "customer_relationship_details.0.service_id",
+            commonServiceId,
+          );
+          setDisplayNamesMap((prev) => ({
+            ...prev,
+            0: { ...prev[0], service: "Common" },
+          }));
+        }
+      }
     }
-  }, [fromCustomerMaster, customerFormDataFromState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromCustomerMaster, customerFormDataFromState, commonServiceId]);
 
   // Function to fetch branches by employee ID for a specific index
   const fetchBranchesByEmployeeId = async (
@@ -306,6 +448,14 @@ function CustomerRelationshipMappingCreate() {
                 relationship_type: item.relationship_type || "Sales",
                 service_id: item.service_id || null,
                 branch_id: item.branch_id || null,
+                credit_day:
+                  item.credit_day != null && item.credit_day !== undefined
+                    ? String(item.credit_day)
+                    : "",
+                credit_amount:
+                  item.credit_amount != null && item.credit_amount !== undefined
+                    ? String(item.credit_amount)
+                    : "",
               }),
             );
 
@@ -362,14 +512,7 @@ function CustomerRelationshipMappingCreate() {
               // Set customer_id in form and initialize with empty relationship details
               form.setValues({
                 customer_id: customerIdFromState,
-                customer_relationship_details: [
-                  {
-                    emp_id_input: "",
-                    relationship_type: "Sales",
-                    service_id: null,
-                    branch_id: null,
-                  },
-                ],
+                customer_relationship_details: [emptyRelationshipDetail()],
               });
               // Set customer display name from form data if available
               if (customerFormDataFromState?.customer_name) {
@@ -391,14 +534,7 @@ function CustomerRelationshipMappingCreate() {
           if (fromCustomerMaster && customerIdFromState) {
             form.setValues({
               customer_id: customerIdFromState,
-              customer_relationship_details: [
-                {
-                  emp_id_input: "",
-                  relationship_type: "Sales",
-                  service_id: null,
-                  branch_id: null,
-                },
-              ],
+              customer_relationship_details: [emptyRelationshipDetail()],
             });
             // Set customer display name from form data if available
             if (customerFormDataFromState?.customer_name) {
@@ -546,6 +682,14 @@ function CustomerRelationshipMappingCreate() {
               relationship_type: detail.relationship_type,
               service_id: detail.service_id,
               branch_id: detail.branch_id,
+              credit_day:
+                detail.credit_day === "" || detail.credit_day == null
+                  ? 0
+                  : Number(detail.credit_day),
+              credit_amount:
+                detail.credit_amount === "" || detail.credit_amount == null
+                  ? 0
+                  : detail.credit_amount,
             };
             // Include id if it exists (for existing entries in edit mode)
             if (detail.id !== undefined && detail.id !== null) {
@@ -718,7 +862,7 @@ function CustomerRelationshipMappingCreate() {
                     <Box key={index}>
                       <Grid gutter="md" columns={12}>
                         {/* Branch Name - Order 1 */}
-                        <Grid.Col span={2.75}>
+                        <Grid.Col span={2}>
                           <Tooltip
                             label={
                               !form.values.customer_id && !fromCustomerMaster
@@ -817,20 +961,31 @@ function CustomerRelationshipMappingCreate() {
                         </Grid.Col>
 
                         {/* Service Name - Order 2 */}
-                        <Grid.Col span={2.75}>
+                        <Grid.Col span={2}>
                           <SearchableSelect
                             label="Service Name"
-                            placeholder="Type service name"
+                            placeholder="Type service name (0 = Common)"
                             apiEndpoint={URL.serviceMaster}
                             searchFields={["service_name", "service_code"]}
                             displayFormat={(item: Record<string, unknown>) => ({
                               value: String(item.id || ""),
-                              label: String(item.service_name || ""),
+                              label:
+                                String(item.service_code ?? "") ===
+                                COMMON_SERVICE_CODE
+                                  ? `${item.service_name || "Common"} (Common)`
+                                  : String(item.service_name || ""),
                             })}
                             value={
                               detail.service_id ? String(detail.service_id) : ""
                             }
-                            displayValue={displayNamesMap[index]?.service}
+                            displayValue={
+                              displayNamesMap[index]?.service ||
+                              (detail.service_id != null &&
+                              commonServiceId != null &&
+                              detail.service_id === commonServiceId
+                                ? "Common"
+                                : null)
+                            }
                             returnOriginalData={true}
                             onChange={(value, selectedData, originalData) => {
                               if (value === null || value === "") {
@@ -848,6 +1003,11 @@ function CustomerRelationshipMappingCreate() {
                                   : value
                                     ? Number(value)
                                     : null;
+                                const isCommon =
+                                  String(originalData?.service_code ?? "") ===
+                                    COMMON_SERVICE_CODE ||
+                                  (commonServiceId != null &&
+                                    serviceId === commonServiceId);
                                 form.setFieldValue(
                                   `customer_relationship_details.${index}.service_id`,
                                   serviceId,
@@ -856,27 +1016,22 @@ function CustomerRelationshipMappingCreate() {
                                   ...prev,
                                   [index]: {
                                     ...prev[index],
-                                    service:
-                                      selectedData?.label ||
-                                      (originalData?.service_name
-                                        ? String(originalData.service_name)
-                                        : null),
+                                    service: isCommon
+                                      ? "Common"
+                                      : selectedData?.label ||
+                                        (originalData?.service_name
+                                          ? String(originalData.service_name)
+                                          : null),
                                   },
                                 }));
                               }
                             }}
                             error={
-                              (
-                                (
-                                  form.errors
-                                    .customer_relationship_details as Record<
-                                    string,
-                                    any
-                                  >
-                                )?.[index] as Record<string, string>
-                              )?.service_id
+                              form.errors[
+                                `customer_relationship_details.${index}.service_id`
+                              ]
                             }
-                            minSearchLength={2}
+                            minSearchLength={1}
                             disabled={
                               !form.values.customer_id && !fromCustomerMaster
                             }
@@ -884,7 +1039,7 @@ function CustomerRelationshipMappingCreate() {
                         </Grid.Col>
 
                         {/* Relationship Type - Order 3 */}
-                        <Grid.Col span={2.75}>
+                        <Grid.Col span={2}>
                           <Select
                             label="Relationship Type"
                             placeholder="Select relationship type"
@@ -917,7 +1072,7 @@ function CustomerRelationshipMappingCreate() {
                         </Grid.Col>
 
                         {/* Salesperson Name - Order 4 */}
-                        <Grid.Col span={2.75}>
+                        <Grid.Col span={2}>
                           <SearchableSelect
                             label="Salesperson Name"
                             placeholder="Type salesperson name"
@@ -984,6 +1139,62 @@ function CustomerRelationshipMappingCreate() {
                               )?.emp_id_input
                             }
                             minSearchLength={2}
+                            disabled={
+                              !form.values.customer_id && !fromCustomerMaster
+                            }
+                          />
+                        </Grid.Col>
+
+                        {/* Credit Days */}
+                        <Grid.Col span={1.5}>
+                          <TextInput
+                            label="Credit Days"
+                            placeholder="Days"
+                            value={detail.credit_day}
+                            onChange={(e) => {
+                              const next = e.currentTarget.value.replace(
+                                /\D/g,
+                                "",
+                              );
+                              form.setFieldValue(
+                                `customer_relationship_details.${index}.credit_day`,
+                                next,
+                              );
+                            }}
+                            error={
+                              form.errors[
+                                `customer_relationship_details.${index}.credit_day`
+                              ]
+                            }
+                            disabled={
+                              !form.values.customer_id && !fromCustomerMaster
+                            }
+                          />
+                        </Grid.Col>
+
+                        {/* Credit Amount */}
+                        <Grid.Col span={1.5}>
+                          <TextInput
+                            label="Credit Amount"
+                            placeholder="Amount"
+                            value={detail.credit_amount}
+                            onChange={(e) => {
+                              const next = e.currentTarget.value;
+                              if (
+                                next === "" ||
+                                /^\d*(\.\d{0,2})?$/.test(next)
+                              ) {
+                                form.setFieldValue(
+                                  `customer_relationship_details.${index}.credit_amount`,
+                                  next,
+                                );
+                              }
+                            }}
+                            error={
+                              form.errors[
+                                `customer_relationship_details.${index}.credit_amount`
+                              ]
+                            }
                             disabled={
                               !form.values.customer_id && !fromCustomerMaster
                             }
@@ -1070,12 +1281,10 @@ function CustomerRelationshipMappingCreate() {
                   color="#105476"
                   leftSection={<IconPlus size={16} />}
                   onClick={() =>
-                    form.insertListItem("customer_relationship_details", {
-                      emp_id_input: "",
-                      relationship_type: "Sales",
-                      service_id: null,
-                      branch_id: null,
-                    })
+                    form.insertListItem(
+                      "customer_relationship_details",
+                      emptyRelationshipDetail(),
+                    )
                   }
                   disabled={!form.values.customer_id && !fromCustomerMaster}
                 >

@@ -47,6 +47,8 @@ interface Country {
 
 interface Branch {
   user_branch_id: number;
+  /** BranchMaster PK — used for CRM credit resolution (service+branch). */
+  branch_id?: number;
   branch_code: string;
   branch_name: string;
   is_default: boolean;

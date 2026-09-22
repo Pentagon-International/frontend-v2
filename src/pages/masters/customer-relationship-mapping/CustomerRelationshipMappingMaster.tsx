@@ -50,6 +50,8 @@ type CustomerRelationshipMappingData = {
   service_name: string;
   branch_code: string | null;
   branch_name: string | null;
+  credit_day?: number | null;
+  credit_amount?: number | string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -366,6 +368,29 @@ function CustomerRelationshipMappingMaster() {
         Cell: ({ row }) => {
           return <Text size="sm">{row.original.branch_name || "-"}</Text>;
         },
+      },
+      {
+        accessorKey: "credit_day",
+        header: "Credit Days",
+        size: 110,
+        Cell: ({ row }) => (
+          <Text size="sm">
+            {row.original.credit_day != null ? row.original.credit_day : "-"}
+          </Text>
+        ),
+      },
+      {
+        accessorKey: "credit_amount",
+        header: "Credit Amount",
+        size: 120,
+        Cell: ({ row }) => (
+          <Text size="sm">
+            {row.original.credit_amount != null &&
+            row.original.credit_amount !== ""
+              ? String(row.original.credit_amount)
+              : "-"}
+          </Text>
+        ),
       },
       {
         id: "actions",

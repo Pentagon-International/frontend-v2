@@ -418,9 +418,76 @@ const bankDetailFieldStyles = {
 const twoDecimalInputRegex = /^\d*(\.\d{0,2})?$/;
 const twoDecimalRequiredRegex = /^\d+(\.\d{1,2})?$/;
 
-function buildCustomerValidationSchema() {
+function buildCustomerValidationSchema(requireCreditFields = false) {
   const isCreditTerm = (v: string | undefined) =>
     String(v ?? "").trim().toUpperCase() === "CREDIT";
+
+  const creditAmountSchema = requireCreditFields
+    ? yup.string().when("term_code", {
+        is: isCreditTerm,
+        then: (schema) =>
+          schema
+            .required("Credit amount is required")
+            .test(
+              "valid-credit-amount",
+              "Enter a valid credit amount",
+              (v) =>
+                !!v &&
+                (twoDecimalRequiredRegex.test(v.trim()) ||
+                  /^\d+$/.test(v.trim())),
+            ),
+        otherwise: (schema) =>
+          schema
+            .optional()
+            .test(
+              "valid-credit-amount",
+              "Enter a valid credit amount",
+              (v) =>
+                !v ||
+                twoDecimalRequiredRegex.test(v.trim()) ||
+                /^\d+$/.test(v.trim()),
+            ),
+      })
+    : yup
+        .string()
+        .optional()
+        .test(
+          "valid-credit-amount",
+          "Enter a valid credit amount",
+          (v) =>
+            !v ||
+            twoDecimalRequiredRegex.test(v.trim()) ||
+            /^\d+$/.test(v.trim()),
+        );
+
+  const creditDaySchema = requireCreditFields
+    ? yup.string().when("term_code", {
+        is: isCreditTerm,
+        then: (schema) =>
+          schema
+            .required("Credit days is required")
+            .test(
+              "valid-credit-day",
+              "Enter a valid number of days",
+              (v) => !!v && /^\d+$/.test(v.trim()),
+            ),
+        otherwise: (schema) =>
+          schema
+            .optional()
+            .test(
+              "valid-credit-day",
+              "Enter a valid number of days",
+              (v) => !v || /^\d+$/.test(v.trim()),
+            ),
+      })
+    : yup
+        .string()
+        .optional()
+        .test(
+          "valid-credit-day",
+          "Enter a valid number of days",
+          (v) => !v || /^\d+$/.test(v.trim()),
+        );
 
   return yup.object({
     customer_name: yup
@@ -441,50 +508,8 @@ function buildCustomerValidationSchema() {
       .string()
       .oneOf(["ACTIVE", "INACTIVE"], "Select ACTIVE or INACTIVE")
       .required("Status is required"),
-    credit_amount: yup.string().when("term_code", {
-      is: isCreditTerm,
-      then: (schema) =>
-        schema
-          .required("Credit amount is required")
-          .test(
-            "valid-credit-amount",
-            "Enter a valid credit amount",
-            (v) =>
-              !!v &&
-              (twoDecimalRequiredRegex.test(v.trim()) ||
-                /^\d+$/.test(v.trim())),
-          ),
-      otherwise: (schema) =>
-        schema
-          .optional()
-          .test(
-            "valid-credit-amount",
-            "Enter a valid credit amount",
-            (v) =>
-              !v ||
-              twoDecimalRequiredRegex.test(v.trim()) ||
-              /^\d+$/.test(v.trim()),
-          ),
-    }),
-    credit_day: yup.string().when("term_code", {
-      is: isCreditTerm,
-      then: (schema) =>
-        schema
-          .required("Credit days is required")
-          .test(
-            "valid-credit-day",
-            "Enter a valid number of days",
-            (v) => !!v && /^\d+$/.test(v.trim()),
-          ),
-      otherwise: (schema) =>
-        schema
-          .optional()
-          .test(
-            "valid-credit-day",
-            "Enter a valid number of days",
-            (v) => !v || /^\d+$/.test(v.trim()),
-          ),
-    }),
+    credit_amount: creditAmountSchema,
+    credit_day: creditDaySchema,
     assigned_to: yup
       .string()
       .test("assign-to-required", "Assign To is required", function (value) {
@@ -494,9 +519,6 @@ function buildCustomerValidationSchema() {
       }),
   });
 }
-
-const customerValidationSchema = buildCustomerValidationSchema();
-
 const addressItemSchema = yup.object({
   // customer_location: yup.string().required("Location is required"),
   address_type: yup
@@ -2282,7 +2304,10 @@ function CustomerCreate() {
       ],
     },
     // Only apply validation in edit mode, not in view mode
-    validate: isViewMode ? undefined : yupResolver(customerValidationSchema),
+    // Credit day/amount required only on verification/approval create routes
+    validate: isViewMode
+      ? undefined
+      : yupResolver(buildCustomerValidationSchema(isVerificationCreateRoute)),
     // Only validate on submit, not on change or blur
     validateInputOnChange: false,
     validateInputOnBlur: false,
@@ -3051,8 +3076,12 @@ function CustomerCreate() {
         term_code: values.term_code,
         own_office: values.own_office === "true",
         status: "ACTIVE",
-        credit_amount: parseOptionalNumber(values.credit_amount),
-        credit_day: parseOptionalNumber(values.credit_day),
+        ...(isVerificationCreateRoute
+          ? {
+              credit_amount: parseOptionalNumber(values.credit_amount),
+              credit_day: parseOptionalNumber(values.credit_day),
+            }
+          : {}),
         assigned_to: values.assigned_to,
         network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => ({
@@ -3214,8 +3243,6 @@ function CustomerCreate() {
           String(values.status ?? "ACTIVE").trim().toUpperCase() === "INACTIVE"
             ? "INACTIVE"
             : "ACTIVE",
-        credit_amount: parseOptionalNumber(values.credit_amount),
-        credit_day: parseOptionalNumber(values.credit_day),
         assigned_to: values.assigned_to,
         network_id: values.network_id ? Number(values.network_id) : null,
         addresses_data: values.addresses_data.map((addr) => {
@@ -3776,50 +3803,57 @@ function CustomerCreate() {
                         />
                       </Grid.Col>
 
-                      <Grid.Col span={4}>
-                        <FormTextInput
-                          label="Credit Amount"
-                          withAsterisk={
-                            String(customerForm.values.term_code ?? "")
-                              .trim()
-                              .toUpperCase() === "CREDIT"
-                          }
-                          placeholder="Enter credit amount"
-                          format="normal"
-                          disabled={isViewMode}
-                          value={customerForm.values.credit_amount}
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            if (
-                              next === "" ||
-                              twoDecimalInputRegex.test(next)
-                            ) {
-                              customerForm.setFieldValue("credit_amount", next);
-                            }
-                          }}
-                          error={customerForm.errors.credit_amount}
-                        />
-                      </Grid.Col>
+                      {isVerificationCreateRoute && (
+                        <>
+                          <Grid.Col span={4}>
+                            <FormTextInput
+                              label="Credit Amount"
+                              withAsterisk={
+                                String(customerForm.values.term_code ?? "")
+                                  .trim()
+                                  .toUpperCase() === "CREDIT"
+                              }
+                              placeholder="Enter credit amount"
+                              format="normal"
+                              disabled={isViewMode}
+                              value={customerForm.values.credit_amount}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (
+                                  next === "" ||
+                                  twoDecimalInputRegex.test(next)
+                                ) {
+                                  customerForm.setFieldValue(
+                                    "credit_amount",
+                                    next,
+                                  );
+                                }
+                              }}
+                              error={customerForm.errors.credit_amount}
+                            />
+                          </Grid.Col>
 
-                      <Grid.Col span={4}>
-                        <FormTextInput
-                          label="Credit Day"
-                          withAsterisk={
-                            String(customerForm.values.term_code ?? "")
-                              .trim()
-                              .toUpperCase() === "CREDIT"
-                          }
-                          placeholder="Enter credit days"
-                          format="normal"
-                          disabled={isViewMode}
-                          value={customerForm.values.credit_day}
-                          onChange={(e) => {
-                            const next = e.target.value.replace(/\D/g, "");
-                            customerForm.setFieldValue("credit_day", next);
-                          }}
-                          error={customerForm.errors.credit_day}
-                        />
-                      </Grid.Col>
+                          <Grid.Col span={4}>
+                            <FormTextInput
+                              label="Credit Day"
+                              withAsterisk={
+                                String(customerForm.values.term_code ?? "")
+                                  .trim()
+                                  .toUpperCase() === "CREDIT"
+                              }
+                              placeholder="Enter credit days"
+                              format="normal"
+                              disabled={isViewMode}
+                              value={customerForm.values.credit_day}
+                              onChange={(e) => {
+                                const next = e.target.value.replace(/\D/g, "");
+                                customerForm.setFieldValue("credit_day", next);
+                              }}
+                              error={customerForm.errors.credit_day}
+                            />
+                          </Grid.Col>
+                        </>
+                      )}
 
                       {(isEditMode ||
                         isViewMode ||

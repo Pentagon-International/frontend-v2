@@ -428,18 +428,28 @@ const fetchCheckSezStatus = async (payload: {
   customer_code: string;
   address: string;
   document_date?: string;
+  service_id?: number | null;
+  branch_id?: number | null;
 }): Promise<SezStatusResult> => {
   try {
     const body: {
       customer_code: string;
       address: string;
       document_date?: string;
+      service_id?: number;
+      branch_id?: number;
     } = {
       customer_code: payload.customer_code,
       address: payload.address,
     };
     if (payload.document_date) {
       body.document_date = payload.document_date;
+    }
+    if (payload.service_id != null && Number.isFinite(Number(payload.service_id))) {
+      body.service_id = Number(payload.service_id);
+    }
+    if (payload.branch_id != null && Number.isFinite(Number(payload.branch_id))) {
+      body.branch_id = Number(payload.branch_id);
     }
     const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
     const root = response as {
@@ -1789,6 +1799,7 @@ export default function SupplierInvoiceCreate({
   }, [partyAddresses, stateOptions, isIndiaUser, isVendorSelected]);
 
   // Vendor/Supplier + address + document date → credit_day for due date
+  // Pass service_id (job/shipment) + active branch_id so CRM credit resolves correctly.
   useEffect(() => {
     if (isViewMode || isReversal) return;
 
@@ -1803,12 +1814,31 @@ export default function SupplierInvoiceCreate({
     const documentDateStr = docDate ? formatDDMMYYYY(docDate) : "";
     if (!documentDateStr) return;
 
+    const activeBranchId = (() => {
+      const b =
+        user?.branches?.find((br) => br.is_default === true) ??
+        user?.branches?.[0];
+      const id = b?.branch_id;
+      return id != null && Number.isFinite(Number(id)) ? Number(id) : null;
+    })();
+
     let cancelled = false;
     void (async () => {
+      let serviceIdForCredit = fallbackServiceIdFromState;
+      const firstShipment = (form.values.charges ?? [])
+        .map((c: { shipment_no?: string }) => String(c.shipment_no ?? "").trim())
+        .find((s: string) => s.length > 0);
+      if (serviceIdForCredit == null && firstShipment) {
+        serviceIdForCredit =
+          (await getServiceIdByShipmentIdAsync(firstShipment)) ?? null;
+      }
+
       const result = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
         document_date: documentDateStr,
+        service_id: serviceIdForCredit,
+        branch_id: activeBranchId,
       });
       if (cancelled) return;
       partyCreditDayRef.current = result.credit_day;
@@ -1832,9 +1862,13 @@ export default function SupplierInvoiceCreate({
   }, [
     form.values.agent_code,
     form.values.date,
+    form.values.charges,
     vendorAddress,
     isViewMode,
     isReversal,
+    user?.branches,
+    fallbackServiceIdFromState,
+    getServiceIdByShipmentIdAsync,
   ]);
 
   const isAirImportJobPrefillFlow =
