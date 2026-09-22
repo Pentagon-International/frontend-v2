@@ -259,7 +259,7 @@ type HAWBDetail = HouseDocumentFields & {
   id: number;
   booking_id?: number | null;
   shipment_id: string;
-  hawb_number: string;
+  hawb_no: string;
   routed: string;
   routed_by?: string;
   pp_cc?: string;
@@ -1212,12 +1212,7 @@ function AirExportJobCreate() {
                   ? Number(house.booking_id)
                   : null,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
-              hawb_number:
-                house.hawb_number || house.hawb_no || house.hbl_number
-                  ? String(
-                      house.hawb_number || house.hawb_no || house.hbl_number,
-                    )
-                  : "",
+              hawb_no: house.hawb_no ? String(house.hawb_no) : "",
               ...readChaHouseBlFromApi(house as Record<string, unknown>),
               routed: house.routed
                 ? String(house.routed).toLowerCase() === "self"
@@ -2500,7 +2495,7 @@ function AirExportJobCreate() {
 
       const existingHouseNumbers = new Set(
         hawbDetails
-          .map((h) => String(h.hawb_number ?? "").trim())
+          .map((h) => String(h.hawb_no ?? "").trim())
           .filter(Boolean),
       );
 
@@ -2908,7 +2903,7 @@ function AirExportJobCreate() {
       const missingFields: string[] = [];
 
       // Step 1 validations
-      if (!hawb.hawb_number?.trim()) {
+      if (!hawb.hawb_no?.trim()) {
         missingFields.push("HAWB Number");
       }
       if (!hawb.origin_code?.trim()) {
@@ -3123,7 +3118,7 @@ function AirExportJobCreate() {
             // Include housing id on update so backend updates instead of delete+recreate
             ...(housingId > 0 && { id: housingId }),
             ...(hawb.shipment_id && { shipment_id: hawb.shipment_id }),
-            hawb_no: hawb.hawb_number,
+            hawb_no: hawb.hawb_no,
             ...pickChaHouseBlPayloadFields(hawb),
             routed: hawb.routed,
             routed_by: hawb.routed_by || null,
@@ -5949,7 +5944,7 @@ function AirExportJobCreate() {
                       HAWB Number
                     </Text>
                     <Text size="sm" mb="sm">
-                      {hawb.hawb_number || "-"}
+                      {hawb.hawb_no || "-"}
                     </Text>
                   </Grid.Col>
 

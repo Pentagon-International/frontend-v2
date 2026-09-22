@@ -174,7 +174,7 @@ import { ChaHouseBlFormFields } from "../chaJob/ChaHouseBlFormFields";
 
 // Type definitions
 type HAWBDetailsForm = {
-  hawb_number: string;
+  hawb_no: string;
   bl_no: string;
   bl_date: Date | null;
   shipment_terms_code: string;
@@ -635,7 +635,7 @@ function HouseCreate() {
   // Form with all fields - pre-fill if in edit mode, auto-set from MAWB in create mode
   const form = useForm<HAWBDetailsForm>({
     initialValues: {
-      hawb_number: editData?.hawb_number || editData?.hbl_number || "",
+      hawb_no: editData?.hawb_no ? String(editData.hawb_no) : "",
       ...readChaHouseBlInitial(
         editData as { bl_no?: string; bl_date?: string | Date } | undefined,
       ),
@@ -980,14 +980,14 @@ function HouseCreate() {
 
   useEffect(() => {
     if (isEditMode) return;
-    const hawbNo = form.values.hawb_number?.trim();
+    const hawbNo = form.values.hawb_no?.trim();
     const agentCode = form.values.origin_agent?.trim();
     if (hawbNo && agentCode) {
       debouncedFetchSimilarBookings(hawbNo, agentCode);
     }
   }, [
     isEditMode,
-    form.values.hawb_number,
+    form.values.hawb_no,
     form.values.origin_agent,
     debouncedFetchSimilarBookings,
   ]);
@@ -1325,8 +1325,7 @@ function HouseCreate() {
     if (!formInitializedFromEditDataRef.current) {
       // Set all form values from editData (main form fields - only once per house)
       form.setValues({
-        hawb_number:
-          editData.hawb_number || editData.hbl_number || editData.hawb_no || "",
+        hawb_no: editData.hawb_no ? String(editData.hawb_no) : "",
         ...readChaHouseBlInitial(
           editData as { bl_no?: string; bl_date?: string | Date },
         ),
@@ -2241,8 +2240,8 @@ function HouseCreate() {
   const validateStep1 = () => {
     const errors: Record<string, string> = {};
 
-    if (!form.values.hawb_number?.trim()) {
-      errors.hawb_number = "HAWB Number is required";
+    if (!form.values.hawb_no?.trim()) {
+      errors.hawb_no = "HAWB Number is required";
     }
     if (!form.values.origin_code?.trim()) {
       errors.origin_code = "Origin is required";
@@ -2441,7 +2440,7 @@ function HouseCreate() {
   const getCurrentHousingDetail = () => {
     const v = form.values;
     return {
-      hawb_number: v.hawb_number,
+      hawb_no: v.hawb_no,
       ...formatChaHouseBlPayload(v),
       shipment_terms_code: v.shipment_terms_code,
       shipment_terms_name: v.shipment_terms_name,
@@ -2565,7 +2564,7 @@ function HouseCreate() {
         )?.id);
     const housingDetail = {
       ...(houseId != null && { id: Number(houseId) }),
-      hawb_number: currentFormValues.hawb_number,
+      hawb_no: currentFormValues.hawb_no,
       ...formatChaHouseBlPayload(currentFormValues),
       shipment_terms_code: currentFormValues.shipment_terms_code,
       shipment_terms_name: currentFormValues.shipment_terms_name,
@@ -2863,8 +2862,7 @@ function HouseCreate() {
 
       // Build hawb data from current form
       const hawbData = {
-        hawb_number: form.values.hawb_number,
-        hawb_no: form.values.hawb_number,
+        hawb_no: form.values.hawb_no,
         routed: form.values.routed,
         routed_by: form.values.routed_by,
         origin_code: form.values.origin_code,
@@ -2991,7 +2989,7 @@ function HouseCreate() {
     if (pdfBlob) {
       const link = document.createElement("a");
       link.href = pdfBlob;
-      link.download = `Cargo-Arrival-Notice-${form.values.hawb_number || "HAWB"}.pdf`;
+      link.download = `Cargo-Arrival-Notice-${form.values.hawb_no || "HAWB"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -3006,7 +3004,7 @@ function HouseCreate() {
   const handleOpenSendEmailForCan = () => {
     setActivePdfBlob(pdfBlob);
     setActiveFileName(
-      `Cargo-Arrival-Notice-${form.values.hawb_number || "HAWB"}.pdf`,
+      `Cargo-Arrival-Notice-${form.values.hawb_no || "HAWB"}.pdf`,
     );
     setActiveDocumentLabel("Cargo Arrival Notice");
     openSendEmail();
@@ -3519,8 +3517,8 @@ function HouseCreate() {
                   label="HAWB Number"
                   required
                   placeholder="Enter HAWB Number"
-                  {...form.getInputProps("hawb_number")}
-                  error={form.errors.hawb_number}
+                  {...form.getInputProps("hawb_no")}
+                  error={form.errors.hawb_no}
                 />
               </Grid.Col>
 
@@ -4902,10 +4900,7 @@ function HouseCreate() {
                                 "",
                             ),
                             sub_job: String(
-                              fullDetail?.hawb_number ??
-                                fullDetail?.hawb_no ??
-                                fullDetail?.id ??
-                                "",
+                              fullDetail?.hawb_no ?? fullDetail?.id ?? "",
                             ),
                           }),
                         );

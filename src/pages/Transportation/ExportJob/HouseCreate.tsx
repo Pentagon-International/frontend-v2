@@ -3889,6 +3889,7 @@ function HouseCreate() {
                   format="capital"
                   label="HBL Number"
                   required
+                  readOnly
                   placeholder="Enter HBL Number"
                   {...form.getInputProps("hbl_number")}
                   error={form.errors.hbl_number}

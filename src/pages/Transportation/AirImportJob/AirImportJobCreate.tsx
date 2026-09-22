@@ -245,7 +245,7 @@ type RoutingDetail = {
 type HAWBDetail = HouseDocumentFields & {
   id?: number;
   shipment_id: string;
-  hawb_number: string;
+  hawb_no: string;
   booking_id?: number | null;
   routed: string;
   routed_by?: string;
@@ -1383,12 +1383,7 @@ function AirImportJobCreate() {
               return {
                 id: house.id != null ? Number(house.id) : undefined,
                 shipment_id: house.shipment_id ? String(house.shipment_id) : "",
-                hawb_number:
-                  house.hawb_number || house.hawb_no || house.hbl_number
-                    ? String(
-                        house.hawb_number || house.hawb_no || house.hbl_number,
-                      )
-                    : "",
+                hawb_no: house.hawb_no ? String(house.hawb_no) : "",
                 ...readChaHouseBlFromApi(house as Record<string, unknown>),
                 routed: house.routed
                   ? String(house.routed).toLowerCase() === "self"
@@ -2689,7 +2684,7 @@ function AirImportJobCreate() {
       const missingFields: string[] = [];
 
       // Step 1 validations
-      if (!hawb.hawb_number?.trim()) {
+      if (!hawb.hawb_no?.trim()) {
         missingFields.push("HAWB Number");
       }
       if (!hawb.origin_code?.trim()) {
@@ -2896,7 +2891,7 @@ function AirImportJobCreate() {
     if (pdfBlob && currentHawbForPreview) {
       const link = document.createElement("a");
       link.href = pdfBlob;
-      link.download = `Cargo-Arrival-Notice-${currentHawbForPreview.hawb_number || "HAWB"}.pdf`;
+      link.download = `Cargo-Arrival-Notice-${currentHawbForPreview.hawb_no || "HAWB"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2911,7 +2906,7 @@ function AirImportJobCreate() {
   const handleOpenSendEmailForCan = () => {
     setActivePdfBlob(pdfBlob);
     setActiveFileName(
-      `Cargo-Arrival-Notice-${currentHawbForPreview?.hawb_number || "HAWB"}.pdf`,
+      `Cargo-Arrival-Notice-${currentHawbForPreview?.hawb_no || "HAWB"}.pdf`,
     );
     setActiveDocumentLabel("Cargo Arrival Notice");
     openSendEmail();
@@ -3228,7 +3223,7 @@ function AirImportJobCreate() {
         housing_details: hawbDetails.map((hawb) => ({
           // Only send positive ids (avoid id: 0 which backend may mishandle)
           ...(Number(hawb.id) > 0 && { id: Number(hawb.id) }),
-          hawb_no: hawb.hawb_number,
+          hawb_no: hawb.hawb_no,
           ...pickChaHouseBlPayloadFields(hawb),
           origin_code: hawb.origin_code,
           destination_code: hawb.destination_code,
@@ -5956,7 +5951,7 @@ function AirImportJobCreate() {
                       HAWB Number
                     </Text>
                     <Text size="sm" mb="sm">
-                      {hawb.hawb_number || "-"}
+                      {hawb.hawb_no || "-"}
                     </Text>
                   </Grid.Col>
 
@@ -6411,7 +6406,7 @@ function AirImportJobCreate() {
         title={
           <Text size="lg" fw={600} c="#105476">
             Cargo Arrival Notice -{" "}
-            {currentHawbForPreview?.hawb_number || "HAWB"}
+            {currentHawbForPreview?.hawb_no || "HAWB"}
           </Text>
         }
         size="95%"

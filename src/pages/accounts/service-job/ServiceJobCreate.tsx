@@ -1380,6 +1380,7 @@ export default function ServiceJobCreate() {
     (jobData as { status?: string | null } | null)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const isServiceLocked = Boolean(routeId || jobData?.id);
   const documentsReadOnly = isViewOnly;
   const jobDocuments = useJobDocuments();
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
@@ -2691,10 +2692,11 @@ export default function ServiceJobCreate() {
                   placeholder="Type service code or name"
                   searchable
                   dropdownZIndex={1000}
-                  disabled={isReadOnly}
+                  disabled={isReadOnly || isServiceLocked}
                   data={serviceOptions}
                   value={form.values.service_id || null}
                   onChange={(value) => {
+                    if (isServiceLocked) return;
                     form.setFieldValue("service_id", value || "");
                     form.setFieldValue("origin_code", "");
                     form.setFieldValue("origin_name", "");
