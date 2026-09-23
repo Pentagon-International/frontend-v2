@@ -410,19 +410,21 @@ function StatusPill({ status }: { status?: string | null }) {
   const cfg =
     key === "sent_to_accounts"
       ? { dot: "#0ea5e9", bg: "#e0f2fe", color: "#0369a1" } // sky
-      : key === "sent_to_verify"
-      ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" } // amber
-      : key === "verified"
-        ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" } // blue
-        : key === "confirmed"
-          ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" } // green
-          : key === "hold"
-            ? { dot: "#7c3aed", bg: "#f5f3ff", color: "#6d28d9" } // violet
-            : key === "approved" || key === "hold_confirmed"
-              ? { dot: "#4f46e5", bg: "#eef2ff", color: "#3730a3" } // indigo — distinct from green Confirmed
-              : key === "rejected" || key === "hold_rejected"
-                ? { dot: "#dc2626", bg: "#fef2f2", color: "#b91c1c" } // red
-                : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" }; // gray
+      : key === "accounts_verified"
+        ? { dot: "#0891b2", bg: "#cffafe", color: "#0e7490" } // cyan — Account Verified
+        : key === "sent_to_verify"
+          ? { dot: "#d97706", bg: "#fef3c7", color: "#b45309" } // amber
+          : key === "verified"
+            ? { dot: "#3b82f6", bg: "#eff6ff", color: "#1d4ed8" } // blue
+            : key === "confirmed"
+              ? { dot: "#10b981", bg: "#ecfdf5", color: "#047857" } // green
+              : key === "hold"
+                ? { dot: "#7c3aed", bg: "#f5f3ff", color: "#6d28d9" } // violet
+                : key === "approved" || key === "hold_confirmed"
+                  ? { dot: "#4f46e5", bg: "#eef2ff", color: "#3730a3" } // indigo — distinct from green Confirmed
+                  : key === "rejected" || key === "hold_rejected"
+                    ? { dot: "#dc2626", bg: "#fef2f2", color: "#b91c1c" } // red
+                    : { dot: "#6b7280", bg: "#f3f4f6", color: "#4b5563" }; // gray
 
   return (
     <Box
@@ -836,7 +838,7 @@ export default function JobProfitVerificationMaster({
             shipmentId,
             (nested as Record<string, unknown> | null | undefined) ?? {
               accounts_verified: true,
-              status: "sent_to_verify",
+              status: "accounts_verified",
             },
           );
           refreshProfitList();
@@ -1644,7 +1646,7 @@ export default function JobProfitVerificationMaster({
                       {!isApprovalMode ? (
                         <>
                           <th style={mergeTh(130, 130)}>Accounts Verify</th>
-                          <th style={mergeTh(140, 140)}>Salesperson Verify</th>
+                          <th style={mergeTh(140, 140)}>Pricing Verify</th>
                         </>
                       ) : null}
                       <th style={mergeTh(150, 150)}>Verified By</th>
@@ -1906,7 +1908,10 @@ export default function JobProfitVerificationMaster({
                                       status: row.status,
                                       accounts_verified: row.accounts_verified,
                                     });
-                                  if (row.is_sales !== true) {
+                                  if (
+                                    row.is_sales !== true &&
+                                    row.is_sales !== false
+                                  ) {
                                     return (
                                       <Text size="sm" c={muted}>
                                         —
@@ -1916,7 +1921,7 @@ export default function JobProfitVerificationMaster({
                                   return (
                                     <Stack gap={4}>
                                       <Checkbox
-                                        label="Salesperson Verify"
+                                        label="Pricing Verify"
                                         checked={salespersonChecked}
                                         disabled={
                                           salespersonChecked ||

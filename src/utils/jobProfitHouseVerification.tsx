@@ -66,7 +66,6 @@ export type JobProfitHouseItemsPayload = {
     shipment_id: string;
     sent_to_accounts?: boolean;
     accounts_verified?: boolean;
-    salesperson_verified?: boolean;
     verified?: boolean;
   }>;
 };
@@ -180,6 +179,7 @@ export function normalizeProfitStatus(status?: string | null): string {
 
 const PROFIT_STATUS_LABELS: Record<string, string> = {
   sent_to_accounts: "Sent to Accounts",
+  accounts_verified: "Account Verified",
   sent_to_verify: "Pending for verification",
   verified: "Pricing verified pending for sales confirmation",
   confirmed: "Sales Confirmed",
@@ -192,6 +192,7 @@ const PROFIT_STATUS_LABELS: Record<string, string> = {
 
 export const PROFIT_STATUS_FILTER_OPTIONS = [
   { value: "sent_to_accounts", label: PROFIT_STATUS_LABELS.sent_to_accounts },
+  { value: "accounts_verified", label: PROFIT_STATUS_LABELS.accounts_verified },
   { value: "sent_to_verify", label: PROFIT_STATUS_LABELS.sent_to_verify },
   { value: "verified", label: PROFIT_STATUS_LABELS.verified },
   { value: "confirmed", label: PROFIT_STATUS_LABELS.confirmed },
@@ -310,23 +311,32 @@ export function isSalespersonProfitVerified(options: {
   if (options.salesperson_verified === true || options.verified === true) {
     return true;
   }
+  const status = normalizeProfitStatus(options.status);
+  // Status after Pricing Verify — pending sales confirm.
+  if (status === "verified") return true;
   return isProfitConfirmed(options.status);
 }
 
-/** Salesperson can verify after accounts has verified (status sent_to_verify). */
+/** Pricing/sales can Pricing-Verify after accounts has verified. */
 export function canShowSalespersonVerify(params: {
   is_sales?: boolean | null;
   status?: string | null;
   accounts_verified?: boolean | null;
 }): boolean {
-  if (params.is_sales !== true) return false;
+  if (params.is_sales !== true && params.is_sales !== false) return false;
   if (isProfitFlowComplete(params.status)) return false;
-  if (isSalespersonProfitVerified({ status: params.status })) return false;
+  if (
+    isSalespersonProfitVerified({
+      status: params.status,
+    })
+  ) {
+    return false;
+  }
   const status = normalizeProfitStatus(params.status);
   return (
     params.accounts_verified === true ||
-    status === "sent_to_verify" ||
-    status === "verified"
+    status === "accounts_verified" ||
+    status === "sent_to_verify"
   );
 }
 
@@ -350,7 +360,7 @@ export function buildSalespersonVerifyPayload(
     items: [
       {
         shipment_id: String(shipmentId ?? "").trim(),
-        salesperson_verified: true,
+        verified: true,
       },
     ],
   };
@@ -443,9 +453,9 @@ export function runJobProfitSalespersonVerify(options: {
     const render = () => {
       update(
         <ConfirmActionModal
-          title="Salesperson Verify"
-          message={`Mark salesperson verification complete for shipment ${shipmentId}?`}
-          confirmLabel="Salesperson Verify"
+          title="Pricing Verify"
+          message={`Mark pricing verification complete for shipment ${shipmentId}?`}
+          confirmLabel="Pricing Verify"
           loading={loading}
           error={error}
           onClose={() => {
@@ -466,7 +476,7 @@ export function runJobProfitSalespersonVerify(options: {
                   type: "success",
                   message:
                     response?.message ??
-                    "Salesperson verification completed successfully",
+                    "Pricing verification completed successfully",
                 });
                 destroy();
                 options.onSuccess?.(response);
@@ -474,7 +484,7 @@ export function runJobProfitSalespersonVerify(options: {
                 loading = false;
                 error = resolveApiErrorMessage(
                   err,
-                  "Failed to complete salesperson verification.",
+                  "Failed to complete pricing verification.",
                 );
                 ToastNotification({ type: "error", message: error });
                 render();
