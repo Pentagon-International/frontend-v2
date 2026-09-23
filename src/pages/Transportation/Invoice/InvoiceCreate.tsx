@@ -147,6 +147,23 @@ const parseVatRatesPayload = (res: unknown): VatRates | null => {
   return { vat_percent: Number.isFinite(parsed) ? parsed : null };
 };
 
+/** Normalize API same_state (boolean or string "true"/"false") to a real boolean. */
+function normalizeGstSameState(
+  rawSame: boolean | string | null | undefined,
+  rates?: { igst: number | null; cgst: number | null; sgst: number | null },
+): boolean {
+  if (rawSame === true || rawSame === "true" || rawSame === "True") return true;
+  if (rawSame === false || rawSame === "false" || rawSame === "False")
+    return false;
+  if (rawSame != null) return Boolean(rawSame);
+  // Infer when flag missing (InvoiceReverse parity).
+  if (rates) {
+    if ((rates.cgst ?? 0) > 0 || (rates.sgst ?? 0) > 0) return true;
+    if ((rates.igst ?? 0) > 0) return false;
+  }
+  return false;
+}
+
 const parseGstRatesPayload = (res: unknown): GstRates | null => {
   const resObj = res as {
     data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
@@ -154,15 +171,21 @@ const parseGstRatesPayload = (res: unknown): GstRates | null => {
   };
   const payload = resObj?.data?.data ?? resObj?.data ?? res;
   const data = payload as GstRatesBySacResponse | null | undefined;
+  if (!data || typeof data !== "object") return null;
   const igstRaw = data?.igst_percent;
   const cgstRaw = data?.cgst_percent;
   const sgstRaw = data?.sgst_percent;
-  const sameState = data?.same_state ?? false;
+  const igst = igstRaw == null || igstRaw === "" ? null : Number(igstRaw);
+  const cgst = cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw);
+  const sgst = sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw);
   return {
-    igst: igstRaw == null || igstRaw === "" ? null : Number(igstRaw),
-    cgst: cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw),
-    sgst: sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw),
-    same_state: sameState,
+    igst: Number.isFinite(igst as number) ? igst : null,
+    cgst: Number.isFinite(cgst as number) ? cgst : null,
+    sgst: Number.isFinite(sgst as number) ? sgst : null,
+    same_state: normalizeGstSameState(
+      data?.same_state as boolean | string | undefined,
+      { igst, cgst, sgst },
+    ),
   };
 };
 
@@ -251,10 +274,7 @@ function resolveVatTaxBase(
 ): number | null | undefined {
   if (isVndCurrency(billingCurrency)) {
     const base =
-      charge.header_amount ??
-      charge.amount_in_local ??
-      charge.amount ??
-      null;
+      charge.header_amount ?? charge.amount_in_local ?? charge.amount ?? null;
     if (base == null) return null;
     return clampLocalAmount(base);
   }
@@ -267,10 +287,7 @@ function resolveVatTaxBase(
 
   if (isMoneyWholeNumberMode() && isVndCurrency(charge.currency)) {
     const base =
-      charge.amount_in_local ??
-      charge.header_amount ??
-      charge.amount ??
-      null;
+      charge.amount_in_local ?? charge.header_amount ?? charge.amount ?? null;
     if (base == null) return null;
     return clampLocalAmount(base);
   }
@@ -287,18 +304,14 @@ function clampCurrencyAmount(
 ): number | null {
   return clampMoneyAmount(
     value,
-    Boolean(currency) &&
-      isMoneyWholeNumberMode() &&
-      isVndCurrency(currency),
+    Boolean(currency) && isMoneyWholeNumberMode() && isVndCurrency(currency),
   );
 }
 
 /** Input decimal scale for charge currency amount / per-unit. */
 function getCurrencyAmountDecimalScale(currency?: string | null): 0 | 2 {
   return getAmountDecimalScale(
-    Boolean(currency) &&
-      isMoneyWholeNumberMode() &&
-      isVndCurrency(currency),
+    Boolean(currency) && isMoneyWholeNumberMode() && isVndCurrency(currency),
   );
 }
 
@@ -644,10 +657,16 @@ const fetchCheckSezStatus = async (payload: {
     if (payload.document_date) {
       body.document_date = payload.document_date;
     }
-    if (payload.service_id != null && Number.isFinite(Number(payload.service_id))) {
+    if (
+      payload.service_id != null &&
+      Number.isFinite(Number(payload.service_id))
+    ) {
       body.service_id = Number(payload.service_id);
     }
-    if (payload.branch_id != null && Number.isFinite(Number(payload.branch_id))) {
+    if (
+      payload.branch_id != null &&
+      Number.isFinite(Number(payload.branch_id))
+    ) {
       body.branch_id = Number(payload.branch_id);
     }
     const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
@@ -852,9 +871,7 @@ function resolveMasterChargeIdForPayload(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function resolveSelectedMasterChargeId(
-  value: string | null,
-): number | null {
+function resolveSelectedMasterChargeId(value: string | null): number | null {
   if (!value || String(value).startsWith("temp_")) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -1114,12 +1131,7 @@ function resolveChargeLocalAmountForGst(charge: {
   }
   const amount = charge.amount;
   const roe = charge.roe;
-  if (
-    amount != null &&
-    roe != null &&
-    Number(amount) > 0 &&
-    Number(roe) > 0
-  ) {
+  if (amount != null && roe != null && Number(amount) > 0 && Number(roe) > 0) {
     return clampAmount(Number(amount) * Number(roe));
   }
   return null;
@@ -1336,7 +1348,7 @@ function resolvePartyStateIdFromHousing(
   };
   const keys = isAgent
     ? ["agent_state_id"]
-    : stateKeysByParty[billToParty] ?? [];
+    : (stateKeysByParty[billToParty] ?? []);
   const sources = [firstHawb, jobHouse0, jobRoot];
   let raw: unknown = null;
   for (const key of keys) {
@@ -1384,7 +1396,10 @@ function readAddressesDataFromParty(
 ): BillToAddressRow[] {
   if (!party || !Array.isArray(party.addresses_data)) return [];
   return (party.addresses_data as BillToAddressRow[]).filter(
-    (addr) => addr != null && addr.id != null && String(addr.address ?? "").trim() !== "",
+    (addr) =>
+      addr != null &&
+      addr.id != null &&
+      String(addr.address ?? "").trim() !== "",
   );
 }
 
@@ -2511,7 +2526,9 @@ function InvoiceCreate({
   // shipment no / job id via filter/job-create. Fall back to location.state.job.
   const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
   const getServiceIdForSac = useCallback(
-    async (shipmentOrJobNo: string | null | undefined): Promise<number | null> => {
+    async (
+      shipmentOrJobNo: string | null | undefined,
+    ): Promise<number | null> => {
       const key = String(shipmentOrJobNo ?? "").trim();
       if (key) {
         if (key in shipmentServiceIdCacheRef.current) {
@@ -2559,7 +2576,10 @@ function InvoiceCreate({
 
         try {
           const stateId = form.values.state ? Number(form.values.state) : null;
-          if (!applyAgentGstRates && (stateId == null || Number.isNaN(stateId))) {
+          if (
+            !applyAgentGstRates &&
+            (stateId == null || Number.isNaN(stateId))
+          ) {
             return;
           }
           const res = await fetchGstRatesByStateSac(
@@ -2769,8 +2789,7 @@ function InvoiceCreate({
           const addrForState =
             selectedAddress?.state_id != null
               ? selectedAddress
-              : primaryAddress ||
-                addressesData.find((a) => a.state_id != null);
+              : primaryAddress || addressesData.find((a) => a.state_id != null);
           if (addrForState?.state_id != null) {
             form.setFieldValue("state", String(addrForState.state_id));
           }
@@ -2784,7 +2803,8 @@ function InvoiceCreate({
         const gstOrPan =
           addrForGst?.gst_id != null && String(addrForGst.gst_id).trim() !== ""
             ? String(addrForGst.gst_id)
-            : addrForGst?.pan_no != null && String(addrForGst.pan_no).trim() !== ""
+            : addrForGst?.pan_no != null &&
+                String(addrForGst.pan_no).trim() !== ""
               ? String(addrForGst.pan_no)
               : "";
         if (gstOrPan) {
@@ -2979,7 +2999,9 @@ function InvoiceCreate({
             if (isGstInvoiceUser || isKenyaUser) form.setFieldValue("gstn", "");
 
             const applyMatchedParty = (matched: Record<string, unknown>) => {
-              const lookedUp = resolveCustomerMasterCode(matched?.customer_code);
+              const lookedUp = resolveCustomerMasterCode(
+                matched?.customer_code,
+              );
               if (!lookedUp) return;
               billToAddressesLoadedForRef.current = "";
               setAddressOptions([]);
@@ -3050,10 +3072,7 @@ function InvoiceCreate({
                 firstHawbRec.billing_customer_address,
                 jobHouse0?.billing_customer_address,
               ),
-              codeKeys: [
-                "billing_customer_code",
-                "customer_code",
-              ],
+              codeKeys: ["billing_customer_code", "customer_code"],
               name,
               nameLookupQuery: name,
             });
@@ -3378,7 +3397,9 @@ function InvoiceCreate({
                     currency,
                   ),
                   amount: clampCurrencyAmount(
-                    Number.isFinite(amount as number) ? (amount as number) : null,
+                    Number.isFinite(amount as number)
+                      ? (amount as number)
+                      : null,
                     currency,
                   ),
                   header_amount: clampHeaderAmount(
@@ -3437,6 +3458,9 @@ function InvoiceCreate({
                       `charges.${originalIdx}.tax_code`,
                       item.sac_code,
                     );
+                    if (showGstTax) {
+                      applyGstRatesForChargeIndex(originalIdx, item.sac_code);
+                    }
                   }
                 });
               });
@@ -3886,16 +3910,27 @@ function InvoiceCreate({
       return;
     }
 
-    // Seed from charge response rates immediately so UI never waits on a spinner.
+    const cacheKeyFor = (sac: string) =>
+      applyAgentGstRates ? `agent:${sac}` : `${stateId}:${sac}`;
+
+    // Seed from charge response / cache so IGST/CGST columns can show after a
+    // cancelled in-flight apply (house→invoice race with state/SAC/ROE updates).
     setGstRatesByChargeIndex((prev) => {
       let changed = false;
       const next = { ...prev };
-      sacs.forEach(({ idx, charge }) => {
+      sacs.forEach(({ idx, sac, charge }) => {
         if (next[idx] != null) return;
         const fromCharge = gstRatesFromCharge(charge);
-        if (!fromCharge) return;
-        next[idx] = fromCharge;
-        changed = true;
+        if (fromCharge) {
+          next[idx] = fromCharge;
+          changed = true;
+          return;
+        }
+        const cached = gstRatesCacheRef.current.get(cacheKeyFor(sac));
+        if (cached) {
+          next[idx] = cached;
+          changed = true;
+        }
       });
       return changed ? next : prev;
     });
@@ -3907,38 +3942,53 @@ function InvoiceCreate({
       stateId: applyAgentGstRates ? null : stateId,
       sacs: sacs.map((s) => s.sac),
     });
-    if (fetchKey === lastGstRatesFetchKeyRef.current) {
-      // Clear any stuck loading flags when rates are already resolved.
+
+    const needsNetworkFetch = sacs.some(({ idx, sac, charge }) => {
+      if (gstRatesByChargeIndex[idx] != null) return false;
+      if (gstRatesCacheRef.current.has(cacheKeyFor(sac))) return false;
+      if (gstRatesFromCharge(charge) != null) return false;
+      return true;
+    });
+
+    // Same key + rates available (state or cache): rehydrate state from cache and skip network.
+    // Do NOT skip when state is empty after a cancelled apply — that hid IGST columns.
+    if (fetchKey === lastGstRatesFetchKeyRef.current && !needsNetworkFetch) {
+      setGstRatesByChargeIndex((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        sacs.forEach(({ idx, sac, charge }) => {
+          if (next[idx] != null) return;
+          const cached = gstRatesCacheRef.current.get(cacheKeyFor(sac));
+          if (cached) {
+            next[idx] = cached;
+            changed = true;
+            return;
+          }
+          const fromCharge = gstRatesFromCharge(charge);
+          if (fromCharge) {
+            next[idx] = fromCharge;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
       setGstRatesLoadingByIndex((prev) => {
         if (!Object.values(prev).some(Boolean)) return prev;
         const next = { ...prev };
-        sacs.forEach(({ idx, sac, charge }) => {
-          const cacheKey = applyAgentGstRates
-            ? `agent:${sac}`
-            : `${stateId}:${sac}`;
-          if (
-            gstRatesCacheRef.current.has(cacheKey) ||
-            gstRatesByChargeIndex[idx] != null ||
-            gstRatesFromCharge(charge) != null
-          ) {
-            next[idx] = false;
-          }
+        sacs.forEach(({ idx }) => {
+          next[idx] = false;
         });
         return next;
       });
       return;
     }
-    lastGstRatesFetchKeyRef.current = fetchKey;
 
     let cancelled = false;
 
     // Loading only when we must wait on network AND charge has no rates yet.
     const indicesToFetch: number[] = [];
     sacs.forEach(({ idx, sac, charge }) => {
-      const cacheKey = applyAgentGstRates
-        ? `agent:${sac}`
-        : `${stateId}:${sac}`;
-      const hasCache = gstRatesCacheRef.current.has(cacheKey);
+      const hasCache = gstRatesCacheRef.current.has(cacheKeyFor(sac));
       if (hasCache) return;
       if (gstRatesFromCharge(charge) == null) {
         indicesToFetch.push(idx);
@@ -3959,9 +4009,7 @@ function InvoiceCreate({
 
     Promise.all(
       sacs.map(async ({ idx, sac }) => {
-        const cacheKey = applyAgentGstRates
-          ? `agent:${sac}`
-          : `${stateId}:${sac}`;
+        const cacheKey = cacheKeyFor(sac);
         const cached = gstRatesCacheRef.current.get(cacheKey);
         if (cached) return { idx, rates: cached, fromCache: true };
 
@@ -3993,6 +4041,8 @@ function InvoiceCreate({
         });
         return next;
       });
+      // Mark key only after rates land in React state (avoids skip-after-cancel).
+      lastGstRatesFetchKeyRef.current = fetchKey;
       // Always clear loading for resolved indices (including cache hits).
       setGstRatesLoadingByIndex((prev) => {
         const next = { ...prev };
@@ -4007,7 +4057,13 @@ function InvoiceCreate({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values.state, form.values.charges, showGstTax, applyGst, applyAgentGstRates]);
+  }, [
+    form.values.state,
+    form.values.charges,
+    showGstTax,
+    applyGst,
+    applyAgentGstRates,
+  ]);
 
   // When charges lack SAC, fetch effective SAC for India GST / India agent invoices (incl. SEZ)
   useEffect(() => {
@@ -4123,10 +4179,7 @@ function InvoiceCreate({
         charge.no_of_unit > 0
       ) {
         const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
-        const clamped = clampCurrencyAmount(
-          calculatedAmount,
-          charge.currency,
-        );
+        const clamped = clampCurrencyAmount(calculatedAmount, charge.currency);
         if (clamped != null && clamped !== charge.amount) {
           return {
             ...charge,
@@ -5130,7 +5183,8 @@ function InvoiceCreate({
         ? percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
-              const taxableTotal = clampLocalAmount(row.taxable_total ?? 0) ?? 0;
+              const taxableTotal =
+                clampLocalAmount(row.taxable_total ?? 0) ?? 0;
               const { amountInLocal, amountInHeader, currencyAmount } =
                 calcTaxRowAmountsFromBreakupTotal(
                   taxableTotal,
@@ -5169,7 +5223,8 @@ function InvoiceCreate({
                 return true;
               })
               .map((row) => {
-                const totalAmount = clampLocalAmount(row.total_amount ?? 0) ?? 0;
+                const totalAmount =
+                  clampLocalAmount(row.total_amount ?? 0) ?? 0;
                 const { amountInLocal, amountInHeader, currencyAmount } =
                   calcTaxRowAmountsFromBreakupTotal(
                     totalAmount,
@@ -5552,9 +5607,12 @@ function InvoiceCreate({
 
   const headerSameState = (() => {
     const fromFetchedRates = Object.values(gstRatesByChargeIndex).find(
-      (rates) => rates?.same_state !== undefined,
+      (rates) => rates != null && rates.same_state !== undefined,
     )?.same_state;
-    if (fromFetchedRates !== undefined) return fromFetchedRates;
+    if (fromFetchedRates !== undefined) {
+      // Coerce in case a stale path stored string "true"/"false".
+      return normalizeGstSameState(fromFetchedRates as boolean | string);
+    }
 
     // Fallback for cases where rates haven't been fetched yet (or were skipped for tax rows):
     // infer intra/inter state from non-tax rows' returned rates (from POST response mapping).
@@ -5568,9 +5626,7 @@ function InvoiceCreate({
   })();
 
   /** India agent invoice: IGST-only (inter-state); avoid undefined hiding GST columns. */
-  const effectiveHeaderSameState = applyAgentGstRates
-    ? false
-    : headerSameState;
+  const effectiveHeaderSameState = applyAgentGstRates ? false : headerSameState;
 
   const chargeSectionTotals = useMemo(
     () =>
@@ -6130,12 +6186,11 @@ function InvoiceCreate({
                   const recalcChargesForBilling = (
                     headerRoe: number | null | undefined,
                   ) => {
-                    const roeForCalc =
-                      isBaseCurrency(newCurrency)
-                        ? 1
-                        : headerRoe != null && headerRoe > 0
-                          ? headerRoe
-                          : form.values.roe;
+                    const roeForCalc = isBaseCurrency(newCurrency)
+                      ? 1
+                      : headerRoe != null && headerRoe > 0
+                        ? headerRoe
+                        : form.values.roe;
 
                     return form.values.charges.map((charge) => {
                       const chargeCode =
@@ -6841,7 +6896,9 @@ function InvoiceCreate({
                               clampedAmount,
                             );
                           }
-                          if (clampedPerUnit !== currentCharge.amount_per_unit) {
+                          if (
+                            clampedPerUnit !== currentCharge.amount_per_unit
+                          ) {
                             form.setFieldValue(
                               `charges.${index}.amount_per_unit`,
                               clampedPerUnit,
@@ -6887,8 +6944,10 @@ function InvoiceCreate({
                               );
                               const latestCharge = form.values.charges[index];
                               const amt =
-                                clampCurrencyAmount(latestCharge.amount, code) ??
-                                latestCharge.amount;
+                                clampCurrencyAmount(
+                                  latestCharge.amount,
+                                  code,
+                                ) ?? latestCharge.amount;
                               if (amt != null && amt > 0) {
                                 let local = latestCharge.amount_in_local;
                                 if (newRoe != null && newRoe > 0) {
@@ -7810,12 +7869,13 @@ function InvoiceCreate({
                                 const newIndex = form.values.charges.length;
                                 chargeUnitsByIndexRef.current[newIndex] = "|";
                                 const defaultShipmentId =
-                                  String(form.values.shipment_no ?? "").trim() ||
-                                  undefined;
+                                  String(
+                                    form.values.shipment_no ?? "",
+                                  ).trim() || undefined;
                                 void ensureRoeForCurrency(
                                   newChargeCurrency,
                                 ).then((roe) => {
-                                  form.insertListItem("charges", {
+                                  form.insertListItem("cha  rges", {
                                     charge_id: null,
                                     charge_name: "",
                                     charge_master_name: "",
