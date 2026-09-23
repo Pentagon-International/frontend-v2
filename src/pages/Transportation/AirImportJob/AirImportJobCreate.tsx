@@ -2923,6 +2923,8 @@ function AirImportJobCreate() {
   const [ediUsbStatusMessage, setEdiUsbStatusMessage] = useState<string | null>(
     null,
   );
+  /** Unsigned EDI text awaiting local HyperPKI sign + submit-signed. */
+  const ediPendingContentRef = useRef<string | null>(null);
   type EdiChecklistMasterDetails = {
     code?: string;
     igm_no?: string;
@@ -3029,59 +3031,64 @@ function AirImportJobCreate() {
     }
   };
 
-  const downloadEdiFile = async (tokenPin?: string) => {
-    if (!jobData?.id) {
-      ToastNotification({
-        type: "error",
-        message: "Job not found for EDI download",
-      });
-      return;
-    }
+  const getEdiSuggestedFilename = (fallbackExt = "edi") => {
+    const fromChecklist = ediChecklistData?.data?.filename;
+    if (fromChecklist) return String(fromChecklist);
+    const jobIdLabel =
+      (jobData as { job_id?: string } | null)?.job_id ||
+      (jobData?.id != null ? `job-${jobData.id}` : "edi");
+    return `${jobIdLabel}.${fallbackExt}`;
+  };
 
-    const res = await postAPICall(
-      `${URL.edi}${jobData.id}/`,
-      tokenPin ? { token_pin: tokenPin } : {},
-      {
-        ...API_HEADER,
-        // Download returns plain text EDI content.
-        responseType: "text",
-      },
-    );
-
-    const payload =
-      res &&
-      typeof res === "object" &&
-      "data" in (res as Record<string, unknown>)
-        ? (res as { data?: unknown }).data
-        : res;
-
-    const ediText =
-      typeof payload === "string" ? payload : String(payload ?? "");
-    if (!ediText.trim()) {
-      throw new Error("Empty EDI response");
-    }
-
-    const blob = new Blob([ediText], { type: "text/plain;charset=utf-8" });
+  const triggerBrowserDownload = (
+    blob: Blob,
+    filename: string,
+  ) => {
     const fileUrl = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = fileUrl;
-
-    const suggestedName =
-      ediChecklistData?.data?.filename ||
-      `${(jobData as { job_id?: string }).job_id || `job-${jobData.id}`}.edi`;
-    link.download = String(suggestedName);
-
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(fileUrl);
+  };
 
-    ToastNotification({
-      type: "success",
-      message: tokenPin
-        ? "Signed EDI file downloaded successfully"
-        : "EDI file downloaded successfully",
-    });
+  const filenameFromContentDisposition = (
+    headerValue: unknown,
+    fallback: string,
+  ): string => {
+    if (typeof headerValue !== "string" || !headerValue.trim()) {
+      return fallback;
+    }
+    const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(headerValue);
+    if (utf8Match?.[1]) {
+      try {
+        return decodeURIComponent(utf8Match[1].trim().replace(/["']/g, ""));
+      } catch {
+        return utf8Match[1].trim().replace(/["']/g, "");
+      }
+    }
+    const plainMatch = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/i.exec(
+      headerValue,
+    );
+    if (plainMatch?.[1]) {
+      return plainMatch[1].replace(/['"]/g, "").trim() || fallback;
+    }
+    return fallback;
+  };
+
+  const unwrapAxiosData = (res: unknown): unknown => {
+    if (
+      res &&
+      typeof res === "object" &&
+      "data" in (res as Record<string, unknown>) &&
+      (typeof (res as { status?: unknown }).status === "number" ||
+        "headers" in (res as Record<string, unknown>))
+    ) {
+      return (res as { data?: unknown }).data;
+    }
+    return res;
   };
 
   const getEdiDownloadErrorMessage = (error: unknown): string => {
@@ -3102,13 +3109,20 @@ function AirImportJobCreate() {
       }
     }
 
+    if (data instanceof Blob) {
+      return "Failed to download EDI file";
+    }
+
     if (data && typeof data === "object") {
-      const obj = data as { message?: unknown; detail?: unknown };
+      const obj = data as { message?: unknown; detail?: unknown; error?: unknown };
       if (typeof obj.message === "string" && obj.message.trim()) {
         return obj.message.trim();
       }
       if (typeof obj.detail === "string" && obj.detail.trim()) {
         return obj.detail.trim();
+      }
+      if (typeof obj.error === "string" && obj.error.trim()) {
+        return obj.error.trim();
       }
     }
 
@@ -3117,6 +3131,89 @@ function AirImportJobCreate() {
     }
 
     return "Failed to download EDI file";
+  };
+
+  const downloadEdiAgentZip = async () => {
+    const res = await apiCallProtected.get(URL.ediAgentDownload, {
+      responseType: "blob",
+      ...API_HEADER,
+    });
+    const payload = unwrapAxiosData(res);
+    const blob =
+      payload instanceof Blob
+        ? payload
+        : new Blob([payload as BlobPart], { type: "application/zip" });
+    const headers =
+      res && typeof res === "object" && "headers" in res
+        ? (res as { headers?: Record<string, unknown> }).headers
+        : undefined;
+    const filename = filenameFromContentDisposition(
+      headers?.["content-disposition"] ?? headers?.["Content-Disposition"],
+      "edi-signing-agent.zip",
+    );
+    triggerBrowserDownload(blob, filename);
+    ToastNotification({
+      type: "warning",
+      message:
+        "EDI signing agent is not available. Agent installer downloaded — install and start it, then try again.",
+    });
+  };
+
+  /** Fetch unsigned EDI text from Pulse (POST /api/edi/:id/). */
+  const fetchUnsignedEdiContent = async (): Promise<string> => {
+    if (!jobData?.id) {
+      throw new Error("Job not found for EDI download");
+    }
+
+    const res = await postAPICall(
+      `${URL.edi}${jobData.id}/`,
+      {},
+      {
+        ...API_HEADER,
+        responseType: "text",
+      },
+    );
+
+    const payload = unwrapAxiosData(res);
+    const ediText =
+      typeof payload === "string" ? payload : String(payload ?? "");
+    if (!ediText.trim()) {
+      throw new Error("Empty EDI response");
+    }
+    return ediText;
+  };
+
+  /** Check local HyperPKI agent usb-status (no auth headers — avoids CORS preflight). */
+  const fetchLocalEdiAgentUsbStatus = async (): Promise<{
+    agent: boolean;
+    usb_present: boolean;
+    message: string | null;
+  } | null> => {
+    try {
+      const res = await fetch(URL.ediLocalUsbStatus, { method: "GET" });
+      if (!res.ok) {
+        return null;
+      }
+      const payload: unknown = await res.json();
+      if (!payload || typeof payload !== "object") {
+        return { agent: false, usb_present: false, message: null };
+      }
+      const status = payload as {
+        agent?: boolean;
+        usb_present?: boolean;
+        message?: string;
+      };
+      return {
+        agent: Boolean(status.agent),
+        usb_present: Boolean(status.usb_present),
+        message:
+          typeof status.message === "string" ? status.message : null,
+      };
+    } catch (error) {
+      // Agent not running / unreachable → treat as agent unavailable.
+      console.warn("Local EDI agent usb-status unreachable:", error);
+      return null;
+    }
   };
 
   const handleDownloadEdiFromChecklist = async () => {
@@ -3129,58 +3226,55 @@ function AirImportJobCreate() {
     }
 
     setEdiDownloadLoading(true);
+    ediPendingContentRef.current = null;
     try {
-      const usbStatusRes = await getAPICall(URL.ediUsbStatus, API_HEADER);
-      const usbStatusPayload =
-        usbStatusRes &&
-        typeof usbStatusRes === "object" &&
-        "data" in (usbStatusRes as Record<string, unknown>) &&
-        typeof (usbStatusRes as { status?: unknown }).status === "number"
-          ? (usbStatusRes as { data?: unknown }).data
-          : usbStatusRes;
+      const usbStatus = await fetchLocalEdiAgentUsbStatus();
 
-      const usbStatus =
-        usbStatusPayload && typeof usbStatusPayload === "object"
-          ? (usbStatusPayload as {
-              usb_present?: boolean;
-              message?: string;
-            })
-          : {};
-
-      const usbPresent = Boolean(usbStatus.usb_present);
-      const statusMessage =
-        typeof usbStatus.message === "string" ? usbStatus.message : null;
-
-      setEdiUsbStatusMessage(statusMessage);
-
-      if (usbPresent) {
-        setEdiTokenPin("");
-        setEdiPinError(null);
-        setEdiPinModalOpen(true);
+      // Agent not running, or agent:false → download installer zip from Pulse.
+      if (!usbStatus || !usbStatus.agent) {
+        try {
+          await downloadEdiAgentZip();
+        } catch (error) {
+          console.error("Error downloading EDI agent zip:", error);
+          ToastNotification({
+            type: "error",
+            message: getEdiDownloadErrorMessage(error),
+          });
+        }
         return;
       }
 
-      if (statusMessage) {
+      setEdiUsbStatusMessage(usbStatus.message);
+
+      if (!usbStatus.usb_present) {
         ToastNotification({
           type: "warning",
-          message: statusMessage,
+          message:
+            usbStatus.message ||
+            "Please connect the signing USB and try again.",
         });
+        return;
       }
 
+      // Agent running + USB present → fetch EDI content, then ask for PIN.
       try {
-        await downloadEdiFile();
+        const ediContent = await fetchUnsignedEdiContent();
+        ediPendingContentRef.current = ediContent;
+        setEdiTokenPin("");
+        setEdiPinError(null);
+        setEdiPinModalOpen(true);
       } catch (error) {
-        console.error("Error downloading EDI file:", error);
+        console.error("Error fetching EDI content:", error);
         ToastNotification({
           type: "error",
           message: getEdiDownloadErrorMessage(error),
         });
       }
     } catch (error) {
-      console.error("Error checking USB status for EDI:", error);
+      console.error("Error starting EDI download flow:", error);
       ToastNotification({
         type: "error",
-        message: "Failed to check USB token status",
+        message: "Failed to start EDI download",
       });
     } finally {
       setEdiDownloadLoading(false);
@@ -3194,15 +3288,136 @@ function AirImportJobCreate() {
       return;
     }
 
+    const ediContent = ediPendingContentRef.current;
+    if (!ediContent?.trim()) {
+      setEdiPinError("EDI content is missing. Please try Download EDI again.");
+      return;
+    }
+
+    if (!jobData?.id) {
+      setEdiPinError("Job not found for EDI download");
+      return;
+    }
+
     setEdiDownloadLoading(true);
     setEdiPinError(null);
     try {
-      await downloadEdiFile(pin);
+      // 1) Sign on local HyperPKI agent (no auth headers — only Content-Type)
+      const signRes = await fetch(URL.ediLocalSign, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token_pin: pin,
+          edi_content: ediContent,
+        }),
+      });
+      if (!signRes.ok) {
+        let failMessage = "Signing failed. Please check the PIN and USB token.";
+        try {
+          const failBody: unknown = await signRes.json();
+          if (
+            failBody &&
+            typeof failBody === "object" &&
+            typeof (failBody as { message?: unknown }).message === "string" &&
+            (failBody as { message: string }).message.trim()
+          ) {
+            failMessage = (failBody as { message: string }).message.trim();
+          }
+        } catch {
+          // keep default message
+        }
+        throw new Error(failMessage);
+      }
+      const signPayload = (await signRes.json()) as {
+        signed?: boolean;
+        signed_edi?: string;
+        message?: string;
+        status?: string;
+      } | null;
+
+      const signedEdi =
+        signPayload && typeof signPayload.signed_edi === "string"
+          ? signPayload.signed_edi
+          : "";
+
+      if (!signedEdi.trim() || signPayload?.signed === false) {
+        throw new Error(
+          (typeof signPayload?.message === "string" &&
+            signPayload.message.trim()) ||
+            "Signing failed. Please check the PIN and USB token.",
+        );
+      }
+
+      // 2) Submit signed EDI to Pulse and download the response
+      const submitRes = await postAPICall(
+        `${URL.edi}${jobData.id}/submit-signed/`,
+        { signed_edi: signedEdi },
+        {
+          ...API_HEADER,
+          responseType: "blob",
+        },
+      );
+
+      const submitPayload = unwrapAxiosData(submitRes);
+      let downloadBlob: Blob;
+      let fallbackName = getEdiSuggestedFilename("edi");
+
+      if (submitPayload instanceof Blob) {
+        downloadBlob = submitPayload;
+        // If server returned JSON error as blob, surface message
+        if (
+          submitPayload.type &&
+          submitPayload.type.includes("application/json")
+        ) {
+          const text = await submitPayload.text();
+          let parsed: { message?: string } | null = null;
+          try {
+            parsed = JSON.parse(text) as { message?: string };
+          } catch {
+            parsed = null;
+          }
+          if (parsed?.message) {
+            throw new Error(parsed.message);
+          }
+          downloadBlob = new Blob([text], {
+            type: "text/plain;charset=utf-8",
+          });
+        }
+      } else if (typeof submitPayload === "string") {
+        downloadBlob = new Blob([submitPayload], {
+          type: "text/plain;charset=utf-8",
+        });
+      } else {
+        downloadBlob = new Blob([JSON.stringify(submitPayload ?? "")], {
+          type: "application/json",
+        });
+        fallbackName = getEdiSuggestedFilename("json");
+      }
+
+      const headers =
+        submitRes && typeof submitRes === "object" && "headers" in submitRes
+          ? (submitRes as { headers?: Record<string, unknown> }).headers
+          : undefined;
+      const filename = filenameFromContentDisposition(
+        headers?.["content-disposition"] ?? headers?.["Content-Disposition"],
+        fallbackName,
+      );
+
+      triggerBrowserDownload(downloadBlob, filename);
+
       setEdiPinModalOpen(false);
       setEdiTokenPin("");
       setEdiUsbStatusMessage(null);
+      ediPendingContentRef.current = null;
+
+      ToastNotification({
+        type: "success",
+        message: "Signed EDI file downloaded successfully",
+      });
     } catch (error) {
-      console.error("Error downloading signed EDI file:", error);
+      console.error("Error signing/submitting EDI file:", error);
       setEdiPinError(getEdiDownloadErrorMessage(error));
     } finally {
       setEdiDownloadLoading(false);
@@ -6540,6 +6755,7 @@ function AirImportJobCreate() {
           setEdiTokenPin("");
           setEdiPinError(null);
           setEdiUsbStatusMessage(null);
+          ediPendingContentRef.current = null;
         }}
         title={
           <Text size="lg" fw={600} c="#105476">
@@ -6584,6 +6800,7 @@ function AirImportJobCreate() {
                 setEdiTokenPin("");
                 setEdiPinError(null);
                 setEdiUsbStatusMessage(null);
+                ediPendingContentRef.current = null;
               }}
               disabled={ediDownloadLoading}
             >

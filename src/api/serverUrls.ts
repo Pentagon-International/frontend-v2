@@ -222,6 +222,10 @@ export const URL = {
   // EDI download for jobs
   edi: "edi/",
   ediUsbStatus: "edi/usb-status/",
+  ediAgentDownload: "edi/agent/download/",
+  /** Local HyperPKI signing agent endpoints (port 19443 — not Pulse). */
+  ediLocalUsbStatus: "http://127.0.0.1:19443/usb-status",
+  ediLocalSign: "http://127.0.0.1:19443/sign",
 
   // Dashboard APIs
   dashboard: {
