@@ -12,11 +12,9 @@ import {
   Group,
   Stack,
   Text,
-  Select,
   Loader,
   Tooltip,
   Flex,
-  TextInput,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { yupResolver } from "mantine-form-yup-resolver";
@@ -30,7 +28,11 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
-import { SearchableSelect } from "../../../components";
+import {
+  SearchableSelect,
+  Dropdown,
+} from "../../../components";
+import FormNumberInput from "../../../components/FormNumberInput";
 import { apiCallProtected } from "../../../api/axios";
 import { getAPICall } from "../../../service/getApiCall";
 
@@ -316,43 +318,59 @@ function CustomerRelationshipMappingCreate() {
     };
   }, []);
 
-  // Initialize customer name when coming from customer master
+  // Initialize customer name when coming from customer master (create only).
+  // Never overwrite CRM edit rows — by-customer load is source of truth.
   useEffect(() => {
-    if (fromCustomerMaster && customerFormDataFromState) {
-      // Pre-fill customer name from customer master form data
-      setCustomerDisplayName(customerFormDataFromState.customer_name || null);
-      // Prefill first row credit from legacy customer form (transition / verification carry-over)
-      const creditDay =
-        customerFormDataFromState.credit_day != null
-          ? String(customerFormDataFromState.credit_day)
-          : "";
-      const creditAmount =
-        customerFormDataFromState.credit_amount != null
-          ? String(customerFormDataFromState.credit_amount)
-          : "";
-      if (creditDay || creditAmount) {
-        form.setFieldValue(
-          "customer_relationship_details.0.credit_day",
-          creditDay,
-        );
-        form.setFieldValue(
-          "customer_relationship_details.0.credit_amount",
-          creditAmount,
-        );
-        if (commonServiceId != null) {
-          form.setFieldValue(
-            "customer_relationship_details.0.service_id",
-            commonServiceId,
-          );
-          setDisplayNamesMap((prev) => ({
-            ...prev,
-            0: { ...prev[0], service: "Common" },
-          }));
-        }
-      }
+    if (!fromCustomerMaster || !customerFormDataFromState || isEditMode) {
+      return;
+    }
+    setCustomerDisplayName(customerFormDataFromState.customer_name || null);
+
+    const creditDayRaw = customerFormDataFromState.credit_day;
+    const creditAmountRaw = customerFormDataFromState.credit_amount;
+    const creditDay =
+      creditDayRaw != null && String(creditDayRaw).trim() !== ""
+        ? String(creditDayRaw).trim()
+        : "";
+    const creditAmount =
+      creditAmountRaw != null && String(creditAmountRaw).trim() !== ""
+        ? String(creditAmountRaw).trim()
+        : "";
+    const dayNum = creditDay === "" ? null : Number(creditDay);
+    const amountNum = creditAmount === "" ? null : Number(creditAmount);
+    const hasMeaningfulCredit =
+      (dayNum != null && Number.isFinite(dayNum) && dayNum !== 0) ||
+      (amountNum != null && Number.isFinite(amountNum) && amountNum !== 0);
+
+    if (!hasMeaningfulCredit) {
+      return;
+    }
+
+    form.setFieldValue(
+      "customer_relationship_details.0.credit_day",
+      creditDay,
+    );
+    form.setFieldValue(
+      "customer_relationship_details.0.credit_amount",
+      creditAmount,
+    );
+    if (commonServiceId != null) {
+      form.setFieldValue(
+        "customer_relationship_details.0.service_id",
+        commonServiceId,
+      );
+      setDisplayNamesMap((prev) => ({
+        ...prev,
+        0: { ...prev[0], service: "Common" },
+      }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromCustomerMaster, customerFormDataFromState, commonServiceId]);
+  }, [
+    fromCustomerMaster,
+    customerFormDataFromState,
+    commonServiceId,
+    isEditMode,
+  ]);
 
   // Function to fetch branches by employee ID for a specific index
   const fetchBranchesByEmployeeId = async (
@@ -889,7 +907,7 @@ function CustomerRelationshipMappingCreate() {
                             withinPortal
                             position="top"
                           >
-                            <Select
+                            <Dropdown
                               key={`branch-select-${index}-${detail.emp_id_input || "none"}`}
                               label="Branch Name"
                               placeholder={
@@ -1040,7 +1058,7 @@ function CustomerRelationshipMappingCreate() {
 
                         {/* Relationship Type - Order 3 */}
                         <Grid.Col span={2}>
-                          <Select
+                          <Dropdown
                             label="Relationship Type"
                             placeholder="Select relationship type"
                             searchable
@@ -1147,18 +1165,24 @@ function CustomerRelationshipMappingCreate() {
 
                         {/* Credit Days */}
                         <Grid.Col span={1.5}>
-                          <TextInput
+                          <FormNumberInput
                             label="Credit Days"
                             placeholder="Days"
-                            value={detail.credit_day}
-                            onChange={(e) => {
-                              const next = e.currentTarget.value.replace(
-                                /\D/g,
-                                "",
-                              );
+                            hideControls
+                            allowDecimal={false}
+                            allowNegative={false}
+                            decimalScale={0}
+                            value={
+                              detail.credit_day === ""
+                                ? ""
+                                : Number(detail.credit_day)
+                            }
+                            onChange={(value) => {
                               form.setFieldValue(
                                 `customer_relationship_details.${index}.credit_day`,
-                                next,
+                                value === "" || value == null
+                                  ? ""
+                                  : String(value),
                               );
                             }}
                             error={
@@ -1174,21 +1198,24 @@ function CustomerRelationshipMappingCreate() {
 
                         {/* Credit Amount */}
                         <Grid.Col span={1.5}>
-                          <TextInput
+                          <FormNumberInput
                             label="Credit Amount"
                             placeholder="Amount"
-                            value={detail.credit_amount}
-                            onChange={(e) => {
-                              const next = e.currentTarget.value;
-                              if (
-                                next === "" ||
-                                /^\d*(\.\d{0,2})?$/.test(next)
-                              ) {
-                                form.setFieldValue(
-                                  `customer_relationship_details.${index}.credit_amount`,
-                                  next,
-                                );
-                              }
+                            hideControls
+                            allowNegative={false}
+                            decimalScale={2}
+                            value={
+                              detail.credit_amount === ""
+                                ? ""
+                                : Number(detail.credit_amount)
+                            }
+                            onChange={(value) => {
+                              form.setFieldValue(
+                                `customer_relationship_details.${index}.credit_amount`,
+                                value === "" || value == null
+                                  ? ""
+                                  : String(value),
+                              );
                             }}
                             error={
                               form.errors[

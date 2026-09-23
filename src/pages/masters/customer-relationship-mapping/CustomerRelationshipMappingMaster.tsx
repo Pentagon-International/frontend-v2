@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ToastNotification, SearchableSelect } from "../../../components";
+import {
+  ToastNotification,
+  SearchableSelect,
+  Dropdown,
+  FormTextInput,
+} from "../../../components";
 import { URL } from "../../../api/serverUrls";
 import {
   MantineReactTable,
@@ -17,10 +22,8 @@ import {
   Card,
   Center,
   Loader,
-  Select,
   Stack,
   Grid,
-  TextInput,
 } from "@mantine/core";
 import {
   IconDotsVertical,
@@ -788,7 +791,7 @@ function CustomerRelationshipMappingMaster() {
 
               {/* Relationship Type Filter */}
               <Grid.Col span={3}>
-                <TextInput
+                <FormTextInput
                   size="xs"
                   label="Relationship Type"
                   placeholder="Enter relationship type"
@@ -859,7 +862,7 @@ function CustomerRelationshipMappingMaster() {
                 <Text size="sm" c="dimmed">
                   Rows per page
                 </Text>
-                <Select
+                <Dropdown
                   size="xs"
                   data={["10", "25", "50"]}
                   value={String(pageSize)}

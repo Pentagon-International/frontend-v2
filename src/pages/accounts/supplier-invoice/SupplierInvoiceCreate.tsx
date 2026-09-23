@@ -1825,7 +1825,8 @@ export default function SupplierInvoiceCreate({
     let cancelled = false;
     void (async () => {
       let serviceIdForCredit = fallbackServiceIdFromState;
-      const firstShipment = (form.values.charges ?? [])
+      // Form stores rows on charges_data (not charges) — required to resolve service_id from shipment.
+      const firstShipment = (form.values.charges_data ?? [])
         .map((c: { shipment_no?: string }) => String(c.shipment_no ?? "").trim())
         .find((s: string) => s.length > 0);
       if (serviceIdForCredit == null && firstShipment) {
@@ -1862,7 +1863,7 @@ export default function SupplierInvoiceCreate({
   }, [
     form.values.agent_code,
     form.values.date,
-    form.values.charges,
+    form.values.charges_data,
     vendorAddress,
     isViewMode,
     isReversal,
