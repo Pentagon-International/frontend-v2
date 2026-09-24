@@ -178,6 +178,7 @@ export function normalizeProfitStatus(status?: string | null): string {
 }
 
 const PROFIT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending for verification",
   sent_to_accounts: "Sent to Accounts",
   accounts_verified: "Account Verified",
   sent_to_verify: "Pending for verification",
@@ -189,6 +190,12 @@ const PROFIT_STATUS_LABELS: Record<string, string> = {
   hold_confirmed: "Approved",
   hold_rejected: "Rejected",
 };
+
+/** House can still be sent to Accounts when status is empty or `pending`. */
+export function isHousePendingForAccountsSend(status?: string | null): boolean {
+  const key = normalizeProfitStatus(status);
+  return !key || key === "pending";
+}
 
 export const PROFIT_STATUS_FILTER_OPTIONS = [
   { value: "sent_to_accounts", label: PROFIT_STATUS_LABELS.sent_to_accounts },

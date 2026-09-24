@@ -157,6 +157,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
 import { getMasterShipmentNo } from "../../../utils/vendorInvoiceAutomation";
 import {
@@ -171,6 +172,7 @@ import {
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { navigateWithReturnTo } from "../../../utils/globalSearchNavigation";
 import {
   parseJobSaveResponse,
   resolveSavedJobId,
@@ -470,6 +472,7 @@ const containerDetailsFormSchema = yup.object({
 type HousingDetail = HouseDocumentFields & {
   id?: number | string;
   shipment_id: string;
+  status?: string | null;
   hbl_number: string;
   house_date: Date | null;
   booking_id?: number | null;
@@ -828,13 +831,16 @@ function ImportJobCreate() {
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const skipUnsavedTrackingRef = useRef(true);
+  const leaveJobPage = () => {
+    navigateWithReturnTo(navigate, location.state, jobModuleBasePath);
+  };
   const handleBackToListClick = () => {
     // Only warn on Back to List when the user actually changed something.
     if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate(jobModuleBasePath);
+    leaveJobPage();
   };
 
   // When navigated from Customer Service Import with jobId only - fetch job and show
@@ -862,6 +868,8 @@ function ImportJobCreate() {
             state: {
               job,
               returnTo: location.state?.returnTo,
+              returnToState: location.state?.returnToState,
+              fromGlobalSearch: location.state?.fromGlobalSearch,
               viewMode: location.state?.viewMode,
             },
             replace: true,
@@ -1389,6 +1397,7 @@ function ImportJobCreate() {
                   : Number(house.id)
                 : undefined,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
+              status: house.status != null ? String(house.status) : null,
               hbl_number: house.hbl_number ? String(house.hbl_number) : "",
               ...readChaHouseBlFromApi(house),
               house_date: house.house_date
@@ -4585,6 +4594,18 @@ function ImportJobCreate() {
                         getShipmentIds={() =>
                           housingDetails.map((house) => house.shipment_id)
                         }
+                        getStatuses={() =>
+                          housingDetails.map((house) => house.status)
+                        }
+                        onSuccess={(ids) => {
+                          setHousingDetails((prev) =>
+                            prev.map((h) =>
+                              ids.includes(String(h.shipment_id ?? "").trim())
+                                ? { ...h, status: "sent_to_accounts" }
+                                : h,
+                            ),
+                          );
+                        }}
                       />
                       <Menu.Item
                       leftSection={
@@ -6843,7 +6864,9 @@ function ImportJobCreate() {
             leftSection={<IconArrowLeft size={16} />}
             onClick={handleBackToListClick}
           >
-            Back to List
+            {String(location.state?.returnTo ?? "").trim() === "/job-ledger"
+              ? "Back"
+              : "Back to List"}
           </Button>
           {(active === 1 ||
             active === 2 ||
@@ -6972,7 +6995,7 @@ function ImportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate(jobModuleBasePath);
+              leaveJobPage();
             }}
           >
             Leave without saving
@@ -7017,6 +7040,9 @@ function ImportJobCreate() {
                         Shipment Id : {house.shipment_id}
                       </Badge>
                     )}
+                    {house.status ? (
+                      <JobProfitStatusPill status={house.status} />
+                    ) : null}
                   </Group>
                   {isViewOnly ? (
                     <Button
@@ -7273,6 +7299,16 @@ function ImportJobCreate() {
                           <SendForVerificationMenuItem
                             jobId={jobData?.id}
                             getShipmentIds={() => [house.shipment_id]}
+                            getStatuses={() => [house.status]}
+                            onSuccess={(ids) => {
+                              setHousingDetails((prev) =>
+                                prev.map((h) =>
+                                  ids.includes(String(h.shipment_id ?? "").trim())
+                                    ? { ...h, status: "sent_to_accounts" }
+                                    : h,
+                                ),
+                              );
+                            }}
                           />
                           <HouseJobLedgerMenuItem
                             serviceName="Ocean Import"

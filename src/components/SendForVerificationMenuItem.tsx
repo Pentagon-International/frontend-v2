@@ -15,10 +15,19 @@ import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
 import { defaultTheme } from "../theme/brandThemeDefault";
 import ToastNotification from "./ToastNotification";
+import { isHousePendingForAccountsSend } from "../utils/jobProfitHouseVerification";
 
 type SendForVerificationMenuItemProps = {
   /** Returns house shipment_id values to include in the PATCH payload. */
   getShipmentIds: () => Array<string | number | null | undefined>;
+  /**
+   * Optional statuses aligned with `getShipmentIds` order.
+   * Non-pending houses are skipped; if none remain, shows
+   * "Already sent for verification".
+   */
+  getStatuses?: () => Array<string | null | undefined>;
+  /** Called after a successful send (with the shipment ids that were sent). */
+  onSuccess?: (shipmentIds: string[]) => void;
   /**
    * When provided, the item is hidden until the job has been saved
    * (same pattern as other house action menu items).
@@ -59,6 +68,30 @@ function normalizeShipmentIds(
     ids.push(id);
   }
   return ids;
+}
+
+function pickPendingShipmentIds(
+  shipmentIds: Array<string | number | null | undefined>,
+  statuses?: Array<string | null | undefined>,
+): { pendingIds: string[]; hadNonPending: boolean } {
+  const seen = new Set<string>();
+  const pendingIds: string[] = [];
+  let hadNonPending = false;
+
+  for (let i = 0; i < shipmentIds.length; i++) {
+    const id = String(shipmentIds[i] ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+
+    const status = statuses?.[i];
+    if (statuses != null && !isHousePendingForAccountsSend(status)) {
+      hadNonPending = true;
+      continue;
+    }
+    pendingIds.push(id);
+  }
+
+  return { pendingIds, hadNonPending };
 }
 
 function ConfirmSendForVerificationModal({
@@ -138,7 +171,10 @@ async function sendHousesForVerification(shipmentIds: string[]) {
 /**
  * Confirm + PATCH outside the Menu tree so the dialog survives dropdown unmount.
  */
-function runSendForVerificationFlow(shipmentIds: string[]) {
+function runSendForVerificationFlow(
+  shipmentIds: string[],
+  onSuccess?: (shipmentIds: string[]) => void,
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root: Root = createRoot(container);
@@ -178,6 +214,7 @@ function runSendForVerificationFlow(shipmentIds: string[]) {
                         ? "House sent to Accounts successfully"
                         : "Houses sent to Accounts successfully"),
                   });
+                  onSuccess?.(shipmentIds);
                   destroy();
                 } catch (err: unknown) {
                   loading = false;
@@ -203,6 +240,8 @@ function runSendForVerificationFlow(shipmentIds: string[]) {
 
 export function SendForVerificationMenuItem({
   getShipmentIds,
+  getStatuses,
+  onSuccess,
   jobId,
 }: SendForVerificationMenuItemProps) {
   if (jobId !== undefined && jobId == null) return null;
@@ -225,15 +264,29 @@ export function SendForVerificationMenuItem({
       }
       styles={menuItemStyles}
       onClick={() => {
-        const ids = normalizeShipmentIds(getShipmentIds());
-        if (ids.length === 0) {
+        const rawIds = getShipmentIds();
+        const statuses = getStatuses?.();
+        const { pendingIds, hadNonPending } = pickPendingShipmentIds(
+          rawIds,
+          statuses,
+        );
+
+        if (pendingIds.length === 0) {
+          if (hadNonPending || normalizeShipmentIds(rawIds).length > 0) {
+            ToastNotification({
+              type: "warning",
+              message: "Already sent for verification",
+            });
+            return;
+          }
           ToastNotification({
             type: "error",
             message: "Shipment number not found to send to Accounts.",
           });
           return;
         }
-        runSendForVerificationFlow(ids);
+
+        runSendForVerificationFlow(pendingIds, onSuccess);
       }}
     >
       Send to Accounts

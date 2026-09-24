@@ -107,6 +107,11 @@ import {
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
 import { buildMasterJobCreatePrqPrefill } from "../../../utils/paymentRequestChargePrefill";
+import {
+  SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+  hasNonAlphanumericCharacters,
+  specialCharactersErrorIfNonAlphanumeric,
+} from "../../../utils/specialCharactersFieldValidation";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   buildJobCreatePayloadFromBooking,
@@ -132,6 +137,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
 import { getMasterShipmentNo } from "../../../utils/vendorInvoiceAutomation";
 import {
@@ -167,6 +173,7 @@ import {
   type AirExportAirPdfDocument,
 } from "../../../utils/airWayBillPdf";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { navigateWithReturnTo } from "../../../utils/globalSearchNavigation";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -259,6 +266,7 @@ type HAWBDetail = HouseDocumentFields & {
   id: number;
   booking_id?: number | null;
   shipment_id: string;
+  status?: string | null;
   hawb_no: string;
   routed: string;
   routed_by?: string;
@@ -404,9 +412,14 @@ const carrierDetailsSchema = yup.object({
   mawb_number: yup
     .string()
     .required("MAWB Number is required")
+    .test(
+      "no-special-chars",
+      SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+      (value) => !hasNonAlphanumericCharacters(value),
+    )
     .matches(
       /^[A-Za-z0-9]{11}$/,
-      "MAWB Number must be exactly 11 alphanumeric characters (no symbols)",
+      "MAWB Number must be exactly 11 characters (no symbols)",
     ),
   mawb_date: yup.date().nullable(),
 });
@@ -641,13 +654,16 @@ function AirExportJobCreate() {
   const documentsReadOnly = isViewOnly;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
+  const leaveJobPage = () => {
+    navigateWithReturnTo(navigate, location.state, jobModuleBasePath);
+  };
   const handleBackToListClick = () => {
     // Confirm before leaving so unsaved edits are not discarded silently.
     if (!isReadOnly) {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate(jobModuleBasePath);
+    leaveJobPage();
   };
 
   // When navigated from Customer Service (Jobs without BL) with jobId only - fetch job and show
@@ -675,6 +691,8 @@ function AirExportJobCreate() {
             state: {
               job,
               returnTo: location.state?.returnTo,
+              returnToState: location.state?.returnToState,
+              fromGlobalSearch: location.state?.fromGlobalSearch,
               viewMode: location.state?.viewMode,
             },
             replace: true,
@@ -1215,6 +1233,7 @@ function AirExportJobCreate() {
                   ? Number(house.booking_id)
                   : null,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
+              status: house.status != null ? String(house.status) : null,
               hawb_no: house.hawb_no ? String(house.hawb_no) : "",
               ...readChaHouseBlFromApi(house as Record<string, unknown>),
               routed: house.routed
@@ -3651,6 +3670,18 @@ function AirExportJobCreate() {
                       getShipmentIds={() =>
                         hawbDetails.map((hawb) => hawb.shipment_id)
                       }
+                      getStatuses={() =>
+                        hawbDetails.map((hawb) => hawb.status)
+                      }
+                      onSuccess={(ids) => {
+                        setHawbDetails((prev) =>
+                          prev.map((h) =>
+                            ids.includes(String(h.shipment_id ?? "").trim())
+                              ? { ...h, status: "sent_to_accounts" }
+                              : h,
+                          ),
+                        );
+                      }}
                     />
                   )}
 
@@ -4215,10 +4246,21 @@ function AirExportJobCreate() {
                   value={carrierDetailsForm.values.mawb_number}
                   error={carrierDetailsForm.errors.mawb_number}
                   onChange={(e) => {
-                    const cleaned = e.currentTarget.value
-                      .replace(/[^A-Za-z0-9]/g, "")
-                      .slice(0, 11);
-                    carrierDetailsForm.setFieldValue("mawb_number", cleaned);
+                    const value = e.currentTarget.value.slice(0, 11);
+                    carrierDetailsForm.setFieldValue("mawb_number", value);
+                    const specialErr =
+                      specialCharactersErrorIfNonAlphanumeric(value);
+                    if (specialErr) {
+                      carrierDetailsForm.setFieldError(
+                        "mawb_number",
+                        specialErr,
+                      );
+                    } else if (
+                      carrierDetailsForm.errors.mawb_number ===
+                      SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE
+                    ) {
+                      carrierDetailsForm.clearFieldError("mawb_number");
+                    }
                   }}
                   onBlur={() =>
                     carrierDetailsForm.validateField("mawb_number")
@@ -5279,7 +5321,9 @@ function AirExportJobCreate() {
             leftSection={<IconArrowLeft size={16} />}
             onClick={handleBackToListClick}
           >
-            Back to List
+            {String(location.state?.returnTo ?? "").trim() === "/job-ledger"
+              ? "Back"
+              : "Back to List"}
           </Button>
           {(active === 1 ||
             active === 2 ||
@@ -5399,7 +5443,7 @@ function AirExportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate(jobModuleBasePath);
+              leaveJobPage();
             }}
           >
             Yes, close
@@ -5733,6 +5777,9 @@ function AirExportJobCreate() {
                         Shipment Id : {hawb.shipment_id}
                       </Badge>
                     )}
+                    {hawb.status ? (
+                      <JobProfitStatusPill status={hawb.status} />
+                    ) : null}
                   </Group>
                   <Group gap="xs">
                     {isViewOnly && (
@@ -5911,6 +5958,16 @@ function AirExportJobCreate() {
                         <SendForVerificationMenuItem
                           jobId={jobData?.id}
                           getShipmentIds={() => [hawb.shipment_id]}
+                          getStatuses={() => [hawb.status]}
+                          onSuccess={(ids) => {
+                            setHawbDetails((prev) =>
+                              prev.map((h) =>
+                                ids.includes(String(h.shipment_id ?? "").trim())
+                                  ? { ...h, status: "sent_to_accounts" }
+                                  : h,
+                              ),
+                            );
+                          }}
                         />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Export"

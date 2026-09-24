@@ -27,6 +27,24 @@ export type GlobalSearchNavigateOptions = {
   returnToState?: unknown;
 };
 
+/** Prefer location.state.returnTo (from global search) over the module list path. */
+export function navigateWithReturnTo(
+  navigate: NavigateFunction,
+  locationState: unknown,
+  fallbackPath: string,
+): void {
+  const state = (locationState ?? {}) as GlobalSearchNavigateOptions;
+  const returnTo = state.returnTo?.trim() ?? "";
+  if (returnTo) {
+    navigate(
+      returnTo,
+      state.returnToState != null ? { state: state.returnToState } : undefined,
+    );
+    return;
+  }
+  navigate(fallbackPath);
+}
+
 const parseJsonIfString = (value: unknown): unknown => {
   if (typeof value !== "string") return value;
   try {

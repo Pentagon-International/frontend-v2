@@ -143,6 +143,7 @@ import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceA
 import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import {
   JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
   JOB_HOUSE_ACTION_MENU_WIDTH,
@@ -172,6 +173,10 @@ import RequiredLabel from "../../../components/RequiredLabel";
 import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
 import FormTextArea from "../../../components/FormTextArea";
 import FormNumberInput from "../../../components/FormNumberInput";
+import {
+  SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+  hasInvalidNumericInputCharacters,
+} from "../../../utils/specialCharactersFieldValidation";
 import { commonSearchAPI } from "../../../service/searchApi";
 import {
   fetchAirWayBillLabelPdf,
@@ -2545,6 +2550,8 @@ function HouseCreate() {
           null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      status:
+        (editData as { status?: string | null } | undefined)?.status ?? null,
       consignee_name: v.consignee_name,
       consignee_code:
         resolveCustomerMasterCode(
@@ -3054,6 +3061,9 @@ function HouseCreate() {
               Shipment ID: {editData.shipment_id}
             </Badge>
           )}
+          {editData?.status ? (
+            <JobProfitStatusPill status={editData.status} />
+          ) : null}
         </Group>
         {/* Save button moved to top */}
         <Group>
@@ -3255,6 +3265,7 @@ function HouseCreate() {
               <SendForVerificationMenuItem
                 jobId={location.state?.job?.id}
                 getShipmentIds={() => [getCurrentHousingDetail().shipment_id]}
+                getStatuses={() => [getCurrentHousingDetail().status]}
               />
               <HouseJobLedgerMenuItem
                 serviceName="Air Export"
@@ -4891,6 +4902,21 @@ function HouseCreate() {
                           setCargoErrors(newErrors);
                         }
                       }}
+                      onBlur={(e) => {
+                        const raw = e.currentTarget.value
+                          .replace(/,/g, "")
+                          .trim();
+                        if (raw && hasInvalidNumericInputCharacters(raw)) {
+                          setCargoErrors((prev) => ({
+                            ...prev,
+                            [index]: {
+                              ...prev[index],
+                              no_of_packages:
+                                SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+                            },
+                          }));
+                        }
+                      }}
                       error={cargoErrors[index]?.no_of_packages}
                     />
                   </Grid.Col>
@@ -4931,6 +4957,17 @@ function HouseCreate() {
                         const raw = e.currentTarget.value
                           .replace(/,/g, "")
                           .trim();
+                        if (raw && hasInvalidNumericInputCharacters(raw)) {
+                          setCargoErrors((prev) => ({
+                            ...prev,
+                            [index]: {
+                              ...prev[index],
+                              gross_weight:
+                                SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+                            },
+                          }));
+                          return;
+                        }
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
@@ -4985,6 +5022,16 @@ function HouseCreate() {
                         const raw = e.currentTarget.value
                           .replace(/,/g, "")
                           .trim();
+                        if (raw && hasInvalidNumericInputCharacters(raw)) {
+                          setCargoErrors((prev) => ({
+                            ...prev,
+                            [index]: {
+                              ...prev[index],
+                              volume: SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+                            },
+                          }));
+                          return;
+                        }
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(

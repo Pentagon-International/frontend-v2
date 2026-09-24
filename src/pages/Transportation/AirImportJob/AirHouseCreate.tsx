@@ -139,6 +139,7 @@ import { VendorInvoiceAutomationModal } from "../../../components/VendorInvoiceA
 import { PaymentRequestAutomationModal } from "../../../components/PaymentRequestAutomationModal";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import {
   JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
   JOB_HOUSE_ACTION_MENU_WIDTH,
@@ -165,6 +166,12 @@ import RequiredLabel from "../../../components/RequiredLabel";
 import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
 import FormTextArea from "../../../components/FormTextArea";
 import FormNumberInput from "../../../components/FormNumberInput";
+import {
+  SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+  hasInvalidNumericInputCharacters,
+  specialCharactersErrorIfNonAlphanumeric,
+  specialCharactersErrorIfNonNumeric,
+} from "../../../utils/specialCharactersFieldValidation";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import {
   formatChaHouseBlPayload,
@@ -2243,6 +2250,12 @@ function HouseCreate() {
     if (!form.values.hawb_no?.trim()) {
       errors.hawb_no = "HAWB Number is required";
     }
+    const subItemSpecialErr = specialCharactersErrorIfNonAlphanumeric(
+      form.values.sub_item_no,
+    );
+    if (subItemSpecialErr) {
+      errors.sub_item_no = subItemSpecialErr;
+    }
     if (!form.values.origin_code?.trim()) {
       errors.origin_code = "Origin is required";
     }
@@ -2491,6 +2504,8 @@ function HouseCreate() {
           null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      status:
+        (editData as { status?: string | null } | undefined)?.status ?? null,
       consignee_code: v.consignee_code,
       consignee_name: v.consignee_name,
       consignee_address: v.consignee_address,
@@ -3026,6 +3041,9 @@ function HouseCreate() {
               Shipment ID: {editData.shipment_id}
             </Badge>
           )}
+          {editData?.status ? (
+            <JobProfitStatusPill status={editData.status} />
+          ) : null}
         </Group>
         {/* Save button moved to top */}
         <Group>
@@ -3318,6 +3336,7 @@ function HouseCreate() {
               <SendForVerificationMenuItem
                 jobId={location.state?.job?.id}
                 getShipmentIds={() => [getCurrentHousingDetail().shipment_id]}
+                getStatuses={() => [getCurrentHousingDetail().status]}
               />
               <HouseJobLedgerMenuItem
                 serviceName="Air Import"
@@ -3777,7 +3796,21 @@ function HouseCreate() {
                   format="capital"
                   label="Sub Item Number"
                   placeholder="Enter Sub Item Number"
-                  {...form.getInputProps("sub_item_no")}
+                  value={form.values.sub_item_no}
+                  onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    form.setFieldValue("sub_item_no", value);
+                    const specialErr =
+                      specialCharactersErrorIfNonNumeric(value);
+                    if (specialErr) {
+                      form.setFieldError("sub_item_no", specialErr);
+                    } else if (
+                      form.errors.sub_item_no ===
+                      SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE
+                    ) {
+                      form.clearFieldError("sub_item_no");
+                    }
+                  }}
                   error={form.errors.sub_item_no}
                 />
               </Grid.Col>
@@ -4566,6 +4599,21 @@ function HouseCreate() {
                           setCargoErrors(newErrors);
                         }
                       }}
+                      onBlur={(e) => {
+                        const raw = e.currentTarget.value
+                          .replace(/,/g, "")
+                          .trim();
+                        if (raw && hasInvalidNumericInputCharacters(raw)) {
+                          setCargoErrors((prev) => ({
+                            ...prev,
+                            [index]: {
+                              ...prev[index],
+                              no_of_packages:
+                                SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+                            },
+                          }));
+                        }
+                      }}
                       error={cargoErrors[index]?.no_of_packages}
                     />
                   </Grid.Col>
@@ -4605,6 +4653,17 @@ function HouseCreate() {
                         const raw = e.currentTarget.value
                           .replace(/,/g, "")
                           .trim();
+                        if (raw && hasInvalidNumericInputCharacters(raw)) {
+                          setCargoErrors((prev) => ({
+                            ...prev,
+                            [index]: {
+                              ...prev[index],
+                              gross_weight:
+                                SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+                            },
+                          }));
+                          return;
+                        }
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(
@@ -4658,6 +4717,16 @@ function HouseCreate() {
                         const raw = e.currentTarget.value
                           .replace(/,/g, "")
                           .trim();
+                        if (raw && hasInvalidNumericInputCharacters(raw)) {
+                          setCargoErrors((prev) => ({
+                            ...prev,
+                            [index]: {
+                              ...prev[index],
+                              volume: SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
+                            },
+                          }));
+                          return;
+                        }
                         if (!raw) return;
                         const updated = [...cargoDetails];
                         updated[index] = withRecalculatedChargeableWeight(

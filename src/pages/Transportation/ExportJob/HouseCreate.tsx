@@ -164,6 +164,7 @@ import SendPdfEmailModal from "../../../components/SendPdfEmailModal";
 import { useDisclosure } from "@mantine/hooks";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import {
   JOB_HOUSE_ACTION_MENU_DROPDOWN_STYLES,
   JOB_HOUSE_ACTION_MENU_WIDTH,
@@ -3031,6 +3032,8 @@ function HouseCreate() {
           null),
       shipment_id:
         (editData as { shipment_id?: string } | undefined)?.shipment_id ?? null,
+      status:
+        (editData as { status?: string | null } | undefined)?.status ?? null,
       consignee_name: v.consignee_name,
       consignee_gst_id:
         (v as { consignee_gst_id?: string }).consignee_gst_id ??
@@ -3418,6 +3421,9 @@ function HouseCreate() {
               Shipment ID: {editData.shipment_id}
             </Badge>
           )}
+          {editData?.status ? (
+            <JobProfitStatusPill status={editData.status} />
+          ) : null}
         </Group>
         {/* Save button moved to top */}
         <Group>
@@ -3697,6 +3703,7 @@ function HouseCreate() {
               <SendForVerificationMenuItem
                 jobId={location.state?.job?.id}
                 getShipmentIds={() => [getCurrentHousingDetail().shipment_id]}
+                getStatuses={() => [getCurrentHousingDetail().status]}
               />
               <HouseJobLedgerMenuItem
                 serviceName="Ocean Export"

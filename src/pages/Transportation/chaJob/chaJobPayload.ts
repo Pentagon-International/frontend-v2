@@ -49,6 +49,10 @@ function mapHousingForChaServiceJob(
       house.shipment_id !== "" && {
         shipment_id: house.shipment_id,
       }),
+    ...(house.status != null &&
+      String(house.status).trim() !== "" && {
+        status: String(house.status).trim(),
+      }),
     pp_cc: house.pp_cc ?? null,
     routed: house.routed ?? null,
     routed_by: house.routed_by ?? null,

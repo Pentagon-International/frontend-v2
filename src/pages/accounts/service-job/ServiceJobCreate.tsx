@@ -38,6 +38,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
+import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
 import { ERPListJobStatusPill } from "../../../components";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
@@ -1418,6 +1420,7 @@ export default function ServiceJobCreate() {
   const [houseMeta, setHouseMeta] = useState<{
     id?: number;
     shipment_id?: string;
+    status?: string | null;
   }>({});
 
   const form = useForm<ServiceJobFormValues>({
@@ -1632,6 +1635,7 @@ export default function ServiceJobCreate() {
             : house.shipment_no
               ? String(house.shipment_no)
               : undefined,
+          status: house.status != null ? String(house.status) : null,
         });
       }
 
@@ -2421,6 +2425,14 @@ export default function ServiceJobCreate() {
               status={(jobData as { status?: string | null } | null)?.status}
             />
           )}
+          {houseMeta.shipment_id ? (
+            <Badge color="#105476" size="md" variant="light">
+              Shipment ID: {houseMeta.shipment_id}
+            </Badge>
+          ) : null}
+          {houseMeta.status ? (
+            <JobProfitStatusPill status={houseMeta.status} />
+          ) : null}
         </Group>
         {!isReadOnly ? (
           <Group gap="sm">
@@ -2534,6 +2546,17 @@ export default function ServiceJobCreate() {
                   >
                     Job Cost Sheet
                   </Menu.Item>
+                  <SendForVerificationMenuItem
+                    jobId={(jobData as { id?: number } | null)?.id}
+                    getShipmentIds={() => [houseMeta.shipment_id]}
+                    getStatuses={() => [houseMeta.status]}
+                    onSuccess={() => {
+                      setHouseMeta((prev) => ({
+                        ...prev,
+                        status: "sent_to_accounts",
+                      }));
+                    }}
+                  />
                 </Menu.Dropdown>
               </Menu>
             )}

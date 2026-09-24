@@ -548,16 +548,53 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       ...(jobReturnTo ? { jobReturnTo } : {}),
       ...(jobReturnToState != null ? { jobReturnToState } : {}),
       ...(navState?.job ? { job: navState.job } : {}),
+      ...(fromProfitVerification
+        ? {
+            fromJobProfitVerification: true,
+            shipment_id: profitShipmentId || undefined,
+            is_sales: profitIsSales,
+            status: profitStatus,
+            brokerage:
+              brokerageAmount != null &&
+              Number.isFinite(Number(brokerageAmount))
+                ? Number(brokerageAmount)
+                : null,
+            brokerage_remark: brokerageRemark || null,
+            accounts_verified: accountsVerified,
+            accounts_by: accountsBy,
+            accounts_at: accountsAt,
+            salesperson_verified: salespersonVerified,
+            verified: salespersonVerified,
+            verified_by: profitVerifiedBy,
+            verified_at: profitVerifiedAt,
+            confirmed_by: profitConfirmedBy,
+            confirmed_at: profitConfirmedAt,
+          }
+        : {}),
     }),
     [
+      accountsAt,
+      accountsBy,
+      accountsVerified,
+      brokerageAmount,
+      brokerageRemark,
       filters.jobNo,
       filters.location,
       filters.segmentCode,
       filters.hbl_hawb_no,
+      fromProfitVerification,
       jobReturnTo,
       jobReturnToState,
       navState?.job,
       navState?.service_name,
+      profitConfirmedAt,
+      profitConfirmedBy,
+      profitIsSales,
+      profitShipmentId,
+      profitStatus,
+      profitVerifiedAt,
+      profitVerifiedBy,
+      salespersonVerified,
     ],
   );
 
@@ -1787,6 +1824,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     ),
   });
 
+  const jobHeaderLabel = String(
+    jobLedgerJobLabel || filters.jobNo || "",
+  ).trim();
+
   return (
     <Box p="md" style={{ position: "relative" }}>
       {documentNavLoading && (
@@ -2416,9 +2457,23 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               >
                 Job:
               </Text>
-              <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
-                {jobLedgerJobLabel || filters.jobNo || "-"}
-              </Text>
+              {jobHeaderLabel ? (
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="lg"
+                  c="#105476"
+                  td="underline"
+                  style={{ fontFamily: "Inter", cursor: "pointer" }}
+                  onClick={() => void handleDocumentNumberClick(jobHeaderLabel)}
+                >
+                  {jobHeaderLabel}
+                </Anchor>
+              ) : (
+                <Text size="lg" c="dimmed" style={{ fontFamily: "Inter" }}>
+                  -
+                </Text>
+              )}
             </Group>
             <Button
               variant={showFilters ? "filled" : "outline"}

@@ -126,6 +126,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { HouseEventsMenuItem } from "../../../components/HouseEventsMenuItem";
 import { HouseJobLedgerMenuItem } from "../../../components/HouseJobLedgerMenuItem";
 import { SendForVerificationMenuItem } from "../../../components/SendForVerificationMenuItem";
+import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import { ClosedJobMasterLedgerMenu } from "../../../components/ClosedJobMasterLedgerMenu";
 import { getMasterShipmentNo } from "../../../utils/vendorInvoiceAutomation";
 import {
@@ -153,6 +154,7 @@ import {
   withInlandImportJobServiceFields,
 } from "./inlandImportJobService";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
+import { navigateWithReturnTo } from "../../../utils/globalSearchNavigation";
 
 type ServiceMasterItem = {
   service_code: string;
@@ -253,6 +255,7 @@ type RoutingDetail = {
 type HAWBDetail = HouseDocumentFields & {
   id: number;
   shipment_id: string;
+  status?: string | null;
   hawb_number: string;
   routed: string;
   routed_by?: string;
@@ -634,13 +637,16 @@ function InlandImportJobCreate() {
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const skipUnsavedTrackingRef = useRef(true);
+  const leaveJobPage = () => {
+    navigateWithReturnTo(navigate, location.state, jobModuleBasePath);
+  };
   const handleBackToListClick = () => {
     // Only warn on Back to List when the user actually changed something.
     if (!isReadOnly && hasUnsavedChanges) {
       setConfirmBackToListOpen(true);
       return;
     }
-    navigate(jobModuleBasePath);
+    leaveJobPage();
   };
 
   // Fetch full job only when navigated with jobId and no job payload (e.g. deep link).
@@ -676,6 +682,8 @@ function InlandImportJobCreate() {
             state: {
               job,
               returnTo: location.state?.returnTo,
+              returnToState: location.state?.returnToState,
+              fromGlobalSearch: location.state?.fromGlobalSearch,
               viewMode: location.state?.viewMode,
             },
             replace: true,
@@ -1272,6 +1280,7 @@ function InlandImportJobCreate() {
             (house: Record<string, unknown>) => ({
               id: house.id ? Number(house.id) : 0,
               shipment_id: house.shipment_id ? String(house.shipment_id) : "",
+              status: house.status != null ? String(house.status) : null,
               hawb_number:
                 house.hawb_number || house.hawb_no || house.hbl_number
                   ? String(
@@ -3313,6 +3322,18 @@ function InlandImportJobCreate() {
                       getShipmentIds={() =>
                         hawbDetails.map((hawb) => hawb.shipment_id)
                       }
+                      getStatuses={() =>
+                        hawbDetails.map((hawb) => hawb.status)
+                      }
+                      onSuccess={(ids) => {
+                        setHawbDetails((prev) =>
+                          prev.map((h) =>
+                            ids.includes(String(h.shipment_id ?? "").trim())
+                              ? { ...h, status: "sent_to_accounts" }
+                              : h,
+                          ),
+                        );
+                      }}
                     />
                   )}
 
@@ -4697,7 +4718,9 @@ function InlandImportJobCreate() {
             leftSection={<IconArrowLeft size={16} />}
             onClick={handleBackToListClick}
           >
-            Back to List
+            {String(location.state?.returnTo ?? "").trim() === "/job-ledger"
+              ? "Back"
+              : "Back to List"}
           </Button>
           {(active === 1 ||
             active === 2 ||
@@ -4794,7 +4817,7 @@ function InlandImportJobCreate() {
             color="#105476"
             onClick={() => {
               setConfirmBackToListOpen(false);
-              navigate(jobModuleBasePath);
+              leaveJobPage();
             }}
           >
             Leave without saving
@@ -5047,6 +5070,9 @@ function InlandImportJobCreate() {
                         Shipment Id : {hawb.shipment_id}
                       </Badge>
                     )}
+                    {hawb.status ? (
+                      <JobProfitStatusPill status={hawb.status} />
+                    ) : null}
                   </Group>
                   <Group gap="xs">
                     {isViewOnly && (
@@ -5166,6 +5192,16 @@ function InlandImportJobCreate() {
                         <SendForVerificationMenuItem
                           jobId={jobData?.id}
                           getShipmentIds={() => [hawb.shipment_id]}
+                          getStatuses={() => [hawb.status]}
+                          onSuccess={(ids) => {
+                            setHawbDetails((prev) =>
+                              prev.map((h) =>
+                                ids.includes(String(h.shipment_id ?? "").trim())
+                                  ? { ...h, status: "sent_to_accounts" }
+                                  : h,
+                              ),
+                            );
+                          }}
                         />
                         <HouseJobLedgerMenuItem
                           serviceName="Air Import"
