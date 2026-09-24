@@ -3108,6 +3108,9 @@ function HouseCreate() {
   // Shape must match ExportJobCreate house-card BL generator / PDF template fields.
   const generatePDFPreview = (options?: { draft?: boolean }) => {
     try {
+      setBolPreviewRowData(null);
+      setPdfBlob(null);
+      setPreviewHasUnsavedChanges(false);
       setPreviewOpen(true);
       const defaultBranch = user?.branches?.find(
         (branch) => branch.is_default,
@@ -3159,6 +3162,8 @@ function HouseCreate() {
           container_id: c.container_id,
           actual_seal_no:
             (matchedContainer?.actual_seal_no as string | undefined) || "",
+          customs_seal_no:
+            (matchedContainer?.customs_seal_no as string | undefined) || "",
           container_type_name:
             (
               matchedContainer?.container_type_details as
@@ -6681,47 +6686,6 @@ function HouseCreate() {
                   color="#105476"
                   variant="outline"
                   disabled={previewHasUnsavedChanges}
-                >
-                  Send Email
-                </Button>
-              </Group>
-            </>
-          ) : pdfBlob ? (
-            <>
-              <iframe
-                src={pdfBlob}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  border: "none",
-                  borderRadius: "8px",
-                }}
-                title="PDF Preview"
-              />
-              <Group
-                justify="flex-end"
-                p="md"
-                style={{ borderTop: "1px solid #e9ecef" }}
-              >
-                <Button
-                  variant="outline"
-                  onClick={handleClosePreview}
-                  leftSection={<IconX size={16} />}
-                >
-                  Close
-                </Button>
-                <Button
-                  onClick={handleDownloadPDF}
-                  leftSection={<IconDownload size={16} />}
-                  color="#105476"
-                >
-                  Download PDF
-                </Button>
-                <Button
-                  onClick={handleOpenSendEmailForBol}
-                  leftSection={<IconSend size={16} />}
-                  color="#105476"
-                  variant="outline"
                 >
                   Send Email
                 </Button>

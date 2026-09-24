@@ -756,7 +756,8 @@ export const generateUsBillOfLadingPDF = (
   const paymentTerms = freightTerm ? `FREIGHT ${freightTerm}` : "";
 
   const cargoDetailsFromHousing = housingData?.cargo_details || [];
-  const containerDetailsFromJob = jobData?.container_details || [];
+  const containerDetailsFromJob =
+    jobData?.container_details || jobData?.containerDetails || [];
   // Match cargo_details with container_details for seal / container type (Marks column)
   const enrichedCargoDetails = cargoDetailsFromHousing.map((cargo: any) => {
     const matchingContainer = containerDetailsFromJob.find(
@@ -764,11 +765,15 @@ export const generateUsBillOfLadingPDF = (
     );
     return {
       ...cargo,
+      // Use ?? so an explicit clear ("") from the PDF editor is not restored from containers
       actual_seal_no:
-        cargo.actual_seal_no || matchingContainer?.actual_seal_no || "",
+        cargo.actual_seal_no ?? matchingContainer?.actual_seal_no ?? "",
+      customs_seal_no:
+        cargo.customs_seal_no ?? matchingContainer?.customs_seal_no ?? "",
       container_type_name:
         cargo.container_type_name ||
         matchingContainer?.container_type_details?.container_type_name ||
+        matchingContainer?.container_type_name ||
         "",
     };
   });
@@ -1239,7 +1244,9 @@ export const generateUsBillOfLadingPDF = (
     if (cargo?.container_type_name)
       entryLines.push(String(cargo.container_type_name));
     if (cargo?.actual_seal_no)
-      entryLines.push(`Seal No: ${cargo.actual_seal_no}`);
+      entryLines.push(`Actual Seal No: ${cargo.actual_seal_no}`);
+    if (cargo?.customs_seal_no)
+      entryLines.push(`Customs Seal No: ${cargo.customs_seal_no}`);
     if (cargo?.gross_weight)
       entryLines.push(`Gross Wt: ${cargo.gross_weight} KGS`);
     if (

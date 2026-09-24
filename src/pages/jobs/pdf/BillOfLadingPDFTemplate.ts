@@ -708,9 +708,10 @@ export const generateBillOfLadingPDF = (
 
     // Container Details - Enrich cargo_details with container_details data
     const cargoDetailsFromHousing = housingData?.cargo_details || [];
-    const containerDetailsFromJob = jobData?.container_details || [];
+    const containerDetailsFromJob =
+      jobData?.container_details || jobData?.containerDetails || [];
     
-    // Match cargo_details with container_details to get actual_seal_no and container_type_name
+    // Match cargo_details with container_details to get seal nos and container_type_name
     const containerDetails = cargoDetailsFromHousing.map((cargo: any) => {
       // Find matching container_detail by container_no
       const matchingContainer = containerDetailsFromJob.find(
@@ -719,8 +720,16 @@ export const generateBillOfLadingPDF = (
       
       return {
         ...cargo,
-        actual_seal_no: cargo.actual_seal_no || matchingContainer?.actual_seal_no || "",
-        container_type_name: cargo.container_type_name || matchingContainer?.container_type_details?.container_type_name || "",
+        // Use ?? so an explicit clear ("") from the PDF editor is not restored from containers
+        actual_seal_no:
+          cargo.actual_seal_no ?? matchingContainer?.actual_seal_no ?? "",
+        customs_seal_no:
+          cargo.customs_seal_no ?? matchingContainer?.customs_seal_no ?? "",
+        container_type_name:
+          cargo.container_type_name ||
+          matchingContainer?.container_type_details?.container_type_name ||
+          matchingContainer?.container_type_name ||
+          "",
       };
     });
 
@@ -1552,7 +1561,8 @@ export const generateBillOfLadingPDF = (
       const lines: string[] = [];
       if (cargo?.container_no) lines.push(cargo.container_no);
       if (cargo?.container_type_name) lines.push(cargo.container_type_name);
-      if (cargo?.actual_seal_no) lines.push(`Seal No: ${cargo.actual_seal_no}`);
+      if (cargo?.actual_seal_no) lines.push(`Actual Seal No: ${cargo.actual_seal_no}`);
+      if (cargo?.customs_seal_no) lines.push(`Customs Seal No: ${cargo.customs_seal_no}`);
       if (cargo?.gross_weight) lines.push(`Gross Wt: ${cargo.gross_weight} KGS`);
       if (cargo?.volume !== undefined && cargo?.volume !== null && cargo?.volume !== "") {
         lines.push(`Volume: ${cargo.volume} CBM`);

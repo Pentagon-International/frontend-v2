@@ -3355,6 +3355,9 @@ function HouseCreate() {
   // Shape matches Ocean Export HouseCreate / ImportJobCreate house-card BL generator.
   const generateBolPDFPreview = (options?: { draft?: boolean }) => {
     try {
+      setBolPreviewRowData(null);
+      setBolPdfBlob(null);
+      setBolPreviewHasUnsavedChanges(false);
       setBolPreviewOpen(true);
       const defaultBranch = user?.branches?.find(
         (branch) => branch.is_default,
@@ -3411,6 +3414,8 @@ function HouseCreate() {
           container_id: c.container_id,
           actual_seal_no:
             (matchedContainer?.actual_seal_no as string | undefined) || "",
+          customs_seal_no:
+            (matchedContainer?.customs_seal_no as string | undefined) || "",
           container_type_name:
             (
               matchedContainer?.container_type_details as

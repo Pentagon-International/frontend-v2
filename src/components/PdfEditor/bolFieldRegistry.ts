@@ -855,9 +855,20 @@ function buildUsBolFieldRegistry(
             columnWidthRatio: COL.marks,
             getDisplayValue: (data) => {
               const seal = getCargoAt(data, index).actual_seal_no;
-              return seal ? `Seal No: ${seal}` : "";
+              return seal ? `Actual Seal No: ${seal}` : "";
             },
-            parseInput: (raw) => stripPrefix(raw, /^Seal No:\s*/i),
+            parseInput: (raw) => stripPrefix(raw, /^Actual Seal No:\s*/i),
+          }),
+          field({
+            id: `bol_marks_customs_seal_${index}`,
+            path: `housingData.cargo_details[${index}].customs_seal_no`,
+            editable: true,
+            columnWidthRatio: COL.marks,
+            getDisplayValue: (data) => {
+              const seal = getCargoAt(data, index).customs_seal_no;
+              return seal ? `Customs Seal No: ${seal}` : "";
+            },
+            parseInput: (raw) => stripPrefix(raw, /^Customs Seal No:\s*/i),
           }),
           field({
             id: `bol_marks_gross_wt_${index}`,
@@ -1396,9 +1407,20 @@ function buildIndiaBolFieldRegistry(
             columnWidthRatio: INDIA_COL.container,
             getDisplayValue: (data) => {
               const seal = getCargoAt(data, index).actual_seal_no;
-              return seal ? `Seal No: ${seal}` : "";
+              return seal ? `Actual Seal No: ${seal}` : "";
             },
-            parseInput: (raw) => stripPrefix(raw, /^Seal No:\s*/i),
+            parseInput: (raw) => stripPrefix(raw, /^Actual Seal No:\s*/i),
+          }),
+          field({
+            id: `bol_marks_customs_seal_${index}`,
+            path: `housingData.cargo_details.${index}.customs_seal_no`,
+            editable: true,
+            columnWidthRatio: INDIA_COL.container,
+            getDisplayValue: (data) => {
+              const seal = getCargoAt(data, index).customs_seal_no;
+              return seal ? `Customs Seal No: ${seal}` : "";
+            },
+            parseInput: (raw) => stripPrefix(raw, /^Customs Seal No:\s*/i),
           }),
           field({
             id: `bol_marks_gross_wt_${index}`,

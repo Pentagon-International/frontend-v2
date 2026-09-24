@@ -3200,6 +3200,9 @@ function ImportJobCreate() {
     options?: { draft?: boolean },
   ) => {
     try {
+      setBolPreviewRowData(null);
+      setBolPdfBlob(null);
+      setBolPreviewHasUnsavedChanges(false);
       setBolPreviewOpen(true);
       setCurrentHousingForBolPreview(housing);
 
@@ -3209,6 +3212,7 @@ function ImportJobCreate() {
         user?.branches?.[0] || { branch_name: "CHENNAI" };
       const country = user?.country || null;
       const isDraft = options?.draft === true;
+      const containers = containerDetailsForm.values.containers || [];
 
       const combinedData = {
         ...(jobWithMergedHousingDetails ?? jobData),
@@ -3249,7 +3253,9 @@ function ImportJobCreate() {
           mbl_number: carrierDetailsForm.values.mbl_number,
           mbl_date: carrierDetailsForm.values.mbl_date,
         },
-        containerDetails: containerDetailsForm.values.containers,
+        // PDF template reads container_details; keep camelCase for registry helpers
+        containerDetails: containers,
+        container_details: containers,
       };
 
       const housingFromJob = (
@@ -3278,17 +3284,36 @@ function ImportJobCreate() {
               "",
           ).trim() || "",
         summary: housing.summary ?? housingFromJob?.summary,
-        cargo_details: (housing.cargo_details || []).map((cargo) => ({
-          ...cargo,
-          package_type:
-            resolvePackageTypeName(
-              cargo.package_type_name || cargo.package_type,
-              packageTypeOptions,
-            ) ||
-            cargo.package_type_name ||
-            cargo.package_type ||
-            "",
-        })),
+        cargo_details: (housing.cargo_details || []).map((cargo) => {
+          const matchedContainer = containers.find(
+            (container) =>
+              String(container.container_no ?? "") ===
+              String(cargo.container_no ?? ""),
+          );
+          return {
+            ...cargo,
+            package_type:
+              resolvePackageTypeName(
+                cargo.package_type_name || cargo.package_type,
+                packageTypeOptions,
+              ) ||
+              cargo.package_type_name ||
+              cargo.package_type ||
+              "",
+            actual_seal_no:
+              (cargo as { actual_seal_no?: string }).actual_seal_no ||
+              matchedContainer?.actual_seal_no ||
+              "",
+            customs_seal_no:
+              (cargo as { customs_seal_no?: string }).customs_seal_no ||
+              matchedContainer?.customs_seal_no ||
+              "",
+            container_type_name:
+              (cargo as { container_type_name?: string }).container_type_name ||
+              matchedContainer?.container_type_name ||
+              "",
+          };
+        }),
         package_type:
           resolvePackageTypeName(
             housing.cargo_details?.find(
