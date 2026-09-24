@@ -234,6 +234,68 @@ function normalizeChargeDrCr(value: unknown): "Dr" | "Cr" {
   return "Dr";
 }
 
+/** Map account/subledger from charge-master selection response (frontend-only). */
+function mapAccountFieldsFromChargeOriginal(
+  originalData?: Record<string, unknown> | null,
+): {
+  account_id: number | null;
+  account_code: string;
+  account_name: string;
+  subledger_code: string;
+} {
+  if (!originalData) {
+    return {
+      account_id: null,
+      account_code: "",
+      account_name: "",
+      subledger_code: "",
+    };
+  }
+  const idRaw = originalData.account_id;
+  const account_id =
+    idRaw != null &&
+    String(idRaw).trim() !== "" &&
+    Number.isFinite(Number(idRaw))
+      ? Number(idRaw)
+      : null;
+  const account_code = String(
+    originalData.account_code ?? originalData.gl_account_code ?? "",
+  ).trim();
+  const name = String(originalData.account_name ?? "").trim();
+  const glName = String(originalData.gl_name ?? "").trim();
+  const account_name =
+    [account_code, name, glName].filter(Boolean).join(" - ") || name;
+  const subledger_code = String(
+    originalData.subledger_code ?? originalData.sl_code ?? "",
+  ).trim();
+  return { account_id, account_code, account_name, subledger_code };
+}
+
+function clearChargeRowAccountFields(
+  index: number,
+  setFieldValue: (path: string, value: unknown) => void,
+) {
+  setFieldValue(`charges.${index}.account_id`, null);
+  setFieldValue(`charges.${index}.account_code`, "");
+  setFieldValue(`charges.${index}.account_name`, "");
+  setFieldValue(`charges.${index}.subledger_code`, "");
+}
+
+function applyChargeAccountFieldsToRow(
+  index: number,
+  originalData: Record<string, unknown> | null | undefined,
+  setFieldValue: (path: string, value: unknown) => void,
+) {
+  const accountFields = mapAccountFieldsFromChargeOriginal(originalData);
+  setFieldValue(`charges.${index}.account_id`, accountFields.account_id);
+  setFieldValue(`charges.${index}.account_code`, accountFields.account_code);
+  setFieldValue(`charges.${index}.account_name`, accountFields.account_name);
+  setFieldValue(
+    `charges.${index}.subledger_code`,
+    accountFields.subledger_code,
+  );
+}
+
 function calcPaymentRequestLocalTotal(charges: ChargeItem[]): number {
   return charges.reduce((sum, charge) => {
     if (isChargeTdsRow(charge)) return sum;
@@ -981,6 +1043,10 @@ function PaymentRequest() {
     useState<PaymentRequestFromApi | null>(null);
   const [chargeErrors, setChargeErrors] = useState<
     Record<number, Record<string, string>>
+  >({});
+  /** Keep last charge-master originalData per row so Job Id can be selected after Charge. */
+  const chargeOriginalByIndexRef = useRef<
+    Record<number, Record<string, unknown> | null>
   >({});
   const [accountNameDisplay, setAccountNameDisplay] = useState<string | null>(
     null,
@@ -2253,6 +2319,34 @@ function PaymentRequest() {
     const isRejectAction = shouldRejectRef.current;
     shouldApproveRef.current = false;
     shouldRejectRef.current = false;
+
+    // Charge selected without Job Id → infield error (create/edit)
+    const missingJobErrors: Record<number, Record<string, string>> = {};
+    (values.charges ?? []).forEach((c, index) => {
+      if (isChargeTdsRow(c)) return;
+      if (c.charge_id != null && String(c.job_no ?? "").trim() === "") {
+        missingJobErrors[index] = {
+          ...(missingJobErrors[index] ?? {}),
+          job_no: "Job Id is required",
+        };
+      }
+    });
+    if (Object.keys(missingJobErrors).length > 0) {
+      setChargeErrors((prev) => {
+        const next = { ...prev };
+        Object.entries(missingJobErrors).forEach(([idx, errs]) => {
+          const i = Number(idx);
+          next[i] = { ...(next[i] ?? {}), ...errs };
+        });
+        return next;
+      });
+      ToastNotification({
+        type: "error",
+        message: "Please select Job Id for charge rows before saving.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const formatDate = (d: Date | null) => {
@@ -3645,18 +3739,54 @@ function PaymentRequest() {
                             placeholder="Select job id"
                             data={prefillJobOptions}
                             value={charge.job_no || null}
-                            onChange={(value) =>
+                            onChange={(value) => {
+                              const nextJob = String(value ?? "").trim();
                               form.setFieldValue(
                                 `charges.${index}.job_no`,
-                                value ?? "",
-                              )
-                            }
+                                nextJob,
+                              );
+                              if (nextJob) {
+                                setChargeErrors((prev) => {
+                                  if (!prev[index]?.job_no) return prev;
+                                  const next = { ...prev };
+                                  const row = { ...(next[index] ?? {}) };
+                                  delete row.job_no;
+                                  if (Object.keys(row).length === 0) {
+                                    delete next[index];
+                                  } else {
+                                    next[index] = row;
+                                  }
+                                  return next;
+                                });
+                                if (charge.charge_id != null) {
+                                  applyChargeAccountFieldsToRow(
+                                    index,
+                                    chargeOriginalByIndexRef.current[index],
+                                    form.setFieldValue,
+                                  );
+                                }
+                              } else if (charge.charge_id != null) {
+                                clearChargeRowAccountFields(
+                                  index,
+                                  form.setFieldValue,
+                                );
+                                setChargeErrors((prev) => ({
+                                  ...prev,
+                                  [index]: {
+                                    ...(prev[index] ?? {}),
+                                    job_no: "Job Id is required",
+                                  },
+                                }));
+                              }
+                            }}
                             searchable
                             readOnly={formFieldsReadOnly}
+                            error={chargeErrors[index]?.job_no}
                             disabled={
                               formFieldsReadOnly ||
                               charge.account_id != null ||
-                              String(charge.account_code ?? "").trim() !== ""
+                              String(charge.account_code ?? "").trim() !== "" ||
+                              String(charge.account_name ?? "").trim() !== ""
                             }
                             styles={{
                               input: {
@@ -3676,18 +3806,54 @@ function PaymentRequest() {
                             searchFields={["shipment_id", "job_id", "type"]}
                             displayFormat={jobCreateDropdownDisplayFormat}
                             readOnly={formFieldsReadOnly}
+                            error={chargeErrors[index]?.job_no}
                             disabled={
                               formFieldsReadOnly ||
                               charge.account_id != null ||
-                              String(charge.account_code ?? "").trim() !== ""
+                              String(charge.account_code ?? "").trim() !== "" ||
+                              String(charge.account_name ?? "").trim() !== ""
                             }
                             dropdownZIndex={chargesDropdownZIndex}
-                            onChange={(value) =>
+                            onChange={(value) => {
+                              const nextJob = String(value ?? "").trim();
                               form.setFieldValue(
                                 `charges.${index}.job_no`,
-                                String(value ?? "").trim(),
-                              )
-                            }
+                                nextJob,
+                              );
+                              if (nextJob) {
+                                setChargeErrors((prev) => {
+                                  if (!prev[index]?.job_no) return prev;
+                                  const next = { ...prev };
+                                  const row = { ...(next[index] ?? {}) };
+                                  delete row.job_no;
+                                  if (Object.keys(row).length === 0) {
+                                    delete next[index];
+                                  } else {
+                                    next[index] = row;
+                                  }
+                                  return next;
+                                });
+                                if (charge.charge_id != null) {
+                                  applyChargeAccountFieldsToRow(
+                                    index,
+                                    chargeOriginalByIndexRef.current[index],
+                                    form.setFieldValue,
+                                  );
+                                }
+                              } else if (charge.charge_id != null) {
+                                clearChargeRowAccountFields(
+                                  index,
+                                  form.setFieldValue,
+                                );
+                                setChargeErrors((prev) => ({
+                                  ...prev,
+                                  [index]: {
+                                    ...(prev[index] ?? {}),
+                                    job_no: "Job Id is required",
+                                  },
+                                }));
+                              }
+                            }}
                             styles={{
                               input: {
                                 fontSize: "13px",
@@ -3803,6 +3969,66 @@ function PaymentRequest() {
                               }
                               setChargeErrors(newErrors);
                             }
+
+                            const jobNo = String(charge.job_no ?? "").trim();
+                            if (chargeId == null) {
+                              chargeOriginalByIndexRef.current[index] = null;
+                              clearChargeRowAccountFields(
+                                index,
+                                form.setFieldValue,
+                              );
+                              setChargeErrors((prev) => {
+                                if (!prev[index]?.job_no) return prev;
+                                const next = { ...prev };
+                                const row = { ...(next[index] ?? {}) };
+                                delete row.job_no;
+                                if (Object.keys(row).length === 0) {
+                                  delete next[index];
+                                } else {
+                                  next[index] = row;
+                                }
+                                return next;
+                              });
+                            } else {
+                              chargeOriginalByIndexRef.current[index] =
+                                (originalData as Record<string, unknown> | null) ??
+                                null;
+                              if (!jobNo) {
+                                clearChargeRowAccountFields(
+                                  index,
+                                  form.setFieldValue,
+                                );
+                                setChargeErrors((prev) => ({
+                                  ...prev,
+                                  [index]: {
+                                    ...(prev[index] ?? {}),
+                                    job_no: "Job Id is required",
+                                  },
+                                }));
+                              } else {
+                                applyChargeAccountFieldsToRow(
+                                  index,
+                                  originalData as
+                                    | Record<string, unknown>
+                                    | null
+                                    | undefined,
+                                  form.setFieldValue,
+                                );
+                                setChargeErrors((prev) => {
+                                  if (!prev[index]?.job_no) return prev;
+                                  const next = { ...prev };
+                                  const row = { ...(next[index] ?? {}) };
+                                  delete row.job_no;
+                                  if (Object.keys(row).length === 0) {
+                                    delete next[index];
+                                  } else {
+                                    next[index] = row;
+                                  }
+                                  return next;
+                                });
+                              }
+                            }
+
                             // Auto-fetch SAC code whenever a charge is selected/changed
                             if (chargeId != null) {
                               setSacCodeLoadingByIndex((prev) => ({
@@ -3840,7 +4066,8 @@ function PaymentRequest() {
                           disabled={
                             formFieldsReadOnly ||
                             charge.account_id != null ||
-                            String(charge.account_code ?? "").trim() !== ""
+                            String(charge.account_code ?? "").trim() !== "" ||
+                            String(charge.account_name ?? "").trim() !== ""
                           }
                           error={chargeErrors[index]?.charge_name}
                           minSearchLength={2}
@@ -3959,8 +4186,8 @@ function PaymentRequest() {
                           }}
                           disabled={
                             formFieldsReadOnly ||
-                            (String(charge.job_no ?? "").trim() !== "" &&
-                              charge.charge_id != null)
+                            charge.charge_id != null ||
+                            String(charge.job_no ?? "").trim() !== ""
                           }
                           styles={{
                             input: {
@@ -3980,8 +4207,8 @@ function PaymentRequest() {
                           readOnly
                           disabled={
                             formFieldsReadOnly ||
-                            (String(charge.job_no ?? "").trim() !== "" &&
-                              charge.charge_id != null)
+                            charge.charge_id != null ||
+                            String(charge.job_no ?? "").trim() !== ""
                           }
                           styles={{
                             input: {
@@ -4347,6 +4574,18 @@ function PaymentRequest() {
                                     );
                                     return next;
                                   });
+                                  const nextRef: Record<
+                                    number,
+                                    Record<string, unknown> | null
+                                  > = {};
+                                  Object.entries(
+                                    chargeOriginalByIndexRef.current,
+                                  ).forEach(([key, value]) => {
+                                    const i = Number(key);
+                                    if (i < index) nextRef[i] = value;
+                                    else if (i > index) nextRef[i - 1] = value;
+                                  });
+                                  chargeOriginalByIndexRef.current = nextRef;
                                   form.removeListItem("charges", index);
                                 }}
                               >

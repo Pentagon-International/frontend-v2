@@ -570,11 +570,15 @@ function mapPaymentRequestChargeToSupplierRow(
 
   return {
     CRN: isGstRow ? "Neutral" : isTdsRow ? "" : "Cost",
+    account_id:
+      c.account_id != null && c.account_id !== ""
+        ? Number(c.account_id)
+        : null,
     account_code: accountCode,
     account_name: accountName,
     subledger_code: String(c.subledger_code ?? ""),
     narration: String(c.narration ?? ""),
-    shipment_no: String(c.job_no ?? c.job_id ?? ""),
+    shipment_no: String(c.job_no ?? c.job_id ?? c.shipment_no ?? ""),
     charge_id:
       c.charge_id != null && c.charge_id !== ""
         ? Number(c.charge_id)
@@ -643,13 +647,17 @@ function parseDateOnly(s: string | null | undefined): Date | null {
 
 type ApiCharge = {
   id?: number;
+  account_id?: number;
   account_code?: string;
   gl_account_code?: string; // list API may return either
   account_name?: string;
   subledger_code?: string;
+  sl_code?: string;
   CRN?: string;
   narration?: string;
   shipment_no?: string;
+  job_no?: string;
+  job_id?: string;
   charge_id?: number;
   currency_id?: number;
   roe?: number | string;
@@ -660,6 +668,74 @@ type ApiCharge = {
   igst_rate?: number | string;
   igst?: number | string;
 };
+
+/** Map account/subledger from charge-master selection response (frontend-only). */
+function mapAccountFieldsFromChargeOriginal(
+  originalData?: Record<string, unknown> | null,
+): {
+  account_id: number | null;
+  account_code: string;
+  account_name: string;
+  subledger_code: string;
+} {
+  if (!originalData) {
+    return {
+      account_id: null,
+      account_code: "",
+      account_name: "",
+      subledger_code: "",
+    };
+  }
+  const idRaw = originalData.account_id;
+  const account_id =
+    idRaw != null &&
+    String(idRaw).trim() !== "" &&
+    Number.isFinite(Number(idRaw))
+      ? Number(idRaw)
+      : null;
+  const account_code = String(
+    originalData.account_code ?? originalData.gl_account_code ?? "",
+  ).trim();
+  const name = String(originalData.account_name ?? "").trim();
+  const glName = String(originalData.gl_name ?? "").trim();
+  const account_name =
+    [account_code, name, glName].filter(Boolean).join(" - ") || name;
+  const subledger_code = String(
+    originalData.subledger_code ?? originalData.sl_code ?? "",
+  ).trim();
+  return { account_id, account_code, account_name, subledger_code };
+}
+
+function clearCrjChargeRowAccountFields(
+  index: number,
+  setFieldValue: (path: string, value: unknown) => void,
+) {
+  setFieldValue(`charges_data.${index}.account_id`, null);
+  setFieldValue(`charges_data.${index}.account_code`, "");
+  setFieldValue(`charges_data.${index}.account_name`, "");
+  setFieldValue(`charges_data.${index}.subledger_code`, "");
+}
+
+function applyCrjChargeAccountFieldsToRow(
+  index: number,
+  originalData: Record<string, unknown> | null | undefined,
+  setFieldValue: (path: string, value: unknown) => void,
+) {
+  const accountFields = mapAccountFieldsFromChargeOriginal(originalData);
+  setFieldValue(`charges_data.${index}.account_id`, accountFields.account_id);
+  setFieldValue(
+    `charges_data.${index}.account_code`,
+    accountFields.account_code,
+  );
+  setFieldValue(
+    `charges_data.${index}.account_name`,
+    accountFields.account_name,
+  );
+  setFieldValue(
+    `charges_data.${index}.subledger_code`,
+    accountFields.subledger_code,
+  );
+}
 
 /** Invoice row from list API (filter/supplier-invoice) — used for View/Edit from list. Same shape as list response item. */
 type SupplierInvoiceListItem = Record<string, unknown> & {
@@ -708,12 +784,15 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => ({
     id: c.id,
+    account_id: c.account_id != null ? Number(c.account_id) : null,
     account_code: String(c.account_code ?? c.gl_account_code ?? "").trim(),
     account_name: c.account_name ?? "",
-    subledger_code: c.subledger_code ?? "",
+    subledger_code: String(c.subledger_code ?? c.sl_code ?? ""),
     CRN: c.CRN ?? "",
     narration: c.narration ?? "",
-    shipment_no: String(c.shipment_no ?? "").trim(),
+    shipment_no: String(
+      c.shipment_no ?? c.job_no ?? c.job_id ?? "",
+    ).trim(),
     charge_id: c.charge_id ?? null,
     charge_name:
       (c as { charge_name?: unknown }).charge_name != null
@@ -1228,6 +1307,7 @@ export default function SupplierInvoiceCreate({
       Dr_Cr: isReversal ? "Dr" : "Cr", // Header: Supplier="Cr", Reverse="Dr" (payload only)
       charges_data: [
         {
+          account_id: null,
           account_code: "",
           account_name: "",
           subledger_code: "",
@@ -1614,6 +1694,10 @@ export default function SupplierInvoiceCreate({
 
   // Cache service_id resolution for shipment/job numbers (search endpoint returns both job_id + shipment_id types)
   const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
+  /** Keep last charge-master originalData per row so Shipment No can be selected after Charge. */
+  const chargeOriginalByIndexRef = useRef<
+    Record<number, Record<string, unknown> | null>
+  >({});
 
   const getServiceIdByShipmentIdAsync = useCallback(
     async (shipmentId: string | null | undefined): Promise<number | null> => {
@@ -3019,6 +3103,24 @@ export default function SupplierInvoiceCreate({
   ): Promise<number | null> => {
     setIsSubmitting(true);
     try {
+      // Charge selected without Shipment No → infield error
+      const missingShipmentAt = (values.charges_data ?? []).findIndex(
+        (c) =>
+          c.charge_id != null && String(c.shipment_no ?? "").trim() === "",
+      );
+      if (missingShipmentAt >= 0) {
+        form.setFieldError(
+          `charges_data.${missingShipmentAt}.shipment_no`,
+          "Shipment No is required",
+        );
+        ToastNotification({
+          type: "error",
+          message:
+            "Please select Shipment No for charge rows before saving.",
+        });
+        return null;
+      }
+
       // If shipment is selected, charge becomes mandatory (TDS rows won't have shipment_no)
       const missingChargeAt = (values.charges_data ?? []).findIndex(
         (c) => String(c.shipment_no ?? "").trim() !== "" && c.charge_id == null,
@@ -3744,6 +3846,7 @@ export default function SupplierInvoiceCreate({
       currencyOptions.find((o) => o.value === currencyIdStr)?.label ?? "";
     const newIndex = form.values.charges_data.length;
     form.insertListItem("charges_data", {
+      account_id: null,
       account_code: "",
       account_name: "",
       subledger_code: "",
@@ -5154,12 +5257,42 @@ export default function SupplierInvoiceCreate({
                           placeholder="Select shipment no"
                           data={prefillShipmentOptions}
                           value={row.shipment_no || null}
+                          error={
+                            form.errors[`charges_data.${index}.shipment_no`]
+                              ? String(
+                                  form.errors[
+                                    `charges_data.${index}.shipment_no`
+                                  ],
+                                )
+                              : undefined
+                          }
                           onChange={(v) => {
                             const shipmentNo = String(v ?? "").trim();
                             form.setFieldValue(
                               `charges_data.${index}.shipment_no`,
                               shipmentNo,
                             );
+                            if (shipmentNo) {
+                              form.clearFieldError(
+                                `charges_data.${index}.shipment_no`,
+                              );
+                              if (row.charge_id != null) {
+                                applyCrjChargeAccountFieldsToRow(
+                                  index,
+                                  chargeOriginalByIndexRef.current[index],
+                                  form.setFieldValue,
+                                );
+                              }
+                            } else if (row.charge_id != null) {
+                              clearCrjChargeRowAccountFields(
+                                index,
+                                form.setFieldValue,
+                              );
+                              form.setFieldError(
+                                `charges_data.${index}.shipment_no`,
+                                "Shipment No is required",
+                              );
+                            }
                             fetchSacForChargeRow(
                               index,
                               row.charge_id,
@@ -5171,7 +5304,8 @@ export default function SupplierInvoiceCreate({
                             isReadOnly ||
                             reversalFormDisabled ||
                             row.account_id != null ||
-                            String(row.account_code ?? "").trim() !== ""
+                            String(row.account_code ?? "").trim() !== "" ||
+                            String(row.account_name ?? "").trim() !== ""
                           }
                           styles={{
                             input: {
@@ -5191,11 +5325,21 @@ export default function SupplierInvoiceCreate({
                           minSearchLength={1}
                           searchFields={["shipment_id", "job_id", "type"]}
                           displayFormat={jobCreateDropdownDisplayFormat}
+                          error={
+                            form.errors[`charges_data.${index}.shipment_no`]
+                              ? String(
+                                  form.errors[
+                                    `charges_data.${index}.shipment_no`
+                                  ],
+                                )
+                              : undefined
+                          }
                           disabled={
                             isReadOnly ||
                             reversalFormDisabled ||
                             row.account_id != null ||
-                            String(row.account_code ?? "").trim() !== ""
+                            String(row.account_code ?? "").trim() !== "" ||
+                            String(row.account_name ?? "").trim() !== ""
                           }
                           onChange={(v) => {
                             const shipmentNo = String(v ?? "").trim();
@@ -5203,6 +5347,27 @@ export default function SupplierInvoiceCreate({
                               `charges_data.${index}.shipment_no`,
                               shipmentNo,
                             );
+                            if (shipmentNo) {
+                              form.clearFieldError(
+                                `charges_data.${index}.shipment_no`,
+                              );
+                              if (row.charge_id != null) {
+                                applyCrjChargeAccountFieldsToRow(
+                                  index,
+                                  chargeOriginalByIndexRef.current[index],
+                                  form.setFieldValue,
+                                );
+                              }
+                            } else if (row.charge_id != null) {
+                              clearCrjChargeRowAccountFields(
+                                index,
+                                form.setFieldValue,
+                              );
+                              form.setFieldError(
+                                `charges_data.${index}.shipment_no`,
+                                "Shipment No is required",
+                              );
+                            }
                             fetchSacForChargeRow(
                               index,
                               row.charge_id,
@@ -5262,17 +5427,57 @@ export default function SupplierInvoiceCreate({
                             `charges_data.${index}.charge_name`,
                             chargeId ? nextName : "",
                           );
-                          if (chargeId != null && row.shipment_no) {
-                            fetchSacForChargeRow(
+                          const shipmentNo = String(
+                            row.shipment_no ?? "",
+                          ).trim();
+                          if (chargeId == null) {
+                            chargeOriginalByIndexRef.current[index] = null;
+                            clearCrjChargeRowAccountFields(
                               index,
-                              chargeId,
-                              row.shipment_no,
+                              form.setFieldValue,
                             );
-                          }
-                          if (!chargeId) {
+                            form.clearFieldError(
+                              `charges_data.${index}.shipment_no`,
+                            );
                             form.setFieldValue(
                               `charges_data.${index}.tax_code`,
                               "",
+                            );
+                          } else {
+                            chargeOriginalByIndexRef.current[index] =
+                              (originalData as Record<string, unknown> | null) ??
+                              null;
+                            if (!shipmentNo) {
+                              clearCrjChargeRowAccountFields(
+                                index,
+                                form.setFieldValue,
+                              );
+                              form.setFieldError(
+                                `charges_data.${index}.shipment_no`,
+                                "Shipment No is required",
+                              );
+                            } else {
+                              applyCrjChargeAccountFieldsToRow(
+                                index,
+                                originalData as
+                                  | Record<string, unknown>
+                                  | null
+                                  | undefined,
+                                form.setFieldValue,
+                              );
+                              form.clearFieldError(
+                                `charges_data.${index}.shipment_no`,
+                              );
+                              fetchSacForChargeRow(
+                                index,
+                                chargeId,
+                                shipmentNo,
+                              );
+                            }
+                          }
+                          if (chargeId != null) {
+                            form.clearFieldError(
+                              `charges_data.${index}.charge_id`,
                             );
                           }
                         }}
@@ -5281,7 +5486,8 @@ export default function SupplierInvoiceCreate({
                           isReadOnly ||
                           reversalFormDisabled ||
                           row.account_id != null ||
-                          String(row.account_code ?? "").trim() !== ""
+                          String(row.account_code ?? "").trim() !== "" ||
+                          String(row.account_name ?? "").trim() !== ""
                         }
                         styles={{
                           input: {
@@ -5411,8 +5617,8 @@ export default function SupplierInvoiceCreate({
                         disabled={
                           isReadOnly ||
                           reversalFormDisabled ||
-                          (String(row.shipment_no ?? "").trim() !== "" &&
-                            row.charge_id != null)
+                          row.charge_id != null ||
+                          String(row.shipment_no ?? "").trim() !== ""
                         }
                         styles={{
                           input: {
@@ -5431,8 +5637,8 @@ export default function SupplierInvoiceCreate({
                         disabled={
                           isReadOnly ||
                           reversalFormDisabled ||
-                          (String(row.shipment_no ?? "").trim() !== "" &&
-                            row.charge_id != null)
+                          row.charge_id != null ||
+                          String(row.shipment_no ?? "").trim() !== ""
                         }
                         styles={{
                           input: {
@@ -5723,9 +5929,21 @@ export default function SupplierInvoiceCreate({
                               color="red"
                               size="sm"
                               px={12}
-                              onClick={() =>
-                                form.removeListItem("charges_data", index)
-                              }
+                              onClick={() => {
+                                form.removeListItem("charges_data", index);
+                                const nextRef: Record<
+                                  number,
+                                  Record<string, unknown> | null
+                                > = {};
+                                Object.entries(
+                                  chargeOriginalByIndexRef.current,
+                                ).forEach(([key, value]) => {
+                                  const i = Number(key);
+                                  if (i < index) nextRef[i] = value;
+                                  else if (i > index) nextRef[i - 1] = value;
+                                });
+                                chargeOriginalByIndexRef.current = nextRef;
+                              }}
                             >
                               <IconTrash size={16} />
                             </Button>
