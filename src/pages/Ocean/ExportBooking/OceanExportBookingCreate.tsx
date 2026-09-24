@@ -17,6 +17,7 @@ import { ToastNotification } from "../../../components";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX } from "../../../utils/editPageAuditInfo";
 import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import { mapEnquirySalesPersonToBookingRouted } from "../../../utils/mapEnquirySalesPersonToBookingRouted";
 
 function OceanExportBookingCreate() {
   const navigate = useNavigate();
@@ -64,6 +65,10 @@ function OceanExportBookingCreate() {
       serviceDetails: Record<string, unknown>;
     };
 
+    const { routed, routed_by } = mapEnquirySalesPersonToBookingRouted(
+      enquiryData.sales_person,
+    );
+
     return {
       // Stepper 1 fields
       customer_code: enquiryData.customer_code || "",
@@ -82,9 +87,9 @@ function OceanExportBookingCreate() {
       carrier_name: quotationData.carrier || "",
       date: new Date(),
       freight: (quotationData.freight as string) || "Prepaid", // From quotation (Prepaid/Collect)
-      routed: "Self", // Default to Self routing
-      routed_by: "", // Let stepper auto-set from logged-in user for Self
-      customer_service_name: "", // Will be auto-set from user in Self mode or filled by user
+      routed,
+      routed_by,
+      customer_service_name: "", // Auto-set from logged-in user in stepper
       is_direct: true,
       is_coload: false,
 

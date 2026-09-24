@@ -1708,11 +1708,11 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           }))
         : [];
 
-    // Ensure edit-mode routed_by value is present in options so the dropdown shows it
-    if (isEditMode && initialData?.routed_by) {
-      const routedByValue = String(initialData.routed_by);
+    // Ensure prefilled routed_by (edit or quotation→booking) is in options so the dropdown shows it
+    if (initialData?.routed_by) {
+      const routedByValue = String(initialData.routed_by).trim();
       const exists = options.some((opt) => opt.value === routedByValue);
-      if (!exists) {
+      if (!exists && routedByValue) {
         options.unshift({
           value: routedByValue,
           label: routedByValue,
@@ -2684,7 +2684,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, user?.full_name, form.values.customer_service_name]);
 
-  // Create flow only: when Routed is "Self" and no customer selected, default Routed By to logged-in user (edit flow uses initialData).
+  // Create flow only: when Routed is "Self", Routed By is empty, and no customer
+  // assigned_to — default Routed By to logged-in user. Preserve enquiry salesperson
+  // (or any other prefilled value) from quotation → booking mapping.
   useEffect(() => {
     if (
       isEditMode ||
@@ -2692,15 +2694,14 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       assignedToDisplayFromCustomer
     )
       return;
+    if (form.values.routed_by?.trim()) return;
     if (!user?.full_name?.trim()) return;
-    const name = user.full_name.trim();
-    if (form.values.routed_by !== name) {
-      form.setFieldValue("routed_by", name);
-    }
+    form.setFieldValue("routed_by", user.full_name.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isEditMode,
     form.values.routed,
+    form.values.routed_by,
     assignedToDisplayFromCustomer,
     user?.full_name,
   ]);

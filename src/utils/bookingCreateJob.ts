@@ -115,6 +115,25 @@ function resolveBookingHouseNumber(booking: Record<string, unknown>): string {
   ).trim();
 }
 
+/** Normalize booking Routed for house payload (`Self`/`Agent` → `self`/`agent`). */
+function normalizeRoutedForHouse(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === "self" || lower === "agent") return lower;
+  return raw;
+}
+
+function resolveBookingRoutedBy(booking: Record<string, unknown>): string {
+  return String(booking.routed_by ?? "").trim();
+}
+
+function resolveBookingCustomerService(booking: Record<string, unknown>): string {
+  return String(
+    booking.customer_service_name ?? booking.customer_service ?? "",
+  ).trim();
+}
+
 /** Master reference from booking (MAWB / MBL). */
 function resolveBookingMasterNumber(booking: Record<string, unknown>): string {
   return String(
@@ -796,9 +815,9 @@ function buildAirHousing(
     destination_code:
       booking.destination_code || booking.destination_code_read || "",
     trade,
-    routed: booking.routed || "",
-    routed_by: booking.routed_by || "",
-    customer_service: booking.customer_service_name || "",
+    routed: normalizeRoutedForHouse(booking.routed),
+    routed_by: resolveBookingRoutedBy(booking),
+    customer_service: resolveBookingCustomerService(booking),
     agent_name:
       booking.destination_agent_name || booking.agent_name || "",
     agent_address:
@@ -859,9 +878,9 @@ function buildOceanHousing(
     destination_code:
       booking.destination_code || booking.destination_code_read || "",
     trade,
-    routed: booking.routed || "",
-    routed_by: booking.routed_by || "",
-    customer_service: booking.customer_service_name || "",
+    routed: normalizeRoutedForHouse(booking.routed),
+    routed_by: resolveBookingRoutedBy(booking),
+    customer_service: resolveBookingCustomerService(booking),
     agent_name:
       booking.destination_agent_name ||
       booking.forwarder_name ||
