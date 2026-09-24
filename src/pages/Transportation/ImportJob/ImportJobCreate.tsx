@@ -119,7 +119,7 @@ import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
 } from "../../../utils/houseChargeAmounts";
-import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
+import { buildMasterJobCreatePrqPrefill } from "../../../utils/paymentRequestChargePrefill";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
   formatHouseCargoChargeableForPayload,
@@ -6733,55 +6733,24 @@ function ImportJobCreate() {
                       },
                     }}
                     onClick={() => {
-                      const estimates = estimatesForm.values.estimates ?? [];
-                      const chargesFromEstimates = estimates
-                        .filter(
-                          (e) =>
-                            e.charge_id != null ||
-                            (e.charge_name && e.charge_name.trim() !== ""),
-                        )
-                        .map((e) =>
-                          mapChargeToPaymentRequestPrefill(
-                            e,
-                            {
-                              job_no: String(
-                                jobData?.job_id ?? jobData?.id ?? "",
-                              ),
-                            },
-                            { source: "estimate" },
-                          ),
-                        );
-                      const firstSupplier =
-                        estimates.find(
-                          (e) =>
-                            String(e.supplier_code ?? "").trim() !== "" ||
-                            String(e.supplier_name ?? "").trim() !== "",
-                        ) ?? null;
+                      const prefill = buildMasterJobCreatePrqPrefill(
+                        estimatesForm.values.estimates,
+                        jobData?.job_id ?? jobData?.id,
+                      );
+                      if (!prefill.ok) {
+                        ToastNotification({
+                          type: "error",
+                          message: prefill.message,
+                        });
+                        return;
+                      }
                       navigate("/payment-request/create", {
                         state: {
                           serviceType: ["FCL", "LCL"],
                           voucherType: "SEA IMPORTS",
-                          chargesFromEstimates:
-                            chargesFromEstimates.length > 0
-                              ? chargesFromEstimates
-                              : undefined,
-                          supplier:
-                            firstSupplier != null
-                              ? {
-                                  supplier_code: String(
-                                    firstSupplier.supplier_code ?? "",
-                                  ),
-                                  supplier_name: String(
-                                    firstSupplier.supplier_name ?? "",
-                                  ),
-                                }
-                              : null,
-                          job_reference_1:
-                            jobData?.job_id != null
-                              ? String(jobData.job_id)
-                              : jobData?.id != null
-                                ? String(jobData.id)
-                                : "",
+                          chargesFromEstimates: prefill.chargesFromEstimates,
+                          supplier: prefill.supplier,
+                          job_reference_1: prefill.jobId,
                           ...(jobWithMergedHousingDetails && {
                             job: jobWithMergedHousingDetails,
                           }),

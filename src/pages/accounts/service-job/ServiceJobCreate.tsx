@@ -65,7 +65,7 @@ import {
   getJobFormReadOnlyTabProps,
   JOB_ACCOUNTS_TAB_PANEL_CLASS,
 } from "../../../utils/jobFormReadOnly";
-import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
+import { buildMasterJobCreatePrqPrefill } from "../../../utils/paymentRequestChargePrefill";
 import {
   JobMasterPartyDetailsPanel,
   type JobMasterPartyDetailsValues,
@@ -2168,49 +2168,29 @@ export default function ServiceJobCreate() {
   }, [chargesForm.values.charges, jobData, navigate]);
 
   const handleCreatePrq = useCallback(() => {
-    const charges = chargesForm.values.charges ?? [];
-    const chargesFromEstimates = charges
-      .filter(
-        (e) =>
-          e.charge_id != null || (e.charge_name && e.charge_name.trim() !== ""),
-      )
-      .map((e) =>
-        mapChargeToPaymentRequestPrefill(
-          {
-            ...e,
-            currency_code: e.currency,
-            cost_per_unit: e.cost_per_unit,
-          },
-          {
-            job_no: String(jobData?.job_id ?? jobData?.id ?? ""),
-          },
-        ),
-      );
-    const firstSupplier =
-      charges.find(
-        (e) =>
-          String(e.supplier_code ?? "").trim() !== "" ||
-          String(e.supplier_name ?? "").trim() !== "",
-      ) ?? null;
+    const charges = (chargesForm.values.charges ?? []).map((e) => ({
+      ...e,
+      currency_code: e.currency,
+      cost_per_unit: e.cost_per_unit,
+    }));
+    const prefill = buildMasterJobCreatePrqPrefill(
+      charges,
+      jobData?.job_id ?? jobData?.id,
+    );
+    if (!prefill.ok) {
+      ToastNotification({
+        type: "error",
+        message: prefill.message,
+      });
+      return;
+    }
 
     navigate("/payment-request/create", {
       state: {
         serviceType: getInvoiceServiceType(transportMode),
-        chargesFromEstimates:
-          chargesFromEstimates.length > 0 ? chargesFromEstimates : undefined,
-        supplier:
-          firstSupplier != null
-            ? {
-                supplier_code: String(firstSupplier.supplier_code ?? ""),
-                supplier_name: String(firstSupplier.supplier_name ?? ""),
-              }
-            : null,
-        job_reference_1:
-          jobData?.job_id != null
-            ? String(jobData.job_id)
-            : jobData?.id != null
-              ? String(jobData.id)
-              : "",
+        chargesFromEstimates: prefill.chargesFromEstimates,
+        supplier: prefill.supplier,
+        job_reference_1: prefill.jobId,
         ...(jobData && { job: jobData }),
       },
     });

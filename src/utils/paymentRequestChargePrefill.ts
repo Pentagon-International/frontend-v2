@@ -480,15 +480,14 @@ export function mapChargeToPaymentRequestPrefill(
     tax: "false",
   };
 
-  if (source === "estimate") {
-    return {
-      ...base,
-      amount: null,
-      amount_in_local: null,
-    };
-  }
+  // Estimates "Total" often includes ROE; PRQ Amount is currency cost (qty × cost/unit).
+  const totalCost =
+    source === "estimate"
+      ? noOfUnit != null && amountPerUnit != null
+        ? clampPrqAmount(noOfUnit * amountPerUnit)
+        : null
+      : resolvePrqTotalCost(charge);
 
-  const totalCost = resolvePrqTotalCost(charge);
   return {
     ...base,
     amount: totalCost,
@@ -497,5 +496,86 @@ export function mapChargeToPaymentRequestPrefill(
       (totalCost != null && roe != null
         ? clampPrqAmount(totalCost * roe)
         : null),
+  };
+}
+
+export type EstimateRowForMasterPrq = ChargeSourceForPrqPrefill & {
+  charge_id?: number | null;
+  charge_name?: string | null;
+  supplier_code?: string | null;
+  supplier_name?: string | null;
+};
+
+export type MasterJobCreatePrqPrefill =
+  | {
+      ok: true;
+      jobId: string;
+      chargesFromEstimates: Array<Record<string, unknown>>;
+      supplier: { supplier_code: string; supplier_name: string };
+    }
+  | { ok: false; message: string };
+
+/**
+ * Master job Estimates → Create PRQ: require job id, vendor, and cost
+ * (same gates as Create Supplier Invoice on house/master charges).
+ */
+export function buildMasterJobCreatePrqPrefill(
+  estimates: EstimateRowForMasterPrq[] | null | undefined,
+  jobIdRaw: unknown,
+): MasterJobCreatePrqPrefill {
+  const toStr = (v: unknown) => String(v ?? "").trim();
+  const jobId = toStr(jobIdRaw);
+  if (!jobId) {
+    return {
+      ok: false,
+      message: "Job ID not found for Payment Request prefill.",
+    };
+  }
+
+  const rows = Array.isArray(estimates) ? estimates : [];
+
+  const withChargeAndSupplier = rows.filter(
+    (e) =>
+      e?.charge_id != null &&
+      (toStr(e.supplier_code) || toStr(e.supplier_name)),
+  );
+
+  if (withChargeAndSupplier.length === 0) {
+    return {
+      ok: false,
+      message: "Select a supplier/vendor to create PRQ",
+    };
+  }
+
+  const withCost = withChargeAndSupplier.filter((e) => {
+    const qty = toNumOrNull(e.no_of_unit ?? e.no_of_units);
+    const costPerUnit = resolvePrqCostPerUnit(e);
+    return qty != null && costPerUnit != null && qty > 0 && costPerUnit > 0;
+  });
+
+  if (withCost.length === 0) {
+    return {
+      ok: false,
+      message: "Fill cost values on the charge(s) to create PRQ",
+    };
+  }
+
+  const chargesFromEstimates = withCost.map((e) =>
+    mapChargeToPaymentRequestPrefill(
+      e,
+      { job_no: jobId },
+      { source: "estimate" },
+    ),
+  );
+
+  const firstSupplier = withCost[0];
+  return {
+    ok: true,
+    jobId,
+    chargesFromEstimates,
+    supplier: {
+      supplier_code: toStr(firstSupplier.supplier_code),
+      supplier_name: toStr(firstSupplier.supplier_name),
+    },
   };
 }
