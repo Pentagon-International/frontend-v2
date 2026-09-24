@@ -1244,9 +1244,9 @@ export const generateUsBillOfLadingPDF = (
     if (cargo?.container_type_name)
       entryLines.push(String(cargo.container_type_name));
     if (cargo?.actual_seal_no)
-      entryLines.push(`Actual Seal No: ${cargo.actual_seal_no}`);
+      entryLines.push(`Seal No: ${cargo.actual_seal_no}`);
     if (cargo?.customs_seal_no)
-      entryLines.push(`Customs Seal No: ${cargo.customs_seal_no}`);
+      entryLines.push(`C.Seal No: ${cargo.customs_seal_no}`);
     if (cargo?.gross_weight)
       entryLines.push(`Gross Wt: ${cargo.gross_weight} KGS`);
     if (

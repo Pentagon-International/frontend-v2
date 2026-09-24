@@ -1561,8 +1561,8 @@ export const generateBillOfLadingPDF = (
       const lines: string[] = [];
       if (cargo?.container_no) lines.push(cargo.container_no);
       if (cargo?.container_type_name) lines.push(cargo.container_type_name);
-      if (cargo?.actual_seal_no) lines.push(`Actual Seal No: ${cargo.actual_seal_no}`);
-      if (cargo?.customs_seal_no) lines.push(`Customs Seal No: ${cargo.customs_seal_no}`);
+      if (cargo?.actual_seal_no) lines.push(`Seal No: ${cargo.actual_seal_no}`);
+      if (cargo?.customs_seal_no) lines.push(`C.Seal No: ${cargo.customs_seal_no}`);
       if (cargo?.gross_weight) lines.push(`Gross Wt: ${cargo.gross_weight} KGS`);
       if (cargo?.volume !== undefined && cargo?.volume !== null && cargo?.volume !== "") {
         lines.push(`Volume: ${cargo.volume} CBM`);

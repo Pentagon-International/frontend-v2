@@ -7875,7 +7875,7 @@ function InvoiceCreate({
                                 void ensureRoeForCurrency(
                                   newChargeCurrency,
                                 ).then((roe) => {
-                                  form.insertListItem("cha  rges", {
+                                  form.insertListItem("charges", {
                                     charge_id: null,
                                     charge_name: "",
                                     charge_master_name: "",
