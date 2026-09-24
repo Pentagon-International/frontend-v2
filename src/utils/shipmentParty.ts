@@ -2,6 +2,8 @@ export type ShipmentPartyAddressOption = {
   value: string;
   label: string;
   email: string;
+  /** Optional address master id (booking pages that persist address_id). */
+  id?: string | number;
 };
 
 type ShipmentPartyRow = Record<string, unknown>;
@@ -68,10 +70,14 @@ export function mapShipmentPartyAddressOptions(
     const key = address.replace(/\s+/g, " ").trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);
+    const rawId = item.id;
     options.push({
       value: address,
       label: address,
       email: String(item.email ?? ""),
+      ...(rawId != null && String(rawId).trim() !== ""
+        ? { id: rawId as string | number }
+        : {}),
     });
   }
   return options;

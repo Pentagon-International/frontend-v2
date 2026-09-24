@@ -404,7 +404,10 @@ const carrierDetailsSchema = yup.object({
   mawb_number: yup
     .string()
     .required("MAWB Number is required")
-    .matches(/^[A-Za-z0-9]{11}$/, "MAWB Number must be exactly 11 characters"),
+    .matches(
+      /^[A-Za-z0-9]{11}$/,
+      "MAWB Number must be exactly 11 alphanumeric characters (no symbols)",
+    ),
   mawb_date: yup.date().nullable(),
 });
 
@@ -4209,7 +4212,17 @@ function AirExportJobCreate() {
                   required
                   placeholder="Enter MAWB number"
                   maxLength={11}
-                  {...carrierDetailsForm.getInputProps("mawb_number")}
+                  value={carrierDetailsForm.values.mawb_number}
+                  error={carrierDetailsForm.errors.mawb_number}
+                  onChange={(e) => {
+                    const cleaned = e.currentTarget.value
+                      .replace(/[^A-Za-z0-9]/g, "")
+                      .slice(0, 11);
+                    carrierDetailsForm.setFieldValue("mawb_number", cleaned);
+                  }}
+                  onBlur={() =>
+                    carrierDetailsForm.validateField("mawb_number")
+                  }
                 />
               </Grid.Col>
 

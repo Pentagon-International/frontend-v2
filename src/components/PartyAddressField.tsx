@@ -6,6 +6,8 @@ export type PartyAddressOption = {
   value: string;
   label: string;
   email?: string;
+  /** Optional address master id (used by booking pages that persist address_id). */
+  id?: string | number;
 };
 
 export type PartyAddressFieldProps = {

@@ -43,7 +43,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
-import { Dropdown, ToastNotification } from "../../../components";
+import { Dropdown, PartyAddressField, ToastNotification } from "../../../components";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -63,8 +63,6 @@ import { toTitleCase } from "../../../utils/textFormatter";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
-  shipmentPartyAddressMatchesSearch,
-  shouldUseCustomShipmentPartyAddress,
 } from "../../../utils/shipmentParty";
 import {
   applyShipmentTermsSelection,
@@ -236,9 +234,11 @@ interface FormValues {
   forwarder_email: string;
   destination_agent_code: string;
   destination_agent_address_id: number;
+  destination_agent_address: string;
   destination_agent_email: string;
   billing_customer_code: string;
   billing_customer_address_id: number;
+  billing_customer_address: string;
   notify1_customer_name: string;
   notify1_customer_address: string;
   notify1_customer_email: string;
@@ -247,6 +247,7 @@ interface FormValues {
   notify2_customer_email: string;
   cha_code: string;
   cha_address_id: number;
+  cha_address: string;
 
   // Commodity Details
   is_hazardous: boolean;
@@ -383,6 +384,7 @@ const validationSchema = yup.object({
     .notRequired(),
   destination_agent_code: yup.string().nullable(),
   destination_agent_address_id: yup.number().nullable(),
+  destination_agent_address: yup.string(),
   destination_agent_email: yup
     .string()
     .email("Invalid email format")
@@ -390,6 +392,7 @@ const validationSchema = yup.object({
     .notRequired(),
   billing_customer_code: yup.string(),
   billing_customer_address_id: yup.number(),
+  billing_customer_address: yup.string(),
   notify1_customer_name: yup.string(),
   notify1_customer_address: yup.string(),
   notify1_customer_email: yup
@@ -406,6 +409,7 @@ const validationSchema = yup.object({
     .notRequired(),
   cha_code: yup.string(),
   cha_address_id: yup.number(),
+  cha_address: yup.string(),
 
   // Commodity Details - All optional
   is_hazardous: yup.boolean(),
@@ -1219,12 +1223,14 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       ),
       destination_agent_address_id:
         Number(data.destination_agent_address_id) || 0,
+      destination_agent_address: String(data.destination_agent_address || ""),
       destination_agent_email: String(data.destination_agent_email || ""),
       billing_customer_code: String(
         data.billing_customer_code_read || data.billing_customer_code || "",
       ),
       billing_customer_address_id:
         Number(data.billing_customer_address_id) || 0,
+      billing_customer_address: String(data.billing_customer_address || ""),
       notify1_customer_name: String(
         data.notify1_customer_name ?? data.notify_customer_name ?? "",
       ),
@@ -1239,6 +1245,7 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       notify2_customer_email: String(data.notify2_customer_email ?? ""),
       cha_code: String(data.cha_code_read || data.cha_code || ""),
       cha_address_id: Number(data.cha_address_id) || 0,
+      cha_address: String(data.cha_address || ""),
 
       // Commodity Details
       is_hazardous: Boolean(data.is_hazardous),
@@ -1432,9 +1439,11 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       forwarder_email: "",
       destination_agent_code: "",
       destination_agent_address_id: 0,
+      destination_agent_address: "",
       destination_agent_email: "",
       billing_customer_code: "",
       billing_customer_address_id: 0,
+      billing_customer_address: "",
       notify1_customer_name: "",
       notify1_customer_address: "",
       notify1_customer_email: "",
@@ -1443,6 +1452,7 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       notify2_customer_email: "",
       cha_code: "",
       cha_address_id: 0,
+      cha_address: "",
 
       // Commodity Details
       is_hazardous: false,
@@ -2193,9 +2203,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (jobData.forwarder_address_id != null && jobData.forwarder_address) {
       setForwarderAddressOptions([
         {
-          value: String(jobData.forwarder_address_id),
+          value: String(jobData.forwarder_address),
           label: String(jobData.forwarder_address),
           email: String(jobData.forwarder_email || ""),
+          id: jobData.forwarder_address_id,
         },
       ]);
     }
@@ -2205,8 +2216,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     ) {
       setAgentAddressOptions([
         {
-          value: String(jobData.destination_agent_address_id),
+          value: String(jobData.destination_agent_address),
           label: String(jobData.destination_agent_address),
+          id: jobData.destination_agent_address_id,
         },
       ]);
     }
@@ -2216,8 +2228,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     ) {
       setBillingCustomerAddressOptions([
         {
-          value: String(jobData.billing_customer_address_id),
+          value: String(jobData.billing_customer_address),
           label: String(jobData.billing_customer_address),
+          id: jobData.billing_customer_address_id,
         },
       ]);
     }
@@ -2240,8 +2253,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (jobData.cha_address_id != null && jobData.cha_address) {
       setChaAddressOptions([
         {
-          value: String(jobData.cha_address_id),
+          value: String(jobData.cha_address),
           label: String(jobData.cha_address),
+          id: jobData.cha_address_id,
         },
       ]);
     }
@@ -2460,8 +2474,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (initialData.shipper_address) {
       setShipperAddressOptions([
         {
-          value: String(initialData.shipper_address_id || 0),
+          value: String(initialData.shipper_address),
           label: String(initialData.shipper_address),
+          id: initialData.shipper_address_id,
         },
       ]);
       form.setFieldValue(
@@ -2476,9 +2491,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (initialData.forwarder_address_id && initialData.forwarder_address) {
       setForwarderAddressOptions([
         {
-          value: String(initialData.forwarder_address_id),
+          value: String(initialData.forwarder_address),
           label: String(initialData.forwarder_address),
           email: String(initialData.forwarder_email || ""),
+          id: initialData.forwarder_address_id,
         },
       ]);
     }
@@ -2490,8 +2506,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     ) {
       setAgentAddressOptions([
         {
-          value: String(initialData.destination_agent_address_id),
+          value: String(initialData.destination_agent_address),
           label: String(initialData.destination_agent_address),
+          id: initialData.destination_agent_address_id,
         },
       ]);
     }
@@ -2503,8 +2520,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     ) {
       setBillingCustomerAddressOptions([
         {
-          value: String(initialData.billing_customer_address_id),
+          value: String(initialData.billing_customer_address),
           label: String(initialData.billing_customer_address),
+          id: initialData.billing_customer_address_id,
         },
       ]);
     }
@@ -2546,8 +2564,9 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
     if (initialData.cha_address_id && initialData.cha_address) {
       setChaAddressOptions([
         {
-          value: String(initialData.cha_address_id),
+          value: String(initialData.cha_address),
           label: String(initialData.cha_address),
+          id: initialData.cha_address_id,
         },
       ]);
     }
@@ -4349,8 +4368,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         }>;
 
                         const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
+                          value: addr.address,
                           label: addr.address,
+                          email: addr.email || "",
+                          id: addr.id,
                         }));
                         setShipperAddressOptions(addressOptions);
 
@@ -4437,68 +4458,27 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {(() => {
-                    const hasForwarder =
-                      Boolean(
-                        String(form.values.forwarder_code || "").trim(),
-                      ) ||
-                      Boolean(forwarderDisplayName?.trim()) ||
-                      Boolean(
-                        String(
-                          (form.values as { forwarder_name?: string })
-                            .forwarder_name || "",
-                        ).trim(),
+                  <PartyAddressField
+                    label="Shipper Address"
+                    placeholder="Enter shipper address"
+                    selectPlaceholder="Select shipper address"
+                    value={form.values.shipper_address || ""}
+                    options={shipperAddressOptions}
+                    partyKey={form.values.shipper_code || form.values.shipper_name || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("shipper_address", next);
+                      form.setFieldValue(
+                        "shipper_address_id",
+                        option?.id != null ? Number(option.id) || 0 : 0,
                       );
-                    const shipperAddressEditable =
-                      (hasForwarder &&
-                        !String(form.values.shipper_code || "").trim()) ||
-                      shipperAddressOptions.length === 0;
-                    if (shipperAddressEditable) {
-                      return (
-                        <FormTextInput
-                          label="Shipper Address"
-                          placeholder="Enter shipper address"
-                          value={form.values.shipper_address || ""}
-                          onChange={(e) => {
-                            form.setFieldValue(
-                              "shipper_address",
-                              toTitleCase(e.currentTarget.value),
-                            );
-                            form.setFieldValue("shipper_address_id", 0);
-                          }}
-                        />
-                      );
-                    }
-                    return (
-                      <Dropdown
-                        label="Shipper Address"
-                        placeholder="Select shipper address"
-                        searchable
-                        clearable
-                        data={shipperAddressOptions}
-                        value={
-                          form.values.shipper_address_id !== 0
-                            ? String(form.values.shipper_address_id)
-                            : ""
-                        }
-                        key={`shipper-${form.values.shipper_address_id}`}
-                        onChange={(value) => {
-                          form.setFieldValue(
-                            "shipper_address_id",
-                            value ? parseInt(value) || 0 : 0,
-                          );
-                          const opt = shipperAddressOptions.find(
-                            (o) => o.value === value,
-                          );
-                          form.setFieldValue(
-                            "shipper_address",
-                            opt?.label ?? "",
-                          );
-                        }}
-                        error={form.errors.shipper_address_id}
-                      />
-                    );
-                  })()}
+                      if (option?.email) {
+                        form.setFieldValue("shipper_email", option.email);
+                      } else if (!next) {
+                        form.setFieldValue("shipper_email", "");
+                      }
+                    }}
+                    error={form.errors.shipper_address_id || form.errors.shipper_address}
+                  />
                 </Grid.Col>
               </Grid>
 
@@ -4621,67 +4601,27 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {shouldUseCustomShipmentPartyAddress(
-                    consigneeAddressCustom,
-                    form.values.consignee_address || "",
-                    consigneeAddressOptions,
-                  ) ? (
-                    <FormTextInput
-                      label="Consignee Address"
-                      placeholder="Enter consignee address"
-                      value={form.values.consignee_address}
-                      onChange={(e) => {
-                        const v = toTitleCase(e.currentTarget.value);
-                        form.setFieldValue("consignee_address", v);
-                        if (!v.trim()) {
-                          setConsigneeAddressCustom(false);
-                          setConsigneeAddressSearch("");
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Dropdown
-                      label="Consignee Address"
-                      placeholder="Select consignee address"
-                      searchable
-                      clearable
-                      data={consigneeAddressOptions}
-                      value={form.values.consignee_address || ""}
-                      searchValue={consigneeAddressSearch}
-                      onSearchChange={(value) => {
-                        setConsigneeAddressSearch(value);
-                        if (
-                          value.trim() &&
-                          !shipmentPartyAddressMatchesSearch(
-                            consigneeAddressOptions,
-                            value,
-                          )
-                        ) {
-                          setConsigneeAddressCustom(true);
-                          form.setFieldValue(
-                            "consignee_address",
-                            toTitleCase(value),
-                          );
-                          form.setFieldValue("consignee_email", "");
-                        }
-                      }}
-                      onChange={(value) => {
-                        const selected = consigneeAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "consignee_address",
-                          value ? toTitleCase(value) : "",
-                        );
-                        form.setFieldValue(
-                          "consignee_email",
-                          selected?.email || "",
-                        );
-                        setConsigneeAddressSearch(value || "");
-                        setConsigneeAddressCustom(false);
-                      }}
-                    />
-                  )}
+                  <PartyAddressField
+                    label="Consignee Address"
+                    placeholder="Enter consignee address"
+                    selectPlaceholder="Select consignee address"
+                    value={form.values.consignee_address || ""}
+                    options={consigneeAddressOptions}
+                    partyKey={form.values.consignee_code || form.values.consignee_name || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("consignee_address", next);
+                      form.setFieldValue(
+                        "consignee_address_id",
+                        option?.id != null ? Number(option.id) || 0 : 0,
+                      );
+                      if (option?.email) {
+                        form.setFieldValue("consignee_email", option.email);
+                      } else if (!next) {
+                        form.setFieldValue("consignee_email", "");
+                      }
+                    }}
+                    error={form.errors.consignee_address_id || form.errors.consignee_address}
+                  />
                 </Grid.Col>
               </Grid>
               <Divider my="md" />
@@ -4733,9 +4673,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           address_type?: string;
                         }>;
                         const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
+                          value: addr.address,
                           label: addr.address,
-                          email: addr.email ?? "",
+                          email: addr.email || "",
+                          id: addr.id,
                         }));
                         setForwarderAddressOptions(addressOptions);
 
@@ -4785,42 +4726,26 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <Dropdown
+                  <PartyAddressField
                     label="Forwarder Address"
-                    placeholder="Select forwarder address"
-                    searchable
-                    clearable
-                    data={forwarderAddressOptions}
-                    key={
-                      form.values.forwarder_address_id &&
-                      form.values.forwarder_address_id !== 0
-                        ? String(form.values.forwarder_address_id)
-                        : "forwarder-empty"
-                    }
-                    value={
-                      form.values.forwarder_address_id &&
-                      form.values.forwarder_address_id !== 0
-                        ? String(form.values.forwarder_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
+                    placeholder="Enter forwarder address"
+                    selectPlaceholder="Select forwarder address"
+                    value={form.values.forwarder_address || ""}
+                    options={forwarderAddressOptions}
+                    partyKey={form.values.forwarder_code || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("forwarder_address", next);
                       form.setFieldValue(
                         "forwarder_address_id",
-                        value ? parseInt(value) : 0,
+                        option?.id != null ? Number(option.id) || 0 : 0,
                       );
-                      const selected = forwarderAddressOptions.find(
-                        (o) => o.value === value,
-                      );
-                      form.setFieldValue(
-                        "forwarder_address",
-                        selected?.label ?? "",
-                      );
-                      if (selected?.email) {
-                        form.setFieldValue("forwarder_email", selected.email);
+                      if (option?.email) {
+                        form.setFieldValue("forwarder_email", option.email);
+                      } else if (!next) {
+                        form.setFieldValue("forwarder_email", "");
                       }
                     }}
-                    error={form.errors.forwarder_address_id}
-                    disabled={forwarderAddressOptions.length === 0}
+                    error={form.errors.forwarder_address_id || form.errors.forwarder_address}
                   />
                 </Grid.Col>
               </Grid>
@@ -4851,6 +4776,8 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setDestinationAgentDisplayName(null);
                         setAgentAddressOptions([]);
                         form.setFieldValue("destination_agent_address_id", 0);
+                          form.setFieldValue("destination_agent_address", "");
+                        form.setFieldValue("destination_agent_address", "");
                         form.setFieldValue("destination_agent_email", "");
                         return;
                       }
@@ -4872,8 +4799,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           address_type?: string;
                         }>;
                         const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
+                          value: addr.address,
                           label: addr.address,
+                          email: addr.email || "",
+                          id: addr.id,
                         }));
                         setAgentAddressOptions(addressOptions);
 
@@ -4888,11 +4817,16 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             primary.id,
                           );
                           form.setFieldValue(
+                            "destination_agent_address",
+                            primary.address ?? "",
+                          );
+                          form.setFieldValue(
                             "destination_agent_email",
                             primary.email ?? "",
                           );
                         } else {
                           form.setFieldValue("destination_agent_address_id", 0);
+                          form.setFieldValue("destination_agent_address", "");
                           form.setFieldValue("destination_agent_email", "");
                         }
                       }
@@ -4912,32 +4846,26 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  <Dropdown
+                  <PartyAddressField
                     label="Destination Agent Address"
-                    placeholder="Select agent address"
-                    searchable
-                    clearable
-                    data={agentAddressOptions}
-                    key={
-                      form.values.destination_agent_address_id &&
-                      form.values.destination_agent_address_id !== 0
-                        ? String(form.values.destination_agent_address_id)
-                        : "agent-empty"
-                    }
-                    value={
-                      form.values.destination_agent_address_id &&
-                      form.values.destination_agent_address_id !== 0
-                        ? String(form.values.destination_agent_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
+                    placeholder="Enter agent address"
+                    selectPlaceholder="Select agent address"
+                    value={form.values.destination_agent_address || ""}
+                    options={agentAddressOptions}
+                    partyKey={form.values.destination_agent_code || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("destination_agent_address", next);
                       form.setFieldValue(
                         "destination_agent_address_id",
-                        value ? parseInt(value) : 0,
+                        option?.id != null ? Number(option.id) || 0 : 0,
                       );
+                      if (option?.email) {
+                        form.setFieldValue("destination_agent_email", option.email);
+                      } else if (!next) {
+                        form.setFieldValue("destination_agent_email", "");
+                      }
                     }}
-                    error={form.errors.destination_agent_address_id}
-                    disabled={agentAddressOptions.length === 0}
+                    error={form.errors.destination_agent_address_id || form.errors.destination_agent_address}
                   />
                 </Grid.Col>
               </Grid>
@@ -4968,6 +4896,8 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setBillingCustomerDisplayName(null);
                         setBillingCustomerAddressOptions([]);
                         form.setFieldValue("billing_customer_address_id", 0);
+                          form.setFieldValue("billing_customer_address", "");
+                        form.setFieldValue("billing_customer_address", "");
                         return;
                       }
 
@@ -4988,8 +4918,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           address_type?: string;
                         }>;
                         const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
+                          value: addr.address,
                           label: addr.address,
+                          email: addr.email || "",
+                          id: addr.id,
                         }));
                         setBillingCustomerAddressOptions(addressOptions);
 
@@ -5003,8 +4935,13 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                             "billing_customer_address_id",
                             primary.id,
                           );
+                          form.setFieldValue(
+                            "billing_customer_address",
+                            primary.address ?? "",
+                          );
                         } else {
                           form.setFieldValue("billing_customer_address_id", 0);
+                          form.setFieldValue("billing_customer_address", "");
                         }
                       }
                     }}
@@ -5015,32 +4952,21 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={8}>
-                  <Dropdown
+                  <PartyAddressField
                     label="Billing Customer Address"
-                    placeholder="Select billing address"
-                    searchable
-                    clearable
-                    data={billingCustomerAddressOptions}
-                    key={
-                      form.values.billing_customer_address_id &&
-                      form.values.billing_customer_address_id !== 0
-                        ? String(form.values.billing_customer_address_id)
-                        : "billing-empty"
-                    }
-                    value={
-                      form.values.billing_customer_address_id &&
-                      form.values.billing_customer_address_id !== 0
-                        ? String(form.values.billing_customer_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
+                    placeholder="Enter billing address"
+                    selectPlaceholder="Select billing address"
+                    value={form.values.billing_customer_address || ""}
+                    options={billingCustomerAddressOptions}
+                    partyKey={form.values.billing_customer_code || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("billing_customer_address", next);
                       form.setFieldValue(
                         "billing_customer_address_id",
-                        value ? parseInt(value) : 0,
+                        option?.id != null ? Number(option.id) || 0 : 0,
                       );
                     }}
-                    error={form.errors.billing_customer_address_id}
-                    disabled={billingCustomerAddressOptions.length === 0}
+                    error={form.errors.billing_customer_address_id || form.errors.billing_customer_address}
                   />
                 </Grid.Col>
               </Grid>
@@ -5162,67 +5088,23 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {shouldUseCustomShipmentPartyAddress(
-                    notifyCustomerAddressCustom,
-                    form.values.notify1_customer_address || "",
-                    notifyCustomerAddressOptions,
-                  ) ? (
-                    <FormTextInput
-                      label="Notify Customer 1 Address"
-                      placeholder="Enter notify address"
-                      value={form.values.notify1_customer_address}
-                      onChange={(e) => {
-                        const v = toTitleCase(e.currentTarget.value);
-                        form.setFieldValue("notify1_customer_address", v);
-                        if (!v.trim()) {
-                          setNotifyCustomerAddressCustom(false);
-                          setNotifyCustomerAddressSearch("");
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Dropdown
-                      label="Notify Customer 1 Address"
-                      placeholder="Select notify address"
-                      searchable
-                      clearable
-                      data={notifyCustomerAddressOptions}
-                      value={form.values.notify1_customer_address || ""}
-                      searchValue={notifyCustomerAddressSearch}
-                      onSearchChange={(value) => {
-                        setNotifyCustomerAddressSearch(value);
-                        if (
-                          value.trim() &&
-                          !shipmentPartyAddressMatchesSearch(
-                            notifyCustomerAddressOptions,
-                            value,
-                          )
-                        ) {
-                          setNotifyCustomerAddressCustom(true);
-                          form.setFieldValue(
-                            "notify1_customer_address",
-                            toTitleCase(value),
-                          );
-                          form.setFieldValue("notify1_customer_email", "");
-                        }
-                      }}
-                      onChange={(value) => {
-                        const selected = notifyCustomerAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "notify1_customer_address",
-                          value ? toTitleCase(value) : "",
-                        );
-                        form.setFieldValue(
-                          "notify1_customer_email",
-                          selected?.email || "",
-                        );
-                        setNotifyCustomerAddressSearch(value || "");
-                        setNotifyCustomerAddressCustom(false);
-                      }}
-                    />
-                  )}
+                  <PartyAddressField
+                    label="Notify Customer 1 Address"
+                    placeholder="Enter notify address"
+                    selectPlaceholder="Select notify address"
+                    value={form.values.notify1_customer_address || ""}
+                    options={notifyCustomerAddressOptions}
+                    partyKey={form.values.notify1_customer_name || notifyCustomerSelectedId || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("notify1_customer_address", next);
+                      if (option?.email) {
+                        form.setFieldValue("notify1_customer_email", option.email);
+                      } else if (!next) {
+                        form.setFieldValue("notify1_customer_email", "");
+                      }
+                    }}
+                    error={form.errors.notify1_customer_address}
+                  />
                 </Grid.Col>
               </Grid>
               <Divider my="md" />
@@ -5345,67 +5227,23 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={12}>
-                  {shouldUseCustomShipmentPartyAddress(
-                    notify2CustomerAddressCustom,
-                    form.values.notify2_customer_address || "",
-                    notify2CustomerAddressOptions,
-                  ) ? (
-                    <FormTextInput
-                      label="Notify Customer 2 Address"
-                      placeholder="Enter notify address"
-                      value={form.values.notify2_customer_address}
-                      onChange={(e) => {
-                        const v = toTitleCase(e.currentTarget.value);
-                        form.setFieldValue("notify2_customer_address", v);
-                        if (!v.trim()) {
-                          setNotify2CustomerAddressCustom(false);
-                          setNotify2CustomerAddressSearch("");
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Dropdown
-                      label="Notify Customer 2 Address"
-                      placeholder="Select notify address"
-                      searchable
-                      clearable
-                      data={notify2CustomerAddressOptions}
-                      value={form.values.notify2_customer_address || ""}
-                      searchValue={notify2CustomerAddressSearch}
-                      onSearchChange={(value) => {
-                        setNotify2CustomerAddressSearch(value);
-                        if (
-                          value.trim() &&
-                          !shipmentPartyAddressMatchesSearch(
-                            notify2CustomerAddressOptions,
-                            value,
-                          )
-                        ) {
-                          setNotify2CustomerAddressCustom(true);
-                          form.setFieldValue(
-                            "notify2_customer_address",
-                            toTitleCase(value),
-                          );
-                          form.setFieldValue("notify2_customer_email", "");
-                        }
-                      }}
-                      onChange={(value) => {
-                        const selected = notify2CustomerAddressOptions.find(
-                          (item) => item.value === value,
-                        );
-                        form.setFieldValue(
-                          "notify2_customer_address",
-                          value ? toTitleCase(value) : "",
-                        );
-                        form.setFieldValue(
-                          "notify2_customer_email",
-                          selected?.email || "",
-                        );
-                        setNotify2CustomerAddressSearch(value || "");
-                        setNotify2CustomerAddressCustom(false);
-                      }}
-                    />
-                  )}
+                  <PartyAddressField
+                    label="Notify Customer 2 Address"
+                    placeholder="Enter notify address"
+                    selectPlaceholder="Select notify address"
+                    value={form.values.notify2_customer_address || ""}
+                    options={notify2CustomerAddressOptions}
+                    partyKey={form.values.notify2_customer_name || notify2CustomerSelectedId || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("notify2_customer_address", next);
+                      if (option?.email) {
+                        form.setFieldValue("notify2_customer_email", option.email);
+                      } else if (!next) {
+                        form.setFieldValue("notify2_customer_email", "");
+                      }
+                    }}
+                    error={form.errors.notify2_customer_address}
+                  />
                 </Grid.Col>
               </Grid>
               <Divider my="md" />
@@ -5435,6 +5273,8 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setChaDisplayName(null);
                         setChaAddressOptions([]);
                         form.setFieldValue("cha_address_id", 0);
+                          form.setFieldValue("cha_address", "");
+                        form.setFieldValue("cha_address", "");
                         return;
                       }
 
@@ -5455,8 +5295,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           address_type?: string;
                         }>;
                         const addressOptions = addressesData.map((addr) => ({
-                          value: String(addr.id),
+                          value: addr.address,
                           label: addr.address,
+                          email: addr.email || "",
+                          id: addr.id,
                         }));
                         setChaAddressOptions(addressOptions);
 
@@ -5467,6 +5309,10 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         );
                         if (primary) {
                           form.setFieldValue("cha_address_id", primary.id);
+                          form.setFieldValue(
+                            "cha_address",
+                            primary.address ?? "",
+                          );
                         } else {
                           form.setFieldValue("cha_address_id", 0);
                         }
@@ -5478,32 +5324,21 @@ const InlandImportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   />
                 </Grid.Col>
                 <Grid.Col span={8}>
-                  <Dropdown
+                  <PartyAddressField
                     label="CHA Address"
-                    placeholder="Select CHA address"
-                    searchable
-                    clearable
-                    data={chaAddressOptions}
-                    key={
-                      form.values.cha_address_id &&
-                      form.values.cha_address_id !== 0
-                        ? String(form.values.cha_address_id)
-                        : "cha-empty"
-                    }
-                    value={
-                      form.values.cha_address_id &&
-                      form.values.cha_address_id !== 0
-                        ? String(form.values.cha_address_id)
-                        : ""
-                    }
-                    onChange={(value) => {
+                    placeholder="Enter CHA address"
+                    selectPlaceholder="Select CHA address"
+                    value={form.values.cha_address || ""}
+                    options={chaAddressOptions}
+                    partyKey={form.values.cha_code || ""}
+                    onChange={(next, option) => {
+                      form.setFieldValue("cha_address", next);
                       form.setFieldValue(
                         "cha_address_id",
-                        value ? parseInt(value) : 0,
+                        option?.id != null ? Number(option.id) || 0 : 0,
                       );
                     }}
-                    error={form.errors.cha_address_id}
-                    disabled={chaAddressOptions.length === 0}
+                    error={form.errors.cha_address_id || form.errors.cha_address}
                   />
                 </Grid.Col>
               </Grid>
