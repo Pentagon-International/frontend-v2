@@ -837,13 +837,14 @@ function HouseCreate() {
         setCargoDetails(mappedCargoDetails);
       }
 
-      // Load charges - prefer non-empty charges, then mbl_charges/mawb_charges
+      // Ocean: mbl_charges first, then legacy rows stored under mawb_charges
       const chargesArray = resolveHouseChargesSource(
         editData as {
           charges?: unknown;
           mbl_charges?: unknown;
           mawb_charges?: unknown;
         },
+        "mbl",
       );
       // unitArr/currArr from masters - will be empty on first run; chargesIdsResolvedRef effect resolves when masters load
       const unitArr = Array.isArray(unitDataRaw) ? unitDataRaw : [];

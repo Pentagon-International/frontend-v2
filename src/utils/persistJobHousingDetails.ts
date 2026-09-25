@@ -77,6 +77,23 @@ function pickPopulatedArray(
   return null;
 }
 
+/** Form display fields used by master routing selects (`Name (CODE)`). */
+export function withRoutingLocationDisplay(
+  routing: Record<string, unknown>,
+): Record<string, unknown> {
+  const from_code = String(routing.from_code ?? routing.from_port_code ?? "");
+  const from_name = String(routing.from_name ?? routing.from_port_name ?? "");
+  const to_code = String(routing.to_code ?? routing.to_port_code ?? "");
+  const to_name = String(routing.to_name ?? routing.to_port_name ?? "");
+  return {
+    ...routing,
+    from_code,
+    from_name,
+    to_code,
+    to_name,
+  };
+}
+
 function mapRoutingForPayload(
   routing: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -333,11 +350,17 @@ function sanitizeHousingDetailsForPayload(
       return { ...rest, mawb_charges: mapHouseChargeRows(rawCharges) };
     }
 
-    if (!rawCharges) return house;
+    // Ocean saves only mbl_charges. Drop mawb_charges so a stale MAWB list
+    // cannot be written back over the same charge rows.
+    const rest = omitHouseChargeAliases(h);
+    if (!rawCharges) return rest;
 
-    const mapped = mapHouseChargeRows(rawCharges);
+    const mapped = mapHouseChargeRows(rawCharges).map((row) => ({
+      ...row,
+      charge_source: "MBL",
+    }));
     return {
-      ...h,
+      ...rest,
       mbl_charges: mapped,
       ...(Array.isArray(h.charges) ? { charges: mapped } : {}),
     };
@@ -599,7 +622,9 @@ export function mergeMasterNavStateFromSavedJob(
   };
 
   if (Array.isArray(savedJob.ocean_routings) && savedJob.ocean_routings.length > 0) {
-    state.routings = savedJob.ocean_routings;
+    state.routings = (savedJob.ocean_routings as Record<string, unknown>[]).map(
+      withRoutingLocationDisplay,
+    );
   }
   if (
     Array.isArray(savedJob.container_details) &&

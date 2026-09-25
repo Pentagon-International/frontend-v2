@@ -102,6 +102,7 @@ import {
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
   hasMeaningfulHouseChargeData,
+  resolveHouseChargesSource,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
 import {
@@ -166,6 +167,7 @@ import {
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
 import { resolveJobAgentAddress } from "../../../utils/resolveJobAgentAddress";
+import { withRoutingLocationDisplay } from "../../../utils/persistJobHousingDetails";
 import { navigateWithReturnTo } from "../../../utils/globalSearchNavigation";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
@@ -1502,21 +1504,9 @@ function ExportJobCreate() {
                       }),
                     )
                   : [],
-              charges: (() => {
-                const src =
-                  house.charges &&
-                  Array.isArray(house.charges) &&
-                  house.charges.length > 0
-                    ? house.charges
-                    : house.mbl_charges &&
-                        Array.isArray(house.mbl_charges) &&
-                        house.mbl_charges.length > 0
-                      ? house.mbl_charges
-                      : [];
-                return (src as Record<string, unknown>[]).map((charge) =>
-                  mapExportJobHouseChargeRow(charge),
-                );
-              })(),
+              charges: resolveHouseChargesSource(house, "mbl").map((charge) =>
+                mapExportJobHouseChargeRow(charge as Record<string, unknown>),
+              ),
               ...extractHouseDocumentFields(house),
             }),
           );
@@ -1547,28 +1537,28 @@ function ExportJobCreate() {
               let voyage_number = "";
               let flightVoyageNumber = "";
 
-              if (transportType === "SEA" || transportType === "VESSEL") {
+              if (transportType === "sea" || transportType === "vessel") {
                 voyage_number = routing.voyage_number
                   ? String(routing.voyage_number)
                   : routing.flight_voyage_number
                     ? String(routing.flight_voyage_number)
                     : "";
                 flightVoyageNumber = voyage_number;
-              } else if (transportType === "AIR") {
+              } else if (transportType === "air") {
                 flight = routing.flight
                   ? String(routing.flight)
                   : routing.flight_voyage_number
                     ? String(routing.flight_voyage_number)
                     : "";
                 flightVoyageNumber = flight;
-              } else if (transportType === "ROAD") {
+              } else if (transportType === "road") {
                 truck_no = routing.truck_no
                   ? String(routing.truck_no)
                   : routing.flight_voyage_number
                     ? String(routing.flight_voyage_number)
                     : "";
                 flightVoyageNumber = truck_no;
-              } else if (transportType === "RAIL") {
+              } else if (transportType === "rail") {
                 rail_no = routing.rail_no
                   ? String(routing.rail_no)
                   : routing.flight_voyage_number
@@ -1997,7 +1987,12 @@ function ExportJobCreate() {
         Array.isArray(location.state.routings) &&
         location.state.routings.length > 0
       ) {
-        routingsForm.setValues({ routings: location.state.routings });
+        routingsForm.setValues({
+          routings: location.state.routings.map(
+            (routing: Record<string, unknown>) =>
+              withRoutingLocationDisplay(routing),
+          ) as typeof routingsForm.values.routings,
+        });
       }
 
       // Restore Container Details
@@ -3661,16 +3656,16 @@ function ExportJobCreate() {
             routing.transport_type || "",
           ).toLowerCase();
 
-          if (transportType === "SEA" || transportType === "VESSEL") {
+          if (transportType === "sea" || transportType === "vessel") {
             routingPayload.vessel = routing.vessel || null;
             routingPayload.voyage_number = routing.voyage_number || null;
-          } else if (transportType === "AIR") {
+          } else if (transportType === "air") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.flight = routing.flight || null;
-          } else if (transportType === "ROAD") {
+          } else if (transportType === "road") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.truck_no = routing.truck_no || null;
-          } else if (transportType === "RAIL") {
+          } else if (transportType === "rail") {
             routingPayload.carrier_code = routing.carrier_code || null;
             routingPayload.rail_no = routing.rail_no || null;
           } else {
@@ -3787,16 +3782,13 @@ function ExportJobCreate() {
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (() => {
-            const src =
-              (house as { mbl_charges?: unknown }).mbl_charges ??
-              (house as { charges?: unknown }).charges ??
-              [];
-            const arr = Array.isArray(src) ? src : [];
+            const arr = resolveHouseChargesSource(house, "mbl");
             const meaningful = arr.filter((charge) =>
               hasMeaningfulHouseChargeData(charge as HouseChargeLike),
             );
             if (meaningful.length === 0) return [];
             return meaningful.map((charge: Record<string, unknown>) => ({
+              charge_source: "MBL",
               ...(mode === "edit" &&
                 charge.id != null && {
                   id:
