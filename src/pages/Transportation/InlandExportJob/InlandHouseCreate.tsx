@@ -38,6 +38,7 @@ import {
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   useRef,
@@ -63,9 +64,6 @@ import {
   type CustomerSelectionState,
   type CustomerSelectionType,
   buildShipperTempPayloadFields,
-  hasForwarderParty,
-  hasBillingCustomerParty,
-  isNewCustomerSelection,
 } from "../../../utils/customerSelection";
 import { resolveExportHouseInvoiceBillTo } from "../../../utils/houseInvoiceBillTo";
 import {
@@ -408,6 +406,8 @@ function HouseCreate() {
     boolean | null
   >(null);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const consigneeFreeTextInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldFocusConsigneeFreeTextRef = useRef(false);
 
   // Notify Customer (shipment-party) - same pattern as Consignee
   const [notifyCustomerSearch, setNotifyCustomerSearch] = useState("");
@@ -545,14 +545,8 @@ function HouseCreate() {
     if (!editData) return;
     const hasCode = Boolean(String(editData.shipper_code || "").trim());
     const hasName = Boolean(String(editData.shipper_name || "").trim());
-    const hasFwd =
-      (editData as { forwarder_id?: number | null }).forwarder_id != null ||
-      Boolean(
-        String(
-          (editData as { forwarder_name?: string }).forwarder_name || "",
-        ).trim(),
-      );
-    if (!hasCode && hasName && hasFwd) {
+    // Name without master code → free-text shipper (same as shipment-party unmatched flow)
+    if (!hasCode && hasName) {
       setShipperSelection({
         selectionType: "freeText",
         customerName: String(editData.shipper_name || ""),
@@ -1580,6 +1574,7 @@ function HouseCreate() {
         if (!arr.length) {
           setConsigneeOptions([]);
           setConsigneeHasResults(false);
+          shouldFocusConsigneeFreeTextRef.current = true;
           setConsigneeManualMode(true);
           consigneeDataRef.current = {};
           // When shipment-party has no matches, keep user's typed text as manual entry
@@ -1604,6 +1599,25 @@ function HouseCreate() {
     },
     500,
   );
+
+  useLayoutEffect(() => {
+    if (
+      !shouldFocusConsigneeFreeTextRef.current ||
+      consigneeHasResults !== false
+    ) {
+      return;
+    }
+    const input = consigneeFreeTextInputRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus({ preventScroll: true });
+    try {
+      input.setSelectionRange(cursor, cursor);
+    } catch {
+      // ignore
+    }
+    shouldFocusConsigneeFreeTextRef.current = false;
+  }, [consigneeHasResults, consigneeSearch]);
 
   // Debounced shipment-party search for Notify Customer 1 - same API & pattern as Consignee
   const debouncedNotifyCustomerSearch = useDebouncedCallback(
@@ -1748,28 +1762,6 @@ function HouseCreate() {
         String(a.address_type || "").toUpperCase() === "PRIMARY" && !!a.address,
     ) || addresses.find((a) => !!a.address);
 
-  const isForwarderSelected = () =>
-    hasForwarderParty({
-      forwarderId: form.values.forwarder_id,
-      forwarderName: form.values.forwarder_name,
-    });
-
-  const isBillingCustomerSelected = () =>
-    hasBillingCustomerParty({
-      billingCustomerId: form.values.billing_customer_id,
-      billingCustomerName: form.values.billing_customer_name,
-    });
-
-  const clearFreeTextShipper = () => {
-    setShipperSelection(INITIAL_CUSTOMER_SELECTION);
-    form.setFieldValue("shipper_code", "");
-    form.setFieldValue("shipper_name", "");
-    setShipperAddressOptions([]);
-    form.setFieldValue("shipper_address", "");
-    form.setFieldValue("shipper_email", "");
-    form.setFieldValue("shipper_state_id", "");
-  };
-
   const handleShipperCustomerChange = ({
     value,
     customerName,
@@ -1870,11 +1862,7 @@ function HouseCreate() {
       return;
     }
 
-    if (!isForwarderSelected() && !isBillingCustomerSelected()) {
-      clearFreeTextShipper();
-      return;
-    }
-
+    // Free-text / temp shipper: keep typed name in payload even when not in master
     form.setFieldValue(
       "shipper_code",
       selectionType === "temp" ? tempCode || value || "" : "",
@@ -3625,7 +3613,7 @@ function HouseCreate() {
                         : form.values.shipper_code
                   }
                   displayValue={form.values.shipper_name}
-                  allowFreeText={isForwarderSelected() || isBillingCustomerSelected()}
+                  allowFreeText
                   showNewCustomerDetailsAction={false}
                   selectionType={shipperSelection.selectionType}
                   onCustomerChange={handleShipperCustomerChange}
@@ -3675,6 +3663,7 @@ function HouseCreate() {
                 {consigneeHasResults === false &&
                 consigneeSearch.trim().length >= 2 ? (
                   <FormTextInput
+                    ref={consigneeFreeTextInputRef}
                     label="Consignee Name"
                     required
                     placeholder="Enter consignee name"
@@ -3846,9 +3835,6 @@ function HouseCreate() {
                       form.setFieldValue("forwarder_address", "");
                       form.setFieldValue("forwarder_email", "");
                       setForwarderAddressOptions([]);
-                      if (isNewCustomerSelection(shipperSelection)) {
-                        clearFreeTextShipper();
-                      }
                       return;
                     }
 
@@ -3985,9 +3971,6 @@ function HouseCreate() {
                       form.setFieldValue("billing_customer_address", "");
                       form.setFieldValue("billing_customer_email", "");
                       setBillingCustomerAddressOptions([]);
-                      if (isNewCustomerSelection(shipperSelection)) {
-                        clearFreeTextShipper();
-                      }
                       return;
                     }
 

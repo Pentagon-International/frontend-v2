@@ -37,6 +37,7 @@ import {
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   useRef,
@@ -56,8 +57,15 @@ import {
   PartyAddressField,
   ToastNotification,
   SingleDateInput,
+  CustomerNameSelect,
 } from "../../../components";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  INITIAL_CUSTOMER_SELECTION,
+  type CustomerSelectionState,
+  type CustomerSelectionType,
+  resolveCustomerMasterCode,
+} from "../../../utils/customerSelection";
 import {
   mapShipmentPartyAddressOptions,
   mapShipmentPartySearchResults,
@@ -404,6 +412,8 @@ function HouseCreate() {
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
     Array<{ value: string; label: string; email?: string }>
   >([]);
+  const [consigneeSelection, setConsigneeSelection] =
+    useState<CustomerSelectionState>(INITIAL_CUSTOMER_SELECTION);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string; email?: string }>>([]);
   // Shipment-party search state for Shipper (import flow)
@@ -417,6 +427,8 @@ function HouseCreate() {
     null,
   );
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const shipperFreeTextInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldFocusShipperFreeTextRef = useRef(false);
   const billingCustomerEmailRef = useRef<HTMLInputElement | null>(null);
   const [billingCustomerAddressOptions, setBillingCustomerAddressOptions] =
     useState<Array<{ value: string; label: string; email?: string }>>([]);
@@ -499,6 +511,7 @@ function HouseCreate() {
       if (!arr.length) {
         setShipperOptions([]);
         setShipperHasResults(false);
+        shouldFocusShipperFreeTextRef.current = true;
         setShipperManualMode(true);
         shipperDataRef.current = {};
         // When shipment-party has no matches, keep the user's typed text
@@ -522,6 +535,20 @@ function HouseCreate() {
       shipperDataRef.current = {};
     }
   }, 500);
+
+  useLayoutEffect(() => {
+    if (!shouldFocusShipperFreeTextRef.current || !shipperManualMode) return;
+    const input = shipperFreeTextInputRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus({ preventScroll: true });
+    try {
+      input.setSelectionRange(cursor, cursor);
+    } catch {
+      // ignore
+    }
+    shouldFocusShipperFreeTextRef.current = false;
+  }, [shipperManualMode, shipperSearch]);
 
   const getPartyAddresses = (
     original: Record<string, unknown>,
@@ -779,6 +806,115 @@ function HouseCreate() {
       return {};
     },
   });
+
+  const handleConsigneeCustomerChange = ({
+    value,
+    customerName,
+    selectionType,
+    tempCode,
+    originalData,
+  }: {
+    value: string;
+    customerName: string;
+    selectionType: CustomerSelectionType;
+    tempCode: string | null;
+    originalData?: Record<string, unknown> | null;
+  }) => {
+    const name = toTitleCase(customerName || value || "");
+    setConsigneeSelection({
+      selectionType,
+      customerName: name,
+      tempCode,
+    });
+
+    if (!value && selectionType === "master") {
+      form.setFieldValue("consignee_code", "");
+      form.setFieldValue("consignee_name", "");
+      form.setFieldValue("consignee_email", "");
+      form.setFieldValue("consignee_address", "");
+      form.setFieldValue("consignee_state_id", "");
+      setConsigneeAddressOptions([]);
+      return;
+    }
+
+    if (selectionType === "master") {
+      const original = (originalData || {}) as Record<string, unknown>;
+      const consigneeCode =
+        resolveCustomerMasterCode(original.customer_code, value) ||
+        String(value || "");
+      form.setFieldValue("consignee_code", consigneeCode);
+      form.setFieldValue("consignee_name", name);
+
+      const email = String(original.customer_email ?? original.email ?? "");
+      const addressesData = Array.isArray(original.addresses_data)
+        ? (original.addresses_data as Array<{
+            address?: string;
+            email?: string;
+            state_id?: number | null;
+            address_type?: string | null;
+          }>)
+        : [];
+      const addressOptions = addressesData
+        .filter((a) => a.address)
+        .map((a) => {
+          const addr = toTitleCase(String(a.address || ""));
+          return {
+            value: addr,
+            label: addr,
+            email: String(a.email || ""),
+          };
+        });
+      setConsigneeAddressOptions(addressOptions);
+
+      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+      form.setFieldValue(
+        "consignee_email",
+        String(primaryAddr?.email || email || ""),
+      );
+
+      if (primaryAddr?.address) {
+        form.setFieldValue(
+          "consignee_address",
+          toTitleCase(String(primaryAddr.address)),
+        );
+      } else if (!value) {
+        form.setFieldValue("consignee_address", "");
+      }
+
+      const primaryAddress = addressesData.find(
+        (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+      );
+      const addrForState =
+        primaryAddress || addressesData.find((a) => a.state_id != null);
+      if (addrForState?.state_id != null) {
+        form.setFieldValue("consignee_state_id", String(addrForState.state_id));
+      } else {
+        form.setFieldValue("consignee_state_id", "");
+      }
+      return;
+    }
+
+    // Free-text / temp: keep typed name in payload even when not in master
+    form.setFieldValue(
+      "consignee_code",
+      selectionType === "temp" ? tempCode || value || "" : "",
+    );
+    form.setFieldValue("consignee_name", name);
+    setConsigneeAddressOptions([]);
+    form.setFieldValue("consignee_state_id", "");
+
+    if (selectionType === "temp" && originalData) {
+      const addr = String(originalData.address || "").trim();
+      const email = String(originalData.email || "").trim();
+      form.setFieldValue("consignee_address", addr);
+      form.setFieldValue("consignee_email", email);
+    } else if (selectionType === "freeText") {
+      if (!name.trim()) {
+        form.setFieldValue("consignee_address", "");
+        form.setFieldValue("consignee_email", "");
+      }
+    }
+  };
 
   const { data: eventMasterData = [] } = useQuery({
     queryKey: ["eventMaster"],
@@ -1456,6 +1592,20 @@ function HouseCreate() {
         const addrStr = toTitleCase(String(consigneeAddr));
         form.setFieldValue("consignee_address", addrStr);
         setConsigneeAddressOptions([{ value: addrStr, label: addrStr }]);
+      }
+      const consigneeCode =
+        editData.consignee_id != null
+          ? String(editData.consignee_id)
+          : String(editData.consignee_code || "");
+      const consigneeName = String(editData.consignee_name || "");
+      if (!consigneeCode.trim() && consigneeName.trim()) {
+        setConsigneeSelection({
+          selectionType: "freeText",
+          customerName: consigneeName,
+          tempCode: null,
+        });
+      } else if (consigneeCode.trim()) {
+        setConsigneeSelection(INITIAL_CUSTOMER_SELECTION);
       }
 
     // Load cargo_details and charges once per house (inside one-shot init)
@@ -3851,6 +4001,7 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 {shipperManualMode && shipperSearch.trim().length >= 2 ? (
                   <FormTextInput
+                    ref={shipperFreeTextInputRef}
                     label="Shipper Name"
                     required
                     placeholder="Enter shipper name"
@@ -4024,7 +4175,7 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <SearchableSelect
+                <CustomerNameSelect
                   label="Consignee Name"
                   required
                   placeholder="Type consignee name"
@@ -4035,84 +4186,20 @@ function HouseCreate() {
                     value: String(item.customer_code),
                     label: String(item.customer_name),
                   })}
-                  value={form.values.consignee_code}
+                  value={
+                    consigneeSelection.selectionType === "temp"
+                      ? consigneeSelection.tempCode || ""
+                      : consigneeSelection.selectionType === "freeText"
+                        ? consigneeSelection.customerName ||
+                          form.values.consignee_name ||
+                          ""
+                        : form.values.consignee_code
+                  }
                   displayValue={form.values.consignee_name}
-                  onChange={(value, selectedData, originalData) => {
-                    if (!value) {
-                      form.setFieldValue("consignee_code", "");
-                      form.setFieldValue("consignee_name", "");
-                      form.setFieldValue("consignee_email", "");
-                      form.setFieldValue("consignee_address", "");
-                      form.setFieldValue("consignee_state_id", "");
-                      setConsigneeAddressOptions([]);
-                      return;
-                    }
-                    form.setFieldValue("consignee_code", value || "");
-                    form.setFieldValue(
-                      "consignee_name",
-                      selectedData?.label || "",
-                    );
-
-                    // Map email + addresses from customer-master response (addresses_data)
-                    const original = (originalData || {}) as Record<
-                      string,
-                      unknown
-                    >;
-                    const email = String(
-                      original.customer_email ?? original.email ?? "",
-                    );
-
-                    const addressesData = Array.isArray(original.addresses_data)
-                      ? (original.addresses_data as Array<{
-                          address?: string;
-                          email?: string;
-                          state_id?: number | null;
-                          address_type?: string | null;
-                        }>)
-                      : [];
-                    const addressOptions = addressesData
-                      .filter((a) => a.address)
-                      .map((a) => {
-                        const addr = toTitleCase(String(a.address || ""));
-                          return {
-                            value: addr,
-                            label: addr,
-                            email: String(a.email || ""),
-                          };
-                      });
-                    setConsigneeAddressOptions(addressOptions);
-
-                    const primaryAddr = pickPrimaryPartyAddress(addressesData);
-                    form.setFieldValue(
-                      "consignee_email",
-                      String(primaryAddr?.email || email || ""),
-                    );
-
-                    if (primaryAddr?.address) {
-                      form.setFieldValue(
-                        "consignee_address",
-                        toTitleCase(String(primaryAddr.address)),
-                      );
-                    }
-
-                    // State id for Invoice Create (Bill To state) — same as Ocean Import
-                    const primaryAddress = addressesData.find(
-                      (a) =>
-                        String(a.address_type || "").toUpperCase() ===
-                        "PRIMARY",
-                    );
-                    const addrForState =
-                      primaryAddress ||
-                      addressesData.find((a) => a.state_id != null);
-                    if (addrForState?.state_id != null) {
-                      form.setFieldValue(
-                        "consignee_state_id",
-                        String(addrForState.state_id),
-                      );
-                    } else {
-                      form.setFieldValue("consignee_state_id", "");
-                    }
-                  }}
+                  allowFreeText
+                  showNewCustomerDetailsAction={false}
+                  selectionType={consigneeSelection.selectionType}
+                  onCustomerChange={handleConsigneeCustomerChange}
                   returnOriginalData={true}
                   error={form.errors.consignee_name as string}
                   minSearchLength={3}
