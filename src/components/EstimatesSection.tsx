@@ -35,6 +35,7 @@ import { useExchangeRateRoe } from "../hooks/useExchangeRateRoe";
 import {
   getBranchCurrencyDefaults,
   getDefaultBranchCurrencyFromUser,
+  estimateRowHasChargeIdentity,
   ROE_CANNOT_BE_ONE_TOAST,
   ROE_DECIMAL_PLACES,
   validateEstimatesRoeRows,
@@ -502,7 +503,10 @@ export function EstimatesSection({
                   selectedData?.label || "",
                 );
 
-                if (!value) return;
+                if (!value) {
+                  clearEstimateError(index, "roe");
+                  return;
+                }
                 const serviceForUnit =
                   jobUnitDefaults?.service || serviceTypeValue;
                 const defaultUnitCode = resolveAutoUnitForNewCharge({
@@ -766,18 +770,22 @@ export function EstimatesSection({
                 const v =
                   typeof value === "number" ? value : toNumberOrNull(value);
                 form.setFieldValue(`estimates.${index}.roe`, v);
-                const roeError = validateRoeField(
-                  row.currency_code,
-                  v,
-                  row.currency_id,
-                );
-                if (roeError) {
-                  setEstimateErrors((prev) => ({
-                    ...prev,
-                    [index]: { ...(prev[index] ?? {}), roe: roeError },
-                  }));
-                } else {
+                if (!estimateRowHasChargeIdentity(row)) {
                   clearEstimateError(index, "roe");
+                } else {
+                  const roeError = validateRoeField(
+                    row.currency_code,
+                    v,
+                    row.currency_id,
+                  );
+                  if (roeError) {
+                    setEstimateErrors((prev) => ({
+                      ...prev,
+                      [index]: { ...(prev[index] ?? {}), roe: roeError },
+                    }));
+                  } else {
+                    clearEstimateError(index, "roe");
+                  }
                 }
                 const total = calcTotalCost(
                   row.no_of_unit,

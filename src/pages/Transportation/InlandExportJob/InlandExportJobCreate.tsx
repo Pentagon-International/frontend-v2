@@ -1858,17 +1858,14 @@ function InlandExportJobCreate() {
     const rows = estimatesForm.values.estimates ?? [];
     estimatesForm.clearErrors();
 
-    const rowHasAnyValue = (e: (typeof rows)[number]) => {
+    const rowHasUserValue = (e: (typeof rows)[number]) => {
       return (
         !!e.supplier_code ||
         !!e.supplier_name ||
         e.charge_id != null ||
         !!e.charge_name ||
-        !!e.pp_cc ||
         !!e.unit_id ||
-        !!e.currency_id ||
         e.no_of_unit != null ||
-        e.roe != null ||
         e.cost_per_unit != null ||
         e.total_cost != null
       );
@@ -1876,7 +1873,7 @@ function InlandExportJobCreate() {
 
     for (let i = 0; i < rows.length; i++) {
       const e = rows[i];
-      if (!rowHasAnyValue(e)) continue;
+      if (!rowHasUserValue(e)) continue;
 
       const missing: Array<{ key: keyof typeof e; label: string }> = [];
       if (e.charge_id == null)

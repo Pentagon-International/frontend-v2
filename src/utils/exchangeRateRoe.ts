@@ -263,6 +263,7 @@ export type EstimateRoeRow = {
   supplier_code?: string | null;
   supplier_name?: string | null;
   charge_id?: number | string | null;
+  charge_code?: string | null;
   charge_name?: string | null;
   unit_id?: string | number | null;
   unit_code?: string | null;
@@ -274,20 +275,17 @@ export type EstimateRoeRow = {
   roe?: number | null;
 };
 
-/** True when the user entered estimate data. Default currency, pp/cc, and ROE do not count. */
-function estimateRowHasEnteredChargeData(row: EstimateRoeRow): boolean {
-  if (String(row.supplier_code ?? "").trim()) return true;
-  if (String(row.supplier_name ?? "").trim()) return true;
-  if (row.charge_id != null && String(row.charge_id).trim() !== "") return true;
-  if (String(row.charge_name ?? "").trim()) return true;
-  if (row.unit_id != null && String(row.unit_id).trim() !== "") return true;
-  if (String(row.unit_code ?? "").trim()) return true;
-  if (row.no_of_unit != null && String(row.no_of_unit).trim() !== "") return true;
-  if (row.cost_per_unit != null && String(row.cost_per_unit).trim() !== "") {
-    return true;
-  }
-  if (row.total_cost != null && String(row.total_cost).trim() !== "") return true;
-  return false;
+/**
+ * ROE rules apply only when a real charge is selected: name plus id or code.
+ * Default blank estimate rows (currency / pp_cc / ROE only) must not validate.
+ */
+export function estimateRowHasChargeIdentity(row: EstimateRoeRow): boolean {
+  const name = String(row.charge_name ?? "").trim();
+  if (!name) return false;
+  const hasId =
+    row.charge_id != null && String(row.charge_id).trim() !== "";
+  const hasCode = String(row.charge_code ?? "").trim() !== "";
+  return hasId || hasCode;
 }
 
 export const validateEstimatesRoeRows = (
@@ -304,7 +302,7 @@ export const validateEstimatesRoeRows = (
   let toastMessage: string | null = null;
 
   rows.forEach((row, index) => {
-    if (!estimateRowHasEnteredChargeData(row)) return;
+    if (!estimateRowHasChargeIdentity(row)) return;
 
     const hasCurrency = Boolean(
       String(row.currency_id ?? "").trim() || String(row.currency_code ?? "").trim(),
