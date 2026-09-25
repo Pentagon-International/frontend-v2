@@ -293,6 +293,10 @@ function ExtractedPayloadBreakdown({
     return options;
   }, [daybookData, override.day_book_id, override.day_book_name]);
 
+  const isDaybookSelected = Boolean(String(override.day_book_id ?? "").trim());
+  const isOverseasDaybook = isOverseasCrjDaybook(override.day_book_name);
+  const vendorApiEndpoint = isOverseasDaybook ? URL.agent : URL.supplierByType;
+
   const copyJson = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(extracted, null, 2));
@@ -436,10 +440,13 @@ function ExtractedPayloadBreakdown({
                       error={fieldErrors.header.day_book_id}
                       onChange={(value) => {
                         clearHeaderError("day_book_id");
+                        clearHeaderError("agent_id");
                         const selected = daybookOptions.find((option) => option.value === value);
                         patchOverride({
                           day_book_id: value ?? "",
                           day_book_name: selected?.label ?? "",
+                          agent_id: "",
+                          agent_name: "",
                         });
                       }}
                       onDropdownOpen={() => setDaybookLookupRequested(true)}
@@ -476,10 +483,15 @@ function ExtractedPayloadBreakdown({
                       disabled={readOnly}
                     />
                     <SearchableSelect
-                      label="Agent"
-                      placeholder="Search agent"
+                      key={vendorApiEndpoint}
+                      label="Vendor/Supplier"
+                      placeholder={
+                        isDaybookSelected
+                          ? "Type supplier name"
+                          : "Select day book first"
+                      }
                       withAsterisk
-                      apiEndpoint={URL.agent}
+                      apiEndpoint={vendorApiEndpoint}
                       value={override.agent_id || null}
                       displayValue={override.agent_name || undefined}
                       dropdownZIndex={400}
@@ -492,18 +504,25 @@ function ExtractedPayloadBreakdown({
                         label: String(item.customer_name ?? item.agent_name ?? ""),
                       })}
                       onChange={(value, selected) => {
+                        if (!isDaybookSelected) {
+                          ToastNotification({
+                            type: "error",
+                            message: "Please select a day book before searching Vendor/Supplier.",
+                          });
+                          return;
+                        }
                         clearHeaderError("agent_id");
                         patchOverride({
                           agent_id: value ?? "",
                           agent_name: selected?.label ?? "",
                         });
                       }}
-                      disabled={readOnly}
+                      disabled={readOnly || !isDaybookSelected}
                     />
                     <SearchableSelect
                       label="State"
                       placeholder="Search state"
-                      withAsterisk={!isOverseasCrjDaybook(override.day_book_name)}
+                      withAsterisk={!isOverseasDaybook}
                       apiEndpoint={URL.state}
                       value={override.state_id || null}
                       displayValue={override.state_name || undefined}

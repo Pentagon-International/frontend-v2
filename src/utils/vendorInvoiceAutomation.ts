@@ -527,7 +527,7 @@ export function getVendorInvoiceOverrideFieldErrors(
   if (!textValue(draft.Inv_crn_amount)) header.Inv_crn_amount = "Inv / CRN amount is required";
   if (!textValue(draft.status)) header.status = "Status is required";
   if (!hasPositiveId(draft.agent_id) || !textValue(draft.agent_name)) {
-    header.agent_id = "Agent is required";
+    header.agent_id = "Vendor/Supplier is required";
   }
   if (!normalizeVendorInvoiceDrCr(draft.Dr_Cr)) header.Dr_Cr = "Dr/Cr is required";
   if (!draft.charges_data.length) {
@@ -582,7 +582,7 @@ export function buildVendorInvoiceStartPayload(
   if (!textValue(draft.taxable_amount)) throw new Error("Taxable amount is required.");
   if (!textValue(draft.Inv_crn_amount)) throw new Error("Inv / CRN amount is required.");
   if (!textValue(draft.status)) throw new Error("Status is required.");
-  if (!textValue(draft.agent_name)) throw new Error("Agent is required.");
+  if (!textValue(draft.agent_name)) throw new Error("Vendor/Supplier is required.");
   const headerDrCr = normalizeVendorInvoiceDrCr(draft.Dr_Cr);
   if (!headerDrCr) throw new Error("Dr/Cr is required.");
   if (!draft.charges_data.length) throw new Error("At least one charge line is required.");
@@ -602,7 +602,7 @@ export function buildVendorInvoiceStartPayload(
     taxable_amount: toAmountString(draft.taxable_amount),
     Inv_crn_amount: toAmountString(draft.Inv_crn_amount),
     status: textValue(draft.status),
-    agent_id: positiveId(draft.agent_id, "Agent"),
+    agent_id: positiveId(draft.agent_id, "Vendor/Supplier"),
     agent_name: textValue(draft.agent_name),
     Dr_Cr: headerDrCr,
     charges_data: draft.charges_data.map((row, index) => {
