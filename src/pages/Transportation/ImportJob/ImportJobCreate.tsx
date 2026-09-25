@@ -113,6 +113,7 @@ import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import {
   getMeaningfulHouseCharges,
   hasMeaningfulHouseChargeData,
+  resolveHouseChargesSource,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
 import {
@@ -179,6 +180,7 @@ import {
 } from "../../../utils/jobSaveResponse";
 import { collectLinkedBookingIds } from "../../../utils/bookingCreateJob";
 import { resolveJobAgentAddress } from "../../../utils/resolveJobAgentAddress";
+import { withRoutingLocationDisplay } from "../../../utils/persistJobHousingDetails";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -1719,10 +1721,7 @@ function ImportJobCreate() {
                             : (charge.cost_local_amount as number)
                           : null,
                     }))
-                  : house.mbl_charges &&
-                      Array.isArray(house.mbl_charges) &&
-                      house.mbl_charges.length > 0
-                    ? house.mbl_charges.map(
+                  : resolveHouseChargesSource(house, "mbl").map(
                         (charge: Record<string, unknown>) => {
                           // Handle mbl_charges structure: unit can be in charge.unit or charge.unit_details.unit_code
                           const unitCode = charge.unit_code
@@ -1870,8 +1869,7 @@ function ImportJobCreate() {
                               : "",
                           };
                         },
-                      )
-                    : [],
+                      ),
               summary: (() => {
                 const raw = house.summary;
                 if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -2372,13 +2370,16 @@ function ImportJobCreate() {
       ) {
         routingsForm.setValues({
           routings: location.state.routings.map(
-            (routing: Record<string, unknown>) => ({
-              ...routing,
-              etd: toFormDate(routing.etd),
-              eta: toFormDate(routing.eta),
-              atd: toFormDate(routing.atd),
-              ata: toFormDate(routing.ata),
-            }),
+            (routing: Record<string, unknown>) => {
+              const row = withRoutingLocationDisplay(routing);
+              return {
+                ...row,
+                etd: toFormDate(row.etd),
+                eta: toFormDate(row.eta),
+                atd: toFormDate(row.atd),
+                ata: toFormDate(row.ata),
+              };
+            },
           ) as typeof routingsForm.values.routings,
         });
       }
@@ -4112,16 +4113,13 @@ function ImportJobCreate() {
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (() => {
-            const src =
-              (house as { mbl_charges?: unknown }).mbl_charges ??
-              (house as { charges?: unknown }).charges ??
-              [];
-            const arr = Array.isArray(src) ? src : [];
+            const arr = resolveHouseChargesSource(house, "mbl");
             const meaningful = arr.filter((charge) =>
               hasMeaningfulHouseChargeData(charge as HouseChargeLike),
             );
             if (meaningful.length === 0) return [];
             return meaningful.map((charge: Record<string, unknown>) => ({
+              charge_source: "MBL",
               ...(mode === "edit" &&
                 charge.id != null && {
                   id:

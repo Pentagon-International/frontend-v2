@@ -49,6 +49,78 @@ function formatMasterDate(
   return formatDateYmd(value);
 }
 
+function hasFilledValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === "string" && value.trim() === "") return false;
+  return true;
+}
+
+/** FCL/LCL jobs must persist house charges as MBL, even if MAWB fields are present. */
+function isOceanFreightService(service: unknown): boolean {
+  const s = String(service ?? "").trim().toUpperCase();
+  return s === "FCL" || s === "LCL" || s.includes("FCL") || s.includes("LCL");
+}
+
+function housingShipmentLooksOcean(houses: unknown): boolean {
+  if (!Array.isArray(houses)) return false;
+  return houses.some((house) => {
+    if (!house || typeof house !== "object" || Array.isArray(house)) return false;
+    const sid = String(
+      (house as { shipment_id?: unknown }).shipment_id ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    return sid.startsWith("SEA/");
+  });
+}
+
+function jobLooksOcean(
+  job: Record<string, unknown> | null | undefined,
+  service?: unknown,
+): boolean {
+  if (!job && service == null) return false;
+  if (isOceanFreightService(service ?? job?.service)) return true;
+  return housingShipmentLooksOcean(job?.housing_details);
+}
+
+function isAirFreightService(service: unknown): boolean {
+  if (isOceanFreightService(service)) return false;
+  const s = String(service ?? "").trim().toUpperCase();
+  return s === "AIR" || s.includes("AIR");
+}
+
+/**
+ * API rows stored as MAWB come back on `mawb_charges`. Ocean screens must
+ * receive and resend them as `mbl_charges`.
+ */
+function normalizeOceanHousingCharges(
+  job: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!jobLooksOcean(job)) return job;
+  const houses = job.housing_details;
+  if (!Array.isArray(houses)) return job;
+  return {
+    ...job,
+    housing_details: houses.map((house) => {
+      if (!house || typeof house !== "object" || Array.isArray(house)) {
+        return house;
+      }
+      const h = house as Record<string, unknown>;
+      const mbl = Array.isArray(h.mbl_charges) ? h.mbl_charges : [];
+      const mawb = Array.isArray(h.mawb_charges) ? h.mawb_charges : [];
+      const charges = Array.isArray(h.charges) ? h.charges : [];
+      const merged =
+        mbl.length > 0 ? mbl : mawb.length > 0 ? mawb : charges;
+      const rest = { ...h };
+      delete rest.mawb_charges;
+      return {
+        ...rest,
+        mbl_charges: merged,
+      };
+    }),
+  };
+}
+
 /** Prefer first non-null, non-empty-string value (empty string must not mask job data). */
 function firstFilled(...values: unknown[]): unknown {
   for (const v of values) {
@@ -75,6 +147,23 @@ function pickPopulatedArray(
   if (Array.isArray(preferred) && preferred.length > 0) return preferred;
   if (Array.isArray(fallback) && fallback.length > 0) return fallback;
   return null;
+}
+
+/** Form display fields used by master routing selects (`Name (CODE)`). */
+export function withRoutingLocationDisplay(
+  routing: Record<string, unknown>,
+): Record<string, unknown> {
+  const from_code = String(routing.from_code ?? routing.from_port_code ?? "");
+  const from_name = String(routing.from_name ?? routing.from_port_name ?? "");
+  const to_code = String(routing.to_code ?? routing.to_port_code ?? "");
+  const to_name = String(routing.to_name ?? routing.to_port_name ?? "");
+  return {
+    ...routing,
+    from_code,
+    from_name,
+    to_code,
+    to_name,
+  };
 }
 
 function mapRoutingForPayload(
@@ -333,11 +422,17 @@ function sanitizeHousingDetailsForPayload(
       return { ...rest, mawb_charges: mapHouseChargeRows(rawCharges) };
     }
 
-    if (!rawCharges) return house;
+    // Ocean saves only mbl_charges. Drop mawb_charges so a stale MAWB list
+    // cannot be written back over the same charge rows.
+    const rest = omitHouseChargeAliases(h);
+    if (!rawCharges) return rest;
 
-    const mapped = mapHouseChargeRows(rawCharges);
+    const mapped = mapHouseChargeRows(rawCharges).map((row) => ({
+      ...row,
+      charge_source: "MBL",
+    }));
     return {
-      ...h,
+      ...rest,
       mbl_charges: mapped,
       ...(Array.isArray(h.charges) ? { charges: mapped } : {}),
     };
@@ -352,6 +447,7 @@ export function buildFullJobUpdatePayloadFromHouseNav(
   jobId: number,
   updatedHousingDetails: unknown[],
   navState: unknown,
+  chargeKeyOverride?: HouseChargePayloadKey,
 ): Record<string, unknown> {
   const state = (navState ?? {}) as Record<string, unknown>;
   const job = (state.job ?? {}) as Record<string, unknown>;
@@ -362,13 +458,22 @@ export function buildFullJobUpdatePayloadFromHouseNav(
 
   const serviceType = String(job.service_type ?? "").toLowerCase();
   const isImport = serviceType.includes("import");
-  const isAir =
-    state.mawbDetails != null ||
-    carrier.flight_number != null ||
-    carrier.mawb_number != null ||
-    String(mbl.service ?? job.service ?? "")
-      .toUpperCase()
-      .includes("AIR");
+  const service = firstFilled(mbl.service, job.service);
+  const ocean =
+    chargeKeyOverride === "mbl_charges" ||
+    isOceanFreightService(service) ||
+    housingShipmentLooksOcean(updatedHousingDetails) ||
+    jobLooksOcean(job, service);
+  // Ocean is never air. A blank mawb_no / flightno, or mawbDetails copied after
+  // the first stay-on-page save, must not move FCL/LCL charges onto mawb_charges.
+  const isAir = ocean
+    ? false
+    : isAirFreightService(service) ||
+      (state.mblDetails == null && state.mawbDetails != null) ||
+      hasFilledValue(carrier.flight_number) ||
+      hasFilledValue(carrier.mawb_number) ||
+      hasFilledValue(job.mawb_no) ||
+      hasFilledValue(job.flightno);
 
   const etdSrc = mbl.etd ?? job.etd;
   const etaSrc = mbl.eta ?? job.eta;
@@ -460,7 +565,7 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     ...(bookingIds.length > 0 ? { booking_ids: bookingIds } : {}),
     housing_details: sanitizeHousingDetailsForPayload(
       updatedHousingDetails,
-      isAir ? "mawb_charges" : "mbl_charges",
+      chargeKeyOverride ?? (isAir ? "mawb_charges" : "mbl_charges"),
     ),
   };
 
@@ -509,10 +614,19 @@ export function mergeMasterNavStateFromSavedJob(
   const state = { ...(navState ?? {}) } as Record<string, unknown>;
   if (!savedJob) return state;
 
+  const oceanJob = jobLooksOcean(
+    savedJob,
+    (state.mblDetails as { service?: unknown } | undefined)?.service,
+  );
+  if (oceanJob) {
+    delete state.mawbDetails;
+  }
   const masterKey =
-    state.mawbDetails != null || savedJob.mawb_no != null
-      ? "mawbDetails"
-      : "mblDetails";
+    oceanJob || state.mblDetails != null
+      ? "mblDetails"
+      : state.mawbDetails != null || hasFilledValue(savedJob.mawb_no)
+        ? "mawbDetails"
+        : "mblDetails";
   const existingMaster = {
     ...((state[masterKey] as Record<string, unknown> | undefined) ?? {}),
   };
@@ -588,18 +702,23 @@ export function mergeMasterNavStateFromSavedJob(
       savedJob.voyage_number,
       existingCarrier.voyage_number,
     ),
-    flight_number: firstFilled(
-      savedJob.flightno,
-      existingCarrier.flight_number,
-    ),
+    flight_number: oceanJob
+      ? null
+      : firstFilled(savedJob.flightno, existingCarrier.flight_number),
     mbl_number: firstFilled(savedJob.mbl_number, existingCarrier.mbl_number),
     mbl_date: firstFilled(savedJob.mbl_date, existingCarrier.mbl_date),
-    mawb_number: firstFilled(savedJob.mawb_no, existingCarrier.mawb_number),
-    mawb_date: firstFilled(savedJob.mawb_date, existingCarrier.mawb_date),
+    mawb_number: oceanJob
+      ? null
+      : firstFilled(savedJob.mawb_no, existingCarrier.mawb_number),
+    mawb_date: oceanJob
+      ? null
+      : firstFilled(savedJob.mawb_date, existingCarrier.mawb_date),
   };
 
   if (Array.isArray(savedJob.ocean_routings) && savedJob.ocean_routings.length > 0) {
-    state.routings = savedJob.ocean_routings;
+    state.routings = (savedJob.ocean_routings as Record<string, unknown>[]).map(
+      withRoutingLocationDisplay,
+    );
   }
   if (
     Array.isArray(savedJob.container_details) &&
@@ -622,6 +741,7 @@ export async function persistJobHousingDetails(
   housingDetails: unknown[],
   navState?: unknown,
   fallbackMessage = "Job updated successfully",
+  chargeKey?: HouseChargePayloadKey,
 ): Promise<{
   message: string;
   job: Record<string, unknown> | null;
@@ -630,9 +750,14 @@ export async function persistJobHousingDetails(
     jobId,
     housingDetails,
     navState,
+    chargeKey,
   );
   const response = await putAPICall(URL.jobCreate, payload, API_HEADER);
-  return parseJobSaveResponse(response, fallbackMessage);
+  const parsed = parseJobSaveResponse(response, fallbackMessage);
+  return {
+    message: parsed.message,
+    job: parsed.job ? normalizeOceanHousingCharges(parsed.job) : null,
+  };
 }
 
 export function resolveHouseJobIdFromLocationState(
