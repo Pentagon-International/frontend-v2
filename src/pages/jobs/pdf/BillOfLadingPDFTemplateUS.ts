@@ -1,4 +1,4 @@
-import { jsPDF } from "jspdf";
+﻿import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import seawayBolStamp from "../../../assets/images/seaway_BOL.png";
 import surrenderedBolStamp from "../../../assets/images/surrendered_BOL.png";
@@ -228,7 +228,14 @@ const buildTextLines = (
   doc.setFontSize(fontSize);
   return parts
     .filter((p) => p && p.trim())
-    .flatMap((part) => doc.splitTextToSize(part, maxWidth));
+    .flatMap((part) =>
+      // Preserve explicit line breaks in commodity/marks text, then wrap by width
+      String(part)
+        .split(/\r?\n/)
+        .flatMap((line) =>
+          line === "" ? [""] : doc.splitTextToSize(line, maxWidth),
+        ),
+    );
 };
 
 const CARGO_BODY_LINE_HEIGHT = 3.8;
@@ -247,8 +254,8 @@ const FREIGHT_WORDS_VALUE_GAP = 1;
 const FREIGHT_TITLE_TOP_PAD = 3.5;
 /** Fixed middle-table footer band heights (mm; matches other 10mm footer rows). */
 const FREIGHT_WORDS_ROW_HEIGHT = 10;
-/** ~3.2× the "Total Number … (in words)" row for blank writing space */
-const FREIGHT_CHARGES_ROW_HEIGHT = 22;
+/** Blank writing space for Freight and Charges (compact so cargo body can grow). */
+const FREIGHT_CHARGES_ROW_HEIGHT = 12;
 const CARGO_BODY_BOTTOM_GAP = 1;
 const PAGE_MARGIN_LEFT = 10;
 const PAGE_MARGIN_RIGHT = 10;
@@ -324,22 +331,6 @@ const measureFreightFooterLayout = (
     freightTitleOffsetY,
   };
 };
-
-const getCargoContentBottomY = (
-  columns: CargoColumnDef[],
-  startIndices: number[],
-  endIndices: number[],
-  dataTopY: number,
-  getColumnFontHeight: (col: CargoColumnDef) => number,
-): number =>
-  columns.reduce((maxBottom, col, colIndex) => {
-    const lineCount = endIndices[colIndex] - startIndices[colIndex];
-    if (lineCount <= 0) return maxBottom;
-    const lineHeight = getColumnLineHeight(col);
-    const fontHeight = getColumnFontHeight(col);
-    const bottom = dataTopY + (lineCount - 1) * lineHeight + fontHeight;
-    return Math.max(maxBottom, bottom);
-  }, dataTopY);
 
 const getCargoHeaderLineHeight = (doc: jsPDF): number => {
   doc.setFont("helvetica", "bold");
@@ -438,52 +429,69 @@ const countLinesThatFit = (
 const remainingContentHeight = (
   columns: CargoColumnDef[],
   indices: number[],
+  getColumnFontHeight: (col: CargoColumnDef) => number,
 ): number => {
   const heights = columns.map((col, i) => {
     const remaining = col.lines.length - indices[i];
     if (remaining <= 0) return 0;
-    return remaining * getColumnLineHeight(col);
+    const lineHeight = getColumnLineHeight(col);
+    const fontHeight = getColumnFontHeight(col);
+    return (remaining - 1) * lineHeight + fontHeight;
   });
   return Math.max(0, ...heights);
 };
 
+type CargoPageSegment = {
+  startIndices: number[];
+  endIndices: number[];
+  /** When true, this page reserves space for Total/Freight rows (single-page form). */
+  includeFreight: boolean;
+};
+
+/**
+ * US BOL cargo pagination:
+ * - If all marks/commodity fit above freight on page 1 → one page with freight.
+ * - Otherwise fill pages with cargo only (full height). Freight/footer are drawn
+ *   after all cargo pages (never overlapping cargo).
+ */
 const simulateCargoPageBreaks = (
   columns: CargoColumnDef[],
   firstPageDataTopY: number,
-  firstPageIntermediateDataBottomY: number,
+  firstPageDataBottomWithFreight: number,
   continuationDataTopY: number,
-  continuationIntermediateDataBottomY: number,
-  firstPageFinalDataBottomY: number,
-  continuationFinalDataBottomY: number,
+  fullPageDataBottomY: number,
   getColumnFontHeight: (col: CargoColumnDef) => number,
-): number[][] => {
-  const indices = columns.map(() => 0);
-  const segments: number[][] = [];
-  let pageIndex = 0;
+): CargoPageSegment[] => {
+  const zeroIndices = columns.map(() => 0);
+  const totalHeight = remainingContentHeight(
+    columns,
+    zeroIndices,
+    getColumnFontHeight,
+  );
+  const fitsOnSinglePage =
+    totalHeight <= firstPageDataBottomWithFreight - firstPageDataTopY;
 
-  const initialRemainingHeight = remainingContentHeight(columns, indices);
-  const singlePageCargoLayout =
-    initialRemainingHeight <= firstPageFinalDataBottomY - firstPageDataTopY;
+  if (fitsOnSinglePage) {
+    return [
+      {
+        startIndices: zeroIndices,
+        endIndices: columns.map((col) => col.lines.length),
+        includeFreight: true,
+      },
+    ];
+  }
+
+  const indices = columns.map(() => 0);
+  const segments: CargoPageSegment[] = [];
+  let pageIndex = 0;
 
   while (indices.some((idx, i) => idx < columns[i].lines.length)) {
     const isFirstPage = pageIndex === 0;
     const dataTopY = isFirstPage ? firstPageDataTopY : continuationDataTopY;
+    const dataBottomY = fullPageDataBottomY;
     const startIndices = [...indices];
-    const finalPageDataBottomY = isFirstPage
-      ? firstPageFinalDataBottomY
-      : continuationFinalDataBottomY;
 
-    const maxRemaining = remainingContentHeight(columns, indices);
-    const fitsOnFinalPage = maxRemaining <= finalPageDataBottomY - dataTopY;
-    const dataBottomY = singlePageCargoLayout
-      ? firstPageFinalDataBottomY
-      : fitsOnFinalPage
-        ? finalPageDataBottomY
-        : isFirstPage
-          ? firstPageIntermediateDataBottomY
-          : continuationIntermediateDataBottomY;
-
-    const linesFit = columns.map((col, i) =>
+    let linesFit = columns.map((col, i) =>
       countLinesThatFit(
         col.lines.length,
         indices[i],
@@ -493,22 +501,25 @@ const simulateCargoPageBreaks = (
         getColumnFontHeight(col),
       ),
     );
-    const batchLines = Math.max(0, ...linesFit);
 
-    if (batchLines === 0) {
-      columns.forEach((col, i) => {
-        if (indices[i] < col.lines.length) indices[i] += 1;
-      });
-      segments.push(startIndices);
-      pageIndex += 1;
-      continue;
+    if (linesFit.every((n) => n === 0)) {
+      linesFit = columns.map((col, i) =>
+        indices[i] < col.lines.length ? 1 : 0,
+      );
     }
 
-    columns.forEach((_, i) => {
-      indices[i] = Math.min(indices[i] + batchLines, columns[i].lines.length);
+    const endIndices = columns.map((col, i) =>
+      Math.min(indices[i] + linesFit[i], col.lines.length),
+    );
+    endIndices.forEach((end, i) => {
+      indices[i] = end;
     });
 
-    segments.push(startIndices);
+    segments.push({
+      startIndices,
+      endIndices,
+      includeFreight: false,
+    });
     pageIndex += 1;
   }
 
@@ -776,6 +787,28 @@ export const generateUsBillOfLadingPDF = (
         matchingContainer?.container_type_name ||
         "",
     };
+  });
+  // Include job containers not present in housing cargo_details (e.g. 3rd container)
+  containerDetailsFromJob.forEach((container: any) => {
+    const containerNo = String(container?.container_no || "").trim();
+    if (!containerNo) return;
+    const alreadyListed = enrichedCargoDetails.some(
+      (cargo: any) => String(cargo?.container_no || "").trim() === containerNo,
+    );
+    if (alreadyListed) return;
+    enrichedCargoDetails.push({
+      container_no: containerNo,
+      actual_seal_no: container?.actual_seal_no ?? "",
+      customs_seal_no: container?.customs_seal_no ?? "",
+      container_type_name:
+        container?.container_type_details?.container_type_name ||
+        container?.container_type_name ||
+        "",
+      gross_weight: container?.gross_weight,
+      volume: container?.volume,
+      no_of_packages: container?.no_of_packages,
+      package_type: container?.package_type,
+    });
   });
 
   let summary = housingData?.summary || {};
@@ -1237,7 +1270,11 @@ export const generateUsBillOfLadingPDF = (
 
   const marksContentWidth = col1W - 2 * boxPadding;
   const marksRawLines: string[] = [];
-  if (marksNo) marksRawLines.push(String(marksNo));
+  if (marksNo) {
+    String(marksNo)
+      .split(/\r?\n/)
+      .forEach((line) => marksRawLines.push(line));
+  }
   enrichedCargoDetails.forEach((cargo: any, index: number) => {
     const entryLines: string[] = [];
     if (cargo?.container_no) entryLines.push(String(cargo.container_no));
@@ -1258,7 +1295,9 @@ export const generateUsBillOfLadingPDF = (
     }
     if (cargo?.no_of_packages) {
       const cargoPackageType =
-        formatPackageTypeNameForBol(cargo.package_type) || packageType || "PACKAGE(S)";
+        formatPackageTypeNameForBol(cargo.package_type) ||
+        packageType ||
+        "PACKAGE(S)";
       entryLines.push(`Pkgs: ${cargo.no_of_packages} ${cargoPackageType}`);
     }
     marksRawLines.push(...entryLines);
@@ -1266,6 +1305,8 @@ export const generateUsBillOfLadingPDF = (
       marksRawLines.push("");
     }
   });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(FONT_TABLE_BODY);
   const marksLines = marksRawLines.flatMap((line) =>
     line === "" ? [""] : doc.splitTextToSize(line, marksContentWidth),
   );
@@ -1302,7 +1343,8 @@ export const generateUsBillOfLadingPDF = (
 
   const firstPageDataTopY = firstPageHeaderLayout.dataTopY;
   const continuationDataTopY = continuationHeaderLayout.dataTopY;
-  const fullPageDataBottomY = pageHeight - PAGE_MARGIN_TOP - 5;
+  // Intermediate cargo pages use nearly the full page so marks/commodity can grow.
+  const fullPageDataBottomY = pageHeight - 8;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_TABLE_BODY);
@@ -1334,37 +1376,35 @@ export const generateUsBillOfLadingPDF = (
     freightTitleOffsetY,
   } = freightFooterLayout;
 
-  const resolveFinalCargoFooterLayout = (headerBottomY: number) => {
-    const footerTableStartYLocal =
-      pageHeight - PRINT_SAFE_BOTTOM_MARGIN - footerTableHeight;
-    const middleTableEndYLocal = footerTableStartYLocal - TABLE_SEPARATION_GAP;
-    const layout = measureFreightFooterLayout(
-      doc,
-      middleTableEndYLocal,
-      innerWidth,
-      boxPadding,
-      packagesInWords,
-    );
-    return {
-      middleTableEndY: middleTableEndYLocal,
-      ...layout,
-    };
-  };
-
-  const continuationFinalPageDataBottomY = resolveFinalCargoFooterLayout(
-    continuationHeaderLayout.headerBottomY,
-  ).wordsRowY;
+  // Leave room for SEAWAY/SURRENDERED stamp so it does not cover last cargo lines
+  const stampReserve = cargoTypeLabel ? 12 : 0;
+  const cargoPageBottomY = fullPageDataBottomY - stampReserve;
+  const singlePageCargoBottomY = wordsRowY - stampReserve;
 
   const pageBreaks = simulateCargoPageBreaks(
     cargoColumns,
     firstPageDataTopY,
-    fullPageDataBottomY,
+    singlePageCargoBottomY,
     continuationDataTopY,
-    fullPageDataBottomY,
-    wordsRowY,
-    continuationFinalPageDataBottomY,
+    cargoPageBottomY,
     getColumnFontHeight,
   );
+
+  const getSegmentContentBottomY = (
+    startIndices: number[],
+    endIndices: number[],
+    dataTopY: number,
+  ): number =>
+    cargoColumns.reduce((maxBottom, col, colIndex) => {
+      const lineCount = endIndices[colIndex] - startIndices[colIndex];
+      if (lineCount <= 0) return maxBottom;
+      const lineHeight = getColumnLineHeight(col);
+      const fontHeight = getColumnFontHeight(col);
+      return Math.max(
+        maxBottom,
+        dataTopY + (lineCount - 1) * lineHeight + fontHeight,
+      );
+    }, dataTopY);
 
   const drawCargoTableBorders = (
     tableTopY: number,
@@ -1403,74 +1443,243 @@ export const generateUsBillOfLadingPDF = (
     }
   };
 
-  const drawCargoPageSegment = (
-    segmentIndex: number,
-    startIndices: number[],
-    isLastSegment: boolean,
+  const drawFreightRowsAt = (
+    segmentWordsRowY: number,
+    segmentTempRowY: number,
   ) => {
-    if (segmentIndex > 0) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_TABLE_HEAD);
+    doc.text(
+      "Total Number of Containers of Packages(in words)",
+      col1X + boxPadding,
+      segmentWordsRowY + wordsTitleOffsetY,
+    );
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(FONT_TABLE_BODY);
+    if (packagesInWords) {
+      doc.text(
+        packagesInWords,
+        col1X + boxPadding,
+        segmentWordsRowY + wordsValueOffsetY,
+        {
+          maxWidth: innerWidth - 2 * boxPadding,
+        },
+      );
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_TABLE_HEAD);
+    doc.text(
+      "Freight and Charges",
+      col1X + boxPadding,
+      segmentTempRowY + freightTitleOffsetY,
+    );
+  };
+
+  const drawPageFooterAt = (footerStartY: number) => {
+    const footerColW = innerWidth / 3;
+    const footerBottomY = footerStartY + footerTableHeight;
+    drawBox(doc, innerMargin, footerStartY, innerWidth, footerTableHeight);
+
+    const drawFooterCell = (
+      x: number,
+      y: number,
+      w: number,
+      title: string,
+      value: string,
+    ) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(FONT_TABLE_HEAD);
+      doc.text(title, x + boxPadding, y + 4);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(FONT_TABLE_BODY);
+      doc.text(value || "", x + boxPadding, y + 8.5, {
+        maxWidth: w - 2 * boxPadding,
+      });
+    };
+
+    const fRow1Y = footerStartY;
+    drawFooterCell(
+      innerMargin,
+      fRow1Y,
+      footerColW,
+      "Shipped on Board Date",
+      shippedOnBoardDate,
+    );
+    drawFooterCell(
+      innerMargin + footerColW,
+      fRow1Y,
+      footerColW,
+      "Number of Original B/L",
+      String(numberOfOriginalBl),
+    );
+    drawFooterCell(
+      innerMargin + footerColW * 2,
+      fRow1Y,
+      footerColW,
+      "Payment Terms",
+      paymentTerms,
+    );
+
+    const fRow2Y = footerStartY + footerRow1Height;
+    drawFooterCell(
+      innerMargin,
+      fRow2Y,
+      footerColW,
+      "Date of Issue of B/L",
+      dateOfIssue,
+    );
+    drawFooterCell(
+      innerMargin + footerColW,
+      fRow2Y,
+      footerColW,
+      "Place of Issue of B/L",
+      placeOfIssue,
+    );
+    drawFooterCell(
+      innerMargin + footerColW * 2,
+      fRow2Y,
+      footerColW,
+      "Total Amount",
+      "",
+    );
+
+    doc.line(innerMargin, fRow2Y, innerMargin + innerWidth, fRow2Y);
+    doc.line(
+      innerMargin + footerColW,
+      footerStartY,
+      innerMargin + footerColW,
+      footerStartY + footerRow1Height + footerRow2Height,
+    );
+    doc.line(
+      innerMargin + footerColW * 2,
+      footerStartY,
+      innerMargin + footerColW * 2,
+      footerStartY + footerRow1Height + footerRow2Height,
+    );
+
+    const fRow3Y = footerStartY + footerRow1Height + footerRow2Height;
+    doc.line(innerMargin, fRow3Y, innerMargin + innerWidth, fRow3Y);
+
+    const legalY = fRow3Y + footerRow3TopInset;
+    const signedByY = footerBottomY - SIGNED_BY_BOTTOM_PAD - signedLineHeight;
+    const carrierY = signedByY - CARRIER_TO_SIGNED_GAP - carrierLineHeight;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(FONT_LEGAL_BODY);
+    doc.text(legalLines, innerMargin + boxPadding, legalY);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(FONT_TABLE_BODY);
+    doc.text(
+      templateOnly ? "Carrier:" : `Carrier: ${companyName}`,
+      innerMargin + boxPadding,
+      carrierY,
+    );
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(FONT_TABLE_BODY);
+    const signedByLabel = "Signed By:";
+    doc.text(signedByLabel, innerMargin + boxPadding, signedByY);
+    const signedByLineStartX =
+      innerMargin + boxPadding + doc.getTextWidth(signedByLabel) + 2;
+    const signedByLineEndX = signedByLineStartX + SIGNED_BY_LINE_WIDTH;
+    doc.setLineWidth(0.3);
+    doc.line(
+      signedByLineStartX,
+      signedByY + 0.5,
+      signedByLineEndX,
+      signedByY + 0.5,
+    );
+    doc.line(innerMargin, footerBottomY, innerMargin + innerWidth, footerBottomY);
+  };
+
+  const drawCargoTypeStampAt = (bottomY: number) => {
+    if (!cargoTypeLabel) return;
+    const stampDrawn = drawUsBolTypeStamp(
+      doc,
+      cargoTypeLabel,
+      col3X + col3W / 2,
+      bottomY - 2,
+      col3W - 4,
+    );
+    if (!stampDrawn) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(255, 0, 0);
+      doc.text(cargoTypeLabel, col3X + col3W / 2, bottomY - 4, {
+        align: "center",
+      });
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(FONT_TABLE_BODY);
+    }
+  };
+
+  const cargoSegments =
+    pageBreaks.length > 0
+      ? pageBreaks
+      : [
+          {
+            startIndices: cargoColumns.map(() => 0),
+            endIndices: cargoColumns.map((col) => col.lines.length),
+            includeFreight: true,
+          },
+        ];
+
+  cargoSegments.forEach((segment, segmentIndex) => {
+    const isFirstSegment = segmentIndex === 0;
+    const includeFreight = segment.includeFreight;
+
+    if (!isFirstSegment) {
       doc.addPage();
     }
 
-    const isFirstSegment = segmentIndex === 0;
-    const tableTopY = isFirstSegment ? cargoTableStartY : continuationTableTopY;
+    const tableTopY = isFirstSegment
+      ? cargoTableStartY
+      : continuationTableTopY;
     const { headerBottomY, dataTopY } = drawCargoColumnHeaders(
       doc,
       tableTopY,
       cargoHeaders,
       boxPadding,
     );
-    const finalLayout = isLastSegment
-      ? resolveFinalCargoFooterLayout(headerBottomY)
-      : null;
-    let segmentWordsRowY = finalLayout?.wordsRowY ?? wordsRowY;
-    let segmentTempRowY = finalLayout?.tempRowY ?? tempRowY;
-    const segmentMiddleTableEndY =
-      finalLayout?.middleTableEndY ?? middleTableEndY;
-    const segmentWordsRowHeight = finalLayout?.wordsRowHeight ?? wordsRowHeight;
-    const segmentWordsTitleOffsetY =
-      finalLayout?.wordsTitleOffsetY ?? wordsTitleOffsetY;
-    const segmentWordsValueOffsetY =
-      finalLayout?.wordsValueOffsetY ?? wordsValueOffsetY;
-    const segmentFreightTitleOffsetY =
-      finalLayout?.freightTitleOffsetY ?? freightTitleOffsetY;
 
-    const plannedDataBottomY = isLastSegment
-      ? segmentWordsRowY
-      : fullPageDataBottomY;
+    const contentBottomY = getSegmentContentBottomY(
+      segment.startIndices,
+      segment.endIndices,
+      dataTopY,
+    );
 
-    const endIndices = cargoColumns.map((col, i) => {
-      const linesOnPage = countLinesThatFit(
-        col.lines.length,
-        startIndices[i],
-        dataTopY,
-        plannedDataBottomY,
-        getColumnLineHeight(col),
-        getColumnFontHeight(col),
-      );
-      return startIndices[i] + linesOnPage;
-    });
+    let segmentTempRowY = tempRowY;
+    let segmentWordsRowY = wordsRowY;
+    let tableBottomY: number;
+    let cargoBodyBottomY: number;
 
-    let cargoBodyBottomY = plannedDataBottomY;
-    if (isLastSegment) {
-      // Keep words + Freight rows compact at the bottom of the middle table so
-      // Marks & Numbers keeps maximum height (do not collapse upward into freight).
-      const segmentTempRowHeight = finalLayout?.tempRowHeight ?? tempRowHeight;
-      segmentTempRowY = segmentMiddleTableEndY - segmentTempRowHeight;
-      segmentWordsRowY = segmentTempRowY - segmentWordsRowHeight;
+    if (includeFreight) {
+      // Single-page form: cargo stops above Total/Freight; footer below middle table
+      segmentTempRowY = middleTableEndY - tempRowHeight;
+      segmentWordsRowY = segmentTempRowY - wordsRowHeight;
       cargoBodyBottomY = segmentWordsRowY;
+      tableBottomY = middleTableEndY;
+    } else {
+      // Multi-page cargo: grow table with content (full page on intermediate pages)
+      const isLastCargoPage = segmentIndex === cargoSegments.length - 1;
+      cargoBodyBottomY = isLastCargoPage
+        ? Math.min(
+            Math.max(contentBottomY + stampReserve + 2, headerBottomY + 8),
+            cargoPageBottomY + stampReserve,
+          )
+        : cargoPageBottomY + stampReserve;
+      tableBottomY = cargoBodyBottomY;
     }
-
-    const tableBottomY = isLastSegment
-      ? segmentMiddleTableEndY
-      : plannedDataBottomY;
 
     drawCargoTableBorders(
       tableTopY,
       tableBottomY,
       headerBottomY,
-      cargoBodyBottomY,
-      isLastSegment,
+      includeFreight ? segmentWordsRowY : tableBottomY,
+      includeFreight,
       segmentWordsRowY,
       segmentTempRowY,
     );
@@ -1482,202 +1691,62 @@ export const generateUsBillOfLadingPDF = (
       doc.setFont("helvetica", "normal");
       doc.setFontSize(col.fontSize ?? FONT_TABLE_BODY);
       const lineHeight = getColumnLineHeight(col);
-      const textMaxWidth = col.width - 2 * boxPadding;
       let lineY = dataTopY;
-      for (let i = startIndices[colIndex]; i < endIndices[colIndex]; i += 1) {
-        doc.text(col.lines[i], col.x + boxPadding, lineY, {
-          maxWidth: textMaxWidth,
-        });
+      for (
+        let i = segment.startIndices[colIndex];
+        i < segment.endIndices[colIndex];
+        i += 1
+      ) {
+        // Lines are pre-wrapped — do not pass maxWidth (avoids double-wrap overflow)
+        doc.text(col.lines[i], col.x + boxPadding, lineY);
         lineY += lineHeight;
       }
     });
 
-    // SEAWAY BILL / SURRENDERED — PNG stamp on every page (same as page 1), centered in Description column
-    if (cargoTypeLabel) {
-      const stampDrawn = drawUsBolTypeStamp(
-        doc,
-        cargoTypeLabel,
-        col3X + col3W / 2,
-        cargoBodyBottomY - 2,
-        col3W - 4,
-      );
-      if (!stampDrawn) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.setTextColor(255, 0, 0);
-        doc.text(cargoTypeLabel, col3X + col3W / 2, cargoBodyBottomY - 4, {
-          align: "center",
-        });
-        doc.setTextColor(0, 0, 0);
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(FONT_TABLE_BODY);
-      }
-    }
-
-    if (isLastSegment) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(FONT_TABLE_HEAD);
-      doc.text(
-        "Total Number of Containers of Packages(in words)",
-        col1X + boxPadding,
-        segmentWordsRowY + segmentWordsTitleOffsetY,
-      );
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(FONT_TABLE_BODY);
-      if (packagesInWords) {
-        doc.text(
-          packagesInWords,
-          col1X + boxPadding,
-          segmentWordsRowY + segmentWordsValueOffsetY,
-          {
-            maxWidth: innerWidth - 2 * boxPadding,
-          },
-        );
-      }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(FONT_TABLE_HEAD);
-      doc.text(
-        "Freight and Charges",
-        col1X + boxPadding,
-        segmentTempRowY + segmentFreightTitleOffsetY,
-      );
-    }
-  };
-
-  const cargoSegments =
-    pageBreaks.length > 0 ? pageBreaks : [cargoColumns.map(() => 0)];
-  // Draft / SEAWAY / SURRENDERED / ORIGINAL: draw all cargo page segments when content overflows.
-  cargoSegments.forEach((startIndices, segmentIndex) => {
-    drawCargoPageSegment(
-      segmentIndex,
-      startIndices,
-      segmentIndex === cargoSegments.length - 1,
+    drawCargoTypeStampAt(
+      includeFreight ? segmentWordsRowY : tableBottomY,
     );
+
+    if (includeFreight) {
+      drawFreightRowsAt(segmentWordsRowY, segmentTempRowY);
+      drawPageFooterAt(footerTableStartY);
+    }
   });
 
-  // ===== TABLE 3: FOOTER (separate table below middle table) =====
-  const footerColW = innerWidth / 3;
+  // Multi-page cargo: after every container/commodity line is drawn, put
+  // Total/Freight + shipped-on-board footer on the next page (never overlapping).
+  if (cargoSegments.some((s) => !s.includeFreight)) {
+    doc.addPage();
 
-  drawBox(doc, innerMargin, footerTableStartY, innerWidth, footerTableHeight);
+    const pageLimit = pageHeight - PRINT_SAFE_BOTTOM_MARGIN;
+    const middleEndY = pageLimit - footerTableHeight - TABLE_SEPARATION_GAP;
+    const segmentTempRowY = middleEndY - tempRowHeight;
+    const segmentWordsRowY = segmentTempRowY - wordsRowHeight;
+    const tableTopY = continuationTableTopY;
 
-  const drawFooterCell = (
-    x: number,
-    y: number,
-    w: number,
-    title: string,
-    value: string,
-  ) => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(FONT_TABLE_HEAD);
-    doc.text(title, x + boxPadding, y + 4);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(FONT_TABLE_BODY);
-    doc.text(value || "", x + boxPadding, y + 8.5, {
-      maxWidth: w - 2 * boxPadding,
-    });
-  };
+    drawBox(doc, innerMargin, tableTopY, innerWidth, middleEndY - tableTopY);
+    drawCargoColumnHeaders(doc, tableTopY, cargoHeaders, boxPadding);
+    doc.line(col2X, tableTopY, col2X, segmentWordsRowY);
+    doc.line(col3X, tableTopY, col3X, segmentWordsRowY);
+    doc.line(col4X, tableTopY, col4X, segmentWordsRowY);
+    doc.line(col5X, tableTopY, col5X, segmentWordsRowY);
+    doc.line(
+      innerMargin,
+      segmentWordsRowY,
+      innerMargin + innerWidth,
+      segmentWordsRowY,
+    );
+    doc.line(
+      innerMargin,
+      segmentTempRowY,
+      innerMargin + innerWidth,
+      segmentTempRowY,
+    );
 
-  const fRow1Y = footerTableStartY;
-  drawFooterCell(
-    innerMargin,
-    fRow1Y,
-    footerColW,
-    "Shipped on Board Date",
-    shippedOnBoardDate,
-  );
-  drawFooterCell(
-    innerMargin + footerColW,
-    fRow1Y,
-    footerColW,
-    "Number of Original B/L",
-    String(numberOfOriginalBl),
-  );
-  drawFooterCell(
-    innerMargin + footerColW * 2,
-    fRow1Y,
-    footerColW,
-    "Payment Terms",
-    paymentTerms,
-  );
-
-  const fRow2Y = footerTableStartY + footerRow1Height;
-  drawFooterCell(
-    innerMargin,
-    fRow2Y,
-    footerColW,
-    "Date of Issue of B/L",
-    dateOfIssue,
-  );
-  drawFooterCell(
-    innerMargin + footerColW,
-    fRow2Y,
-    footerColW,
-    "Place of Issue of B/L",
-    placeOfIssue,
-  );
-  drawFooterCell(
-    innerMargin + footerColW * 2,
-    fRow2Y,
-    footerColW,
-    "Total Amount",
-    "",
-  );
-
-  doc.line(innerMargin, fRow2Y, innerMargin + innerWidth, fRow2Y);
-  doc.line(
-    innerMargin + footerColW,
-    footerTableStartY,
-    innerMargin + footerColW,
-    footerTableStartY + footerRow1Height + footerRow2Height,
-  );
-  doc.line(
-    innerMargin + footerColW * 2,
-    footerTableStartY,
-    innerMargin + footerColW * 2,
-    footerTableStartY + footerRow1Height + footerRow2Height,
-  );
-
-  const fRow3Y = footerTableStartY + footerRow1Height + footerRow2Height;
-
-  doc.line(innerMargin, fRow3Y, innerMargin + innerWidth, fRow3Y);
-
-  const legalY = fRow3Y + footerRow3TopInset;
-  const signedByY = footerBoxBottomY - SIGNED_BY_BOTTOM_PAD - signedLineHeight;
-  const carrierY = signedByY - CARRIER_TO_SIGNED_GAP - carrierLineHeight;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(FONT_LEGAL_BODY);
-  doc.text(legalLines, innerMargin + boxPadding, legalY);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(FONT_TABLE_BODY);
-  doc.text(
-    templateOnly ? "Carrier:" : `Carrier: ${companyName}`,
-    innerMargin + boxPadding,
-    carrierY,
-  );
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(FONT_TABLE_BODY);
-  const signedByLabel = "Signed By:";
-  doc.text(signedByLabel, innerMargin + boxPadding, signedByY);
-  const signedByLineStartX =
-    innerMargin + boxPadding + doc.getTextWidth(signedByLabel) + 2;
-  const signedByLineEndX = signedByLineStartX + SIGNED_BY_LINE_WIDTH;
-  doc.setLineWidth(0.3);
-  doc.line(
-    signedByLineStartX,
-    signedByY + 0.5,
-    signedByLineEndX,
-    signedByY + 0.5,
-  );
-  doc.line(
-    innerMargin,
-    footerBoxBottomY,
-    innerMargin + innerWidth,
-    footerBoxBottomY,
-  );
+    drawFreightRowsAt(segmentWordsRowY, segmentTempRowY);
+    drawCargoTypeStampAt(segmentWordsRowY);
+    drawPageFooterAt(middleEndY + TABLE_SEPARATION_GAP);
+  }
 
   const pdfBlob = doc.output("blob");
   return URL.createObjectURL(pdfBlob);
