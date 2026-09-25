@@ -38,6 +38,7 @@ import {
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   Fragment,
@@ -58,10 +59,16 @@ import {
   PartyAddressField,
   ToastNotification,
   SingleDateInput,
+  CustomerNameSelect,
 } from "../../../components";
 import { commonSearchAPI } from "../../../service/searchApi";
 import { toTitleCase } from "../../../utils/textFormatter";
-import { resolveCustomerMasterCode } from "../../../utils/customerSelection";
+import {
+  INITIAL_CUSTOMER_SELECTION,
+  type CustomerSelectionState,
+  type CustomerSelectionType,
+  resolveCustomerMasterCode,
+} from "../../../utils/customerSelection";
 import { resolveImportHouseInvoiceBillTo } from "../../../utils/houseInvoiceBillTo";
 import {
   mapShipmentPartyAddressOptions,
@@ -436,6 +443,8 @@ function HouseCreate() {
   const [consigneeAddressOptions, setConsigneeAddressOptions] = useState<
     Array<{ value: string; label: string; email?: string }>
   >([]);
+  const [consigneeSelection, setConsigneeSelection] =
+    useState<CustomerSelectionState>(INITIAL_CUSTOMER_SELECTION);
   const [notifyCustomerAddressOptions, setNotifyCustomerAddressOptions] =
     useState<Array<{ value: string; label: string; email?: string }>>([]);
   // Shipment-party search state for Shipper (import flow)
@@ -447,6 +456,8 @@ function HouseCreate() {
   const [shipperManualMode, setShipperManualMode] = useState(false);
   // Note: shipper results are derived from shipperOptions length; no extra flag needed.
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const shipperFreeTextInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldFocusShipperFreeTextRef = useRef(false);
   const partyUiInitializedFromEditRef = useRef(false);
   const billingCustomerEmailRef = useRef<HTMLInputElement | null>(null);
   const [billingCustomerAddressOptions, setBillingCustomerAddressOptions] =
@@ -637,6 +648,7 @@ function HouseCreate() {
 
       if (!arr.length) {
         setShipperOptions([]);
+        shouldFocusShipperFreeTextRef.current = true;
         setShipperManualMode(true);
         shipperDataRef.current = {};
         // When shipment-party has no matches, keep user's typed text as manual entry
@@ -658,6 +670,20 @@ function HouseCreate() {
     }
   }, 500);
 
+  useLayoutEffect(() => {
+    if (!shouldFocusShipperFreeTextRef.current || !shipperManualMode) return;
+    const input = shipperFreeTextInputRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus({ preventScroll: true });
+    try {
+      input.setSelectionRange(cursor, cursor);
+    } catch {
+      // ignore
+    }
+    shouldFocusShipperFreeTextRef.current = false;
+  }, [shipperManualMode, shipperSearch]);
+
   const pickPrimaryPartyAddress = <
     T extends { address?: string; email?: string; address_type?: string | null },
   >(
@@ -667,6 +693,115 @@ function HouseCreate() {
       (a) =>
         String(a.address_type || "").toUpperCase() === "PRIMARY" && !!a.address,
     ) || addresses.find((a) => !!a.address);
+
+  const handleConsigneeCustomerChange = ({
+    value,
+    customerName,
+    selectionType,
+    tempCode,
+    originalData,
+  }: {
+    value: string;
+    customerName: string;
+    selectionType: CustomerSelectionType;
+    tempCode: string | null;
+    originalData?: Record<string, unknown> | null;
+  }) => {
+    const name = toTitleCase(customerName || value || "");
+    setConsigneeSelection({
+      selectionType,
+      customerName: name,
+      tempCode,
+    });
+
+    if (!value && selectionType === "master") {
+      form.setFieldValue("consignee_code", "");
+      form.setFieldValue("consignee_name", "");
+      form.setFieldValue("consignee_email", "");
+      form.setFieldValue("consignee_address", "");
+      form.setFieldValue("consignee_state_id", "");
+      setConsigneeAddressOptions([]);
+      return;
+    }
+
+    if (selectionType === "master") {
+      const original = (originalData || {}) as Record<string, unknown>;
+      const consigneeCode =
+        resolveCustomerMasterCode(original.customer_code, value) ||
+        String(value || "");
+      form.setFieldValue("consignee_code", consigneeCode);
+      form.setFieldValue("consignee_name", name);
+
+      const email = String(original.customer_email ?? original.email ?? "");
+      const addressesData = Array.isArray(original.addresses_data)
+        ? (original.addresses_data as Array<{
+            address?: string;
+            email?: string;
+            state_id?: number | null;
+            address_type?: string | null;
+          }>)
+        : [];
+      const addressOptions = addressesData
+        .filter((a) => a.address)
+        .map((a) => {
+          const addr = toTitleCase(String(a.address || ""));
+          return {
+            value: addr,
+            label: addr,
+            email: String(a.email || ""),
+          };
+        });
+      setConsigneeAddressOptions(addressOptions);
+
+      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+      form.setFieldValue(
+        "consignee_email",
+        String(primaryAddr?.email || email || ""),
+      );
+
+      if (primaryAddr?.address) {
+        form.setFieldValue(
+          "consignee_address",
+          toTitleCase(String(primaryAddr.address)),
+        );
+      } else if (!value) {
+        form.setFieldValue("consignee_address", "");
+      }
+
+      const primaryAddress = addressesData.find(
+        (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+      );
+      const addrForState =
+        primaryAddress || addressesData.find((a) => a.state_id != null);
+      if (addrForState?.state_id != null) {
+        form.setFieldValue("consignee_state_id", String(addrForState.state_id));
+      } else {
+        form.setFieldValue("consignee_state_id", "");
+      }
+      return;
+    }
+
+    // Free-text / temp: keep typed name in payload even when not in master
+    form.setFieldValue(
+      "consignee_code",
+      selectionType === "temp" ? tempCode || value || "" : "",
+    );
+    form.setFieldValue("consignee_name", name);
+    setConsigneeAddressOptions([]);
+    form.setFieldValue("consignee_state_id", "");
+
+    if (selectionType === "temp" && originalData) {
+      const addr = String(originalData.address || "").trim();
+      const email = String(originalData.email || "").trim();
+      form.setFieldValue("consignee_address", addr);
+      form.setFieldValue("consignee_email", email);
+    } else if (selectionType === "freeText") {
+      if (!name.trim()) {
+        form.setFieldValue("consignee_address", "");
+        form.setFieldValue("consignee_email", "");
+      }
+    }
+  };
 
   // Get existing housing details from location state if available
   // Support both hawbDetails and housingDetails for backward compatibility (same as AirHouseCreate)
@@ -1242,6 +1377,14 @@ function HouseCreate() {
     const consigneeSelectValue = String(editData.consignee_code || "");
     if (consigneeSelectValue) {
       form.setFieldValue("consignee_code", consigneeSelectValue);
+      setConsigneeSelection(INITIAL_CUSTOMER_SELECTION);
+    } else if (String(editData.consignee_name || "").trim()) {
+      // Name without master code → free-text consignee
+      setConsigneeSelection({
+        selectionType: "freeText",
+        customerName: String(editData.consignee_name || ""),
+        tempCode: null,
+      });
     }
 
     const consigneeAddr = editData.consignee_address;
@@ -4802,6 +4945,7 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 {shipperManualMode && shipperSearch.trim().length >= 2 ? (
                   <FormTextInput
+                    ref={shipperFreeTextInputRef}
                     label="Shipper Name"
                     required
                     placeholder="Enter shipper name"
@@ -4997,7 +5141,7 @@ function HouseCreate() {
             </Text>
             <Grid mb="xs">
               <Grid.Col span={4}>
-                <SearchableSelect
+                <CustomerNameSelect
                   label="Consignee Name"
                   required
                   placeholder="Type consignee name"
@@ -5005,88 +5149,20 @@ function HouseCreate() {
                   dropdownZIndex={10}
                   searchFields={["customer_name", "customer_code"]}
                   displayFormat={customerCodeNameDisplayFormat}
-                  value={form.values.consignee_code}
+                  value={
+                    consigneeSelection.selectionType === "temp"
+                      ? consigneeSelection.tempCode || ""
+                      : consigneeSelection.selectionType === "freeText"
+                        ? consigneeSelection.customerName ||
+                          form.values.consignee_name ||
+                          ""
+                        : form.values.consignee_code
+                  }
                   displayValue={form.values.consignee_name}
-                  onChange={(value, selectedData, originalData) => {
-                    if (!value) {
-                      form.setFieldValue("consignee_code", "");
-                      form.setFieldValue("consignee_name", "");
-                      form.setFieldValue("consignee_email", "");
-                      form.setFieldValue("consignee_address", "");
-                      form.setFieldValue("consignee_state_id", "");
-                      setConsigneeAddressOptions([]);
-                      return;
-                    }
-                    // Map email + addresses from customer-master response (addresses_data)
-                    const original = (originalData || {}) as Record<
-                      string,
-                      unknown
-                    >;
-                    const consigneeCode =
-                      resolveCustomerMasterCode(
-                        original.customer_code,
-                        value,
-                      ) || String(value || "");
-                    form.setFieldValue("consignee_code", consigneeCode);
-                    form.setFieldValue(
-                      "consignee_name",
-                      selectedData?.label || "",
-                    );
-
-                    const email = String(
-                      original.customer_email ?? original.email ?? "",
-                    );
-
-                    const addressesData = Array.isArray(original.addresses_data)
-                      ? (original.addresses_data as Array<{
-                          address?: string;
-                          email?: string;
-                          state_id?: number | null;
-                          address_type?: string | null;
-                        }>)
-                      : [];
-                    const addressOptions = addressesData
-                      .filter((a) => a.address)
-                      .map((a) => {
-                        const addr = toTitleCase(String(a.address || ""));
-                        return {
-                          value: addr,
-                          label: addr,
-                          email: String(a.email || ""),
-                        };
-                      });
-                    setConsigneeAddressOptions(addressOptions);
-
-                    const primaryAddr = pickPrimaryPartyAddress(addressesData);
-                    form.setFieldValue(
-                      "consignee_email",
-                      String(primaryAddr?.email || email || ""),
-                    );
-
-                    if (primaryAddr?.address) {
-                      form.setFieldValue(
-                        "consignee_address",
-                        toTitleCase(String(primaryAddr.address)),
-                      );
-                    }
-
-                    const primaryAddress = addressesData.find(
-                      (a) =>
-                        String(a.address_type || "").toUpperCase() ===
-                        "PRIMARY",
-                    );
-                    const addrForState =
-                      primaryAddress ||
-                      addressesData.find((a) => a.state_id != null);
-                    if (addrForState?.state_id != null) {
-                      form.setFieldValue(
-                        "consignee_state_id",
-                        String(addrForState.state_id),
-                      );
-                    } else {
-                      form.setFieldValue("consignee_state_id", "");
-                    }
-                  }}
+                  allowFreeText
+                  showNewCustomerDetailsAction={false}
+                  selectionType={consigneeSelection.selectionType}
+                  onCustomerChange={handleConsigneeCustomerChange}
                   returnOriginalData={true}
                   error={form.errors.consignee_name as string}
                   minSearchLength={3}

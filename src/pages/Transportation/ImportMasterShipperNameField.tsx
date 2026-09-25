@@ -1,6 +1,6 @@
 import { Select } from "@mantine/core";
 import { useDebouncedCallback } from "@mantine/hooks";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import FormTextInput from "../../components/FormTextInput";
 import { URL } from "../../api/serverUrls";
 import { commonSearchAPI } from "../../service/searchApi";
@@ -77,6 +77,8 @@ export function ImportMasterShipperNameField({
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
   const hydratedKeyRef = useRef<string>("");
   const freeTextOwnedRef = useRef(false);
+  const shouldFocusFreeTextRef = useRef(false);
+  const freeTextInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const id = normalizePartyId(shipperId);
@@ -124,6 +126,20 @@ export function ImportMasterShipperNameField({
     }
   }, [shipperId, shipperName]);
 
+  useLayoutEffect(() => {
+    if (!shouldFocusFreeTextRef.current) return;
+    const input = freeTextInputRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus({ preventScroll: true });
+    try {
+      input.setSelectionRange(cursor, cursor);
+    } catch {
+      // ignore
+    }
+    shouldFocusFreeTextRef.current = false;
+  }, [shipperManualMode, shipperHasResults, shipperSearch]);
+
   const selectData = useMemo(() => {
     if (
       normalizedId &&
@@ -169,6 +185,7 @@ export function ImportMasterShipperNameField({
 
       if (!arr.length) {
         freeTextOwnedRef.current = true;
+        shouldFocusFreeTextRef.current = true;
         setShipperOptions([]);
         setShipperHasResults(false);
         setShipperManualMode(true);
@@ -200,11 +217,11 @@ export function ImportMasterShipperNameField({
   if (showFreeText) {
     return (
       <FormTextInput
+        ref={freeTextInputRef}
         size={size}
         label="Shipper Name"
         placeholder="Enter shipper name"
         disabled={disabled}
-        autoFocus={!shipperName}
         value={shipperSearch}
         onChange={(e) => {
           const v = toTitleCase(e.currentTarget.value);

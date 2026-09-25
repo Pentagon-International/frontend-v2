@@ -115,13 +115,27 @@ export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
   useLayoutEffect(() => {
     if (inputMode !== "freeText" || !shouldFocusFreeTextRef.current) return;
 
-    const input = freeTextInputRef.current;
-    if (!input) return;
+    const focusInput = () => {
+      const input = freeTextInputRef.current;
+      if (!input) return false;
+      const cursor = input.value.length;
+      input.focus({ preventScroll: true });
+      try {
+        input.setSelectionRange(cursor, cursor);
+      } catch {
+        // Some input types may not support setSelectionRange
+      }
+      shouldFocusFreeTextRef.current = false;
+      return true;
+    };
 
-    const cursor = input.value.length;
-    input.focus();
-    input.setSelectionRange(cursor, cursor);
-    shouldFocusFreeTextRef.current = false;
+    if (focusInput()) return;
+
+    // Input may not be mounted yet on the first paint after mode switch
+    const frameId = window.requestAnimationFrame(() => {
+      focusInput();
+    });
+    return () => window.cancelAnimationFrame(frameId);
   }, [inputMode, freeTextValue]);
 
   useEffect(() => {
@@ -161,6 +175,8 @@ export default forwardRef<CustomerNameSelectHandle, CustomerNameSelectProps>(
       }
 
       lastAppliedFreeTextRef.current = trimmed;
+      // Keep caret in the free-text field after SearchableSelect unmounts
+      shouldFocusFreeTextRef.current = true;
       setFreeTextValue(trimmed);
       setInputMode("freeText");
       setPendingCustomerName(trimmed);

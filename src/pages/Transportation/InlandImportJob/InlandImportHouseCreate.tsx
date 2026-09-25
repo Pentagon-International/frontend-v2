@@ -38,6 +38,7 @@ import {
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useCallback,
   useRef,
@@ -391,6 +392,8 @@ function HouseCreate() {
     null,
   );
   const shipperDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const shipperFreeTextInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldFocusShipperFreeTextRef = useRef(false);
   const [shipperAddressSearch, setShipperAddressSearch] = useState("");
   const [shipperAddressCustom, setShipperAddressCustom] = useState(false);
 
@@ -405,6 +408,8 @@ function HouseCreate() {
     boolean | null
   >(null);
   const consigneeDataRef = useRef<Record<string, Record<string, unknown>>>({});
+  const consigneeFreeTextInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldFocusConsigneeFreeTextRef = useRef(false);
 
   // Notify Customer (shipment-party) - same pattern as Consignee
   const [notifyCustomerSearch, setNotifyCustomerSearch] = useState("");
@@ -1574,6 +1579,7 @@ function HouseCreate() {
       if (!arr.length) {
         setShipperOptions([]);
         setShipperHasResults(false);
+        shouldFocusShipperFreeTextRef.current = true;
         setShipperManualMode(true);
         shipperDataRef.current = {};
         form.setFieldValue("shipper_code", "");
@@ -1595,6 +1601,23 @@ function HouseCreate() {
       shipperDataRef.current = {};
     }
   }, 500);
+
+  useLayoutEffect(() => {
+    const showShipperFreeText =
+      (shipperHasResults === false || shipperManualMode) &&
+      shipperSearch.trim().length >= 2;
+    if (!shouldFocusShipperFreeTextRef.current || !showShipperFreeText) return;
+    const input = shipperFreeTextInputRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus({ preventScroll: true });
+    try {
+      input.setSelectionRange(cursor, cursor);
+    } catch {
+      // ignore
+    }
+    shouldFocusShipperFreeTextRef.current = false;
+  }, [shipperHasResults, shipperManualMode, shipperSearch]);
 
   // Debounced shipment-party search for Consignee (export flow)
   const debouncedConsigneeSearch = useDebouncedCallback(
@@ -1621,6 +1644,7 @@ function HouseCreate() {
         if (!arr.length) {
           setConsigneeOptions([]);
           setConsigneeHasResults(false);
+          shouldFocusConsigneeFreeTextRef.current = true;
           setConsigneeManualMode(true);
           consigneeDataRef.current = {};
           // When shipment-party has no matches, keep user's typed text as manual entry
@@ -1645,6 +1669,24 @@ function HouseCreate() {
     },
     500,
   );
+
+  useLayoutEffect(() => {
+    const showConsigneeFreeText =
+      consigneeHasResults === false && consigneeSearch.trim().length >= 2;
+    if (!shouldFocusConsigneeFreeTextRef.current || !showConsigneeFreeText) {
+      return;
+    }
+    const input = consigneeFreeTextInputRef.current;
+    if (!input) return;
+    const cursor = input.value.length;
+    input.focus({ preventScroll: true });
+    try {
+      input.setSelectionRange(cursor, cursor);
+    } catch {
+      // ignore
+    }
+    shouldFocusConsigneeFreeTextRef.current = false;
+  }, [consigneeHasResults, consigneeSearch]);
 
   // Debounced shipment-party search for Notify Customer 1 - same API & pattern as Consignee
   const debouncedNotifyCustomerSearch = useDebouncedCallback(
@@ -3520,6 +3562,7 @@ function HouseCreate() {
                 {(shipperHasResults === false || shipperManualMode) &&
                 shipperSearch.trim().length >= 2 ? (
                   <FormTextInput
+                    ref={shipperFreeTextInputRef}
                     label="Shipper Name"
                     required
                     placeholder="Enter shipper name"
@@ -3720,6 +3763,7 @@ function HouseCreate() {
                 {consigneeHasResults === false &&
                 consigneeSearch.trim().length >= 2 ? (
                   <FormTextInput
+                    ref={consigneeFreeTextInputRef}
                     label="Consignee Name"
                     required
                     placeholder="Enter consignee name"
