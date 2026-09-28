@@ -329,8 +329,8 @@ const validationSchema = yup.object({
   flight_no: yup.string().nullable().optional(),
   is_direct: yup.boolean(),
   is_coload: yup.boolean(),
-  etd: yup.date().nullable().required("ETD is required"),
-  eta: yup.date().nullable().required("ETA is required"),
+  etd: yup.date().nullable(),
+  eta: yup.date().nullable(),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -3004,8 +3004,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
-        "etd",
-        "eta",
       ];
 
       const validation = form.validate();
@@ -4213,7 +4211,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETD (Estimated Time of Departure)"
                     placeholder="YYYY-MM-DD"
-                    withAsterisk
                     value={form.values.etd ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("etd", date ?? null);
@@ -4225,7 +4222,6 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETA (Estimated Time of Arrival)"
                     placeholder="YYYY-MM-DD"
-                    withAsterisk
                     value={form.values.eta ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("eta", date ?? null);

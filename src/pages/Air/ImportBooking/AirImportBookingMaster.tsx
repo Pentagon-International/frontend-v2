@@ -72,6 +72,7 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 import useDateFormat from "../../../hooks/useDateFormat";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
 import { createChaJobFromBooking } from "../../../utils/bookingCreateChaJob";
+import { useBookingEtdEtaPrompt } from "../../../components/BookingEtdEtaPrompt";
 import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 
 const LIST_KEY = "AIR_IMPORT_BOOKING_MASTER";
@@ -872,7 +873,12 @@ function AirImportBookingMaster() {
   //   navigate("./create");
   // }, [persistListState, navigate]);
 
-  const isDataLoading = isRestoring || isLoading || isFetching;
+  const isJobFlowActive =
+    createJobBookingId != null ||
+    createChaJobBookingId != null ||
+    isDuplicatingBooking;
+  const isDataLoading =
+    !isJobFlowActive && (isRestoring || isLoading || isFetching);
 
   const lastDebouncedSearchRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1089,8 +1095,26 @@ function AirImportBookingMaster() {
     }
   };
 
+  const { ensureBookingEtdEta, bookingEtdEtaPrompt } = useBookingEtdEtaPrompt({
+    onUpdated: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["air-import-booking/filter/"],
+      });
+      void refetchImportShipments();
+    },
+  });
+
   const handleCreateJob = async (booking: ImportShipmentData) => {
-    await createJobFromBooking(booking as unknown as Record<string, unknown>, {
+    const ready = await ensureBookingEtdEta(
+      booking as unknown as Record<string, unknown>,
+      {
+        confirmLabel: "Create Job",
+        onProceed: () => setCreateJobBookingId(booking.id),
+        onAbort: () => setCreateJobBookingId(null),
+      },
+    );
+    if (!ready) return;
+    await createJobFromBooking(ready, {
       navigate,
       mode: "air-import",
       onStart: () => setCreateJobBookingId(booking.id),
@@ -1105,7 +1129,16 @@ function AirImportBookingMaster() {
   };
 
   const handleCreateChaJob = async (booking: ImportShipmentData) => {
-    await createChaJobFromBooking(booking as unknown as Record<string, unknown>, {
+    const ready = await ensureBookingEtdEta(
+      booking as unknown as Record<string, unknown>,
+      {
+        confirmLabel: "Create CHA Job",
+        onProceed: () => setCreateChaJobBookingId(booking.id),
+        onAbort: () => setCreateChaJobBookingId(null),
+      },
+    );
+    if (!ready) return;
+    await createChaJobFromBooking(ready, {
       navigate,
       mode: "air-import",
       onStart: () => setCreateChaJobBookingId(booking.id),
@@ -1995,6 +2028,7 @@ function AirImportBookingMaster() {
             }}
           />
         </Drawer>
+        {bookingEtdEtaPrompt}
         <BookingCreateJobLoader
           active={
             createJobBookingId != null ||

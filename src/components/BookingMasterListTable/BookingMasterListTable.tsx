@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { BookingTableViewportCenter } from "../BookingTableViewportCenter";
 import {
   Box,
-  Center,
   Drawer,
   Flex,
   Group,
@@ -435,15 +435,15 @@ export function BookingMasterListTable<TRaw>({
         <tbody>
           {isLoading ? (
             <tr>
-              <td colSpan={emptyColSpan} style={{ padding: 80, textAlign: "center" }}>
-                <Center>
+              <td colSpan={emptyColSpan} style={{ padding: 0 }}>
+                <BookingTableViewportCenter>
                   <Stack align="center" gap="sm">
                     <Loader size="lg" color={primary} />
                     <Text c="dimmed" size="sm" style={{ fontFamily: fontSans }}>
                       {loadingMessage}
                     </Text>
                   </Stack>
-                </Center>
+                </BookingTableViewportCenter>
               </td>
             </tr>
           ) : rows.length === 0 ? (

@@ -17,7 +17,7 @@ export function BookingCreateJobLoader({
       style={{
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(255, 255, 255, 0.75)",
+        backgroundColor: "rgba(255, 255, 255, 0.92)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

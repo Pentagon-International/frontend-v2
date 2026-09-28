@@ -377,8 +377,8 @@ const validationSchema = yup.object({
   // Ocean Schedule fields
   schedule_id: yup.string(),
   carrier_code: yup.string(),
-  eta: yup.date().nullable().required("ETA is required"),
-  etd: yup.date().nullable().required("ETD is required"),
+  eta: yup.date().nullable(),
+  etd: yup.date().nullable(),
   vessel_name: yup.string(),
   voyage_no: yup.string(),
 
@@ -3209,8 +3209,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         "routed",
         "routed_by",
         "customer_service_name",
-        "etd",
-        "eta",
       ];
 
       const validation = form.validate();
@@ -4601,7 +4599,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETD (Estimated Time of Departure)"
                     placeholder="YYYY-MM-DD"
-                    withAsterisk
                     value={form.values.etd ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("etd", date ?? null);
@@ -4613,7 +4610,6 @@ const OceanExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETA (Estimated Time of Arrival)"
                     placeholder="YYYY-MM-DD"
-                    withAsterisk
                     value={form.values.eta ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("eta", date ?? null);

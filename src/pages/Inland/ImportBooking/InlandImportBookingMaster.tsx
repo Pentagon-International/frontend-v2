@@ -12,7 +12,6 @@ import {
   Flex,
   Button,
   Text,
-  Center,
   Loader,
   Stack,
   Grid,
@@ -81,6 +80,8 @@ import {
 import { useForm } from "@mantine/form";
 import { apiCallProtected } from "../../../api/axios";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
+import { useBookingEtdEtaPrompt } from "../../../components/BookingEtdEtaPrompt";
+import { BookingTableViewportCenter } from "../../../components/BookingTableViewportCenter";
 import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -1404,7 +1405,10 @@ function InlandImportBookingMaster() {
     [visibleColumns],
   );
 
-  const isDataLoading = isRestoring || isLoading || isFetching;
+  const isJobFlowActive =
+    createJobBookingId != null || isDuplicatingBooking;
+  const isDataLoading =
+    !isJobFlowActive && (isRestoring || isLoading || isFetching);
 
   // Reset to first page whenever the search term changes (after debounce).
   // Use a ref to skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
@@ -1680,8 +1684,26 @@ function InlandImportBookingMaster() {
     }
   };
 
+  const { ensureBookingEtdEta, bookingEtdEtaPrompt } = useBookingEtdEtaPrompt({
+    onUpdated: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["inland-import-booking/filter/"],
+      });
+      void refetchExportShipments();
+    },
+  });
+
   const handleCreateJob = async (booking: ExportShipmentData) => {
-    await createJobFromBooking(booking as unknown as Record<string, unknown>, {
+    const ready = await ensureBookingEtdEta(
+      booking as unknown as Record<string, unknown>,
+      {
+        confirmLabel: "Create Job",
+        onProceed: () => setCreateJobBookingId(booking.id),
+        onAbort: () => setCreateJobBookingId(null),
+      },
+    );
+    if (!ready) return;
+    await createJobFromBooking(ready, {
       navigate,
       mode: "inland-import",
       onStart: () => setCreateJobBookingId(booking.id),
@@ -2692,11 +2714,8 @@ function InlandImportBookingMaster() {
                   <tbody>
                     {isDataLoading ? (
                       <tr>
-                        <td
-                          colSpan={20}
-                          style={{ padding: 80, textAlign: "center" }}
-                        >
-                          <Center>
+                        <td colSpan={20} style={{ padding: 0 }}>
+                          <BookingTableViewportCenter>
                             <Stack align="center" gap="sm">
                               <Loader size="lg" color={primary} />
                               <Text
@@ -2707,7 +2726,7 @@ function InlandImportBookingMaster() {
                                 Loading import bookings...
                               </Text>
                             </Stack>
-                          </Center>
+                          </BookingTableViewportCenter>
                         </td>
                       </tr>
                     ) : tableRows.length === 0 ? (
@@ -3224,6 +3243,7 @@ function InlandImportBookingMaster() {
           />
         </Drawer>
 
+        {bookingEtdEtaPrompt}
         <BookingCreateJobLoader
           active={createJobBookingId != null || isDuplicatingBooking}
           message={

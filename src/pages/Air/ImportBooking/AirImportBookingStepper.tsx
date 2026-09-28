@@ -318,8 +318,8 @@ const validationSchema = yup.object({
   carrier_code: yup.string().optional(),
   carrier_name: yup.string().optional(),
   flight_no: yup.string().nullable().optional(),
-  etd: yup.date().nullable().required("ETD is required"),
-  eta: yup.date().nullable().required("ETA is required"),
+  etd: yup.date().nullable(),
+  eta: yup.date().nullable(),
 
   // Routing Details - All optional
   routingDetails: yup
@@ -2698,8 +2698,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         "destination_agent_address_id",
         "destination_agent_address",
         "destination_agent_email",
-        "etd",
-        "eta",
       ];
 
       const validation = form.validate();
@@ -3822,7 +3820,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETD (Estimated Time of Departure)"
                     placeholder="YYYY-MM-DD"
-                    withAsterisk
                     value={form.values.etd ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("etd", date ?? null);
@@ -3834,7 +3831,6 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                   <SingleDateInput
                     label="ETA (Estimated Time of Arrival)"
                     placeholder="YYYY-MM-DD"
-                    withAsterisk
                     value={form.values.eta ?? undefined}
                     onChange={(date) => {
                       form.setFieldValue("eta", date ?? null);

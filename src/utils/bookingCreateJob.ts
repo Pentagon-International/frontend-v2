@@ -26,6 +26,10 @@ import {
 } from "./nonDecimalMoneyAmount";
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 import { pickPackageTypeCodeFromCargo } from "./packageTypeOptions";
+import {
+  bookingHasEtdAndEta,
+  preferBookingScheduleDates,
+} from "./bookingScheduleDates";
 
 export type BookingCreateJobMode =
   | "air-export"
@@ -1096,9 +1100,20 @@ export async function createJobFromBooking(
   const { navigate, mode, onStart, onEnd, invalidateList } = options;
   const jobEditPath = JOB_EDIT_PATH[mode];
 
+  if (!bookingHasEtdAndEta(booking)) {
+    ToastNotification({
+      type: "error",
+      message: "ETD and ETA are required to create a job.",
+    });
+    return false;
+  }
+
   onStart?.();
   try {
-    const bookingForPayload = await resolveBookingRecordForJobCreate(booking);
+    const bookingForPayload = preferBookingScheduleDates(
+      await resolveBookingRecordForJobCreate(booking),
+      booking,
+    );
     const houseDocumentIds =
       await prepareHouseDocumentIdsFromBooking(bookingForPayload);
     const payload = buildJobCreatePayloadFromBooking(bookingForPayload, mode, {

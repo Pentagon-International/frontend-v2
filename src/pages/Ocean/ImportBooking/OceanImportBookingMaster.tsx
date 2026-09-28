@@ -73,6 +73,7 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 import useDateFormat from "../../../hooks/useDateFormat";
 import { createJobFromBooking } from "../../../utils/bookingCreateJob";
 import { createChaJobFromBooking } from "../../../utils/bookingCreateChaJob";
+import { useBookingEtdEtaPrompt } from "../../../components/BookingEtdEtaPrompt";
 import { navigateBookingDuplicate } from "../../../utils/navigateBookingDuplicate";
 
 const LIST_KEY = "OCEAN_IMPORT_BOOKING_MASTER";
@@ -861,7 +862,12 @@ function OceanImportBookingMaster() {
   //   navigate("./create");
   // }, [persistListState, navigate]);
 
-  const isDataLoading = isRestoring || isLoading || isFetching;
+  const isJobFlowActive =
+    createJobBookingId != null ||
+    createChaJobBookingId != null ||
+    isDuplicatingBooking;
+  const isDataLoading =
+    !isJobFlowActive && (isRestoring || isLoading || isFetching);
 
   // Reset to first page whenever the search term changes (after debounce).
   // Skip the initial value (and any restore-driven update) so we don't clobber a restored pageIndex.
@@ -1081,8 +1087,26 @@ function OceanImportBookingMaster() {
     }
   };
 
+  const { ensureBookingEtdEta, bookingEtdEtaPrompt } = useBookingEtdEtaPrompt({
+    onUpdated: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["ocean-import-booking/filter/"],
+      });
+      void refetchImportShipments();
+    },
+  });
+
   const handleCreateJob = async (booking: ImportShipmentData) => {
-    await createJobFromBooking(booking as unknown as Record<string, unknown>, {
+    const ready = await ensureBookingEtdEta(
+      booking as unknown as Record<string, unknown>,
+      {
+        confirmLabel: "Create Job",
+        onProceed: () => setCreateJobBookingId(booking.id),
+        onAbort: () => setCreateJobBookingId(null),
+      },
+    );
+    if (!ready) return;
+    await createJobFromBooking(ready, {
       navigate,
       mode: "ocean-import",
       onStart: () => setCreateJobBookingId(booking.id),
@@ -1097,7 +1121,16 @@ function OceanImportBookingMaster() {
   };
 
   const handleCreateChaJob = async (booking: ImportShipmentData) => {
-    await createChaJobFromBooking(booking as unknown as Record<string, unknown>, {
+    const ready = await ensureBookingEtdEta(
+      booking as unknown as Record<string, unknown>,
+      {
+        confirmLabel: "Create CHA Job",
+        onProceed: () => setCreateChaJobBookingId(booking.id),
+        onAbort: () => setCreateChaJobBookingId(null),
+      },
+    );
+    if (!ready) return;
+    await createChaJobFromBooking(ready, {
       navigate,
       mode: "ocean-import",
       onStart: () => setCreateChaJobBookingId(booking.id),
@@ -1937,6 +1970,7 @@ function OceanImportBookingMaster() {
             }}
           />
         </Drawer>
+        {bookingEtdEtaPrompt}
         <BookingCreateJobLoader
           active={
             createJobBookingId != null ||

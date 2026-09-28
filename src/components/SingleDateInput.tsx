@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { DateInput } from "@mantine/dates";
+import { DateInput, type DateInputProps } from "@mantine/dates";
 import {
   IconCalendar,
   IconChevronRight,
@@ -28,6 +28,8 @@ export interface SingleDateInputProps {
   classNames?: Record<string, string>;
   /** Shallow-merge over default date field styles (e.g. `fontFamily`). */
   styles?: Record<string, React.CSSProperties & Record<string, unknown>>;
+  /** Calendar popover options. Raise `zIndex` when the field sits inside a modal. */
+  popoverProps?: DateInputProps["popoverProps"];
 }
 
 /** Mantine DateInput requires a real Date; nav/API may pass ISO strings. */
@@ -56,6 +58,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
   title,
   classNames,
   styles: stylesOverride,
+  popoverProps,
 }) => {
   const dateFormat = useDateFormat();
   const dateValue = useMemo(() => toDateOrNull(value), [value]);
@@ -192,6 +195,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       withAsterisk={withAsterisk}
       title={title}
       classNames={classNames}
+      popoverProps={popoverProps}
       getDayProps={(date) => {
         const isSelected = isDateSelected(date, dateValue);
         return {

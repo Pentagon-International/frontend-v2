@@ -60,6 +60,9 @@ export function ERPListTableCard({
             minHeight: 0,
             overflow: "auto",
             backgroundColor: theme.cardBg,
+            // Visible width for loaders inside a horizontally scrolling table.
+            containerType: "inline-size",
+            containerName: "erp-list-table-scroll",
           }}
         >
           {children}

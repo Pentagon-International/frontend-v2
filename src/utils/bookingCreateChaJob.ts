@@ -23,6 +23,10 @@ import {
   resolveBookingRecordForJobCreate,
   type BookingCreateJobMode,
 } from "./bookingCreateJob";
+import {
+  bookingHasEtdAndEta,
+  preferBookingScheduleDates,
+} from "./bookingScheduleDates";
 
 export type BookingCreateChaJobMode = Extract<
   BookingCreateJobMode,
@@ -117,9 +121,20 @@ export async function createChaJobFromBooking(
   const chaConfig = CHA_CONFIG_BY_BOOKING_MODE[mode];
   const jobEditPath = `${chaConfig.basePath}/edit`;
 
+  if (!bookingHasEtdAndEta(booking)) {
+    ToastNotification({
+      type: "error",
+      message: "ETD and ETA are required to create a CHA job.",
+    });
+    return false;
+  }
+
   onStart?.();
   try {
-    const bookingForPayload = await resolveBookingRecordForJobCreate(booking);
+    const bookingForPayload = preferBookingScheduleDates(
+      await resolveBookingRecordForJobCreate(booking),
+      booking,
+    );
     const payload = await buildChaJobCreatePayloadFromBooking(
       bookingForPayload,
       mode,
