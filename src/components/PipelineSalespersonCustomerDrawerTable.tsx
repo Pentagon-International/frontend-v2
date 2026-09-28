@@ -66,6 +66,8 @@ export interface PipelineSalespersonCustomerDrawerTableProps {
     row: PipelineCustomerDrawerRow,
     value: number
   ) => void;
+  /** When false, expected profit is shown as text. USD display must not be saved as local profit. */
+  expectedEditable?: boolean;
 }
 
 function sumField(rows: PipelineCustomerDrawerRow[], key: keyof PipelineCustomerDrawerRow) {
@@ -147,6 +149,7 @@ export default function PipelineSalespersonCustomerDrawerTable({
   periodLabel,
   onFinancialColumnClick,
   onExpectedEnter,
+  expectedEditable = true,
 }: PipelineSalespersonCustomerDrawerTableProps) {
   const { formatAmountFromNumber: formatAmount } = useBranchNumberFormat();
 
@@ -403,10 +406,18 @@ export default function PipelineSalespersonCustomerDrawerTable({
                           verticalAlign: "middle",
                         }}
                       >
-                        <ExpectedEditCell
-                          row={r}
-                          onEnter={(n) => onExpectedEnter(drillIdx, r, n)}
-                        />
+                        {expectedEditable ? (
+                          <ExpectedEditCell
+                            row={r}
+                            onEnter={(n) => onExpectedEnter(drillIdx, r, n)}
+                          />
+                        ) : (
+                          <MetricText
+                            n={r.expected}
+                            formatAmount={formatAmount}
+                            fw={r.expected > 0 ? 600 : 400}
+                          />
+                        )}
                       </Table.Td>
                     </Table.Tr>
                   );

@@ -36,6 +36,8 @@ import {
   PotentialCustomerItem,
 } from "../../../service/dashboard.service";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
+import PipelineReportCurrencySelect from "./PipelineReportCurrencySelect";
 import {
   DetailedViewTable,
   PipelineSalespersonByRepTable,
@@ -94,6 +96,8 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   coordinatorName,
 }) => {
   const { user } = useAuthStore();
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
+  const pipelineReportShowsMoney = user?.pulse_id !== "P2CCI";
   const navigate = useNavigate();
   const lastQuotationDrillRef = useRef<{
     filters: PipelineReportFilters;
@@ -102,6 +106,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   const isInitialMount = useRef(true);
   const isInitialMountForSearch = useRef(true);
   const isInitialMountForCalculation = useRef(true);
+  const isInitialMountForCurrency = useRef(true);
   const [drillLevel, setDrillLevel] = useState<0 | 1 | 2>(
     initialState?.drillLevel ?? 0
   );
@@ -364,10 +369,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     return dateFilters;
   };
 
+  const displayCurrencyFields = (): { display_currency?: "LOCAL" | "USD" } =>
+    pipelineReportShowsMoney
+      ? { display_currency: displayCurrencyMode === "USD" ? "USD" : "LOCAL" }
+      : {};
+
   const buildPipelineCommonFilters = () => ({
     ...buildDateFilters(),
     ...(globalSearch?.trim() && { search: globalSearch.trim() }),
     ...(user?.pulse_id === "P2CCI" && { calculation }),
+    ...displayCurrencyFields(),
     ...(branchCode?.trim() && { branch_code: branchCode.trim() }),
     ...(coordinatorName?.trim() && {
       coordinator_name: coordinatorName.trim(),
@@ -382,11 +393,18 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
   );
 
   const mergeRestoredQuotationDrillFilters = useCallback(
-    (payload: PipelineReportFilters): PipelineReportFilters => ({
-      ...payload,
-      company: user?.company?.company_name || payload.company,
-    }),
-    [user?.company?.company_name],
+    (payload: PipelineReportFilters): PipelineReportFilters => {
+      const next: PipelineReportFilters = {
+        ...payload,
+        company: user?.company?.company_name || payload.company,
+        ...displayCurrencyFields(),
+      };
+      if (!pipelineReportShowsMoney) {
+        delete next.display_currency;
+      }
+      return next;
+    },
+    [user?.company?.company_name, displayCurrencyMode, pipelineReportShowsMoney],
   );
 
   const buildQuotationNavigatePipelineState = useCallback(
@@ -537,6 +555,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       branchCode,
       coordinatorName,
       calculation,
+      displayCurrencyMode,
     ]
   );
 
@@ -557,6 +576,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     const shared = {
       ...buildDateFilters(),
       ...(user?.pulse_id === "P2CCI" && { calculation }),
+      ...displayCurrencyFields(),
       ...(globalSearch?.trim() && { search: globalSearch.trim() }),
     };
     if (state.selectedSector) {
@@ -936,6 +956,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                     ),
                     ...buildDateFilters(),
                     ...(user?.pulse_id === "P2CCI" && { calculation }),
+                    ...displayCurrencyFields(),
                     ...(globalSearch &&
                       globalSearch.trim() && { search: globalSearch.trim() }),
                   };
@@ -1048,6 +1069,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                     ),
                     ...buildDateFilters(),
                     ...(user?.pulse_id === "P2CCI" && { calculation }),
+                    ...displayCurrencyFields(),
                     ...(globalSearch &&
                       globalSearch.trim() && { search: globalSearch.trim() }),
                   };
@@ -1213,6 +1235,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
               // period, // Commented out - can be used in future case
               ...buildDateFilters(),
               ...(user?.pulse_id === "P2CCI" && { calculation }),
+              ...displayCurrencyFields(),
               ...(globalSearch &&
                 globalSearch.trim() && { search: globalSearch.trim() }),
             };
@@ -1248,13 +1271,16 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
 
   const loadPipelineData = async (
     salesperson?: string,
-    periodValue?: string
+    periodValue?: string,
+    background = false,
   ) => {
     try {
-      if (salesperson) {
-        setDrilldownLoading(true);
-      } else {
-        setInitialLoading(true);
+      if (!background) {
+        if (salesperson) {
+          setDrilldownLoading(true);
+        } else {
+          setInitialLoading(true);
+        }
       }
 
       const companyName = user?.company?.company_name || "";
@@ -1316,10 +1342,12 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     } catch (error) {
       console.error("Error loading pipeline data:", error);
     } finally {
-      if (salesperson) {
-        setDrilldownLoading(false);
-      } else {
-        setInitialLoading(false);
+      if (!background) {
+        if (salesperson) {
+          setDrilldownLoading(false);
+        } else {
+          setInitialLoading(false);
+        }
       }
     }
   };
@@ -2348,6 +2376,204 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculation]);
 
+  // Refetch the open Pipeline Report screen when the currency choice changes.
+  useEffect(() => {
+    if (isInitialMountForCurrency.current) {
+      isInitialMountForCurrency.current = false;
+      return;
+    }
+
+    const refreshBaseTabs = () => {
+      loadPipelineData();
+      loadSectorData();
+      loadProductData();
+    };
+
+    if (drillLevel === 2 && selectedColumnType) {
+      refreshBaseTabs();
+      // Level 2 is kept in memory and shown again on back. Reload it in the new currency.
+      if (selectedSalesperson) {
+        const parentCompany = user?.company?.company_name || "";
+        if (parentCompany) {
+          const profitFilters: PipelineReportFilters = {
+            company: parentCompany,
+            type: selectedColumnType,
+            ...buildPipelineCommonFilters(),
+            salesperson: selectedSalesperson,
+            ...(selectedSector && { region: selectedSector }),
+            ...(selectedService && { service: selectedService }),
+            ...(selectedServiceType && {
+              service_type: toTitleCase(selectedServiceType),
+            }),
+          };
+          let profitKind: QuotationDrillFetchKind = "salesperson";
+          if (selectedSector) profitKind = "regional";
+          else if (selectedService) profitKind = "product";
+          setCustomerProfitLoading(true);
+          void (async () => {
+            try {
+              const result = await fetchPipelineCustomerProfitDrill(
+                profitFilters,
+                profitKind,
+              );
+              setCustomerProfitRows(result.rows);
+              setCustomerProfitSummary(result.summary);
+            } catch (error) {
+              console.error(
+                "Error reloading parent pipeline drill for currency:",
+                error,
+              );
+            } finally {
+              setCustomerProfitLoading(false);
+            }
+          })();
+        }
+        if (selectedSector) {
+          void loadSectorCustomerData(selectedSalesperson, period);
+        } else if (selectedService) {
+          void loadProductCustomerData(selectedSalesperson, period);
+        } else {
+          void loadPipelineData(selectedSalesperson, period, true);
+        }
+      }
+      const companyName = user?.company?.company_name || "";
+      if (!companyName) return;
+
+      const normalizedColumnType = mapPipelineColumnTypeToApiType(
+        selectedColumnType
+      )!;
+      let filters: PipelineReportFilters = {
+        company: companyName,
+        salesperson: selectedSalesperson || "",
+        type: normalizedColumnType,
+        ...buildPipelineCommonFilters(),
+      };
+      filters = withPipelineCustomerCode(filters, selectedCustomerCode);
+      if (selectedSector) filters.region = selectedSector;
+      if (selectedService) filters.service = selectedService;
+      if (selectedServiceType) {
+        filters.service_type = toTitleCase(selectedServiceType);
+      }
+
+      setDrilldownLoading(true);
+      (async () => {
+        try {
+          let response;
+          if (selectedSector) {
+            rememberQuotationDrillRequest(filters, "regional");
+            response = await getPotentialCustomersDataForRegional(filters);
+          } else if (selectedService) {
+            rememberQuotationDrillRequest(filters, "product");
+            response = await getPotentialCustomersDataForProduct(filters);
+          } else {
+            rememberQuotationDrillRequest(filters, "salesperson");
+            response = await getPotentialCustomersData(filters);
+          }
+          setPotentialCustomersData(transformNullValues(response.data || []));
+          if ((response as any).summary) {
+            setPotentialCustomersSummary((response as any).summary);
+          } else {
+            setPotentialCustomersSummary(null);
+          }
+        } catch (error) {
+          console.error("Error reloading pipeline data for currency:", error);
+          setPotentialCustomersData([]);
+          setPotentialCustomersSummary(null);
+        } finally {
+          setDrilldownLoading(false);
+        }
+      })();
+      return;
+    }
+
+    if (drillLevel === 1 && selectedColumnType && selectedSalesperson) {
+      refreshBaseTabs();
+      const companyName = user?.company?.company_name || "";
+      if (!companyName) return;
+      const profitFilters: PipelineReportFilters = {
+        company: companyName,
+        type: selectedColumnType,
+        ...buildPipelineCommonFilters(),
+        salesperson: selectedSalesperson,
+        ...(selectedSector && { region: selectedSector }),
+        ...(selectedService && { service: selectedService }),
+        ...(selectedServiceType && {
+          service_type: toTitleCase(selectedServiceType),
+        }),
+      };
+      let profitKind: QuotationDrillFetchKind = "salesperson";
+      if (selectedSector) profitKind = "regional";
+      else if (selectedService) profitKind = "product";
+
+      setCustomerProfitLoading(true);
+      (async () => {
+        try {
+          const result = await fetchPipelineCustomerProfitDrill(
+            profitFilters,
+            profitKind
+          );
+          setCustomerProfitRows(result.rows);
+          setCustomerProfitSummary(result.summary);
+        } catch (error) {
+          console.error("Error reloading customer profit for currency:", error);
+          setCustomerProfitRows([]);
+          setCustomerProfitSummary(null);
+        } finally {
+          setCustomerProfitLoading(false);
+        }
+      })();
+      return;
+    }
+
+    if (productDrillLevel > 0 && selectedService && selectedServiceType) {
+      loadPipelineData();
+      loadSectorData();
+      if (productDrillLevel === 1) {
+        loadProductData(
+          period,
+          selectedService,
+          toTitleCase(selectedServiceType),
+          selectedColumnType || undefined
+        );
+      } else if (selectedSalesperson) {
+        loadProductData();
+        loadProductCustomerData(
+          selectedSalesperson,
+          period,
+          selectedColumnType || undefined
+        );
+      }
+      return;
+    }
+
+    if (sectorDrillLevel > 0 && selectedSector) {
+      loadPipelineData();
+      loadProductData();
+      if (sectorDrillLevel === 1) {
+        loadSectorData(period, selectedSector, selectedColumnType || undefined);
+      } else if (selectedSalesperson) {
+        loadSectorData();
+        loadSectorCustomerData(
+          selectedSalesperson,
+          period,
+          selectedColumnType || undefined
+        );
+      } else {
+        loadSectorData(period, selectedSector, selectedColumnType || undefined);
+      }
+      return;
+    }
+
+    if (drillLevel === 1 && selectedSalesperson) {
+      refreshBaseTabs();
+      loadPipelineData(selectedSalesperson, period);
+      return;
+    }
+
+    refreshBaseTabs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayCurrencyMode]);
+
   // Effect to refetch data when company/branch changes and reset to base level
   useEffect(() => {
     // Skip on initial mount
@@ -3134,6 +3360,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     isEnterKey: boolean = false
   ) => {
     if (columnKey !== "expected") return;
+    if (displayCurrencyMode === "USD") return;
 
     // If Enter key was not pressed (blur event), revert to original value
     if (!isEnterKey) {
@@ -3195,6 +3422,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     isEnterKey: boolean = false
   ) => {
     if (columnKey !== "expected") return;
+    if (displayCurrencyMode === "USD") return;
 
     // If Enter key was not pressed (blur event), revert to original value
     if (!isEnterKey) {
@@ -3260,6 +3488,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
     isEnterKey: boolean = false
   ) => {
     if (columnKey !== "expected") return;
+    if (displayCurrencyMode === "USD") return;
 
     // If Enter key was not pressed (blur event), revert to original value
     if (!isEnterKey) {
@@ -4324,14 +4553,17 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                 {pipelineDrawerHeaderLabel}
               </Text>
             </Group>
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={handlePipelineDrawerNavBack}
-              aria-label="Close"
-            >
-              <IconX size={18} stroke={2} />
-            </ActionIcon>
+            <Group gap={8} wrap="nowrap">
+              <PipelineReportCurrencySelect dropdownZIndex={500} />
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                onClick={handlePipelineDrawerNavBack}
+                aria-label="Close"
+              >
+                <IconX size={18} stroke={2} />
+              </ActionIcon>
+            </Group>
           </Box>
 
           <ScrollArea
@@ -4389,6 +4621,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                     }
                     summary={drilldownSummary}
                     salespersonLabel={selectedSalesperson}
+                    expectedEditable={displayCurrencyMode !== "USD"}
                     loading={
                       initialLoading || drilldownLoading || cellEditLoading
                     }
@@ -4467,6 +4700,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                       }
                       summary={productDrilldownSummary}
                       salespersonLabel={selectedSalesperson}
+                      expectedEditable={displayCurrencyMode !== "USD"}
                       breakdownHeading={
                         selectedSalesperson
                           ? `${selectedSalesperson.trim()} · Customers breakdown`
@@ -4580,6 +4814,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
                       }
                       summary={sectorDrilldownSummary}
                       salespersonLabel={selectedSalesperson || selectedSector}
+                      expectedEditable={displayCurrencyMode !== "USD"}
                       breakdownHeading={
                         selectedSalesperson
                           ? `${(selectedSector || "").trim()} · ${selectedSalesperson.trim()} · Customers breakdown`
@@ -4663,6 +4898,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
       showCloseButton={drillLevel > 0}
       headerActions={
         <Group gap="sm" align="center">
+          <PipelineReportCurrencySelect />
           {/* <SegmentedControl
             value={calculation}
             onChange={(value) => {
@@ -4705,7 +4941,7 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
           /> */}
         </Group>
       }
-      onCellEdit={handleCellEdit}
+      onCellEdit={displayCurrencyMode === "USD" ? undefined : handleCellEdit}
     />
   );
 };

@@ -4,6 +4,62 @@ import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
 import dayjs from "dayjs";
 import { apiCallProtected } from "../api/axios";
+import ToastNotification from "../components/ToastNotification";
+import { usePipelineReportCurrencyStore } from "../store/pipelineReportCurrencyStore";
+
+let pipelineExchangeRateToastAt = 0;
+let lastPipelineDisplayCurrency: "LOCAL" | "USD" | null = null;
+
+function formatPipelineExchangeRate(rate: string | number): string {
+  const numeric = Number(rate);
+  if (!Number.isFinite(numeric)) return String(rate);
+  return numeric.toFixed(6).replace(/\.?0+$/, "");
+}
+
+/** USD was requested but ExchangeRateMaster has no usable row. Keep local amounts and tell the user once. */
+function noteMissingPipelineExchangeRate(
+  requested: string | undefined,
+  response: unknown,
+) {
+  const normalized = requested === "USD" ? "USD" : requested === "LOCAL" ? "LOCAL" : null;
+  const switchedToUsd = normalized === "USD" && lastPipelineDisplayCurrency === "LOCAL";
+  if (normalized) {
+    lastPipelineDisplayCurrency = normalized;
+  }
+
+  if (requested !== "USD") return;
+
+  const body = response as {
+    exchange_rate_missing?: boolean;
+    exchange_rate?: string | number;
+    local_currency?: string;
+  } | null;
+  if (body?.exchange_rate_missing) {
+    lastPipelineDisplayCurrency = "LOCAL";
+    if (usePipelineReportCurrencyStore.getState().mode !== "LOCAL") {
+      usePipelineReportCurrencyStore.getState().setMode("LOCAL");
+    }
+
+    const now = Date.now();
+    if (now - pipelineExchangeRateToastAt < 2500) return;
+    pipelineExchangeRateToastAt = now;
+    ToastNotification({
+      type: "warning",
+      message:
+        "No exchange rate is available for USD. Amounts are shown in your local currency.",
+    });
+    return;
+  }
+
+  if (!switchedToUsd || body?.exchange_rate == null || body.exchange_rate === "") {
+    return;
+  }
+  const localCode = body.local_currency || "local currency";
+  ToastNotification({
+    type: "success",
+    message: `Amounts are shown in USD. Exchange rate: 1 USD = ${formatPipelineExchangeRate(body.exchange_rate)} ${localCode}.`,
+  });
+}
 
 /**
  * Dashboard Service
@@ -2662,6 +2718,8 @@ export interface PipelineReportFilters {
   branch_code?: string;
   coordinator_name?: string;
   calculation?: "volume" | "no_of_shipments";
+  /** LOCAL keeps stored branch currency. USD converts money fields on the server. */
+  display_currency?: "LOCAL" | "USD";
 }
 
 // Sector-wise Pipeline Report interfaces (formerly Regional)
@@ -2715,6 +2773,7 @@ export interface PipelineReportRegionalFilters {
   search?: string;
   branch_code?: string;
   coordinator_name?: string;
+  display_currency?: "LOCAL" | "USD";
 }
 
 // Alias for backward compatibility and clarity
@@ -2803,6 +2862,7 @@ export const getPipelineReportData = async (
       delete payload.calculation;
     }
     const response = await postAPICall(URL.dashboard.pipelineReport, payload);
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Pipeline Report API Response:", response);
     return response as PipelineReportResponse;
   } catch (error) {
@@ -2826,6 +2886,7 @@ export const getPipelineReportRegionalData = async (
       URL.dashboard.pipelineReportRegional,
       payload
     );
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Pipeline Report Sector API Response:", response);
     return response as PipelineReportRegionalResponse;
   } catch (error) {
@@ -2888,6 +2949,7 @@ export interface PipelineReportProductFilters {
   search?: string;
   branch_code?: string;
   coordinator_name?: string;
+  display_currency?: "LOCAL" | "USD";
 }
 
 // Get Product-wise Pipeline Report data
@@ -2905,6 +2967,7 @@ export const getPipelineReportProductData = async (
       URL.dashboard.pipelineReportProduct,
       payload
     );
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Pipeline Report Product API Response:", response);
     return response as PipelineReportProductResponse;
   } catch (error) {
@@ -2925,6 +2988,7 @@ export const getPotentialCustomersData = async (
       delete payload.calculation;
     }
     const response = await postAPICall(URL.dashboard.pipelineReport, payload);
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Potential Customers API Response:", response);
     return response as PotentialCustomersResponse;
   } catch (error) {
@@ -2948,6 +3012,7 @@ export const getPotentialCustomersDataForProduct = async (
       URL.dashboard.pipelineReportProduct,
       payload
     );
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Potential Customers Product API Response:", response);
     return response as PotentialCustomersResponse;
   } catch (error) {
@@ -2974,6 +3039,7 @@ export const getPotentialCustomersDataForRegional = async (
       URL.dashboard.pipelineReportRegional,
       payload
     );
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Potential Customers Regional API Response:", response);
     return response as PotentialCustomersResponse;
   } catch (error) {

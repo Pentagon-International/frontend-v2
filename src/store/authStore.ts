@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invalidateBranchRelatedQueries } from "../utils/queryClient";
 import { URL } from "../api/serverUrls";
 import { resetOperationsChatSession } from "../pages/Workflow/operationsChatSessionStore";
+import { resetPipelineReportCurrency } from "./pipelineReportCurrencyStore";
 // const useAuthStore = create(
 //   persist(
 //     (set,get) => {
@@ -58,6 +59,10 @@ interface Branch {
   has_odex_credentials?: boolean;
   logo_url?: string | null;
   branch_title?: string | null;
+  currency?: {
+    currency_id?: number;
+    currency_code?: string;
+  } | null;
 }
 
 interface ScreenPermissions {
@@ -190,6 +195,7 @@ const useAuthStore = create<AuthStore>((set) => ({
 
   logout: () => {
     resetOperationsChatSession();
+    resetPipelineReportCurrency();
     localStorage.clear();
     set({ user: null, accessToken: null, refreshToken: null });
     window.location.href = "/login"; // or use navigate()
@@ -197,6 +203,7 @@ const useAuthStore = create<AuthStore>((set) => ({
 
   resetAuth: () => {
     resetOperationsChatSession();
+    resetPipelineReportCurrency();
     localStorage.clear();
     set({ user: null, accessToken: null, refreshToken: null });
     window.location.href = "/login";

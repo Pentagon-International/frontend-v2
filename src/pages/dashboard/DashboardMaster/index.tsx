@@ -82,6 +82,7 @@ import OutstandingSection from "./OutstandingSection";
 import EnquirySection from "./EnquirySection";
 import BudgetSection from "./BudgetSection";
 import PipelineReport from "../PipelineReport/index";
+import PipelineReportCurrencySelect from "../PipelineReport/PipelineReportCurrencySelect";
 import Booking from "../Booking/index";
 import CustomerServiceReport from "../CustomerServiceReport";
 import CustomerServiceImportReport from "../CustomerServiceImportReport";
@@ -7967,6 +7968,7 @@ const Dashboard = () => {
                     />
                   </Box>
                 ) : null}
+                {isPipelineReportTab ? <PipelineReportCurrencySelect /> : null}
                 <Box
                   style={{
                     flexShrink: 0,
