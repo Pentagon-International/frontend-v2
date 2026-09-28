@@ -71,6 +71,10 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { readJobFormActiveTabFromLocation } from "../../../utils/jobFinanceDocuments";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
+import {
+  HouseFreightCertificateMenuItem,
+  useHouseFreightCertificatePreview,
+} from "../../jobs/pdf/HouseFreightCertificatePreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
@@ -702,6 +706,15 @@ function ImportJobCreate() {
   const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
   const [activeFileName, setActiveFileName] = useState("");
   const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
+  const freightCertificate = useHouseFreightCertificatePreview({
+    housingId: null,
+    onSendEmail: (pdfBlobUrl, fileName) => {
+      setActivePdfBlob(pdfBlobUrl);
+      setActiveFileName(fileName);
+      setActiveDocumentLabel("Freight Certificate");
+      openSendEmail();
+    },
+  });
 
   // Accounts tab: invoice list from filter/invoice API
   const {
@@ -7237,6 +7250,13 @@ function ImportJobCreate() {
                           >
                             Cargo Arrival Notice
                           </Menu.Item>
+                          {house.id != null && Number(house.id) > 0 && !isChaMode && (
+                            <HouseFreightCertificateMenuItem
+                              onClick={() =>
+                                freightCertificate.openPreview(house.id)
+                              }
+                            />
+                          )}
                           <Menu.Item
                             leftSection={
                               <Box
@@ -7757,6 +7777,7 @@ function ImportJobCreate() {
         </Stack>
       </Modal>
 
+      {freightCertificate.modal}
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}

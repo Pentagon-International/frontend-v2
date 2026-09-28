@@ -92,6 +92,10 @@ import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
+import {
+  HouseFreightCertificateMenuItem,
+  useHouseFreightCertificatePreview,
+} from "../../jobs/pdf/HouseFreightCertificatePreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { ImportMasterShipperNameField } from "../ImportMasterShipperNameField";
@@ -592,6 +596,15 @@ function AirImportJobCreate() {
   const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
   const [activeFileName, setActiveFileName] = useState("");
   const [activeDocumentLabel, setActiveDocumentLabel] = useState("");
+  const freightCertificate = useHouseFreightCertificatePreview({
+    housingId: null,
+    onSendEmail: (pdfBlobUrl, fileName) => {
+      setActivePdfBlob(pdfBlobUrl);
+      setActiveFileName(fileName);
+      setActiveDocumentLabel("Freight Certificate");
+      openSendEmail();
+    },
+  });
   const { user } = useAuthStore();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -6237,6 +6250,13 @@ function AirImportJobCreate() {
                           >
                             Cargo Arrival Notice
                           </Menu.Item>
+                          {hawb.id != null && Number(hawb.id) > 0 && !isChaMode && (
+                            <HouseFreightCertificateMenuItem
+                              onClick={() =>
+                                freightCertificate.openPreview(hawb.id)
+                              }
+                            />
+                          )}
 
                           <HouseEventsMenuItem
                             onClick={() => handleOpenHouseEvents(index)}
@@ -6897,6 +6917,7 @@ function AirImportJobCreate() {
         </Stack>
       </Modal>
 
+      {freightCertificate.modal}
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}

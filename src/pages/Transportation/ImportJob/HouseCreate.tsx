@@ -134,6 +134,10 @@ import {
   resolveHousingEventsForHouseForm,
 } from "../../../utils/jobHousingEventsFromPatch";
 import { previewCargoArrivalNoticePDF } from "../../jobs/pdf/canPdfPreview";
+import {
+  HouseFreightCertificateMenuItem,
+  useHouseFreightCertificatePreview,
+} from "../../jobs/pdf/HouseFreightCertificatePreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
@@ -834,6 +838,15 @@ function HouseCreate() {
     enabled: !!editData?.shipment_id,
   });
   const isEditMode = editIndex !== undefined && editData !== undefined;
+  const freightCertificate = useHouseFreightCertificatePreview({
+    housingId: isEditMode ? editData?.id : null,
+    onSendEmail: (pdfBlobUrl, fileName) => {
+      setActivePdfBlob(pdfBlobUrl);
+      setActiveFileName(fileName);
+      setActiveDocumentLabel("Freight Certificate");
+      openSendEmail();
+    },
+  });
   const isViewOnly = isJobOpenedAsView({
     viewMode: location.state?.viewMode,
     actionType: location.state?.actionType,
@@ -4318,6 +4331,11 @@ function HouseCreate() {
               >
                 Cargo Arrival Notice
               </Menu.Item>
+              {!isChaMode && freightCertificate.enabled && (
+                <HouseFreightCertificateMenuItem
+                  onClick={freightCertificate.openPreview}
+                />
+              )}
               <Menu.Item
                 leftSection={
                   <Box
@@ -7341,6 +7359,7 @@ function HouseCreate() {
         </Stack>
       </Modal>
 
+      {freightCertificate.modal}
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}
