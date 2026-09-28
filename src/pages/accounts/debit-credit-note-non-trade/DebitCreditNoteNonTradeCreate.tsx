@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActionIcon,
   Badge,
   Box,
   Button,
@@ -8,15 +9,20 @@ import {
   Grid,
   Group,
   Loader,
+  Menu,
   Modal,
   Stack,
   Text,
 } from "@mantine/core";
 import {
   IconArrowLeft,
+  IconDotsVertical,
+  IconDownload,
+  IconEye,
   IconPlus,
   IconTrash,
   IconUpload,
+  IconX,
 } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { useQuery } from "@tanstack/react-query";
@@ -58,6 +64,16 @@ import {
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import useAuthStore from "../../../store/authStore";
+import {
+  extractPartyAddressesFromRecord,
+  findPrimaryPartyAddress,
+  getPartyGstFromPrimaryAddress,
+  resolveStateCodeFromPartyAddress,
+} from "../../../utils/paymentRequestChargePrefill";
+import {
+  isIndianOutstandingBranch,
+  isIndianUserCountry,
+} from "../../../utils/userNumberFormat";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -158,6 +174,107 @@ function formatChartOfAccountsLabel(
   const b = String(glAccountCode ?? "").trim();
   const c = String(accountName ?? "").trim();
   return [c, b, a].filter(Boolean).join(" - ");
+}
+
+function normalizeDrCr(value: unknown): "Dr" | "Cr" {
+  const raw = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (raw === "CR" || raw === "CREDIT") return "Cr";
+  if (raw === "DR" || raw === "DEBIT") return "Dr";
+  return "Dr";
+}
+
+function lineHasAccountSelection(line: LineItem): boolean {
+  return (
+    String(line.account_id ?? "").trim() !== "" ||
+    String(line.account_code ?? "").trim() !== "" ||
+    String(line.account_name ?? "").trim() !== ""
+  );
+}
+
+/** Charge or shipment is the charge-entry path; it locks account and subledger. */
+function lineLocksAccountFields(line: LineItem, showTradeFields: boolean): boolean {
+  if (line.charge_id != null) return true;
+  return showTradeFields && String(line.shipment_no ?? "").trim() !== "";
+}
+
+function mapAccountFromChargeOriginal(
+  originalData?: Record<string, unknown> | null,
+): Pick<LineItem, "account_id" | "account_code" | "account_name" | "subledger"> {
+  if (!originalData) {
+    return {
+      account_id: "",
+      account_code: "",
+      account_name: "",
+      subledger: "",
+    };
+  }
+  const idRaw = originalData.account_id;
+  const account_id =
+    idRaw != null &&
+    String(idRaw).trim() !== "" &&
+    Number.isFinite(Number(idRaw))
+      ? String(idRaw)
+      : "";
+  const account_code = String(
+    originalData.account_code ?? originalData.gl_account_code ?? "",
+  ).trim();
+  const name = String(originalData.account_name ?? "").trim();
+  const glName = String(originalData.gl_name ?? "").trim();
+  const subledger = String(
+    originalData.subledger_code ?? originalData.sl_code ?? "",
+  ).trim();
+  return {
+    account_id,
+    account_code,
+    account_name: formatChartOfAccountsLabel(glName, account_code, name),
+    subledger,
+  };
+}
+
+const CLEARED_ACCOUNT_FIELDS: Pick<
+  LineItem,
+  "account_id" | "account_code" | "account_name" | "subledger"
+> = {
+  account_id: "",
+  account_code: "",
+  account_name: "",
+  subledger: "",
+};
+
+/** Same input metrics as Supplier Invoice charge rows. */
+const chargeFieldStyles = {
+  input: {
+    fontSize: "13px",
+    fontFamily: "Inter",
+    height: "36px",
+  },
+};
+
+const chargeHeaderTextStyle = {
+  fontSize: "13px",
+  fontFamily: "Inter",
+  fontWeight: 600,
+  color: "#105476",
+} as const;
+
+function unwrapGstPayload(raw: unknown): Record<string, unknown> {
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  const root = asRecord(raw) ?? {};
+  const data = asRecord(root.data);
+  const nested = data ? asRecord(data.data) : null;
+  const hasBreakup = (record: Record<string, unknown> | null) =>
+    record != null &&
+    (record.sac_wise_totals != null ||
+      record.charges != null ||
+      record.cgst_total != null);
+  if (hasBreakup(nested)) return nested as Record<string, unknown>;
+  if (hasBreakup(data)) return data as Record<string, unknown>;
+  return root;
 }
 
 const newLineItem = (n: number, currency = ""): LineItem => ({
@@ -289,10 +406,93 @@ export function DebitCreditNoteCreateBase({
     file: File | null;
   };
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [pdfBlob, setPdfBlob] = useState<string | null>(null);
   const [saveResponse, setSaveResponse] = useState<Record<
     string,
     unknown
   > | null>(null);
+  const chargeOriginalByIdRef = useRef<
+    Record<string, Record<string, unknown> | null>
+  >({});
+
+  const isIndiaUser = useMemo(() => {
+    const activeBranch =
+      user?.branches?.find((b) => b.is_default) ?? user?.branches?.[0];
+    const branchCountryCode = String(
+      (activeBranch as { country?: { country_code?: string } } | undefined)
+        ?.country?.country_code ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    const branchCurrencyCode = String(
+      (
+        activeBranch as
+          | { currency?: { currency_code?: string } }
+          | undefined
+      )?.currency?.currency_code ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (branchCountryCode || branchCurrencyCode) {
+      return isIndianOutstandingBranch(branchCountryCode, branchCurrencyCode);
+    }
+    return (
+      isIndianUserCountry(user?.country?.country_code) ||
+      String(user?.country?.country_name ?? "")
+        .toLowerCase()
+        .includes("india")
+    );
+  }, [
+    user?.branches,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
+
+  /** Spans total 12 so the charge grid fills the row. Trade gives Charge more width. */
+  const lineColSpans = useMemo(
+    () =>
+      showTradeFields
+        ? {
+            shipment: 0.95,
+            charge: 1.2,
+            crn: 0.6,
+            account: 1.15,
+            subledger: 0.7,
+            code: 0.5,
+            key: 0.5,
+            currency: 0.65,
+            roe: 0.5,
+            amount: 0.7,
+            localAmount: 0.75,
+            headerAmount: 0.8,
+            drCr: 0.5,
+            sac: 0.6,
+            narration: 0.7,
+            note: 0.6,
+            actions: 0.6,
+          }
+        : {
+            shipment: 0,
+            charge: 0,
+            crn: 0,
+            account: 1.9,
+            subledger: 0.85,
+            code: 0.65,
+            key: 0.65,
+            currency: 0.75,
+            roe: 0.55,
+            amount: 0.8,
+            localAmount: 0.9,
+            headerAmount: 0.95,
+            drCr: 0.55,
+            sac: 0.75,
+            narration: 1.1,
+            note: 0.9,
+            actions: 0.7,
+          },
+    [showTradeFields],
+  );
 
   type CustomerRow = {
     id?: number | string;
@@ -406,16 +606,81 @@ export function DebitCreditNoteCreateBase({
   // (Trade-only SAC auto fetch effect is placed after isReadOnly is defined)
 
   const setLineById = (id: string, patch: Partial<LineItem>) => {
-    const idx = form.values.lines.findIndex((l) => l.id === id);
+    const lines = form.getValues().lines;
+    const idx = lines.findIndex((row) => row.id === id);
     if (idx < 0) return;
-    form.setFieldValue(`lines.${idx}`, { ...form.values.lines[idx], ...patch });
+    form.setFieldValue(`lines.${idx}`, { ...lines[idx], ...patch });
   };
 
-  const addLine = () =>
-    form.insertListItem(
-      "lines",
-      newLineItem(form.values.lines.length, localCurrency),
+  const addLine = () => {
+    const latest = form.getValues();
+    const currency = String(latest.currencyCode || localCurrency)
+      .trim()
+      .toUpperCase();
+    const row = newLineItem(latest.lines.length, currency);
+    const { currencyId } = resolveLineCurrencyContext(currency, currencyIdByCode);
+    if (isLocalCurrency(currency, currencyId ?? latest.currencyId)) {
+      row.roe = 1;
+    } else if (latest.roe !== "") {
+      row.roe = latest.roe;
+    }
+    form.insertListItem("lines", row);
+  };
+
+  /** Account-entry rows use the document currency ROE when the line has none yet. */
+  const ensureLineRoeAndLocalAmount = (lineId: string) => {
+    const latest = form.getValues();
+    const line = latest.lines.find((row) => row.id === lineId);
+    if (!line) return;
+
+    const currency = String(line.currency || latest.currencyCode || localCurrency)
+      .trim()
+      .toUpperCase();
+    const { currencyId } = resolveLineCurrencyContext(currency, currencyIdByCode);
+    const headerRoe = latest.roe === "" ? "" : latest.roe;
+
+    const write = (roe: number | "") => {
+      const current = form.getValues().lines.find((row) => row.id === lineId);
+      if (!current) return;
+      const amount = current.amount;
+      const headerNow = form.getValues().roe;
+      setLineById(lineId, {
+        currency: String(current.currency || currency).trim().toUpperCase(),
+        roe,
+        local_amount: computeLocalAmount(amount, roe),
+        amount_in_inr: computeAmountInHeaderCurrency(
+          amount,
+          headerNow === "" ? roe : headerNow,
+        ),
+      });
+    };
+
+    if (line.roe !== "" && line.roe != null) {
+      if (line.amount !== "" && line.local_amount === "") {
+        write(line.roe);
+      }
+      return;
+    }
+
+    if (isLocalCurrency(currency, currencyId ?? latest.currencyId)) {
+      write(1);
+      return;
+    }
+
+    const headerCode = String(latest.currencyCode ?? "")
+      .trim()
+      .toUpperCase();
+    if (headerRoe !== "" && (!headerCode || currency === headerCode)) {
+      write(headerRoe);
+      return;
+    }
+
+    syncRoeForCurrencyChange(
+      currency,
+      (roe) => write(roe == null ? "" : roe),
+      currencyId ?? latest.currencyId,
     );
+  };
   const removeLine = (id: string) => {
     if (form.values.lines.length <= 1) return;
     const idx = form.values.lines.findIndex((l) => l.id === id);
@@ -445,12 +710,15 @@ export function DebitCreditNoteCreateBase({
   };
 
   const saveForGst = async (): Promise<string | null> => {
-    // Ensure we have an id before calling GST breakup.
+    if (isReadOnly) return null;
+    // Ensure we have an id before calling GST breakup, and persist current lines.
     if (saveResponse?.id != null) {
-      await onUpdate();
+      const updated = await onUpdate();
+      if (!updated) return null;
       return String(saveResponse.id);
     }
 
+    if (!validateRoeBeforeSave()) return null;
     const fd = buildDebitCreditNoteFormData();
     try {
       const res = await apiCallProtected.post(
@@ -469,23 +737,53 @@ export function DebitCreditNoteCreateBase({
       return createdHeader?.id != null ? String(createdHeader.id) : null;
     } catch (err) {
       console.error("Failed to save debit/credit note for GST", err);
+      ToastNotification({
+        type: "error",
+        message: "Failed to save debit/credit note before calculating GST",
+      });
       return null;
     }
   };
 
   const calculateGst = async () => {
+    if (isReadOnly) return;
+    if (saveResponse?.id == null) {
+      const hasAmount = form.values.lines.some(
+        (line) => line.amount !== "" && Number(line.amount) !== 0,
+      );
+      if (!hasAmount) {
+        ToastNotification({
+          type: "error",
+          message: "Please enter at least one amount before calculating GST.",
+        });
+        return;
+      }
+    }
+
+    setCalcLoading(true);
+    setLoadingText("Saving debit/credit note...");
     const id = await saveForGst();
-    if (!id) return;
+    if (!id) {
+      setCalcLoading(false);
+      setLoadingText("");
+      return;
+    }
 
     type SacWiseTotal = {
       sac_code?: string;
-      total_amount?: number;
+      total_amount?: number | string;
       narration?: string;
       account_code?: string | null;
-      subledger_code?: string | null;
-      roe?: number | null;
-      currency_code?: string | null;
       account_name?: string | null;
+      subledger_code?: string | null;
+      roe?: number | string | null;
+      currency_code?: string | null;
+      charge_id?: number | string | null;
+      charge_name?: string | null;
+      shipment_no?: string | null;
+      Dr_Cr?: unknown;
+      Dr_cr?: unknown;
+      dr_cr?: unknown;
     };
 
     setCalcLoading(true);
@@ -496,49 +794,85 @@ export function DebitCreditNoteCreateBase({
         { debit_credit_note_id: Number(id) },
         API_HEADER,
       );
-      const root = res as { data?: unknown };
-      const payload = (root?.data ?? res) as Record<string, unknown>;
-      const sacWiseTotals = (payload?.sac_wise_totals ?? []) as SacWiseTotal[];
+      const payload = unwrapGstPayload(res);
+      const sacWiseTotals = (payload.sac_wise_totals ?? []) as SacWiseTotal[];
 
-      if (!Array.isArray(sacWiseTotals) || sacWiseTotals.length === 0) return;
+      if (!Array.isArray(sacWiseTotals) || sacWiseTotals.length === 0) {
+        ToastNotification({
+          type: "error",
+          message: "No GST rows returned from calculation.",
+        });
+        return;
+      }
 
-      const generatedLines: LineItem[] = sacWiseTotals.map((t, i) => {
-        const amount = t.total_amount != null ? Number(t.total_amount) : "";
-        const lineRoe = t.roe != null ? Number(t.roe) : "";
-        const localAmount = computeLocalAmount(amount, lineRoe);
-        const amountInHeader = computeAmountInHeaderCurrency(
-          amount,
-          form.values.roe,
+      const currentLines = form.getValues().lines;
+      const headerRoe = form.getValues().roe;
+      const generatedLines: LineItem[] = sacWiseTotals
+        .map((t, i): LineItem | null => {
+          const chargeId = Number(t.charge_id);
+          if (!Number.isFinite(chargeId)) return null;
+          const amount =
+            t.total_amount != null && t.total_amount !== ""
+              ? Number(t.total_amount)
+              : "";
+          const lineRoe = t.roe != null && t.roe !== "" ? Number(t.roe) : 1;
+          const localAmount = computeLocalAmount(amount, lineRoe);
+          const amountInHeader = computeAmountInHeaderCurrency(
+            amount,
+            headerRoe,
+          );
+          return {
+            ...newLineItem(currentLines.length + i),
+            shipment_no: String(t.shipment_no ?? ""),
+            charge_id: chargeId,
+            charge_name: String(t.charge_name ?? ""),
+            crn: "Neutral",
+            account_id: "",
+            account_code: String(t.account_code ?? ""),
+            account_name: String(t.account_name ?? ""),
+            subledger: String(t.subledger_code ?? ""),
+            currency: String(
+              t.currency_code ?? form.getValues().currencyCode ?? localCurrency,
+            )
+              .trim()
+              .toUpperCase(),
+            roe: lineRoe,
+            amount: amount === "" || !Number.isFinite(amount) ? "" : amount,
+            local_amount: localAmount,
+            amount_in_inr: amountInHeader,
+            dr_cr: normalizeDrCr(t.Dr_Cr ?? t.Dr_cr ?? t.dr_cr),
+            // SAC stays empty on tax rows so they are not taxed again.
+            sac_code: "",
+            narration: String(t.narration ?? ""),
+            note: "",
+          };
+        })
+        .filter((row): row is LineItem => row !== null);
+
+      if (!generatedLines.length) {
+        ToastNotification({
+          type: "error",
+          message:
+            "GST breakup did not include a charge. CGST, SGST, and IGST must exist in Charge Master.",
+        });
+        return;
+      }
+
+      const deduped = generatedLines.filter((nr) => {
+        return !currentLines.some(
+          (er) =>
+            Number(er.charge_id) === Number(nr.charge_id) &&
+            String(er.account_code ?? "") === String(nr.account_code ?? "") &&
+            String(er.subledger ?? "") === String(nr.subledger ?? "") &&
+            Number(er.amount === "" ? 0 : er.amount) ===
+              Number(nr.amount === "" ? 0 : nr.amount) &&
+            er.dr_cr === nr.dr_cr,
         );
-
-        return {
-          ...newLineItem(form.values.lines.length + i),
-          account_id: "",
-          account_code: String(t.account_code ?? ""),
-          account_name: String(t.account_name ?? ""),
-          subledger: String(t.subledger_code ?? ""),
-          currency: String(
-            t.currency_code ?? form.values.currencyCode ?? localCurrency,
-          ),
-          roe: lineRoe,
-          amount,
-          local_amount: localAmount,
-          amount_in_inr: amountInHeader,
-          dr_cr:
-            (form.values.lines[0]?.dr_cr as "Dr" | "Cr" | undefined) ?? "Dr",
-          sac_code: String(t.sac_code ?? ""),
-          narration: String(t.narration ?? ""),
-          note: "",
-        };
       });
 
-      // Append with existing entries (do not wipe user-entered lines).
-      form.setFieldValue(
-        "lines",
-        [...form.values.lines, ...generatedLines].length
-          ? [...form.values.lines, ...generatedLines]
-          : [newLineItem(0)],
-      );
+      if (deduped.length) {
+        form.setFieldValue("lines", [...currentLines, ...deduped]);
+      }
       ToastNotification({
         type: "success",
         message: "GST calculated successfully",
@@ -764,8 +1098,18 @@ export function DebitCreditNoteCreateBase({
       note: form.values.note,
       gst_id: form.values.gstId,
       dr_cr: (form.values.lines[0]?.dr_cr as "Dr" | "Cr" | undefined) ?? "Dr",
-      debit_credit_note_tem: form.values.lines.map((l) => ({
-        ...(showTradeFields
+      debit_credit_note_tem: form.values.lines.map((l) => {
+        const includeChargeFields =
+          showTradeFields ||
+          l.charge_id != null ||
+          String(l.shipment_no ?? "").trim() !== "" ||
+          String(l.crn ?? "").trim() !== "";
+        const { currencyId: lineCurrencyId } = resolveLineCurrencyContext(
+          l.currency,
+          currencyIdByCode,
+        );
+        return {
+        ...(includeChargeFields
           ? {
               shipment_no: String(l.shipment_no ?? ""),
               charge_id: l.charge_id ?? null,
@@ -776,9 +1120,11 @@ export function DebitCreditNoteCreateBase({
         subledger: l.subledger,
         code: l.cost_center_code,
         key: l.cost_center_key,
-        currency_id: form.values.currencyId
-          ? Number(form.values.currencyId)
-          : null,
+        currency_id: lineCurrencyId
+          ? Number(lineCurrencyId)
+          : form.values.currencyId
+            ? Number(form.values.currencyId)
+            : null,
         roe: l.roe === "" ? "" : formatRoeAsString(l.roe),
         amount: l.amount === "" ? "" : String(l.amount),
         local_amount:
@@ -790,7 +1136,8 @@ export function DebitCreditNoteCreateBase({
         sac_code: l.sac_code,
         narration: l.narration,
         note: l.note,
-      })),
+        };
+      }),
     };
 
     const fd = new FormData();
@@ -1004,9 +1351,9 @@ export function DebitCreditNoteCreateBase({
     }
   };
 
-  const onUpdate = async () => {
-    if (saveResponse?.id == null) return;
-    if (!validateRoeBeforeSave()) return;
+  const onUpdate = async (): Promise<boolean> => {
+    if (saveResponse?.id == null) return false;
+    if (!validateRoeBeforeSave()) return false;
     const fd = buildDebitCreditNoteFormData();
     // putAPICall expects `formValue.id` to build `${url}${id}/`.
     (fd as unknown as { id: unknown }).id = saveResponse.id;
@@ -1020,6 +1367,11 @@ export function DebitCreditNoteCreateBase({
       );
       applyCreateResponseToForm(raw);
       ToastNotification({ type: "success", message: "Updated successfully" });
+      return true;
+    } catch (err) {
+      console.error("Failed to update debit/credit note", err);
+      ToastNotification({ type: "error", message: "Failed to update" });
+      return false;
     } finally {
       setIsSubmitting(false);
       setLoadingText("");
@@ -1035,12 +1387,65 @@ export function DebitCreditNoteCreateBase({
   const isReadOnly = isViewMode || isPosted;
   const pageLabel = showTradeFields ? "Trade" : "Non Trade";
 
+  const handlePdfPreview = async () => {
+    const pdfId = saveResponse?.id;
+    if (pdfId == null) return;
+    setPreviewOpen(true);
+    setPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.debitCreditNote}${pdfId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      setPdfBlob(window.URL.createObjectURL(blob));
+    } catch (error) {
+      console.error("Error fetching debit/credit note PDF:", error);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load PDF preview",
+      });
+      setPreviewOpen(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (pdfBlob) {
+      window.URL.revokeObjectURL(pdfBlob);
+    }
+    setPdfBlob(null);
+  };
+
+  const handleDownloadPDF = () => {
+    if (!pdfBlob) return;
+    const docNo =
+      form.values.documentNo ||
+      (saveResponse?.document_no != null
+        ? String(saveResponse.document_no)
+        : "") ||
+      String(saveResponse?.id ?? "draft");
+    const link = document.createElement("a");
+    link.href = pdfBlob;
+    link.download = `Debit-Credit-Note-${docNo}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const applyHeaderRoeToLines = (roe: number | null, currencyCode?: string) => {
     const code = currencyCode?.trim().toUpperCase();
     const lineRoe = roe ?? ("" as const);
     form.setFieldValue(
       "lines",
-      form.values.lines.map((l) => ({
+      form.getValues().lines.map((l) => ({
         ...l,
         ...(code ? { currency: code } : {}),
         roe: lineRoe,
@@ -1219,11 +1624,9 @@ export function DebitCreditNoteCreateBase({
   return (
     <Box
       p="sm"
+      w="100%"
       style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
+        position: "relative",
       }}
     >
       {(isSubmitting || calcLoading) && (
@@ -1378,15 +1781,34 @@ export function DebitCreditNoteCreateBase({
                 size="sm"
                 variant="light"
                 color={isPosted ? "green" : "gray"}
-              >
+                >
                 {isPosted ? "POSTED" : "UNPOSTED"}
               </Badge>
+                {saveResponse?.id != null && (
+                  <Menu shadow="md" width={240}>
+                    <Menu.Target>
+                      <ActionIcon variant="light" color="#105476" size="lg">
+                        <IconDotsVertical size={18} />
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item
+                        leftSection={<IconEye size={14} />}
+                        onClick={() => void handlePdfPreview()}
+                      >
+                        {isPosted
+                          ? "Debit / Credit Note PDF"
+                          : "Draft Debit / Credit Note PDF"}
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                )}
             </Group>
           )}
         </Group>
 
         {/* Header section (Grid 1) */}
-        <Grid gutter="sm" mt="sm" columns={13}>
+        <Grid gutter="sm" mt="sm">
           <Grid.Col span={2}>
             <Dropdown
               label="Daybook"
@@ -1402,6 +1824,7 @@ export function DebitCreditNoteCreateBase({
                 if (docType) form.setFieldValue("documentType", docType);
               }}
               size="sm"
+              styles={chargeFieldStyles}
               disabled={isReadOnly}
             />
           </Grid.Col>
@@ -1434,14 +1857,29 @@ export function DebitCreditNoteCreateBase({
                 form.setFieldValue("partyAccount", val || "");
                 form.setFieldValue("partyName", selected?.label ?? "");
                 const row = (original as CustomerRow | null) ?? null;
-                if (row?.address)
-                  form.setFieldValue("address", String(row.address));
+                const addresses = extractPartyAddressesFromRecord(original);
+                const primary = findPrimaryPartyAddress(addresses);
+                const resolvedAddress = String(
+                  primary?.address ?? row?.address ?? "",
+                ).trim();
+                if (resolvedAddress) {
+                  form.setFieldValue("address", resolvedAddress);
+                }
+                if (!isIndiaUser || !primary) return;
+                const stateId = resolveStateCodeFromPartyAddress(
+                  primary,
+                  stateOptions,
+                );
+                if (stateId) form.setFieldValue("stateId", stateId);
+                const gstId = getPartyGstFromPrimaryAddress(addresses);
+                if (gstId) form.setFieldValue("gstId", gstId);
               }}
               displayFormat={(item) => ({
                 value: String(item.customer_code ?? item.id ?? ""),
                 label: String(item.customer_name ?? item.name ?? "").trim(),
               })}
               size="sm"
+              styles={chargeFieldStyles}
               disabled={isReadOnly}
             />
           </Grid.Col>
@@ -1473,6 +1911,8 @@ export function DebitCreditNoteCreateBase({
                 const found = stateOptions.find((o) => o.label === label);
                 form.setFieldValue("stateId", found?.value ?? null);
               }}
+              size="sm"
+              styles={chargeFieldStyles}
               disabled={isReadOnly}
             />
           </Grid.Col>
@@ -1489,6 +1929,8 @@ export function DebitCreditNoteCreateBase({
                   : null
               }
               onChange={(id, item) => handleHeaderCurrencyChange(id, item)}
+              size="sm"
+              styles={chargeFieldStyles}
               disabled={isReadOnly}
             />
           </Grid.Col>
@@ -1534,14 +1976,15 @@ export function DebitCreditNoteCreateBase({
               value={form.values.documentDate}
               onChange={(v) => form.setFieldValue("documentDate", v)}
               size="sm"
+              styles={chargeFieldStyles}
               disabled={isReadOnly}
             />
           </Grid.Col>
         </Grid>
 
         {/* Header section (Grid 2) */}
-        <Grid gutter="sm" mt="xs" columns={13}>
-          <Grid.Col span={2}>
+        <Grid gutter="sm" mt="xs">
+          <Grid.Col span={3}>
             <FormTextInput
               format="capital"
               label="GST ID"
@@ -1553,7 +1996,7 @@ export function DebitCreditNoteCreateBase({
               disabled={isReadOnly}
             />
           </Grid.Col>
-          <Grid.Col span={2}>
+          <Grid.Col span={4.5}>
             <FormTextInput
               label="Narration"
               placeholder="Narration"
@@ -1564,7 +2007,7 @@ export function DebitCreditNoteCreateBase({
               disabled={isReadOnly}
             />
           </Grid.Col>
-          <Grid.Col span={2}>
+          <Grid.Col span={4.5}>
             <FormTextInput
               label="Note"
               placeholder="Note"
@@ -1587,121 +2030,111 @@ export function DebitCreditNoteCreateBase({
           <Text size="sm" fw={600} c="#105476">
             Cost Center
           </Text>
-          <Button variant="outline" color="#105476" onClick={calculateGst}>
-            Calculate GST
-          </Button>
+          {isIndiaUser && (
+            <Button
+              type="button"
+              size="sm"
+              variant="light"
+              color="#105476"
+              onClick={() => void calculateGst()}
+              disabled={isReadOnly || calcLoading}
+            >
+              Calculate GST
+            </Button>
+          )}
           {/* <Button variant="outline" leftSection={<IconPlus size={16} />} onClick={addLine}>
               Add Row
             </Button> */}
         </Group>
         {/* <Divider mb="sm" /> */}
 
-        <Grid gutter={6} columns={showTradeFields ? 18 : 14}>
+        <Grid
+          w="100%"
+          gutter="xs"
+          py="sm"
+          style={{
+            position: "sticky",
+            top: 45,
+            backgroundColor: "white",
+            fontWeight: 600,
+            color: "#105476",
+          }}
+        >
           {/* <Grid.Col span={0.3}>
               <Text size="xs" fw={600} c="#105476">
                 SNo
               </Text>
             </Grid.Col> */}
           {showTradeFields && (
-            <Grid.Col span={1.5}>
-              <Text size="xs" fw={600} c="#105476">
-                Shipment No
-              </Text>
+            <Grid.Col span={lineColSpans.shipment} style={chargeHeaderTextStyle}>
+              Shipment No
             </Grid.Col>
           )}
           {showTradeFields && (
-            <Grid.Col span={1.3}>
-              <Text size="xs" fw={600} c="#105476">
-                Charge
-              </Text>
+            <Grid.Col span={lineColSpans.charge} style={chargeHeaderTextStyle}>
+              Charge
             </Grid.Col>
           )}
           {showTradeFields && (
-            <Grid.Col span={0.9}>
-              <Text size="xs" fw={600} c="#105476">
-                CRN
-              </Text>
+            <Grid.Col span={lineColSpans.crn} style={chargeHeaderTextStyle}>
+              CRN
             </Grid.Col>
           )}
-          <Grid.Col span={showTradeFields ? 1.9 : 2}>
-            <Text size="xs" fw={600} c="#105476">
-              Account
-            </Text>
+          <Grid.Col span={lineColSpans.account} style={chargeHeaderTextStyle}>
+            Account
           </Grid.Col>
-          <Grid.Col span={showTradeFields ? 0.9 : 1}>
-            <Text size="xs" fw={600} c="#105476">
-              Subledger
-            </Text>
+          <Grid.Col span={lineColSpans.subledger} style={chargeHeaderTextStyle}>
+            Subledger
           </Grid.Col>
-          <Grid.Col span={0.9}>
-            <Text size="xs" fw={600} c="#105476">
-              Code
-            </Text>
+          <Grid.Col span={lineColSpans.code} style={chargeHeaderTextStyle}>
+            Code
           </Grid.Col>
-          <Grid.Col span={0.9}>
-            <Text size="xs" fw={600} c="#105476">
-              Key
-            </Text>
+          <Grid.Col span={lineColSpans.key} style={chargeHeaderTextStyle}>
+            Key
           </Grid.Col>
-          <Grid.Col span={showTradeFields ? 0.9 : 1}>
-            <Text size="xs" fw={600} c="#105476">
-              Currency
-            </Text>
+          <Grid.Col span={lineColSpans.currency} style={chargeHeaderTextStyle}>
+            Currency
           </Grid.Col>
-          <Grid.Col span={0.7}>
-            <Text size="xs" fw={600} c="#105476">
-              ROE
-            </Text>
+          <Grid.Col span={lineColSpans.roe} style={chargeHeaderTextStyle}>
+            ROE
           </Grid.Col>
-          <Grid.Col span={showTradeFields ? 0.9 : 1}>
-            <Text size="xs" fw={600} c="#105476">
-              Amount
-            </Text>
+          <Grid.Col span={lineColSpans.amount} style={chargeHeaderTextStyle}>
+            Amount
           </Grid.Col>
-          <Grid.Col span={1}>
-            <Text size="xs" fw={600} c="#105476">
-              Local Amount
-            </Text>
+          <Grid.Col span={lineColSpans.localAmount} style={chargeHeaderTextStyle}>
+            Local Amount
           </Grid.Col>
-          <Grid.Col span={1}>
-            <Text size="xs" fw={600} c="#105476">
-              Amount in {headerCurrencyCode || localCurrency}
-            </Text>
+          <Grid.Col span={lineColSpans.headerAmount} style={chargeHeaderTextStyle}>
+            Amount in {headerCurrencyCode || localCurrency}
           </Grid.Col>
-          <Grid.Col span={0.7}>
-            <Text size="xs" fw={600} c="#105476">
-              Dr/Cr
-            </Text>
+          <Grid.Col span={lineColSpans.drCr} style={chargeHeaderTextStyle}>
+            Dr/Cr
           </Grid.Col>
-          <Grid.Col span={showTradeFields ? 0.9 : 1}>
-            <Text size="xs" fw={600} c="#105476">
-              SAC Code
-            </Text>
+          <Grid.Col span={lineColSpans.sac} style={chargeHeaderTextStyle}>
+            SAC Code
           </Grid.Col>
-          <Grid.Col span={1}>
-            <Text size="xs" fw={600} c="#105476">
-              Narration
-            </Text>
+          <Grid.Col span={lineColSpans.narration} style={chargeHeaderTextStyle}>
+            Narration
           </Grid.Col>
-          <Grid.Col span={1}>
-            <Text size="xs" fw={600} c="#105476">
-              Note
-            </Text>
+          <Grid.Col span={lineColSpans.note} style={chargeHeaderTextStyle}>
+            Note
           </Grid.Col>
-          <Grid.Col span={showTradeFields ? 0.8 : 0.6}>
-            <Text size="xs" fw={600} c="#105476">
-              Action
-            </Text>
+          <Grid.Col span={lineColSpans.actions} style={chargeHeaderTextStyle}>
+            Action
           </Grid.Col>
 
-          {form.values.lines.map((l, idx) => (
-            <Grid.Col key={l.id} span={showTradeFields ? 18 : 14} p={0} mt={6}>
-              <Grid gutter={6} align="end" columns={showTradeFields ? 18 : 14}>
+        </Grid>
+
+          {form.values.lines.map((l, idx) => {
+            const accountSelected = lineHasAccountSelection(l);
+            const accountLocked = lineLocksAccountFields(l, showTradeFields);
+            return (
+              <Grid key={l.id} w="100%" gutter="xs" align="end" mt="xs">
                 {/* <Grid.Col span={1}>
                     <Text size="sm">{idx + 1}</Text>
                   </Grid.Col> */}
                 {showTradeFields && (
-                  <Grid.Col span={1.5}>
+                  <Grid.Col span={lineColSpans.shipment}>
                     <SearchableSelect
                       apiEndpoint={URL.filterJobCreate}
                       placeholder="Shipment no"
@@ -1712,6 +2145,11 @@ export function DebitCreditNoteCreateBase({
                       searchFields={["shipment_id", "job_id", "type"]}
                       displayFormat={jobCreateDropdownDisplayFormat}
                       returnOriginalData
+                      error={
+                        form.errors[`lines.${idx}.shipment_no`]
+                          ? String(form.errors[`lines.${idx}.shipment_no`])
+                          : undefined
+                      }
                       onChange={(val, _selected, original) => {
                         const shipmentNo = String(val ?? "").trim();
                         const serviceIdRaw =
@@ -1729,28 +2167,53 @@ export function DebitCreditNoteCreateBase({
                           Number.isFinite(Number(serviceIdRaw))
                             ? Number(serviceIdRaw)
                             : null;
-                        setLineById(l.id, {
-                          shipment_no: shipmentNo,
-                          service_id: serviceId,
-                        });
                         const chargeId =
                           l.charge_id != null ? Number(l.charge_id) : null;
-                        if (shipmentNo && chargeId != null) {
-                          void fetchSacForLine(
-                            idx,
-                            chargeId,
-                            shipmentNo,
-                            serviceId,
-                          );
+                        if (shipmentNo) {
+                          form.clearFieldError(`lines.${idx}.shipment_no`);
+                          setLineById(l.id, {
+                            shipment_no: shipmentNo,
+                            service_id: serviceId,
+                            ...(chargeId != null
+                              ? mapAccountFromChargeOriginal(
+                                  chargeOriginalByIdRef.current[l.id],
+                                )
+                              : {}),
+                          });
+                          if (chargeId != null) {
+                            void fetchSacForLine(
+                              idx,
+                              chargeId,
+                              shipmentNo,
+                              serviceId,
+                            );
+                          }
+                          return;
                         }
+                        if (chargeId != null) {
+                          form.setFieldError(
+                            `lines.${idx}.shipment_no`,
+                            "Shipment No is required",
+                          );
+                          setLineById(l.id, {
+                            shipment_no: "",
+                            service_id: null,
+                            ...CLEARED_ACCOUNT_FIELDS,
+                          });
+                          return;
+                        }
+                        setLineById(l.id, {
+                          shipment_no: "",
+                          service_id: null,
+                        });
                       }}
-                      size="xs"
-                      disabled={isReadOnly}
+                      styles={chargeFieldStyles}
+                      disabled={isReadOnly || accountSelected}
                     />
                   </Grid.Col>
                 )}
                 {showTradeFields && (
-                  <Grid.Col span={1.3}>
+                  <Grid.Col span={lineColSpans.charge}>
                     <SearchableSelect
                       apiEndpoint={URL.chargeMaster}
                       placeholder="Charge"
@@ -1766,48 +2229,81 @@ export function DebitCreditNoteCreateBase({
                         const name = String(item.charge_name ?? "").trim();
                         return { value: id, label: name };
                       }}
-                      onChange={(val, selected) => {
+                      returnOriginalData
+                      onChange={(val, selected, originalData) => {
                         const chargeId =
                           val && Number.isFinite(Number(val))
                             ? Number(val)
                             : null;
+                        const nextName =
+                          selected?.label ??
+                          (originalData?.charge_name != null
+                            ? String(originalData.charge_name)
+                            : "");
+                        const shipmentNo = String(l.shipment_no ?? "").trim();
+                        if (chargeId == null) {
+                          chargeOriginalByIdRef.current[l.id] = null;
+                          form.clearFieldError(`lines.${idx}.shipment_no`);
+                          setLineById(l.id, {
+                            charge_id: null,
+                            charge_name: "",
+                            ...CLEARED_ACCOUNT_FIELDS,
+                          });
+                          return;
+                        }
+                        chargeOriginalByIdRef.current[l.id] =
+                          (originalData as Record<string, unknown> | null) ??
+                          null;
+                        if (!shipmentNo) {
+                          form.setFieldError(
+                            `lines.${idx}.shipment_no`,
+                            "Shipment No is required",
+                          );
+                          setLineById(l.id, {
+                            charge_id: chargeId,
+                            charge_name: nextName,
+                            ...CLEARED_ACCOUNT_FIELDS,
+                          });
+                          return;
+                        }
+                        form.clearFieldError(`lines.${idx}.shipment_no`);
                         setLineById(l.id, {
                           charge_id: chargeId,
-                          charge_name: selected?.label ?? "",
+                          charge_name: nextName,
+                          ...mapAccountFromChargeOriginal(
+                            originalData as Record<string, unknown> | null,
+                          ),
                         });
-                        const shipmentNo = String(l.shipment_no ?? "").trim();
                         const serviceId =
                           l.service_id != null &&
                           Number.isFinite(Number(l.service_id))
                             ? Number(l.service_id)
                             : null;
-                        if (shipmentNo && chargeId != null) {
-                          void fetchSacForLine(
-                            idx,
-                            chargeId,
-                            shipmentNo,
-                            serviceId,
-                          );
-                        }
+                        void fetchSacForLine(
+                          idx,
+                          chargeId,
+                          shipmentNo,
+                          serviceId,
+                        );
                       }}
-                      size="xs"
-                      disabled={isReadOnly}
+                      styles={chargeFieldStyles}
+                      disabled={isReadOnly || accountSelected}
                     />
                   </Grid.Col>
                 )}
                 {showTradeFields && (
-                  <Grid.Col span={0.9}>
+                  <Grid.Col span={lineColSpans.crn}>
                     <Dropdown
                       data={CRN_OPTIONS}
                       value={String(l.crn ?? "") || null}
                       onChange={(v) => setLineById(l.id, { crn: v ?? "" })}
-                      size="xs"
+                      styles={chargeFieldStyles}
                       clearable
                       disabled={isReadOnly}
                     />
                   </Grid.Col>
                 )}
-                <Grid.Col span={showTradeFields ? 1.9 : 2}>
+                <Grid.Col span={lineColSpans.account}>
                   <SearchableSelect
                     apiEndpoint={URL.chartOfAccounts}
                     placeholder="Account"
@@ -1823,6 +2319,10 @@ export function DebitCreditNoteCreateBase({
                     ]}
                     returnOriginalData
                     onChange={(val, selected, original) => {
+                      if (!val || !original) {
+                        setLineById(l.id, { ...CLEARED_ACCOUNT_FIELDS });
+                        return;
+                      }
                       const orig =
                         (original as {
                           id?: number | string;
@@ -1853,6 +2353,7 @@ export function DebitCreditNoteCreateBase({
                         ),
                         subledger: subledgerCode || l.subledger,
                       });
+                      ensureLineRoeAndLocalAmount(l.id);
                     }}
                     displayFormat={(item) => ({
                       value: String(item.id ?? ""),
@@ -1868,22 +2369,22 @@ export function DebitCreditNoteCreateBase({
                         ).trim(),
                       ),
                     })}
-                    size="xs"
-                    disabled={isReadOnly}
+                    styles={chargeFieldStyles}
+                    disabled={isReadOnly || accountLocked}
                   />
                 </Grid.Col>
-                <Grid.Col span={showTradeFields ? 0.9 : 1}>
+                <Grid.Col span={lineColSpans.subledger}>
                   <FormTextInput
                     value={l.subledger}
                     onChange={(e) =>
                       setLineById(l.id, { subledger: e.currentTarget.value })
                     }
-                    size="xs"
+                    styles={chargeFieldStyles}
                     readOnly
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || accountLocked}
                   />
                 </Grid.Col>
-                <Grid.Col span={0.9}>
+                <Grid.Col span={lineColSpans.code}>
                   <FormTextInput
                     value={l.cost_center_code}
                     onChange={(e) =>
@@ -1891,11 +2392,11 @@ export function DebitCreditNoteCreateBase({
                         cost_center_code: e.currentTarget.value,
                       })
                     }
-                    size="xs"
+                    styles={chargeFieldStyles}
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={0.9}>
+                <Grid.Col span={lineColSpans.key}>
                   <FormTextInput
                     value={l.cost_center_key}
                     onChange={(e) =>
@@ -1903,11 +2404,11 @@ export function DebitCreditNoteCreateBase({
                         cost_center_key: e.currentTarget.value,
                       })
                     }
-                    size="xs"
+                    styles={chargeFieldStyles}
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={showTradeFields ? 0.9 : 1}>
+                <Grid.Col span={lineColSpans.currency}>
                   <Dropdown
                     searchable
                     data={currencyOptions.map((o) => o.label)}
@@ -1917,13 +2418,13 @@ export function DebitCreditNoteCreateBase({
                         : null
                     }
                     onChange={(code) => handleLineCurrencyChange(l.id, code)}
-                    size="xs"
+                    styles={chargeFieldStyles}
                     clearable
                     placeholder="Currency"
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={lineColSpans.roe}>
                   <FormTextInput
                     type="number"
                     value={l.roe === "" ? "" : String(l.roe)}
@@ -1957,21 +2458,31 @@ export function DebitCreditNoteCreateBase({
                         local_amount: localAmount,
                       });
                     }}
-                    size="xs"
+                    styles={chargeFieldStyles}
                     disabled={isReadOnly || isLineLocalCurrency(l.currency)}
                   />
                 </Grid.Col>
-                <Grid.Col span={showTradeFields ? 0.9 : 1}>
+                <Grid.Col span={lineColSpans.amount}>
                   <FormTextInput
                     type="number"
                     value={l.amount === "" ? "" : String(l.amount)}
                     onChange={(e) => {
                       const v = e.currentTarget.value;
                       const nextAmount = v === "" ? "" : Number(v);
-                      const localAmount = computeLocalAmount(nextAmount, l.roe);
+                      const latestLine = form
+                        .getValues()
+                        .lines.find((row) => row.id === l.id);
+                      const roeForCalc =
+                        latestLine?.roe !== "" && latestLine?.roe != null
+                          ? latestLine.roe
+                          : l.roe;
+                      const localAmount = computeLocalAmount(
+                        nextAmount,
+                        roeForCalc,
+                      );
                       const amountInHeader = computeAmountInHeaderCurrency(
                         nextAmount,
-                        form.values.roe,
+                        form.getValues().roe,
                       );
                       setLineById(l.id, {
                         amount: nextAmount,
@@ -1979,11 +2490,11 @@ export function DebitCreditNoteCreateBase({
                         amount_in_inr: amountInHeader,
                       });
                     }}
-                    size="xs"
+                    styles={chargeFieldStyles}
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={lineColSpans.localAmount}>
                   <FormTextInput
                     value={
                       l.local_amount === ""
@@ -1996,12 +2507,12 @@ export function DebitCreditNoteCreateBase({
                         local_amount: v === "" ? "" : Number(v),
                       });
                     }}
-                    size="xs"
+                    styles={chargeFieldStyles}
                     readOnly
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={lineColSpans.headerAmount}>
                   <FormTextInput
                     value={
                       l.amount_in_inr === ""
@@ -2014,12 +2525,12 @@ export function DebitCreditNoteCreateBase({
                         amount_in_inr: v === "" ? "" : Number(v),
                       });
                     }}
-                    size="xs"
+                    styles={chargeFieldStyles}
                     readOnly
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={0.7}>
+                <Grid.Col span={lineColSpans.drCr}>
                   <Dropdown
                     data={["Dr", "Cr"]}
                     value={l.dr_cr || null}
@@ -2028,12 +2539,12 @@ export function DebitCreditNoteCreateBase({
                         dr_cr: (v as "Dr" | "Cr" | null) ?? "",
                       })
                     }
-                    size="xs"
+                    styles={chargeFieldStyles}
                     clearable
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={lineColSpans.sac}>
                   <Dropdown
                     searchable
                     data={sacCodeOptionsForForm}
@@ -2041,33 +2552,33 @@ export function DebitCreditNoteCreateBase({
                     onChange={(val) => {
                       setLineById(l.id, { sac_code: String(val ?? "").trim() });
                     }}
-                    size="xs"
+                    styles={chargeFieldStyles}
                     clearable
                     placeholder="SAC"
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={lineColSpans.narration}>
                   <FormTextInput
                     value={l.narration}
                     onChange={(e) =>
                       setLineById(l.id, { narration: e.currentTarget.value })
                     }
-                    size="xs"
+                    styles={chargeFieldStyles}
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                <Grid.Col span={lineColSpans.note}>
                   <FormTextInput
                     value={l.note}
                     onChange={(e) =>
                       setLineById(l.id, { note: e.currentTarget.value })
                     }
-                    size="xs"
+                    styles={chargeFieldStyles}
                     disabled={isReadOnly}
                   />
                 </Grid.Col>
-                <Grid.Col span={0.6}>
+                <Grid.Col span={lineColSpans.actions}>
                   <Group gap={6} justify="flex-start" wrap="nowrap">
                     {!isReadOnly && idx === form.values.lines.length - 1 && (
                       <Button
@@ -2109,9 +2620,8 @@ export function DebitCreditNoteCreateBase({
                   </Group>
                 </Grid.Col>
               </Grid>
-            </Grid.Col>
-          ))}
-        </Grid>
+            );
+          })}
 
         {/* removed: DR/CR/Net INR totals */}
         {/* </Card> */}
@@ -2170,6 +2680,72 @@ export function DebitCreditNoteCreateBase({
           )}
         </Group>
       </Group>
+
+      <Modal
+        opened={previewOpen}
+        onClose={handleClosePreview}
+        title="PDF Preview"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {pdfBlob ? (
+            <>
+              <iframe
+                src={pdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }
