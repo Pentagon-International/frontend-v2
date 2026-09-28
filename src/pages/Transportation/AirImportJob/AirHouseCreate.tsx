@@ -3392,7 +3392,9 @@ function HouseCreate() {
               </Menu.Item>
               {!isChaMode && freightCertificate.enabled && (
                 <HouseFreightCertificateMenuItem
-                  onClick={freightCertificate.openPreview}
+                  onClick={() =>
+                    freightCertificate.openPreview(editData?.id)
+                  }
                 />
               )}
 

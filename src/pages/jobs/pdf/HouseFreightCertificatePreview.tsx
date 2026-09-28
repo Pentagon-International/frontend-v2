@@ -98,8 +98,11 @@ export function useHouseFreightCertificatePreview(options: {
   };
 
   const openPreview = async (housingIdOverride?: number | string | null) => {
+    const overrideIsId =
+      typeof housingIdOverride === "number" ||
+      typeof housingIdOverride === "string";
     const id = resolveHousingId(
-      housingIdOverride !== undefined ? housingIdOverride : options.housingId,
+      overrideIsId ? housingIdOverride : options.housingId,
     );
     if (!id) return;
     setFileName(`FreightCertificate-${id}.pdf`);
