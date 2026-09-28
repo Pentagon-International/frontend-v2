@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import primeLogo from "../../../assets/images/prime.png";
 import {
   getCctBranchInfoFromLogin,
   isCctCompany,
@@ -41,46 +41,6 @@ const formatDate = (dateString: any) => {
 // Helper function to format date for display (DD-MMM-YY)
 const formatDateForDisplay = (dateString: any) => {
   return formatDate(dateString);
-};
-
-// USA logo for India and USA branches; empty otherwise (no fallback)
-const getLogoByCountry = (country: any): string | null => {
-  try {
-    let countryName = "";
-    let countryCode = "";
-
-    const userStr = localStorage.getItem("user");
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user?.country) {
-        countryName = (user.country.country_name || "").toUpperCase();
-        countryCode = (user.country.country_code || "").toUpperCase();
-      }
-    }
-
-    if (country) {
-      countryName = (country.country_name || "").toUpperCase();
-      countryCode = (country.country_code || "").toUpperCase();
-    }
-
-    const isIndia =
-      countryName.includes("INDIA") ||
-      countryCode === "IN" ||
-      countryName === "INDIA";
-    const isUSA =
-      countryName.includes("USA") ||
-      countryCode === "US" ||
-      countryName === "USA" ||
-      countryName.includes("UNITED STATES");
-
-    if (isIndia || isUSA) {
-      return pentagonPrimeAmericas;
-    }
-    return null;
-  } catch (error) {
-    console.error("Error getting logo by country:", error);
-    return null;
-  }
 };
 
 const getUserCountry = () => {
@@ -407,10 +367,10 @@ export const generateDeliveryOrderPDF = (
     const footerHeight = 15;
     const bottomBorderPadding = 5; // Padding inside border at bottom
 
-    // Get branch info and country-specific logo (Kenya uses prime.png from assets)
+    // Same Pentagon Prime logo for every country
     const country = getUserCountry();
     const branchInfo = getBranchInfo(country);
-    const logoImage = getLogoByCountry(country);
+    const logoImage = primeLogo;
 
     // Extract data from jobData (consol_details) and housingData (housing_details)
     // jobData contains: igm_no, igm_date, vessel_name, voyage_number, mbl_number, mbl_date, eta, etc.
