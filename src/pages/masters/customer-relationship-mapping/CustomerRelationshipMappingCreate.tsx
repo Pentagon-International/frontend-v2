@@ -35,6 +35,11 @@ import {
 import FormNumberInput from "../../../components/FormNumberInput";
 import { apiCallProtected } from "../../../api/axios";
 import { getAPICall } from "../../../service/getApiCall";
+import useAuthStore from "../../../store/authStore";
+import {
+  canEditCustomerRelationshipMapping,
+  CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
+} from "./customerRelationshipMappingAccess";
 
 const COMMON_SERVICE_CODE = "0";
 
@@ -141,26 +146,8 @@ type EditResponseItem = {
 function CustomerRelationshipMappingCreate() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Check user permissions from localStorage
-  const hasManagerOrStaffAccess = useMemo(() => {
-    try {
-      const userStr = localStorage.getItem("user");
-      if (!userStr) return false;
-      const user = JSON.parse(userStr);
-      return user?.is_manager === true || user?.is_staff === true;
-    } catch (error) {
-      console.error("Error checking user permissions:", error);
-      return false;
-    }
-  }, []);
-
-  // Redirect unauthorized users to /master
-  useEffect(() => {
-    if (!hasManagerOrStaffAccess) {
-      navigate("/master", { replace: true });
-    }
-  }, [hasManagerOrStaffAccess, navigate]);
+  const user = useAuthStore((state) => state.user);
+  const editAccessDeniedNoticeShown = useRef(false);
 
   // Check if we're in edit mode based on location pathname and state
   const isEditMode = location.pathname.includes("/edit");
@@ -173,6 +160,52 @@ function CustomerRelationshipMappingCreate() {
   const customerIdFromState = locationState?.customer_id || null;
   const fromCustomerMaster = locationState?.fromCustomerMaster || false;
   const customerFormDataFromState = locationState?.customerFormData || null;
+  const addressFormDataFromState = locationState?.addressFormData || null;
+
+  // Create stays limited to managers and staff. Edit is admin or Accounts.
+  const hasManagerOrStaffAccess = useMemo(() => {
+    return user?.is_manager === true || user?.is_staff === true;
+  }, [user]);
+
+  const canAccessEdit = useMemo(() => {
+    return canEditCustomerRelationshipMapping(user);
+  }, [user]);
+
+  const hasPageAccess = isEditMode ? canAccessEdit : hasManagerOrStaffAccess;
+
+  useEffect(() => {
+    if (hasPageAccess) return;
+
+    if (isEditMode && !editAccessDeniedNoticeShown.current) {
+      editAccessDeniedNoticeShown.current = true;
+      ToastNotification({
+        type: "error",
+        message: CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
+      });
+    }
+
+    if (isEditMode && fromCustomerMaster && customerIdFromState) {
+      navigate(`/master/customer/edit/${customerIdFromState}`, {
+        replace: true,
+        state: {
+          customerFormData: customerFormDataFromState,
+          addressFormData: addressFormDataFromState,
+        },
+      });
+      return;
+    }
+
+    navigate("/master", { replace: true });
+  }, [
+    hasPageAccess,
+    isEditMode,
+    fromCustomerMaster,
+    customerIdFromState,
+    customerFormDataFromState,
+    addressFormDataFromState,
+    navigate,
+  ]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFormInitialized, setIsFormInitialized] = useState(false);
   const [isLoadingEditData, setIsLoadingEditData] = useState(false);
@@ -767,7 +800,7 @@ function CustomerRelationshipMappingCreate() {
   };
 
   // Don't render if user doesn't have access
-  if (!hasManagerOrStaffAccess) {
+  if (!hasPageAccess) {
     return null;
   }
 

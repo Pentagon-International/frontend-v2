@@ -85,6 +85,8 @@ interface User {
   email?: string;
   is_staff: boolean;
   is_manager: boolean;
+  role_code?: string | null;
+  role?: string | null;
   company: Company;
   country: Country;
   branches: Branch[];
@@ -105,6 +107,8 @@ interface AuthStore {
     username: string;
     is_staff: boolean;
     is_manager: boolean;
+    role_code?: string | null;
+    role?: string | null;
     company: Company;
     country: Country;
     branches: Branch[];
@@ -164,6 +168,8 @@ const useAuthStore = create<AuthStore>((set) => ({
       email: data.user_identifier, // Using user_identifier as email
       is_staff: data.is_staff,
       is_manager: data.is_manager,
+      role_code: data.role_code ?? null,
+      role: data.role ?? null,
       company: data.company,
       country: data.country,
       branches: data.branches,

@@ -49,6 +49,8 @@ type LoginResponse = {
   username: string;
   is_staff: boolean;
   is_manager: boolean;
+  role_code?: string | null;
+  role?: string | null;
   company: {
     company_id: number;
     company_code: string;
@@ -139,6 +141,8 @@ function LoginForm() {
       username: data.username,
       is_staff: data.is_staff,
       is_manager: data.is_manager,
+      role_code: data.role_code,
+      role: data.role,
       company: data.company,
       country: data.country,
       branches: normalizeLoginBranches(data.branches),

@@ -44,6 +44,10 @@ import { getAPICall } from "../../../service/getApiCall";
 import { useQuery } from "@tanstack/react-query";
 import { toTitleCase } from "../../../utils/textFormatter";
 import useAuthStore from "../../../store/authStore";
+import {
+  canEditCustomerRelationshipMapping,
+  CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
+} from "../customer-relationship-mapping/customerRelationshipMappingAccess";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
@@ -3375,6 +3379,16 @@ function CustomerCreate() {
       }
 
       if (isEditMode && customerId) {
+        if (
+          !canEditCustomerRelationshipMapping(useAuthStore.getState().user)
+        ) {
+          ToastNotification({
+            type: "error",
+            message: CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
+          });
+          return;
+        }
+
         navigate("/master/customer-relationship-mapping/edit", {
           state: {
             customer_id: Number(customerId),

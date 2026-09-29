@@ -39,6 +39,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useForm } from "@mantine/form";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import useAuthStore from "../../../store/authStore";
+import {
+  canEditCustomerRelationshipMapping,
+  CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
+} from "./customerRelationshipMappingAccess";
 
 type CustomerRelationshipMappingData = {
   sno: number;
@@ -78,6 +83,7 @@ type FilterState = {
 
 function CustomerRelationshipMappingMaster() {
   const isAdmin = useIsAdminUser();
+  const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -308,6 +314,14 @@ function CustomerRelationshipMappingMaster() {
   // Handle edit
   const handleEdit = useCallback(
     (row: CustomerRelationshipMappingData) => {
+      if (!canEditCustomerRelationshipMapping(user)) {
+        ToastNotification({
+          type: "error",
+          message: CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
+        });
+        return;
+      }
+
       // Navigate to edit page with customer_id in location state (not in URL)
       const customerId = row.customer_id;
       if (customerId) {
@@ -322,7 +336,7 @@ function CustomerRelationshipMappingMaster() {
         });
       }
     },
-    [navigate],
+    [navigate, user],
   );
 
   const columns = useMemo<MRT_ColumnDef<CustomerRelationshipMappingData>[]>(
