@@ -49,8 +49,8 @@ import { apiCallProtected } from "../../../api/axios";
 import {
   Dropdown,
   ERPListColumnHeaderFilter,
-  ERPListHeaderFilterInput,
   ERPListColumnToggleMenu,
+  SearchableSelect,
   ERPListFilterActionsFooter,
   ERPListPaginationFooter,
   ERPListScreen,
@@ -165,8 +165,8 @@ type FilterState = {
   date_to: Date | null;
   payment_type: string | null;
   request_no: string | null;
-  service: string | null;
-  service_type: string | null;
+  service_code: string | null;
+  service_display: string | null;
   job_reference: string | null;
   shipment_id: string | null;
 };
@@ -196,16 +196,25 @@ function formatServiceColumnValue(
   return svc || type || "-";
 }
 
-function formatServiceFilterDisplay(
-  service?: string | null,
-  serviceType?: string | null,
-): string {
-  const svc = String(service ?? "").trim();
-  const type = String(serviceType ?? "").trim();
-  if (svc && type && svc.toUpperCase() !== type.toUpperCase()) {
-    return `${svc} / ${type}`;
-  }
-  return svc || type || "";
+function serviceMasterOptionLabel(item: Record<string, unknown>): string {
+  const service = String(item.service ?? item.full_groupage ?? "").trim();
+  const serviceType = String(item.service_type ?? item.import_export ?? "").trim();
+  if (service && serviceType) return `${service} / ${serviceType}`;
+  return (
+    service ||
+    serviceType ||
+    String(item.service_name ?? item.service_code ?? "").trim()
+  );
+}
+
+const PAYMENT_REQUEST_PAGE_SIZES = [10, 25, 50] as const;
+
+function parseStoredPageSize(value: unknown): number | null {
+  const size = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(size)) return null;
+  return (PAYMENT_REQUEST_PAGE_SIZES as readonly number[]).includes(size)
+    ? size
+    : null;
 }
 
 function statusColor(status?: string): string {
@@ -226,19 +235,61 @@ function statusColor(status?: string): string {
   }
 }
 
+function buildPaymentRequestListPayload(
+  filters: FilterState,
+  createdBy: string,
+  paidTo: string,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  if (filters.status) payload.status = filters.status;
+  if (filters.date_from)
+    payload.date_from = dayjs(filters.date_from).format("YYYY-MM-DD");
+  if (filters.date_to)
+    payload.date_to = dayjs(filters.date_to).format("YYYY-MM-DD");
+  if (filters.payment_type) payload.payment_type = filters.payment_type;
+  if (filters.request_no?.trim())
+    payload.request_no = filters.request_no.trim();
+  if (filters.service_code?.trim())
+    payload.service_code = filters.service_code.trim();
+  if (filters.job_reference?.trim())
+    payload.job_reference = filters.job_reference.trim();
+  if (filters.shipment_id?.trim())
+    payload.shipment_id = filters.shipment_id.trim();
+  if (createdBy.trim()) payload.created_by = createdBy.trim();
+  if (paidTo.trim()) payload.paid_to = paidTo.trim();
+  return payload;
+}
+
+function withPaymentRequestListUiState(
+  payload: Record<string, unknown>,
+  pageSize: number,
+  serviceDisplay: string | null | undefined,
+): Record<string, unknown> {
+  const stored: Record<string, unknown> = { ...payload, pageSize };
+  const label = String(serviceDisplay ?? "").trim();
+  if (label) stored.service_display = label;
+  return stored;
+}
+
 const emptyFilters = (): FilterState => ({
   status: null,
   date_from: dayjs().startOf("month").toDate(),
   date_to: dayjs().toDate(),
   payment_type: null,
   request_no: null,
-  service: null,
-  service_type: null,
+  service_code: null,
+  service_display: null,
   job_reference: null,
   shipment_id: null,
 });
 
 const LIST_KEY = "PAYMENT_REQUEST_APPROVAL";
+
+function readStoredPageSize(): number {
+  const stored = useListFilterStore.getState().getState(LIST_KEY);
+  if (stored?.shouldRestore !== true) return 25;
+  return parseStoredPageSize(stored.filters?.pageSize) ?? 25;
+}
 
 type PaymentRequestColumnVisibility = {
   sno: boolean;
@@ -303,10 +354,10 @@ function PaymentRequestApproval() {
   const location = useLocation();
   const { openViewAllocationDocs, viewAllocationDocsUi } =
     useViewAllocationDocs();
-  const [pagination, setPagination] = useState<MRT_PaginationState>({
+  const [pagination, setPagination] = useState<MRT_PaginationState>(() => ({
     pageIndex: 0,
-    pageSize: 25,
-  });
+    pageSize: readStoredPageSize(),
+  }));
   const [totalRecords, setTotalRecords] = useState(0);
   const [isRestoring, setIsRestoring] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -368,16 +419,21 @@ function PaymentRequestApproval() {
 
     if (typeof stored?.search === "string") setSearch(stored.search);
 
-    if (stored?.filters && typeof stored.filters === "object") {
-      const f = stored.filters as Record<string, unknown>;
+    const storedFilters =
+      stored?.filters && typeof stored.filters === "object"
+        ? (stored.filters as Record<string, unknown>)
+        : null;
+
+    if (storedFilters) {
+      const f = storedFilters;
       const restored: FilterState = {
         status: (f.status as string) ?? null,
         date_from: f.date_from ? new Date(f.date_from as string) : null,
         date_to: f.date_to ? new Date(f.date_to as string) : null,
         payment_type: (f.payment_type as string) ?? null,
         request_no: (f.request_no as string) ?? null,
-        service: (f.service as string) ?? null,
-        service_type: (f.service_type as string) ?? null,
+        service_code: (f.service_code as string) ?? null,
+        service_display: (f.service_display as string) ?? null,
         job_reference: (f.job_reference as string) ?? null,
         shipment_id: (f.shipment_id as string) ?? null,
       };
@@ -389,7 +445,12 @@ function PaymentRequestApproval() {
       setAppliedPaidTo((f.paid_to as string) ?? "");
     }
 
-    setPagination((p) => ({ ...p, pageIndex: 0 }));
+    const restoredPageSize = parseStoredPageSize(storedFilters?.pageSize);
+    setPagination((p) => ({
+      ...p,
+      pageIndex: 0,
+      ...(restoredPageSize != null ? { pageSize: restoredPageSize } : {}),
+    }));
     clearAllExcept(LIST_KEY);
     setShouldRestore(LIST_KEY, false);
     setIsRestoring(false);
@@ -399,29 +460,33 @@ function PaymentRequestApproval() {
 
   // ─── Build filter payload ─────────────────────────────────────────────────
 
-  const buildFilterPayload = useMemo(() => {
-    const payload: Record<string, unknown> = {};
-    if (appliedFilters.status) payload.status = appliedFilters.status;
-    if (appliedFilters.date_from)
-      payload.date_from = dayjs(appliedFilters.date_from).format("YYYY-MM-DD");
-    if (appliedFilters.date_to)
-      payload.date_to = dayjs(appliedFilters.date_to).format("YYYY-MM-DD");
-    if (appliedFilters.payment_type)
-      payload.payment_type = appliedFilters.payment_type;
-    if (appliedFilters.request_no?.trim())
-      payload.request_no = appliedFilters.request_no.trim();
-    if (appliedFilters.service?.trim())
-      payload.service = appliedFilters.service.trim();
-    if (appliedFilters.service_type?.trim())
-      payload.service_type = appliedFilters.service_type.trim();
-    if (appliedFilters.job_reference?.trim())
-      payload.job_reference = appliedFilters.job_reference.trim();
-    if (appliedFilters.shipment_id?.trim())
-      payload.shipment_id = appliedFilters.shipment_id.trim();
-    if (appliedCreatedBy.trim()) payload.created_by = appliedCreatedBy.trim();
-    if (appliedPaidTo.trim()) payload.paid_to = appliedPaidTo.trim();
-    return payload;
-  }, [appliedFilters, appliedCreatedBy, appliedPaidTo]);
+  const buildFilterPayload = useMemo(
+    () =>
+      buildPaymentRequestListPayload(
+        appliedFilters,
+        appliedCreatedBy,
+        appliedPaidTo,
+      ),
+    [appliedFilters, appliedCreatedBy, appliedPaidTo],
+  );
+
+  const persistListState = useCallback(
+    (
+      payload: Record<string, unknown>,
+      options?: { pageSize?: number; serviceDisplay?: string | null },
+    ) => {
+      const pageSize = options?.pageSize ?? pagination.pageSize;
+      const serviceDisplay =
+        options && "serviceDisplay" in options
+          ? options.serviceDisplay
+          : appliedFilters.service_display;
+      setStoreFilters(
+        LIST_KEY,
+        withPaymentRequestListUiState(payload, pageSize, serviceDisplay),
+      );
+    },
+    [appliedFilters.service_display, pagination.pageSize, setStoreFilters],
+  );
 
   // ─── Queries ──────────────────────────────────────────────────────────────
 
@@ -638,15 +703,26 @@ function PaymentRequestApproval() {
     setDraftFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handlePageSizeChange = (newPageSize: number) =>
+  const handlePageSizeChange = (newPageSize: number) => {
     setPagination({ pageIndex: 0, pageSize: newPageSize });
+    persistListState(buildFilterPayload, { pageSize: newPageSize });
+  };
 
   const applyFilters = () => {
     setAppliedFilters(draftFilters);
     setAppliedCreatedBy(draftCreatedBy);
     setAppliedPaidTo(draftPaidTo);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, buildFilterPayload);
+    persistListState(
+      buildPaymentRequestListPayload(
+        draftFilters,
+        draftCreatedBy,
+        draftPaidTo,
+      ),
+      {
+        serviceDisplay: draftFilters.service_display,
+      },
+    );
     setStoreSearch(LIST_KEY, search);
     setShowFilters(false);
   };
@@ -699,29 +775,21 @@ function PaymentRequestApproval() {
         setAppliedPaidTo(nextPaidTo);
       }
       setPagination((p) => ({ ...p, pageIndex: 0 }));
-      const payload: Record<string, unknown> = {};
-      if (nextFilters.status) payload.status = nextFilters.status;
-      if (nextFilters.date_from)
-        payload.date_from = dayjs(nextFilters.date_from).format("YYYY-MM-DD");
-      if (nextFilters.date_to)
-        payload.date_to = dayjs(nextFilters.date_to).format("YYYY-MM-DD");
-      if (nextFilters.payment_type)
-        payload.payment_type = nextFilters.payment_type;
-      if (nextFilters.request_no?.trim())
-        payload.request_no = nextFilters.request_no.trim();
-      if (nextFilters.service?.trim())
-        payload.service = nextFilters.service.trim();
-      if (nextFilters.service_type?.trim())
-        payload.service_type = nextFilters.service_type.trim();
-      if (nextFilters.job_reference?.trim())
-        payload.job_reference = nextFilters.job_reference.trim();
-      if (nextFilters.shipment_id?.trim())
-        payload.shipment_id = nextFilters.shipment_id.trim();
-      if (nextCreatedBy.trim()) payload.created_by = nextCreatedBy.trim();
-      if (nextPaidTo.trim()) payload.paid_to = nextPaidTo.trim();
-      setStoreFilters(LIST_KEY, payload);
+      persistListState(
+        buildPaymentRequestListPayload(
+          nextFilters,
+          nextCreatedBy,
+          nextPaidTo,
+        ),
+        { serviceDisplay: nextFilters.service_display },
+      );
     },
-    [draftFilters, appliedCreatedBy, appliedPaidTo, setStoreFilters],
+    [
+      draftFilters,
+      appliedCreatedBy,
+      appliedPaidTo,
+      persistListState,
+    ],
   );
 
   // ─── Columns ──────────────────────────────────────────────────────────────
@@ -872,59 +940,50 @@ function PaymentRequestApproval() {
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Service"
-            value={formatServiceFilterDisplay(
-              appliedFilters.service,
-              appliedFilters.service_type,
-            )}
-            displayValue={formatServiceFilterDisplay(
-              appliedFilters.service,
-              appliedFilters.service_type,
-            )}
+            value={appliedFilters.service_code ?? ""}
+            displayValue={appliedFilters.service_display ?? ""}
             onChange={() => {}}
             theme={erpTheme}
             isEditing={editingHeaderId === "service"}
             onStartEdit={() => openHeaderEditor("service")}
             onStopEdit={() => collapseHeaderEditor("service")}
-            renderEditor={() => (
-              <Box
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  width: "100%",
-                  minWidth: 0,
+            renderEditor={({ autoFocus }) => (
+              <SearchableSelect
+                autoFocus={autoFocus}
+                size="xs"
+                placeholder="Service"
+                apiEndpoint={URL.serviceMaster}
+                searchFields={[
+                  "service_name",
+                  "service_code",
+                  "service",
+                  "service_type",
+                ]}
+                minSearchLength={1}
+                dropdownZIndex={1000}
+                returnOriginalData
+                value={appliedFilters.service_code || null}
+                displayValue={appliedFilters.service_display || undefined}
+                displayFormat={(item) => ({
+                  value: String(item.service_code ?? ""),
+                  label: serviceMasterOptionLabel(item),
+                })}
+                onChange={(value, selectedData, originalData) => {
+                  const code = String(value ?? "").trim();
+                  const label = originalData
+                    ? serviceMasterOptionLabel(originalData)
+                    : String(selectedData?.label ?? "").trim();
+                  commitHeaderFilters({
+                    filters: (prev) => ({
+                      ...prev,
+                      service_code: code || null,
+                      service_display: code ? label || null : null,
+                    }),
+                  });
                 }}
-              >
-                <ERPListHeaderFilterInput
-                  value={appliedFilters.service ?? ""}
-                  onChange={(nextVal) =>
-                    commitHeaderFilters({
-                      filters: (prev) => ({
-                        ...prev,
-                        service: nextVal ? nextVal.trim().toUpperCase() : null,
-                      }),
-                    })
-                  }
-                  placeholder="Service"
-                  ariaLabel="Filter Service"
-                  autoFocus
-                />
-                <ERPListHeaderFilterInput
-                  value={appliedFilters.service_type ?? ""}
-                  onChange={(nextVal) =>
-                    commitHeaderFilters({
-                      filters: (prev) => ({
-                        ...prev,
-                        service_type: nextVal
-                          ? nextVal.trim().toUpperCase()
-                          : null,
-                      }),
-                    })
-                  }
-                  placeholder="Type"
-                  ariaLabel="Filter Service Type"
-                />
-              </Box>
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
             )}
           />
         ),
@@ -1135,7 +1194,7 @@ function PaymentRequestApproval() {
               <Menu.Item
                 leftSection={<IconEye size={16} color={primary} />}
                 onClick={() => {
-                  setStoreFilters(LIST_KEY, buildFilterPayload);
+                  persistListState(buildFilterPayload);
                   setStoreSearch(LIST_KEY, search);
                   setShouldRestore(LIST_KEY, true);
                   navigate(`/payment-request/view/${row.original.id}`, {
@@ -1152,7 +1211,7 @@ function PaymentRequestApproval() {
                 <Menu.Item
                   leftSection={<IconEdit size={16} color={primary} />}
                   onClick={() => {
-                    setStoreFilters(LIST_KEY, buildFilterPayload);
+                    persistListState(buildFilterPayload);
                     setStoreSearch(LIST_KEY, search);
                     setShouldRestore(LIST_KEY, true);
                     navigate(`/payment-request/edit/${row.original.id}`, {
@@ -1180,7 +1239,7 @@ function PaymentRequestApproval() {
                             ?.data?.data ??
                           (raw as { data?: PaymentRequestRecord })?.data ??
                           row.original;
-                        setStoreFilters(LIST_KEY, buildFilterPayload);
+                        persistListState(buildFilterPayload);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
                         navigate("/supplier-invoice/create", {
@@ -1218,7 +1277,7 @@ function PaymentRequestApproval() {
       index,
       buildFilterPayload,
       search,
-      setStoreFilters,
+      persistListState,
       setStoreSearch,
       setShouldRestore,
       dateFormat,
@@ -1532,7 +1591,7 @@ function PaymentRequestApproval() {
             opened: showFilters,
             title: "Filters",
             subtitle:
-              "Refine by user, request no., type, date range, paid to, job id, shipment id, or status",
+              "Refine by user, request no., type, service, date range, paid to, job id, shipment id, or status",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1679,6 +1738,43 @@ function PaymentRequestApproval() {
                       size="xs"
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                       styles={formTextFilterStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <SearchableSelect
+                      size="xs"
+                      label="Service"
+                      placeholder="Search service"
+                      apiEndpoint={URL.serviceMaster}
+                      searchFields={[
+                        "service_name",
+                        "service_code",
+                        "service",
+                        "service_type",
+                      ]}
+                      minSearchLength={1}
+                      dropdownZIndex={1000}
+                      returnOriginalData
+                      value={draftFilters.service_code || null}
+                      displayValue={draftFilters.service_display || undefined}
+                      displayFormat={(item) => ({
+                        value: String(item.service_code ?? ""),
+                        label: serviceMasterOptionLabel(item),
+                      })}
+                      onChange={(value, selectedData, originalData) => {
+                        const code = String(value ?? "").trim();
+                        const label = originalData
+                          ? serviceMasterOptionLabel(originalData)
+                          : String(selectedData?.label ?? "").trim();
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          service_code: code || null,
+                          service_display: code ? label || null : null,
+                        }));
+                      }}
+                      styles={filterFieldStyles}
                     />
                   </Box>
                 </Grid.Col>

@@ -795,6 +795,33 @@ const emptyCharge = (): ChargeItem => ({
   Dr_Cr: "Dr",
 });
 
+function resolvePaymentRequestJobReference(options: {
+  locationState: unknown;
+  savedJobReference: string;
+  useSavedReference: boolean;
+}): string {
+  const saved = String(options.savedJobReference ?? "").trim();
+  if (options.useSavedReference) return saved;
+
+  const job = (
+    options.locationState as {
+      job?: { job_id?: unknown; id?: unknown };
+    } | null
+  )?.job;
+  const jobId = String(job?.job_id ?? "").trim();
+  if (jobId) return jobId;
+  const id = String(job?.id ?? "").trim();
+  if (id) return id;
+  return saved;
+}
+
+function paymentRequestPartyCodePayload(
+  partyCode: string | null | undefined,
+): Record<string, string> {
+  const code = String(partyCode ?? "").trim();
+  return code ? { subledger_code: code } : {};
+}
+
 function formatPaymentRequestDate(d: Date | null): string | null {
   if (!d) return null;
   const day = String(d.getDate()).padStart(2, "0");
@@ -1778,7 +1805,11 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         id: saveResponse.id,
-        job_reference: "",
+        job_reference: resolvePaymentRequestJobReference({
+          locationState: location.state,
+          savedJobReference: values.job_reference_1,
+          useSavedReference: isUpdate,
+        }),
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -1791,11 +1822,7 @@ function PaymentRequest() {
         proforma_inv_date: formatDate(values.proforma_invoice_date),
         actual_inv_no: actualInvNo,
         actual_inv_date: formatDate(actualInvDate),
-        account_id:
-          values.account_id && Number.isFinite(Number(values.account_id))
-            ? Number(values.account_id)
-            : undefined,
-        ...(values.account_code ? { account_code: values.account_code } : {}),
+        ...paymentRequestPartyCodePayload(values.account_code),
         amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -1903,7 +1930,11 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: "",
+        job_reference: resolvePaymentRequestJobReference({
+          locationState: location.state,
+          savedJobReference: values.job_reference_1,
+          useSavedReference: isUpdate,
+        }),
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -1916,11 +1947,7 @@ function PaymentRequest() {
         proforma_inv_date: formatDate(values.proforma_invoice_date),
         actual_inv_no: values.actual_invoice_no ?? "",
         actual_inv_date: formatDate(values.actual_invoice_date),
-        account_id:
-          values.account_id && Number.isFinite(Number(values.account_id))
-            ? Number(values.account_id)
-            : undefined,
-        ...(values.account_code ? { account_code: values.account_code } : {}),
+        ...paymentRequestPartyCodePayload(values.account_code),
         amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -2099,7 +2126,11 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: "",
+        job_reference: resolvePaymentRequestJobReference({
+          locationState: location.state,
+          savedJobReference: values.job_reference_1,
+          useSavedReference: isUpdate,
+        }),
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -2112,11 +2143,7 @@ function PaymentRequest() {
         proforma_inv_date: formatDate(values.proforma_invoice_date),
         actual_inv_no: values.actual_invoice_no ?? "",
         actual_inv_date: formatDate(values.actual_invoice_date),
-        account_id:
-          values.account_id && Number.isFinite(Number(values.account_id))
-            ? Number(values.account_id)
-            : undefined,
-        ...(values.account_code ? { account_code: values.account_code } : {}),
+        ...paymentRequestPartyCodePayload(values.account_code),
         amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -2378,7 +2405,11 @@ function PaymentRequest() {
 
       const payload: Record<string, unknown> = {
         ...(isUpdate ? { id: saveResponse?.id ?? Number(requestId) } : {}),
-        job_reference: "",
+        job_reference: resolvePaymentRequestJobReference({
+          locationState: location.state,
+          savedJobReference: values.job_reference_1,
+          useSavedReference: isUpdate,
+        }),
         crj_number: values.payment_crj_did ?? "",
         approved_by: values.approved_by_1 ?? "",
         approved_date: formatDate(values.approved_date),
@@ -2391,11 +2422,7 @@ function PaymentRequest() {
         proforma_inv_date: formatDate(values.proforma_invoice_date),
         actual_inv_no: values.actual_invoice_no ?? "",
         actual_inv_date: formatDate(values.actual_invoice_date),
-        account_id:
-          values.account_id && Number.isFinite(Number(values.account_id))
-            ? Number(values.account_id)
-            : undefined,
-        ...(values.account_code ? { account_code: values.account_code } : {}),
+        ...paymentRequestPartyCodePayload(values.account_code),
         amount: formatPaymentRequestPayloadAmount(values.amount) ?? null,
         crj_date: formatDate(values.crj_date),
         paid_to_type: values.paid_to_type ?? "",
@@ -2516,10 +2543,7 @@ function PaymentRequest() {
             });
             setAuditPatch((prev) => appendEditPageAuditPatch(prev, d));
             setPaymentRequestDataFromApi(d);
-            setAccountNameDisplay(
-              ((d as any).account_name ?? d.account_code ?? "").toString() ||
-                null,
-            );
+            setAccountNameDisplay(String(d.paid_to ?? "").trim() || null);
             setSupportingDocuments(
               mapApiDocumentsToSupportingDocuments(
                 (d as any).documents ?? (d as any).supporting_documents,
@@ -2529,7 +2553,13 @@ function PaymentRequest() {
             // Populate the form with all saved values so the screen is in edit mode
             form.setValues({
               request_no: d.request_no ?? "",
-              job_reference_1: d.job_reference ?? "",
+              job_reference_1:
+                String(d.job_reference ?? "").trim() ||
+                resolvePaymentRequestJobReference({
+                  locationState: location.state,
+                  savedJobReference: values.job_reference_1,
+                  useSavedReference: false,
+                }),
               job_reference_2: form.values.job_reference_2,
               payment_crj_did: d.crj_number ?? "",
               date: normalizeDate(d.date) ?? values.date,
@@ -2543,13 +2573,13 @@ function PaymentRequest() {
               actual_invoice_no: d.actual_inv_no ?? "",
               actual_invoice_date: normalizeDate(d.actual_inv_date),
               account_id: d.account_id != null ? String(d.account_id) : "",
-              account_code: d.account_code ?? "",
+              account_code: String(d.subledger_code ?? d.account_code ?? ""),
               currency: d.currency_code ?? values.currency,
               amount: d.amount != null ? clampAmount(Number(d.amount)) : null,
               crj_date: normalizeDate(d.crj_date),
               paid_to_type: d.paid_to_type ?? "",
               not_over: d.not_over ?? "",
-              paid_to: d.paid_to ?? "",
+              paid_to: String(d.paid_to ?? ""),
               approved: d.status ?? "",
               state_code_1:
                 d.state_id != null ? String(d.state_id) : values.state_code_1,
@@ -2614,9 +2644,7 @@ function PaymentRequest() {
     const loadedActualDate = normalizeDate(d.actual_inv_date);
     setActualInvAlreadySet(Boolean(loadedActualNo && loadedActualDate));
 
-    setAccountNameDisplay(
-      ((d as any).account_name ?? d.account_code ?? "").toString() || null,
-    );
+    setAccountNameDisplay(String(d.paid_to ?? "").trim() || null);
     setSupportingDocuments(
       mapApiDocumentsToSupportingDocuments(
         (d as any).documents ?? (d as any).supporting_documents,
@@ -2639,13 +2667,13 @@ function PaymentRequest() {
       actual_invoice_no: d.actual_inv_no ?? "",
       actual_invoice_date: normalizeDate(d.actual_inv_date),
       account_id: d.account_id != null ? String(d.account_id) : "",
-      account_code: d.account_code ?? "",
+      account_code: String(d.subledger_code ?? d.account_code ?? ""),
       currency: d.currency_code ?? defaultBranchCurrency,
       amount: d.amount != null ? clampAmount(Number(d.amount)) : null,
       crj_date: normalizeDate(d.crj_date),
       paid_to_type: d.paid_to_type ?? "",
       not_over: d.not_over ?? "",
-      paid_to: d.paid_to ?? "",
+      paid_to: String(d.paid_to ?? ""),
       approved: d.status ?? "",
       state_code_1: d.state_id != null ? String(d.state_id) : "",
       state_code_2: "",
@@ -3235,9 +3263,8 @@ function PaymentRequest() {
                   ),
                 })}
                 value={form.values.account_id || null}
-                displayValue={
-                  String(form.values.paid_to ?? "").trim() || undefined
-                }
+                displayValue={String(form.values.paid_to ?? "").trim()}
+                hideValueInDisplay
                 returnOriginalData
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("account_id", value ?? "");
