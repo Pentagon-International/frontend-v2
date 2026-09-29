@@ -159,6 +159,16 @@ export const globalSearchModuleToRoute = (
       if (sub === "service_job")
         return { path: `/service-job/edit/${id}`, needsState: true };
       return null;
+    case "cha_job":
+      if (sub === "air_export")
+        return { path: "/cha/air-export-job/edit", needsState: true };
+      if (sub === "air_import")
+        return { path: "/cha/air-import-job/edit", needsState: true };
+      if (sub === "ocean_export")
+        return { path: "/cha/ocean-export-job/edit", needsState: true };
+      if (sub === "ocean_import")
+        return { path: "/cha/ocean-import-job/edit", needsState: true };
+      return null;
     case "invoice":
       if (sub === "air_export")
         return { path: `/air/export-job/invoice/edit/${id}`, needsState: false };
@@ -259,7 +269,7 @@ export async function resolveGlobalSearchItemLocation(
     ...returnExtras,
   };
 
-  if (module === "job") {
+  if (module === "job" || module === "cha_job") {
     // Pass job payload only — job pages fetch by jobId only when job is absent.
     // Including both caused Inland Import/Export to refetch and remount on open.
     // Closed jobs stay on /edit so Attach Documents can persist.

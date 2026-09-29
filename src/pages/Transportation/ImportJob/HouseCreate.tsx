@@ -3101,6 +3101,9 @@ function HouseCreate() {
         jobId,
         updatedHousingDetails,
         location.state,
+        undefined,
+        undefined,
+        isChaMode ? { isServiceJob: false } : undefined,
       );
       ToastNotification({ type: "success", message });
 

@@ -100,8 +100,9 @@ export function getChaJobPageTitle(
 }
 
 /**
- * Transform a normal (agent) job payload into a service-job payload for CHA jobs.
- * Keeps the normal job UI while submitting `is_service_job` + `service_id`.
+ * Transform a normal (agent) job payload for CHA job pages.
+ * CHA create/edit sends `is_service_job: false` plus `service_id`.
+ * Accounts service-job screens keep their own payload (`is_service_job: true`).
  */
 export function buildChaServiceJobPayload(input: {
   agentPayload: Record<string, unknown>;
@@ -123,7 +124,7 @@ export function buildChaServiceJobPayload(input: {
   const documentIds = agentPayload.document_ids;
 
   return {
-    is_service_job: true,
+    is_service_job: false,
     service_id: serviceId ? Number(serviceId) : null,
     ...pickChaMasterTransportPayload(agentPayload, transportMode),
     pp_cc: agentPayload.pp_cc ?? "Collect",

@@ -2626,6 +2626,7 @@ function AirExportJobCreate() {
         `${URL.base}${URL.jobCreate}`,
         {
           id: jobData.id,
+          ...(isChaMode ? { is_service_job: false } : {}),
           ...(existingBookingIds.length > 0
             ? { booking_ids: existingBookingIds }
             : {}),
@@ -2686,6 +2687,7 @@ function AirExportJobCreate() {
   }, [
     bookingLinkSelectedIds,
     hawbDetails,
+    isChaMode,
     jobData,
     location.state?.returnTo,
     location.state?.viewMode,

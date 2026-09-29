@@ -448,6 +448,7 @@ export function buildFullJobUpdatePayloadFromHouseNav(
   updatedHousingDetails: unknown[],
   navState: unknown,
   chargeKeyOverride?: HouseChargePayloadKey,
+  options?: { isServiceJob?: boolean },
 ): Record<string, unknown> {
   const state = (navState ?? {}) as Record<string, unknown>;
   const job = (state.job ?? {}) as Record<string, unknown>;
@@ -488,8 +489,17 @@ export function buildFullJobUpdatePayloadFromHouseNav(
   const itemNoRaw = firstFilled(mbl.item_no, job.item_no);
   const igmNoRaw = firstFilled(mbl.igm_no, job.igm_no);
 
+  const serviceJobFlag =
+    options?.isServiceJob ??
+    (job.is_service_job === true || state.is_service_job === true
+      ? true
+      : undefined);
+
   const payload: Record<string, unknown> = {
     id: jobId,
+    ...(serviceJobFlag !== undefined
+      ? { is_service_job: serviceJobFlag }
+      : {}),
     service: firstFilled(mbl.service, job.service) ?? job.service,
     ...(firstFilled(mbl.service_id, job.service_id) != null
       ? { service_id: firstFilled(mbl.service_id, job.service_id) }
@@ -742,6 +752,7 @@ export async function persistJobHousingDetails(
   navState?: unknown,
   fallbackMessage = "Job updated successfully",
   chargeKey?: HouseChargePayloadKey,
+  options?: { isServiceJob?: boolean },
 ): Promise<{
   message: string;
   job: Record<string, unknown> | null;
@@ -751,6 +762,7 @@ export async function persistJobHousingDetails(
     housingDetails,
     navState,
     chargeKey,
+    options,
   );
   const response = await putAPICall(URL.jobCreate, payload, API_HEADER);
   const parsed = parseJobSaveResponse(response, fallbackMessage);

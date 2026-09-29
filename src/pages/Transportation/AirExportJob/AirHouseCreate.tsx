@@ -2771,6 +2771,9 @@ function HouseCreate() {
         jobId,
         updatedHousingDetails,
         location.state,
+        undefined,
+        undefined,
+        isChaMode ? { isServiceJob: false } : undefined,
       );
       ToastNotification({ type: "success", message });
       const houses = Array.isArray(savedJob?.housing_details)
@@ -3501,9 +3504,9 @@ function HouseCreate() {
                   format="capital"
                   label="HAWB Number"
                   required
-                  readOnly
                   placeholder="Enter HAWB Number"
                   {...form.getInputProps("hawb_no")}
+                  readOnly={!isChaMode || isViewOnly}
                   error={form.errors.hawb_no}
                 />
               </Grid.Col>

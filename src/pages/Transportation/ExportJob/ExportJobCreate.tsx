@@ -3288,6 +3288,7 @@ function ExportJobCreate() {
         URL.importJob,
         {
           id: jobData.id,
+          ...(isChaMode ? { is_service_job: false } : {}),
           ...(existingBookingIds.length > 0
             ? { booking_ids: existingBookingIds }
             : {}),
@@ -3347,6 +3348,7 @@ function ExportJobCreate() {
     bookingLinkSelectedIds,
     containerDetailsForm.values.containers,
     housingDetails,
+    isChaMode,
     jobData,
     location.state?.returnTo,
     location.state?.viewMode,

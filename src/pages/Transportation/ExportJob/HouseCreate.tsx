@@ -2897,6 +2897,9 @@ function HouseCreate() {
         jobId,
         updatedHousingDetails,
         location.state,
+        undefined,
+        undefined,
+        isChaMode ? { isServiceJob: false } : undefined,
       );
       ToastNotification({ type: "success", message });
 
@@ -3885,9 +3888,9 @@ function HouseCreate() {
                   format="capital"
                   label="HBL Number"
                   required
-                  readOnly
                   placeholder="Enter HBL Number"
                   {...form.getInputProps("hbl_number")}
+                  readOnly={!isChaMode || isViewOnly}
                   error={form.errors.hbl_number}
                 />
               </Grid.Col>

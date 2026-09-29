@@ -77,7 +77,7 @@ export function buildChaListFilters(config: {
   serviceType: "Import" | "Export";
 }): Record<string, string | string[] | boolean> {
   return {
-    is_service_job: true,
+    is_service_job: false,
     service_code: config.serviceCodes,
     service_type: config.serviceType,
   };
