@@ -11,7 +11,7 @@ export const msalConfig = {
   auth: {
     clientId: import.meta.env.VITE_AZURE_CLIENT_ID as string,
     authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID}`,
-    redirectUri: import.meta.env.VITE_API_BASE_URL as string,
+    redirectUri: import.meta.env.VITE_BASE_URL as string,
   },
   cache: {
     cacheLocation: "sessionStorage" as const,
