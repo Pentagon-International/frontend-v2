@@ -36,7 +36,7 @@ export const serviceFormSchema = yup.object({
         service: yup
           .string()
           .required("Service is required")
-          .oneOf(["AIR", "FCL", "LCL", "OTHERS"], "Select service"),
+          .oneOf(["AIR", "FCL", "LCL", "INLAND", "OTHERS"], "Select service"),
         trade: yup.string().when("service", {
           is: (service: string) => service !== "OTHERS",
           then: (schema) => schema.required("Trade is required"),

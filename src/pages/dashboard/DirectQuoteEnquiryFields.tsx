@@ -686,7 +686,7 @@ export default function DirectQuoteEnquiryFields({
                         withAsterisk
                         placeholder="Select Service"
                         searchable
-                        data={["AIR", "FCL", "LCL", "OTHERS"]}
+                        data={["AIR", "FCL", "LCL", "INLAND", "OTHERS"]}
                         styles={FIELD_STYLES}
                         value={serviceType}
                         onChange={(value) => {

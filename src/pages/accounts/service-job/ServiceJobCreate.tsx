@@ -1408,6 +1408,7 @@ export default function ServiceJobCreate() {
   const [costSheetLoading, setCostSheetLoading] = useState(false);
   const [costSheetPdfUrl, setCostSheetPdfUrl] = useState<string | null>(null);
   const lastHydrationKeyRef = useRef<string | null>(null);
+  const lastQuotationPrefillKeyRef = useRef<string | null>(null);
   const forceApiFetchRef = useRef(false);
 
   useEffect(() => {
@@ -1415,6 +1416,7 @@ export default function ServiceJobCreate() {
       forceApiFetchRef.current = true;
     }
     lastHydrationKeyRef.current = null;
+    lastQuotationPrefillKeyRef.current = null;
     setResolvedJob(null);
   }, [routeId, location.key]);
   const [houseMeta, setHouseMeta] = useState<{
@@ -1921,6 +1923,51 @@ export default function ServiceJobCreate() {
     stateJobFromNav?.id,
     populateFromJob,
     serviceMasterList.length,
+  ]);
+
+  // Prefill create form from gained quotation (OTHERS non-CHA services).
+  useEffect(() => {
+    if (isEditMode || mode !== "create" || serviceMasterList.length === 0) {
+      return;
+    }
+
+    const prefill = (
+      location.state as { quotationPrefill?: Record<string, unknown> } | null
+    )?.quotationPrefill;
+    if (!prefill || typeof prefill !== "object") return;
+
+    const prefillKey = `quotation:${location.key}`;
+    if (lastQuotationPrefillKeyRef.current === prefillKey) return;
+    lastQuotationPrefillKeyRef.current = prefillKey;
+
+    const serviceCode = String(prefill.service_code ?? "").trim();
+    const resolvedService =
+      (serviceCode
+        ? serviceMasterList.find(
+            (s) => String(s.service_code ?? "").trim() === serviceCode,
+          )
+        : null) ??
+      (prefill.service_id
+        ? serviceMasterList.find(
+            (s) => String(s.id) === String(prefill.service_id),
+          )
+        : null);
+
+    populateFromJob({
+      ...prefill,
+      service_id:
+        resolvedService?.id != null
+          ? String(resolvedService.id)
+          : String(prefill.service_id ?? ""),
+      service_code: serviceCode || String(resolvedService?.service_code ?? ""),
+    });
+  }, [
+    isEditMode,
+    mode,
+    location.key,
+    location.state,
+    populateFromJob,
+    serviceMasterList,
   ]);
 
   const serviceJobAuditSource = useMemo(

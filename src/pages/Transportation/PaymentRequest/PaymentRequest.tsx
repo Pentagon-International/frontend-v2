@@ -55,6 +55,7 @@ import {
   jobCreateDropdownDisplayFormat,
   mapJobCreateDropdownOptions,
 } from "../../../utils/jobCreateDropdown";
+import { CCT_PULSE_ID } from "../../../utils/pdfCompanyBranding";
 import useAuthStore from "../../../store/authStore";
 import {
   getBranchGstNo,
@@ -707,11 +708,18 @@ const CN_R_OPTIONS = [
   { value: "R", label: "R" },
 ];
 
-function resolveAccountNameEndpointByPaidToType(paidToType: string): string {
+function resolveAccountNameEndpointByPaidToType(
+  paidToType: string,
+  pulseId?: string | null,
+): string {
   const type = (paidToType ?? "").trim().toLowerCase();
-  // Supplier account-name search uses the customer-master filter, not the
-  // by-type supplier endpoint.
-  if (type === "supplier") return URL.customerFilter;
+  if (type === "supplier") {
+    // P2CCT: full supplier list via by-type endpoint.
+    // Other pulse IDs: cash vendors only via customer-master filter.
+    const isCct =
+      String(pulseId ?? "").trim().toUpperCase() === CCT_PULSE_ID;
+    return isCct ? URL.supplierByType : URL.customerFilter;
+  }
   if (type === "agent") return URL.agent;
   return "";
 }
@@ -3346,10 +3354,14 @@ function PaymentRequest() {
                 apiEndpoint={
                   resolveAccountNameEndpointByPaidToType(
                     form.values.paid_to_type,
+                    user?.pulse_id,
                   ) || undefined
                 }
                 postBody={
-                  form.values.paid_to_type?.trim().toLowerCase() === "supplier"
+                  form.values.paid_to_type?.trim().toLowerCase() ===
+                    "supplier" &&
+                  String(user?.pulse_id ?? "").trim().toUpperCase() !==
+                    CCT_PULSE_ID
                     ? supplierAccountNameSearchBody
                     : undefined
                 }

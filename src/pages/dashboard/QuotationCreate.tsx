@@ -110,10 +110,8 @@ import {
 import DirectQuoteEnquiryFields from "./DirectQuoteEnquiryFields";
 import { buildEnquiryServicePayload } from "../../utils/buildEnquiryServicePayload";
 import { buildCustomerCreatePayloadFields } from "../../utils/customerSelection";
-import {
-  getBookingCreatePath,
-  type OtherServiceOption,
-} from "../../utils/otherServiceType";
+import { type OtherServiceOption } from "../../utils/otherServiceType";
+import { resolveQuotationCreateNavigation } from "../../utils/quotationCreateJobNav";
 
 /** Currency / per-unit amounts: always 2 decimal places. */
 function clampCurrencyAmount(value: number | null | undefined): number | null {
@@ -424,8 +422,8 @@ type CarrierItem = {
 
 type ServiceDetail = {
   id: number;
-  service: "AIR" | "FCL" | "LCL";
-  trade: "Export" | "Import";
+  service: "AIR" | "FCL" | "LCL" | "INLAND" | "OTHERS";
+  trade: "Export" | "Import" | null;
   origin_code_read: string;
   origin_name: string;
   destination_code_read: string;
@@ -466,7 +464,7 @@ type QuotationCreateProps = {
     customer_services: string;
     services?: ServiceDetail[];
     // Legacy single service support
-    service?: "AIR" | "FCL" | "LCL";
+    service?: "AIR" | "FCL" | "LCL" | "INLAND" | "OTHERS";
     trade?: "Export" | "Import";
     origin_name?: string;
     destination_name?: string;
@@ -808,7 +806,12 @@ function QuotationCreate({
     ) {
       return quotationDataToUse.map((quotation: any) => ({
         id: quotation.service_id,
-        service: quotation.service_type as "AIR" | "FCL" | "LCL" | "OTHERS",
+        service: quotation.service_type as
+          | "AIR"
+          | "FCL"
+          | "LCL"
+          | "INLAND"
+          | "OTHERS",
         service_type: quotation.service_type, // Include service_type for OTHERS detection
         trade: quotation.trade as "Export" | "Import" | null,
         service_code: quotation.service_code || "", // Include service_code for OTHERS
@@ -2776,7 +2779,11 @@ function QuotationCreate({
         selectedService.shipment_terms_name,
     };
 
-    const bookingData = {
+    const trade = quotationForService.trade || selectedService.trade;
+    const serviceType =
+      quotationForService.service_type || selectedService.service;
+
+    const navResult = resolveQuotationCreateNavigation(serviceType, trade, {
       enquiryData: {
         enquiry_id: actualEnquiryData.enquiry_id,
         customer_name: actualEnquiryData.customer_name,
@@ -2788,47 +2795,21 @@ function QuotationCreate({
         sales_person: actualEnquiryData.sales_person,
         enquiry_received_date: actualEnquiryData.enquiry_received_date,
         customer_code: actualEnquiryData.customer_code || "",
+        customer_email: actualEnquiryData.customer_email,
       },
       quotationData: quotationForService,
       serviceDetails,
       // Quotation primary key (id) for filter-gained API - row id from filter_quotations list (e.g. 163), NOT quotation_service_id (197)
       quotation_primary_id: actualEnquiryData?.id,
-    };
-    console.log("bookingData---", bookingData);
-
-    const trade = quotationForService.trade || selectedService.trade;
-    const serviceType =
-      quotationForService.service_type || selectedService.service;
-    const serviceCode =
-      quotationForService.service_code ||
-      selectedService.service_code ||
-      "";
-
-    const bookingPath = getBookingCreatePath(serviceType, trade, {
-      serviceCode,
       otherServicesData,
     });
 
-    if (bookingPath) {
-      navigate(bookingPath, { state: { bookingData } });
+    if ("error" in navResult) {
+      ToastNotification({ type: "error", message: navResult.error });
       return;
     }
 
-    if (
-      serviceType === "OTHERS" &&
-      serviceCode &&
-      trade !== "Export" &&
-      trade !== "Import"
-    ) {
-      ToastNotification({ type: "error", message: "Invalid trade type" });
-      return;
-    }
-
-    ToastNotification({
-      type: "error",
-      message:
-        "Create booking is only supported for AIR, FCL, LCL and inland OTHERS services",
-    });
+    navigate(navResult.path, { state: navResult.state });
   };
 
   const submitQuotation = async () => {

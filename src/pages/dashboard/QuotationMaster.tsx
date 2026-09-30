@@ -109,10 +109,8 @@ import {
   type QuotationVisibleColumns,
 } from "./QuotationListNativeTable";
 import { useDebouncedValue } from "@mantine/hooks";
-import {
-  getBookingCreatePath,
-  type OtherServiceOption,
-} from "../../utils/otherServiceType";
+import { type OtherServiceOption } from "../../utils/otherServiceType";
+import { resolveQuotationCreateNavigation } from "../../utils/quotationCreateJobNav";
 
 const fetchOtherServices = async () => {
   const response = await getAPICall(
@@ -150,6 +148,7 @@ type QuotationData = {
   enquiry_received_date: string;
   customer_code: string;
   customer_address: string;
+  customer_email?: string | null;
   /** From filter quotation response; used when creating booking (shipper/consignee) */
   customer_address_id?: number;
   /** When true, enquiry uses a temporary customer — booking must be blocked until customer is in master */
@@ -2246,7 +2245,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       no_of_containers: firstCargo?.no_of_containers,
     };
 
-    const bookingData = {
+    const trade = service.trade;
+    const serviceType = service.service_type;
+
+    const navResult = resolveQuotationCreateNavigation(serviceType, trade, {
       enquiryData: {
         enquiry_id: rowData.enquiry_id,
         customer_name: rowData.customer_name,
@@ -2258,41 +2260,20 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         sales_person: rowData.sales_person,
         enquiry_received_date: rowData.enquiry_received_date,
         customer_code: rowData.customer_code || "",
+        customer_email: rowData.customer_email,
       },
       quotationData: service,
       serviceDetails,
       quotation_primary_id: rowData.id,
-    };
-
-    const trade = service.trade;
-    const serviceType = service.service_type;
-    const serviceCode = service.service_code || "";
-
-    const bookingPath = getBookingCreatePath(serviceType, trade, {
-      serviceCode,
       otherServicesData,
     });
 
-    if (bookingPath) {
-      navigate(bookingPath, { state: { bookingData } });
+    if ("error" in navResult) {
+      ToastNotification({ type: "error", message: navResult.error });
       return;
     }
 
-    if (
-      serviceType === "OTHERS" &&
-      serviceCode &&
-      trade !== "Export" &&
-      trade !== "Import"
-    ) {
-      ToastNotification({ type: "error", message: "Invalid trade type" });
-      return;
-    }
-
-    ToastNotification({
-      type: "error",
-      message:
-        "Create booking is only supported for AIR, FCL, LCL and inland OTHERS services",
-    });
+    navigate(navResult.path, { state: navResult.state });
   };
 
   const handleSendEmail = async () => {

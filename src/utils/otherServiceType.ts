@@ -7,6 +7,18 @@ export type OtherServiceOption = {
   full_groupage?: string;
 };
 
+/** CHA service master codes (aligned with chaJobConfig). */
+export const CHA_SERVICE_CODES = ["81", "82", "83", "84", "85", "86"] as const;
+
+export function isChaServiceCode(
+  serviceCode: string | undefined | null,
+): boolean {
+  if (!serviceCode) return false;
+  return (CHA_SERVICE_CODES as readonly string[]).includes(
+    String(serviceCode).trim(),
+  );
+}
+
 export function resolveEffectiveServiceFromTransport(
   transportMode: string,
   fullGroupage: string,
@@ -63,6 +75,12 @@ export function getBookingCreatePath(
   },
 ): string | null {
   const { serviceCode, otherServicesData = [] } = options || {};
+
+  if (serviceType === "INLAND") {
+    if (trade === "Export") return "/inland/export-booking/create";
+    if (trade === "Import") return "/inland/import-booking/create";
+    return null;
+  }
 
   if (
     serviceType === "OTHERS" &&

@@ -2346,7 +2346,12 @@ function EnquiryCreate() {
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
-              } else if (serviceValue === "AIR" || isOthersWithAIR || isOthersWithInland) {
+              } else if (
+                serviceValue === "AIR" ||
+                serviceValue === "INLAND" ||
+                isOthersWithAIR ||
+                isOthersWithInland
+              ) {
                 // AIR service with direct cargo fields (or OTHERS with AIR structure)
                 serviceDetail.cargo_details = [
                   {
@@ -2576,7 +2581,12 @@ function EnquiryCreate() {
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
-              } else if (service.service === "AIR" || isOthersWithAIR || isOthersWithInland) {
+              } else if (
+                service.service === "AIR" ||
+                service.service === "INLAND" ||
+                isOthersWithAIR ||
+                isOthersWithInland
+              ) {
                 // AIR service with direct cargo fields (or OTHERS with AIR structure)
                 serviceDetail.cargo_details = [
                   {
@@ -2796,7 +2806,12 @@ function EnquiryCreate() {
               pkg_group: enq.pkg_group || fcl.pkg_group || null,
               stackable: enq.stackable ? "Yes" : "No",
             }));
-          } else if (enq?.service === "AIR" || isOthersWithAIR || isOthersWithInland) {
+          } else if (
+            enq?.service === "AIR" ||
+            enq?.service === "INLAND" ||
+            isOthersWithAIR ||
+            isOthersWithInland
+          ) {
             // AIR service with direct cargo fields (or OTHERS with AIR structure)
             serviceDetail.cargo_details = [
               {
@@ -4485,7 +4500,7 @@ function EnquiryCreate() {
                                   key={serviceForm.key(
                                     `service_details.${serviceIndex}.service`
                                   )}
-                                  data={["AIR", "FCL", "LCL", "OTHERS"]}
+                                  data={["AIR", "FCL", "LCL", "INLAND", "OTHERS"]}
                                   value={
                                     serviceForm.values.service_details[
                                       serviceIndex
@@ -5754,6 +5769,48 @@ function EnquiryCreate() {
                                       }
                                       return effectiveServiceType;
                                     })() === "AIR" ||
+                                    (() => {
+                                      // Determine effective service type for rendering
+                                      let effectiveServiceType =
+                                        serviceDetail.service;
+                                      if (
+                                        serviceDetail.service === "OTHERS" &&
+                                        serviceDetail.service_code
+                                      ) {
+                                        const selectedOtherService =
+                                          otherServicesData.find(
+                                            (item) =>
+                                              item.value ===
+                                              serviceDetail.service_code
+                                          );
+                                        if (selectedOtherService) {
+                                          const transportMode =
+                                            selectedOtherService.transport_mode ||
+                                            "";
+                                          const fullGroupage =
+                                            selectedOtherService.full_groupage ||
+                                            "";
+                                          if (
+                                            transportMode === "SEA" &&
+                                            fullGroupage === "FULL"
+                                          ) {
+                                            effectiveServiceType = "FCL";
+                                          } else if (
+                                            transportMode === "SEA" &&
+                                            fullGroupage === "GROUPAGE"
+                                          ) {
+                                            effectiveServiceType = "LCL";
+                                          } else {
+                                            effectiveServiceType =
+                                              resolveEffectiveServiceFromTransport(
+                                                transportMode,
+                                                fullGroupage,
+                                              );
+                                          }
+                                        }
+                                      }
+                                      return effectiveServiceType;
+                                    })() === "INLAND" ||
                                     (() => {
                                       // Determine effective service type for rendering
                                       let effectiveServiceType =
