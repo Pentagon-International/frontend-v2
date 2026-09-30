@@ -57,14 +57,10 @@ export function pickChaMasterTransportPayload(
   agentPayload: Record<string, unknown>,
   transportMode: "AIR" | "SEA",
 ): Record<string, unknown> {
-  const agent =
-    agentPayload.agent ??
-    agentPayload.origin_agent ??
-    agentPayload.agent_code ??
-    null;
-
+  // CHA jobs do not keep an origin/destination agent. Explicit null clears it on update.
   const base: Record<string, unknown> = {
-    agent,
+    agent: null,
+    agent_name: null,
     carrier_code: agentPayload.carrier_code ?? null,
   };
 
@@ -85,4 +81,18 @@ export function pickChaMasterTransportPayload(
       agentPayload.vessel_name ?? agentPayload.vessel ?? null,
     voyage_number: agentPayload.voyage_number ?? null,
   };
+}
+
+const CHA_HIDDEN_AGENT_KEYS = new Set(["origin_agent", "agent_code"]);
+
+/** True when master validation should block save. CHA ignores the removed agent fields. */
+export function masterFormHasBlockingErrors(
+  isChaMode: boolean,
+  validation: { hasErrors: boolean; errors?: object },
+): boolean {
+  if (!validation.hasErrors) return false;
+  if (!isChaMode) return true;
+  return Object.entries(validation.errors ?? {}).some(
+    ([key, value]) => Boolean(value) && !CHA_HIDDEN_AGENT_KEYS.has(key),
+  );
 }

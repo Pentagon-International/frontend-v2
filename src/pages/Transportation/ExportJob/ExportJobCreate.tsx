@@ -181,10 +181,20 @@ import {
   pickChaServiceFormFields,
   readChaServiceFormFields,
   readChaMasterAgentFields,
+  masterFormHasBlockingErrors,
   type ChaServiceFormFields,
 } from "../chaJob/chaJobMasterSnapshot";
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
+import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import {
+  emptyChaMasterCustoms,
+  formatChaJobDateForPayload,
+  pickChaMasterCustomsPayload,
+  readChaMasterCustoms,
+  resolveChaJobDate,
+  type ChaMasterCustomsFormValues,
+} from "../chaJob/chaJobCustomsFields";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -221,7 +231,7 @@ type MBLDetailsForm = {
   carrier_agent_email: string;
   carrier_agent_address_id: string;
   carrier_agent_address: string;
-};
+} & ChaMasterCustomsFormValues;
 
 type CarrierDetailsForm = {
   schedule_id: string;
@@ -938,7 +948,15 @@ function ExportJobCreate() {
       eta: null,
       atd: null,
       ata: null,
-      job_date: null,
+      job_date: isChaMode
+        ? resolveChaJobDate({
+            mode,
+            storedJobDate:
+              location.state?.mblDetails?.job_date ??
+              (jobData as { job_date?: unknown } | undefined)?.job_date,
+          })
+        : null,
+      ...emptyChaMasterCustoms(),
       shipper_id: "",
       shipper_name: "",
       shipper_email: "",
@@ -955,7 +973,13 @@ function ExportJobCreate() {
       carrier_agent_address_id: "",
       carrier_agent_address: "",
     },
-    validate: yupResolver(mblDetailsSchema),
+    validate: yupResolver(
+      isChaMode
+        ? mblDetailsSchema.shape({
+            origin_agent: yup.string().nullable().optional(),
+          })
+        : mblDetailsSchema,
+    ),
   });
 
   const {
@@ -1118,6 +1142,7 @@ function ExportJobCreate() {
         mblDetailsForm.setValues({
           ...readChaServiceFormFields(mblData as ChaServiceFormFields),
           ...readChaMasterAgentFields(mblData as Record<string, unknown>),
+          ...readChaMasterCustoms(mblData),
           service: mblData.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblData as { pp_cc?: unknown }).pp_cc ??
@@ -1166,8 +1191,12 @@ function ExportJobCreate() {
             mblData.ata && dayjs(mblData.ata).isValid()
               ? dayjs(mblData.ata).toDate()
               : null,
-          job_date:
-            mblData.etd && dayjs(mblData.etd).isValid()
+          job_date: isChaMode
+            ? resolveChaJobDate({
+                mode,
+                storedJobDate: (mblData as { job_date?: unknown }).job_date,
+              })
+            : mblData.etd && dayjs(mblData.etd).isValid()
               ? dayjs(mblData.etd).startOf("day").toDate()
               : null,
           shipper_id: String(
@@ -1900,6 +1929,7 @@ function ExportJobCreate() {
         mblDetailsForm.setValues({
           ...readChaServiceFormFields(mblDetails),
           ...readChaMasterAgentFields(mblDetails as Record<string, unknown>),
+          ...readChaMasterCustoms(mblDetails),
           service: mblDetails.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblDetails as { pp_cc?: unknown })?.pp_cc ??
@@ -1924,8 +1954,12 @@ function ExportJobCreate() {
           eta: mblDetails.eta || null,
           atd: mblDetails.atd || null,
           ata: mblDetails.ata || null,
-          job_date:
-            mblDetails.etd && dayjs(mblDetails.etd).isValid()
+          job_date: isChaMode
+            ? resolveChaJobDate({
+                mode,
+                storedJobDate: (mblDetails as { job_date?: unknown }).job_date,
+              })
+            : mblDetails.etd && dayjs(mblDetails.etd).isValid()
               ? dayjs(mblDetails.etd).startOf("day").toDate()
               : mblDetails.etd || null,
           shipper_id:
@@ -2121,7 +2155,9 @@ function ExportJobCreate() {
 
   // Validate step 1
   const validateStep1 = () => {
-    const mblValid = mblDetailsForm.validate().hasErrors === false;
+    const mblValid =
+      masterFormHasBlockingErrors(isChaMode, mblDetailsForm.validate()) ===
+      false;
     const carrierValid = carrierDetailsForm.validate().hasErrors === false;
     return mblValid && carrierValid;
   };
@@ -2920,6 +2956,7 @@ function ExportJobCreate() {
         missingFields.push("Service");
       }
       if (
+        !isChaMode &&
         !mblDetailsForm.values.is_direct &&
         !mblDetailsForm.values.origin_agent?.trim()
       ) {
@@ -2970,6 +3007,7 @@ function ExportJobCreate() {
           }),
           mblDetails: {
             ...pickChaServiceFormFields(mblDetailsForm.values),
+            ...readChaMasterCustoms(mblDetailsForm.values),
             service: mblDetailsForm.values.service || "",
             pp_cc: mblDetailsForm.values.pp_cc || "Collect",
             note: mblDetailsForm.values.note || "",
@@ -3066,6 +3104,7 @@ function ExportJobCreate() {
     const missingFields: string[] = [];
     if (!mblDetailsForm.values.service?.trim()) missingFields.push("Service");
     if (
+      !isChaMode &&
       !mblDetailsForm.values.is_direct &&
       !mblDetailsForm.values.origin_agent?.trim()
     ) {
@@ -3521,11 +3560,11 @@ function ExportJobCreate() {
     )?.origin_agent;
     const shouldIgnoreOriginAgent =
       mblDetailsForm.values.is_direct === true && !!originAgentError;
+    const mblHasBlockingErrors = isChaMode
+      ? masterFormHasBlockingErrors(true, mblValidation)
+      : mblValidation.hasErrors && !shouldIgnoreOriginAgent;
 
-    if (
-      (mblValidation.hasErrors && !shouldIgnoreOriginAgent) ||
-      carrierValidation.hasErrors
-    ) {
+    if (mblHasBlockingErrors || carrierValidation.hasErrors) {
       ToastNotification({
         type: "error",
         message: "Please fill all required fields in MBL & Carrier Details",
@@ -3598,11 +3637,19 @@ function ExportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
-        job_date: mblDetailsForm.values.etd
-          ? dayjs(mblDetailsForm.values.etd).isValid()
-            ? dayjs(mblDetailsForm.values.etd).format("YYYY-MM-DD")
-            : null
-          : null,
+        job_date: isChaMode
+          ? formatChaJobDateForPayload(mblDetailsForm.values.job_date)
+          : mblDetailsForm.values.etd
+            ? dayjs(mblDetailsForm.values.etd).isValid()
+              ? dayjs(mblDetailsForm.values.etd).format("YYYY-MM-DD")
+              : null
+            : null,
+        ...(isChaMode && chaConfig
+          ? pickChaMasterCustomsPayload(
+              mblDetailsForm.values,
+              chaConfig.serviceType,
+            )
+          : {}),
         is_direct: mblDetailsForm.values.is_direct,
         carrier_code: carrierDetailsForm.values.carrier_code,
         vessel_name: carrierDetailsForm.values.vessel_name || null,
@@ -4471,6 +4518,7 @@ function ExportJobCreate() {
 
               
 
+              {!isChaMode && (
               <Grid.Col span={3}>
                 <SearchableSelect
                   label="Destination Agent"
@@ -4528,6 +4576,7 @@ function ExportJobCreate() {
                   minSearchLength={2}
                 />
               </Grid.Col>
+              )}
 
               <Grid.Col span={3}>
                 <SearchableSelect
@@ -4601,6 +4650,21 @@ function ExportJobCreate() {
                   error={mblDetailsForm.errors.destination_code as string}
                 />
               </Grid.Col>
+              {isChaMode && (
+                <Grid.Col span={3}>
+                  <Dropdown
+                    size="sm"
+                    label="Freight"
+                    placeholder="Select Freight"
+                    searchable
+                    data={[
+                      { value: "Prepaid", label: "Prepaid" },
+                      { value: "Collect", label: "Collect" },
+                    ]}
+                    {...mblDetailsForm.getInputProps("pp_cc")}
+                  />
+                </Grid.Col>
+              )}
             </Grid>
 
             {/* Second row for ETD, ETA, ATD, ATA */}
@@ -4617,7 +4681,9 @@ function ExportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("etd", value);
-                        mblDetailsForm.setFieldValue("job_date", value);
+                        if (!isChaMode) {
+                          mblDetailsForm.setFieldValue("job_date", value);
+                        }
                       },
                     };
                   })()}
@@ -4701,23 +4767,31 @@ function ExportJobCreate() {
                   {...mblDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
+              <ChaMasterCustomsFields
+                isChaMode={isChaMode}
+                serviceType={chaConfig?.serviceType}
+                readOnly={isReadOnly}
+                form={mblDetailsForm}
+              />
             </Grid>
 
             {/* Direct */}
             <Grid mb="sm">
-              <Grid.Col span={3}>
-                <Dropdown
-                  size="sm"
-                  label="Freight"
-                  placeholder="Select Freight"
-                  searchable
-                  data={[
-                    { value: "Prepaid", label: "Prepaid" },
-                    { value: "Collect", label: "Collect" },
-                  ]}
-                  {...mblDetailsForm.getInputProps("pp_cc")}
-                />
-              </Grid.Col>
+              {!isChaMode && (
+                <Grid.Col span={3}>
+                  <Dropdown
+                    size="sm"
+                    label="Freight"
+                    placeholder="Select Freight"
+                    searchable
+                    data={[
+                      { value: "Prepaid", label: "Prepaid" },
+                      { value: "Collect", label: "Collect" },
+                    ]}
+                    {...mblDetailsForm.getInputProps("pp_cc")}
+                  />
+                </Grid.Col>
+              )}
               <Grid.Col span={3}>
                 <Radio.Group
                   label="Direct"

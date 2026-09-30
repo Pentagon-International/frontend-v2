@@ -180,9 +180,19 @@ import {
   pickChaServiceFormFields,
   readChaServiceFormFields,
   readChaMasterAgentFields,
+  masterFormHasBlockingErrors,
 } from "../chaJob/chaJobMasterSnapshot";
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
+import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import {
+  emptyChaMasterCustoms,
+  formatChaJobDateForPayload,
+  pickChaMasterCustomsPayload,
+  readChaMasterCustoms,
+  resolveChaJobDate,
+  type ChaMasterCustomsFormValues,
+} from "../chaJob/chaJobCustomsFields";
 import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
 
 // Type definitions
@@ -221,7 +231,7 @@ type MAWBDetailsForm = {
   carrier_agent_email: string;
   carrier_agent_address_id: string;
   carrier_agent_address: string;
-};
+} & ChaMasterCustomsFormValues;
 
 type CarrierDetailsForm = {
   schedule_id: string;
@@ -774,14 +784,22 @@ function AirImportJobCreate() {
       ata:
         parseLocalDateTime(jobData?.ata) ??
         (location.state?.mawbDetails?.ata || null),
-      job_date: (() => {
-        const etaVal =
-          parseLocalDateTime(jobData?.eta) ??
-          (location.state?.mawbDetails?.eta || null);
-        return etaVal && dayjs(etaVal).isValid()
-          ? dayjs(etaVal).startOf("day").toDate()
-          : null;
-      })(),
+      job_date: isChaMode
+        ? resolveChaJobDate({
+            mode,
+            storedJobDate:
+              location.state?.mawbDetails?.job_date ??
+              (jobData as { job_date?: unknown } | undefined)?.job_date,
+          })
+        : (() => {
+            const etaVal =
+              parseLocalDateTime(jobData?.eta) ??
+              (location.state?.mawbDetails?.eta || null);
+            return etaVal && dayjs(etaVal).isValid()
+              ? dayjs(etaVal).startOf("day").toDate()
+              : null;
+          })(),
+      ...emptyChaMasterCustoms(),
       igm_no:
         (jobData as { igm_no?: string } | undefined)?.igm_no ||
         location.state?.mawbDetails?.igm_no ||
@@ -874,7 +892,13 @@ function AirImportJobCreate() {
         location.state?.mawbDetails?.carrier_agent_address ||
         "",
     },
-    validate: yupResolver(mawbDetailsSchema),
+    validate: yupResolver(
+      isChaMode
+        ? mawbDetailsSchema.shape({
+            origin_agent: yup.string().nullable().optional(),
+          })
+        : mawbDetailsSchema,
+    ),
   });
 
   const {
@@ -886,6 +910,7 @@ function AirImportJobCreate() {
   const getMawbDetailsSnapshot = useCallback(
     () => ({
       ...pickChaServiceFormFields(mawbDetailsForm.values),
+      ...readChaMasterCustoms(mawbDetailsForm.values),
       service: mawbDetailsForm.values.service || "Air",
       pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
       note: mawbDetailsForm.values.note || "",
@@ -1070,6 +1095,7 @@ function AirImportJobCreate() {
         const mawbInitialValues = {
           ...readChaServiceFormFields(jobData as Record<string, unknown>),
           ...readChaMasterAgentFields(jobData as Record<string, unknown>),
+          ...readChaMasterCustoms(jobData),
           service: jobData.service || "AIR",
           pp_cc: resolveJobFreightPpCc(
             jobData.pp_cc,
@@ -1092,12 +1118,17 @@ function AirImportJobCreate() {
           eta: parseLocalDateTime(jobData.eta),
           atd: parseLocalDateTime(jobData.atd),
           ata: parseLocalDateTime(jobData.ata),
-          job_date: (() => {
-            const etaVal = parseLocalDateTime(jobData.eta);
-            return etaVal && dayjs(etaVal).isValid()
-              ? dayjs(etaVal).startOf("day").toDate()
-              : null;
-          })(),
+          job_date: isChaMode
+            ? resolveChaJobDate({
+                mode,
+                storedJobDate: (jobData as { job_date?: unknown }).job_date,
+              })
+            : (() => {
+                const etaVal = parseLocalDateTime(jobData.eta);
+                return etaVal && dayjs(etaVal).isValid()
+                  ? dayjs(etaVal).startOf("day").toDate()
+                  : null;
+              })(),
           igm_no: (jobData as { igm_no?: string } | undefined)?.igm_no || "",
           igm_date:
             (jobData as { igm_date?: string } | undefined)?.igm_date &&
@@ -1929,7 +1960,9 @@ function AirImportJobCreate() {
 
   // Validate step 1
   const validateStep1 = () => {
-    const mawbValid = mawbDetailsForm.validate().hasErrors === false;
+    const mawbValid =
+      masterFormHasBlockingErrors(isChaMode, mawbDetailsForm.validate()) ===
+      false;
     const carrierValid = carrierDetailsForm.validate().hasErrors === false;
     return mawbValid && carrierValid;
   };
@@ -2340,6 +2373,7 @@ function AirImportJobCreate() {
           // Restore MAWB Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             ...readChaServiceFormFields(savedMawbDetails),
+            ...readChaMasterCustoms(savedMawbDetails),
             service: savedMawbDetails.service || "Air",
             pp_cc: resolveJobFreightPpCc(savedMawbDetails.pp_cc),
             note: String((savedMawbDetails as { note?: unknown })?.note ?? ""),
@@ -2353,8 +2387,13 @@ function AirImportJobCreate() {
             eta: savedMawbDetails.eta || null,
             atd: savedMawbDetails.atd || null,
             ata: savedMawbDetails.ata || null,
-            job_date:
-              savedMawbDetails.eta && dayjs(savedMawbDetails.eta).isValid()
+            job_date: isChaMode
+              ? resolveChaJobDate({
+                  mode,
+                  storedJobDate: (savedMawbDetails as { job_date?: unknown })
+                    .job_date,
+                })
+              : savedMawbDetails.eta && dayjs(savedMawbDetails.eta).isValid()
                 ? dayjs(savedMawbDetails.eta).startOf("day").toDate()
                 : savedMawbDetails.eta || null,
             igm_no:
@@ -2564,7 +2603,7 @@ function AirImportJobCreate() {
       if (!mawbDetailsForm.values.service?.trim()) {
         missingFields.push("Service");
       }
-      if (!mawbDetailsForm.values.origin_agent?.trim()) {
+      if (!isChaMode && !mawbDetailsForm.values.origin_agent?.trim()) {
         missingFields.push("Origin Agent");
       }
       if (!mawbDetailsForm.values.origin_code?.trim()) {
@@ -2684,7 +2723,7 @@ function AirImportJobCreate() {
     // Check MAWB mandatory fields
     const mawbFieldsValid =
       mawbDetailsForm.values.service?.trim() &&
-      mawbDetailsForm.values.origin_agent?.trim() &&
+      (isChaMode || mawbDetailsForm.values.origin_agent?.trim()) &&
       mawbDetailsForm.values.origin_code?.trim() &&
       mawbDetailsForm.values.destination_code?.trim() &&
       mawbDetailsForm.values.etd &&
@@ -2696,6 +2735,7 @@ function AirImportJobCreate() {
     return mawbFieldsValid && hasHawbDetails;
   }, [
     mawbDetailsForm.values.service,
+    isChaMode,
     mawbDetailsForm.values.origin_agent,
     mawbDetailsForm.values.origin_code,
     mawbDetailsForm.values.destination_code,
@@ -3472,7 +3512,10 @@ function AirImportJobCreate() {
     const mawbValidation = mawbDetailsForm.validate();
     const carrierValidation = carrierDetailsForm.validate();
 
-    if (mawbValidation.hasErrors || carrierValidation.hasErrors) {
+    if (
+      masterFormHasBlockingErrors(isChaMode, mawbValidation) ||
+      carrierValidation.hasErrors
+    ) {
       ToastNotification({
         type: "error",
         message: "Please fill all required fields in MAWB & Carrier Details",
@@ -3514,11 +3557,19 @@ function AirImportJobCreate() {
         eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
-        job_date: mawbDetailsForm.values.eta
-          ? dayjs(mawbDetailsForm.values.eta).isValid()
-            ? dayjs(mawbDetailsForm.values.eta).format("YYYY-MM-DD")
-            : null
-          : null,
+        job_date: isChaMode
+          ? formatChaJobDateForPayload(mawbDetailsForm.values.job_date)
+          : mawbDetailsForm.values.eta
+            ? dayjs(mawbDetailsForm.values.eta).isValid()
+              ? dayjs(mawbDetailsForm.values.eta).format("YYYY-MM-DD")
+              : null
+            : null,
+        ...(isChaMode && chaConfig
+          ? pickChaMasterCustomsPayload(
+              mawbDetailsForm.values,
+              chaConfig.serviceType,
+            )
+          : {}),
         igm_no: mawbDetailsForm.values.igm_no
           ? mawbDetailsForm.values.igm_no.trim()
           : null,
@@ -4328,6 +4379,7 @@ function AirImportJobCreate() {
                 />
               </Grid.Col>
 
+              {!isChaMode && (
               <Grid.Col span={3}>
                 <SearchableSelect
                   key={`origin-agent-${formInitializedKey}`}
@@ -4373,6 +4425,7 @@ function AirImportJobCreate() {
                   minSearchLength={2}
                 />
               </Grid.Col>
+              )}
 
               <Grid.Col span={3}>
                 <SearchableSelect
@@ -4451,6 +4504,21 @@ function AirImportJobCreate() {
                   error={mawbDetailsForm.errors.destination_code as string}
                 />
               </Grid.Col>
+              {isChaMode && (
+                <Grid.Col span={3}>
+                  <Dropdown
+                    label="Freight"
+                    placeholder="Select Freight"
+                    searchable
+                    disabled={isReadOnly}
+                    data={[
+                      { value: "Prepaid", label: "Prepaid" },
+                      { value: "Collect", label: "Collect" },
+                    ]}
+                    {...mawbDetailsForm.getInputProps("pp_cc")}
+                  />
+                </Grid.Col>
+              )}
             </Grid>
 
             {/* Second row for ETD, ETA, ATD, ATA */}
@@ -4477,12 +4545,14 @@ function AirImportJobCreate() {
                   value={mawbDetailsForm.values.eta}
                   onChange={(value: Date | null) => {
                     mawbDetailsForm.setFieldValue("eta", value);
-                    mawbDetailsForm.setFieldValue(
-                      "job_date",
-                      value && dayjs(value).isValid()
-                        ? dayjs(value).startOf("day").toDate()
-                        : null,
-                    );
+                    if (!isChaMode) {
+                      mawbDetailsForm.setFieldValue(
+                        "job_date",
+                        value && dayjs(value).isValid()
+                          ? dayjs(value).startOf("day").toDate()
+                          : null,
+                      );
+                    }
                   }}
                   error={mawbDetailsForm.errors.eta as string}
                   size="sm"
@@ -4535,23 +4605,31 @@ function AirImportJobCreate() {
                   {...mawbDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
+              <ChaMasterCustomsFields
+                isChaMode={isChaMode}
+                serviceType={chaConfig?.serviceType}
+                readOnly={isReadOnly}
+                form={mawbDetailsForm}
+              />
             </Grid>
 
             {/* IGM details row */}
             <Grid mb="xl">
-              <Grid.Col span={3}>
-                <Dropdown
-                  label="Freight"
-                  placeholder="Select Freight"
-                  searchable
-                  disabled={isReadOnly}
-                  data={[
-                    { value: "Prepaid", label: "Prepaid" },
-                    { value: "Collect", label: "Collect" },
-                  ]}
-                  {...mawbDetailsForm.getInputProps("pp_cc")}
-                />
-              </Grid.Col>
+              {!isChaMode && (
+                <Grid.Col span={3}>
+                  <Dropdown
+                    label="Freight"
+                    placeholder="Select Freight"
+                    searchable
+                    disabled={isReadOnly}
+                    data={[
+                      { value: "Prepaid", label: "Prepaid" },
+                      { value: "Collect", label: "Collect" },
+                    ]}
+                    {...mawbDetailsForm.getInputProps("pp_cc")}
+                  />
+                </Grid.Col>
+              )}
               <Grid.Col span={3}>
                 <FormTextInput
                   format="capital"

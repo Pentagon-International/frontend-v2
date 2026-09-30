@@ -2405,6 +2405,7 @@ function HouseCreate() {
 
   // Auto-update house Agent name/address from MBL origin agent
   useEffect(() => {
+    if (isChaMode) return;
     const mblDetails = location.state?.mblDetails;
     if (!mblDetails) return;
 
@@ -3103,7 +3104,7 @@ function HouseCreate() {
         location.state,
         undefined,
         undefined,
-        isChaMode ? { isServiceJob: false } : undefined,
+        isChaMode ? { clearOriginDestinationAgent: true } : undefined,
       );
       ToastNotification({ type: "success", message });
 

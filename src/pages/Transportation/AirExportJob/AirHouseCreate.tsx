@@ -2166,6 +2166,7 @@ function HouseCreate() {
 
   // Auto-update HAWB origin agent name and address from MAWB origin agent
   useEffect(() => {
+    if (isChaMode) return;
     const mawbDetails =
       location.state?.mawbDetails || location.state?.mawbDetails;
     if (!mawbDetails) return;
@@ -2773,7 +2774,7 @@ function HouseCreate() {
         location.state,
         undefined,
         undefined,
-        isChaMode ? { isServiceJob: false } : undefined,
+        isChaMode ? { clearOriginDestinationAgent: true } : undefined,
       );
       ToastNotification({ type: "success", message });
       const houses = Array.isArray(savedJob?.housing_details)
@@ -4339,6 +4340,8 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
 
+            {!isChaMode && (
+            <>
             {/* Destination Agent Section */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Destination Agent
@@ -4443,6 +4446,8 @@ function HouseCreate() {
                 />
               </Grid.Col>
             </Grid>
+            </>
+            )}
 
             {/* Notify Customer 1 Details */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">

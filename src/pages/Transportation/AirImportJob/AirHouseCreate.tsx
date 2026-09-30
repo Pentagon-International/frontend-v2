@@ -2326,6 +2326,7 @@ function HouseCreate() {
   // Master sends origin_agent = code (for payload); we display and send customer name in house as agent_name, address as agent_address
   // In edit flow we may have origin_agent_address from API (e.g. agent_address) - only overwrite when master has new address data
   useEffect(() => {
+    if (isChaMode) return;
     const mawbDetails =
       location.state?.mawbDetails || location.state?.mawbDetails;
     if (!mawbDetails) return;
@@ -2913,7 +2914,7 @@ function HouseCreate() {
         location.state,
         undefined,
         undefined,
-        isChaMode ? { isServiceJob: false } : undefined,
+        isChaMode ? { clearOriginDestinationAgent: true } : undefined,
       );
       ToastNotification({ type: "success", message });
 

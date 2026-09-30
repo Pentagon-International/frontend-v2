@@ -80,6 +80,7 @@ import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActi
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { buildChaListFilters } from "../chaJob/chaJobService";
+import { firstChaHouseConsigneeName } from "../chaJob/chaJobCustomsFields";
 
 const LIST_KEY = "AIR_IMPORT_JOB_MASTER";
 
@@ -590,17 +591,19 @@ function AirImportJobMaster() {
 
   const columnToggleItems = useMemo(
     () =>
-      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[]).map((key) => ({
-        id: String(key),
-        label: AIR_IMPORT_JOB_COLUMN_LABELS[key],
-        checked: visibleColumns[key],
-        onToggle: () =>
-          setVisibleColumns((prev) => ({
-            ...prev,
-            [key]: !prev[key],
-          })),
-      })),
-    [visibleColumns],
+      (Object.keys(visibleColumns) as (keyof VisibleColumnsState)[])
+        .filter((key) => !(isChaMode && key === "agent"))
+        .map((key) => ({
+          id: String(key),
+          label: AIR_IMPORT_JOB_COLUMN_LABELS[key],
+          checked: visibleColumns[key],
+          onToggle: () =>
+            setVisibleColumns((prev) => ({
+              ...prev,
+              [key]: !prev[key],
+            })),
+        })),
+    [visibleColumns, isChaMode],
   );
 
   return (
@@ -781,6 +784,7 @@ function AirImportJobMaster() {
                     />
                   </Box>
                 </Grid.Col>
+                {!isChaMode && (
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
@@ -814,6 +818,7 @@ function AirImportJobMaster() {
                     />
                   </Box>
                 </Grid.Col>
+                )}
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SearchableSelect
@@ -1042,7 +1047,10 @@ function AirImportJobMaster() {
                           />
                         </th>
                       )}
-                      {visibleColumns.agent && (
+                      {isChaMode && (
+                        <th style={mergeTh(240)}>Consignee</th>
+                      )}
+                      {visibleColumns.agent && !isChaMode && (
                         <th style={mergeTh(240)}>
                           <ERPListColumnHeaderFilter
                             label="Origin Agent"
@@ -1426,7 +1434,14 @@ function AirImportJobMaster() {
                                 )}
                               </td>
                             )}
-                            {visibleColumns.agent && (
+                            {isChaMode && (
+                              <td style={{ ...tdPad, maxWidth: 200 }}>
+                                <Text size="sm" c={fg} lineClamp={1}>
+                                  {firstChaHouseConsigneeName(row)}
+                                </Text>
+                              </td>
+                            )}
+                            {visibleColumns.agent && !isChaMode && (
                               <td style={{ ...tdPad, maxWidth: 200 }}>
                                 <Tooltip
                                   label={row.agent_name ?? ""}

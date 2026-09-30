@@ -448,7 +448,7 @@ export function buildFullJobUpdatePayloadFromHouseNav(
   updatedHousingDetails: unknown[],
   navState: unknown,
   chargeKeyOverride?: HouseChargePayloadKey,
-  options?: { isServiceJob?: boolean },
+  options?: { isServiceJob?: boolean; clearOriginDestinationAgent?: boolean },
 ): Record<string, unknown> {
   const state = (navState ?? {}) as Record<string, unknown>;
   const job = (state.job ?? {}) as Record<string, unknown>;
@@ -610,6 +610,46 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     payload.document_ids = job.document_ids;
   }
 
+  if (options?.clearOriginDestinationAgent) {
+    payload.agent = null;
+    // CHA master customs live on the consol. Forward them when present in
+    // nav/job state so house saves do not drop a just-entered BOE/SB.
+    if ("boe_no" in mbl || "boe_no" in job) {
+      const boeNo = firstFilled(mbl.boe_no, job.boe_no);
+      payload.boe_no =
+        boeNo != null && String(boeNo).trim() !== ""
+          ? String(boeNo).trim()
+          : null;
+    }
+    if ("boe_date" in mbl || "boe_date" in job) {
+      payload.boe_date = formatDateYmd(firstFilled(mbl.boe_date, job.boe_date));
+    }
+    if ("sb_no" in mbl || "sb_no" in job) {
+      const sbNo = firstFilled(mbl.sb_no, job.sb_no);
+      payload.sb_no =
+        sbNo != null && String(sbNo).trim() !== ""
+          ? String(sbNo).trim()
+          : null;
+    }
+    if ("sb_date" in mbl || "sb_date" in job) {
+      payload.sb_date = formatDateYmd(firstFilled(mbl.sb_date, job.sb_date));
+    }
+    if (Array.isArray(payload.housing_details)) {
+      payload.housing_details = payload.housing_details.map((house) => {
+        if (!house || typeof house !== "object" || Array.isArray(house)) {
+          return house;
+        }
+        return {
+          ...(house as Record<string, unknown>),
+          agent: null,
+          agent_name: null,
+          agent_address: null,
+          agent_email: null,
+        };
+      });
+    }
+  }
+
   return payload;
 }
 
@@ -668,6 +708,15 @@ export function mergeMasterNavStateFromSavedJob(
     igm_no: firstFilled(savedJob.igm_no, existingMaster.igm_no),
     igm_date: firstFilled(savedJob.igm_date, existingMaster.igm_date),
     item_no: firstFilled(savedJob.item_no, existingMaster.item_no),
+    boe_no: firstFilled(savedJob.boe_no, existingMaster.boe_no),
+    boe_date: firstFilled(savedJob.boe_date, existingMaster.boe_date),
+    sb_no: firstFilled(savedJob.sb_no, existingMaster.sb_no),
+    sb_date: firstFilled(savedJob.sb_date, existingMaster.sb_date),
+    service_id: firstFilled(savedJob.service_id, existingMaster.service_id),
+    service_code: firstFilled(
+      savedJob.service_code,
+      existingMaster.service_code,
+    ),
     shipper_name: firstFilled(savedJob.shipper_name, existingMaster.shipper_name),
     shipper_email: firstFilled(
       savedJob.shipper_email,
@@ -752,7 +801,7 @@ export async function persistJobHousingDetails(
   navState?: unknown,
   fallbackMessage = "Job updated successfully",
   chargeKey?: HouseChargePayloadKey,
-  options?: { isServiceJob?: boolean },
+  options?: { isServiceJob?: boolean; clearOriginDestinationAgent?: boolean },
 ): Promise<{
   message: string;
   job: Record<string, unknown> | null;

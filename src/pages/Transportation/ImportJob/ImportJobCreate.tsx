@@ -196,10 +196,20 @@ import {
   pickChaServiceFormFields,
   readChaServiceFormFields,
   readChaMasterAgentFields,
+  masterFormHasBlockingErrors,
   type ChaServiceFormFields,
 } from "../chaJob/chaJobMasterSnapshot";
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
+import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import {
+  emptyChaMasterCustoms,
+  formatChaJobDateForPayload,
+  pickChaMasterCustomsPayload,
+  readChaMasterCustoms,
+  resolveChaJobDate,
+  type ChaMasterCustomsFormValues,
+} from "../chaJob/chaJobCustomsFields";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -238,7 +248,7 @@ type MBLDetailsForm = {
   carrier_agent_email: string;
   carrier_agent_address_id: string;
   carrier_agent_address: string;
-};
+} & ChaMasterCustomsFormValues;
 
 type CarrierDetailsForm = {
   schedule_id: string;
@@ -944,7 +954,15 @@ function ImportJobCreate() {
       eta: null,
       atd: null,
       ata: null,
-      job_date: null,
+      job_date: isChaMode
+        ? resolveChaJobDate({
+            mode,
+            storedJobDate:
+              location.state?.mblDetails?.job_date ??
+              (jobData as { job_date?: unknown } | undefined)?.job_date,
+          })
+        : null,
+      ...emptyChaMasterCustoms(),
       igm_no: "",
       igm_date: null,
       item_no: "",
@@ -1004,7 +1022,13 @@ function ImportJobCreate() {
       carrier_agent_address_id: "",
       carrier_agent_address: "",
     },
-    validate: yupResolver(mblDetailsSchema),
+    validate: yupResolver(
+      isChaMode
+        ? mblDetailsSchema.shape({
+            origin_agent: yup.string().nullable().optional(),
+          })
+        : mblDetailsSchema,
+    ),
   });
 
   const {
@@ -1203,6 +1227,7 @@ function ImportJobCreate() {
         mblDetailsForm.setValues({
           ...readChaServiceFormFields(mblData as ChaServiceFormFields),
           ...readChaMasterAgentFields(mblData as Record<string, unknown>),
+          ...readChaMasterCustoms(mblData),
           service: mblData.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblData as { pp_cc?: unknown }).pp_cc ??
@@ -1250,8 +1275,12 @@ function ImportJobCreate() {
             mblData.ata && dayjs(mblData.ata).isValid()
               ? dayjs(mblData.ata).toDate()
               : null,
-          job_date:
-            mblData.eta && dayjs(mblData.eta).isValid()
+          job_date: isChaMode
+            ? resolveChaJobDate({
+                mode,
+                storedJobDate: (mblData as { job_date?: unknown }).job_date,
+              })
+            : mblData.eta && dayjs(mblData.eta).isValid()
               ? dayjs(mblData.eta).startOf("day").toDate()
               : null,
           igm_no:
@@ -2269,6 +2298,7 @@ function ImportJobCreate() {
         mblDetailsForm.setValues({
           ...readChaServiceFormFields(mblDetails),
           ...readChaMasterAgentFields(mblDetails as Record<string, unknown>),
+          ...readChaMasterCustoms(mblDetails),
           service: mblDetails.service || "",
           pp_cc: normalizeFreightPpCc(
             (mblDetails as { pp_cc?: unknown })?.pp_cc ??
@@ -2290,8 +2320,12 @@ function ImportJobCreate() {
           eta: toFormDate(mblDetails.eta),
           atd: toFormDate(mblDetails.atd),
           ata: toFormDate(mblDetails.ata),
-          job_date:
-            toFormDate(mblDetails.eta)
+          job_date: isChaMode
+            ? resolveChaJobDate({
+                mode,
+                storedJobDate: (mblDetails as { job_date?: unknown }).job_date,
+              })
+            : toFormDate(mblDetails.eta)
               ? dayjs(mblDetails.eta).startOf("day").toDate()
               : toFormDate(mblDetails.job_date),
           igm_no:
@@ -2507,7 +2541,9 @@ function ImportJobCreate() {
 
   // Validate step 1
   const validateStep1 = () => {
-    const mblValid = mblDetailsForm.validate().hasErrors === false;
+    const mblValid =
+      masterFormHasBlockingErrors(isChaMode, mblDetailsForm.validate()) ===
+      false;
     const carrierValid = carrierDetailsForm.validate().hasErrors === false;
     return mblValid && carrierValid;
   };
@@ -2864,7 +2900,7 @@ function ImportJobCreate() {
       if (!mblDetailsForm.values.service?.trim()) {
         missingFields.push("Service");
       }
-      if (!mblDetailsForm.values.origin_agent?.trim()) {
+      if (!isChaMode && !mblDetailsForm.values.origin_agent?.trim()) {
         missingFields.push("Origin Agent");
       }
       if (!mblDetailsForm.values.origin_code?.trim()) {
@@ -2907,6 +2943,7 @@ function ImportJobCreate() {
           }),
           mblDetails: {
             ...pickChaServiceFormFields(mblDetailsForm.values),
+            ...readChaMasterCustoms(mblDetailsForm.values),
             service: mblDetailsForm.values.service || "",
             pp_cc: mblDetailsForm.values.pp_cc || "Collect",
             note: mblDetailsForm.values.note || "",
@@ -2990,7 +3027,7 @@ function ImportJobCreate() {
     // Check MBL mandatory fields
     const mblFieldsValid =
       mblDetailsForm.values.service?.trim() &&
-      mblDetailsForm.values.origin_agent?.trim() &&
+      (isChaMode || mblDetailsForm.values.origin_agent?.trim()) &&
       mblDetailsForm.values.origin_code?.trim() &&
       mblDetailsForm.values.destination_code?.trim() &&
       mblDetailsForm.values.etd &&
@@ -3009,6 +3046,7 @@ function ImportJobCreate() {
     return mblFieldsValid && hasValidContainers && hasHousingDetails;
   }, [
     mblDetailsForm.values.service,
+    isChaMode,
     mblDetailsForm.values.origin_agent,
     mblDetailsForm.values.origin_code,
     mblDetailsForm.values.destination_code,
@@ -3855,7 +3893,10 @@ function ImportJobCreate() {
     const mblValidation = mblDetailsForm.validate();
     const carrierValidation = carrierDetailsForm.validate();
 
-    if (mblValidation.hasErrors || carrierValidation.hasErrors) {
+    if (
+      masterFormHasBlockingErrors(isChaMode, mblValidation) ||
+      carrierValidation.hasErrors
+    ) {
       ToastNotification({
         type: "error",
         message: "Please fill all required fields in MBL & Carrier Details",
@@ -3918,11 +3959,19 @@ function ImportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
-        job_date: mblDetailsForm.values.eta
-          ? dayjs(mblDetailsForm.values.eta).isValid()
-            ? dayjs(mblDetailsForm.values.eta).format("YYYY-MM-DD")
-            : null
-          : null,
+        job_date: isChaMode
+          ? formatChaJobDateForPayload(mblDetailsForm.values.job_date)
+          : mblDetailsForm.values.eta
+            ? dayjs(mblDetailsForm.values.eta).isValid()
+              ? dayjs(mblDetailsForm.values.eta).format("YYYY-MM-DD")
+              : null
+            : null,
+        ...(isChaMode && chaConfig
+          ? pickChaMasterCustomsPayload(
+              mblDetailsForm.values,
+              chaConfig.serviceType,
+            )
+          : {}),
         igm_no: mblDetailsForm.values.igm_no
           ? mblDetailsForm.values.igm_no.trim()
           : null,
@@ -4827,6 +4876,7 @@ function ImportJobCreate() {
                 />
               </Grid.Col>
 
+              {!isChaMode && (
               <Grid.Col span={3}>
                 <SearchableSelect
                   size="sm"
@@ -4887,6 +4937,7 @@ function ImportJobCreate() {
                   minSearchLength={2}
                 />
               </Grid.Col>
+              )}
 
               <Grid.Col span={3}>
                 <SearchableSelect
@@ -4964,6 +5015,21 @@ function ImportJobCreate() {
                   error={mblDetailsForm.errors.destination_code as string}
                 />
               </Grid.Col>
+              {isChaMode && (
+                <Grid.Col span={3}>
+                  <Dropdown
+                    size="sm"
+                    label="Freight"
+                    placeholder="Select Freight"
+                    searchable
+                    data={[
+                      { value: "Prepaid", label: "Prepaid" },
+                      { value: "Collect", label: "Collect" },
+                    ]}
+                    {...mblDetailsForm.getInputProps("pp_cc")}
+                  />
+                </Grid.Col>
+              )}
             </Grid>
 
             {/* Second row for ETD, ETA, ATD, ATA */}
@@ -4999,7 +5065,9 @@ function ImportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("eta", value);
-                        mblDetailsForm.setFieldValue("job_date", value);
+                        if (!isChaMode) {
+                          mblDetailsForm.setFieldValue("job_date", value);
+                        }
                       },
                     };
                   })()}
@@ -5063,23 +5131,31 @@ function ImportJobCreate() {
                   {...mblDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
+              <ChaMasterCustomsFields
+                isChaMode={isChaMode}
+                serviceType={chaConfig?.serviceType}
+                readOnly={isReadOnly}
+                form={mblDetailsForm}
+              />
             </Grid>
 
             {/* IGM details row */}
             <Grid mb="xl">
-              <Grid.Col span={3}>
-                <Dropdown
-                  size="sm"
-                  label="Freight"
-                  placeholder="Select Freight"
-                  searchable
-                  data={[
-                    { value: "Prepaid", label: "Prepaid" },
-                    { value: "Collect", label: "Collect" },
-                  ]}
-                  {...mblDetailsForm.getInputProps("pp_cc")}
-                />
-              </Grid.Col>
+              {!isChaMode && (
+                <Grid.Col span={3}>
+                  <Dropdown
+                    size="sm"
+                    label="Freight"
+                    placeholder="Select Freight"
+                    searchable
+                    data={[
+                      { value: "Prepaid", label: "Prepaid" },
+                      { value: "Collect", label: "Collect" },
+                    ]}
+                    {...mblDetailsForm.getInputProps("pp_cc")}
+                  />
+                </Grid.Col>
+              )}
 
               <Grid.Col span={3}>
                 <FormTextInput
