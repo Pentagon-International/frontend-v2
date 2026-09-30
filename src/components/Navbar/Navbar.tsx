@@ -112,6 +112,9 @@ const Navbar = ({
     Boolean(user?.is_staff) ||
     Boolean(user?.screen_permissions?.finance_dashboard);
   const showCheckerPage = useCanAccessCheckerPage();
+  const showCreditLimitOverrideApproval =
+    Boolean(user?.is_staff) ||
+    Boolean(user?.screen_permissions?.credit_override_approval);
   const showAccountsSubNav = useCanAccessAccountsSubNav();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
@@ -138,6 +141,7 @@ const Navbar = ({
       location.pathname.startsWith("/receipt") ||
       location.pathname.startsWith("/payment") ||
       location.pathname.startsWith("/payment-request-approval") ||
+      location.pathname.startsWith("/payment-request-override-approval") ||
       location.pathname.startsWith("/supplier-invoice") ||
       location.pathname.startsWith("/supplier-invoice-rcm") ||
       location.pathname.startsWith("/overseas-receipt") ||
@@ -1299,6 +1303,21 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
+                    {showCreditLimitOverrideApproval && (
+                      <SubNavLink
+                        parent="Accounts"
+                        label="Credit Limit Override Approval"
+                        icon={IconChecklist}
+                        path="/payment-request-override-approval"
+                        collapsibles={{
+                          setIsSalesOpen,
+                          setIsTariffOpen,
+                          setIsCustomerServiceOpen,
+                          setIsAirOpen,
+                          setIsSeaExportOpen,
+                        }}
+                      />
+                    )}
                     <SubNavLink
                       parent="Accounts"
                       label="Supplier Invoice"

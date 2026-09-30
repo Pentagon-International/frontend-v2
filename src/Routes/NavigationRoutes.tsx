@@ -138,6 +138,7 @@ import {
   InvoiceReverse,
   PaymentRequestCreate,
   PaymentRequestApproval,
+  PaymentRequestOverrideApproval,
   AirExportJobMaster,
   AirExportJobCreate,
   AirExportHouseCreate,
@@ -267,6 +268,7 @@ import GstReport from "../pages/reports/gstReport/GstReport";
 import IrnReport from "../pages/reports/irnReport/IrnReport";
 import FapiaoReport from "../pages/reports/fapiaoReport/FapiaoReport";
 import DocumentWiseOutstanding from "../pages/reports/documentWiseOutstanding/DocumentWiseOutstanding";
+import UnadjustedCreditReport from "../pages/reports/unadjustedCreditReport/UnadjustedCreditReport";
 import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
 import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
 import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
@@ -596,6 +598,10 @@ const NavigationRoutes = () => {
             path="document-wise-outstanding"
             element={<DocumentWiseOutstanding />}
           />
+          <Route
+            path="unadjusted-credit-report"
+            element={<UnadjustedCreditReport />}
+          />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />
@@ -818,6 +824,10 @@ const NavigationRoutes = () => {
         <Route
           path="/payment-request-approval"
           element={<PaymentRequestApproval />}
+        />
+        <Route
+          path="/payment-request-override-approval"
+          element={<PaymentRequestOverrideApproval />}
         />
         <Route path="/settings" element={<DemoPage />} />
         <Route path="/lead" element={<LeadList />} />

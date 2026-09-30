@@ -765,6 +765,7 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: "1203010002", label: "Local Creditor - 1203010002" },
   { value: "1103010003", label: "Overseas Debtor - 1103010003" },
   { value: "1203010007", label: "Overseas Creditor - 1203010007" },
+  { value: "1104050027", label: "Tds Receivable Fy 2026-2027" },
 ] as const;
 
 const ACCOUNT_TYPE_CODES = new Set<string>(

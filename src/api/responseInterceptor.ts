@@ -291,6 +291,7 @@ const responseInterceptor = () =>
             console.log("🔍 400 Error - Final message:", errorMessage);
             return Promise.reject({
               message: errorMessage,
+              ...(data?.override === true ? { override: true } : {}),
             });
           }
 
@@ -346,6 +347,7 @@ const responseInterceptor = () =>
                 (fallbackMessage !== "Bad Request! Please check your input."
                   ? fallbackMessage
                   : "An error occurred! Please try again later."),
+              ...(data?.override === true ? { override: true } : {}),
             });
           }
         }

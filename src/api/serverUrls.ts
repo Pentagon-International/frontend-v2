@@ -193,6 +193,8 @@ export const URL = {
   jobFinanceDocumentsFilter: "filter/job-finance-documents/",
   paymentRequest: "payment-request/",
   paymentRequestFilter: "filter/payment-request/",
+  paymentRequestRemainingActiveJobs:
+    "payment-request/remaining-active-jobs/",
   journalVoucher: "journal_voucher/",
   journalVoucherFilter: "filter/journal_voucher/",
   journalVoucherReversal: "reverse_voucher/",

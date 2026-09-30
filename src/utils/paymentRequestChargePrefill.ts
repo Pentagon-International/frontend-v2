@@ -407,15 +407,22 @@ export function splitPrqChargesForSupplierInvoiceAgentInv(
     const localAmount = parsePrqChargeLocalAmount(charge);
 
     if (nameUpper === PRQ_GST_CHARGE_NAME.CGST) {
-      cgst_amount = localAmount;
+      // Sum all CGST rows so Agent INV/CRN gets the overall GST total.
+      if (localAmount != null) {
+        cgst_amount = (cgst_amount ?? 0) + localAmount;
+      }
       continue;
     }
     if (nameUpper === PRQ_GST_CHARGE_NAME.SGST) {
-      sgst_amount = localAmount;
+      if (localAmount != null) {
+        sgst_amount = (sgst_amount ?? 0) + localAmount;
+      }
       continue;
     }
     if (nameUpper === PRQ_GST_CHARGE_NAME.IGST) {
-      igst_amount = localAmount;
+      if (localAmount != null) {
+        igst_amount = (igst_amount ?? 0) + localAmount;
+      }
       continue;
     }
 
@@ -428,6 +435,9 @@ export function splitPrqChargesForSupplierInvoiceAgentInv(
   }
 
   const actualTotal = hasActualRow ? clampPrqAmount(actualSum) : null;
+  cgst_amount = clampPrqAmount(cgst_amount);
+  sgst_amount = clampPrqAmount(sgst_amount);
+  igst_amount = clampPrqAmount(igst_amount);
   const hasGst =
     cgst_amount != null || sgst_amount != null || igst_amount != null;
 

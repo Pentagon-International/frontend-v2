@@ -73,6 +73,8 @@ interface ScreenPermissions {
   checker?: boolean;
   finance_dashboard?: boolean;
   job_profit_approval?: boolean;
+  credit_override_approval?: boolean;
+  job_agent?: boolean;
 }
 
 interface User {

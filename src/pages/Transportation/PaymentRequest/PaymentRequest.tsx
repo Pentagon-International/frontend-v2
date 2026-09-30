@@ -22,6 +22,7 @@ import { useForm } from "@mantine/form";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import {
+  IconAlertTriangle,
   IconArrowLeft,
   IconCheck,
   IconChevronRight,
@@ -75,6 +76,8 @@ import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFor
 import {
   getApiFailureMessage,
   getServerErrorMessage,
+  isApiOverrideResponse,
+  isCreditLimitOverrideMessage,
   unwrapApiStatusBody,
 } from "../../../utils/apiErrorMessage";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
@@ -801,7 +804,16 @@ function resolvePaymentRequestJobReference(options: {
   useSavedReference: boolean;
 }): string {
   const saved = String(options.savedJobReference ?? "").trim();
+  // Prefer the form / navigated value so house-level Create PRQ keeps shipment id
+  // and master-level Create PRQ keeps job id (do not overwrite with job.job_id).
+  if (saved) return saved;
   if (options.useSavedReference) return saved;
+
+  const fromState = String(
+    (options.locationState as { job_reference_1?: unknown } | null)
+      ?.job_reference_1 ?? "",
+  ).trim();
+  if (fromState) return fromState;
 
   const job = (
     options.locationState as {
@@ -810,9 +822,7 @@ function resolvePaymentRequestJobReference(options: {
   )?.job;
   const jobId = String(job?.job_id ?? "").trim();
   if (jobId) return jobId;
-  const id = String(job?.id ?? "").trim();
-  if (id) return id;
-  return saved;
+  return String(job?.id ?? "").trim();
 }
 
 function paymentRequestPartyCodePayload(
@@ -1053,6 +1063,11 @@ function PaymentRequest() {
     rejectModalOpened,
     { open: openRejectModal, close: closeRejectModal },
   ] = useDisclosure(false);
+  const [
+    overrideModalOpened,
+    { open: openOverrideModal, close: closeOverrideModal },
+  ] = useDisclosure(false);
+  const [overrideModalMessage, setOverrideModalMessage] = useState("");
   const [supportingDocuments, setSupportingDocuments] = useState<
     SupportingDocumentItem[]
   >([]);
@@ -1275,6 +1290,16 @@ function PaymentRequest() {
     return mapChargesFromState(location.state);
   }, [location.state, requestId]);
 
+  const jobReferenceFromNav = useMemo(() => {
+    if (requestId) return "";
+    const fromPrefill = String(prefillFromState?.job_reference_1 ?? "").trim();
+    if (fromPrefill) return fromPrefill;
+    return String(
+      (location.state as { job_reference_1?: unknown } | null)
+        ?.job_reference_1 ?? "",
+    ).trim();
+  }, [location.state, prefillFromState?.job_reference_1, requestId]);
+
   const defaultVoucherTypeFromSource = useMemo(
     () => resolveVoucherTypeFromSourceState(location.state),
     [location.state],
@@ -1285,7 +1310,7 @@ function PaymentRequest() {
   const form = useForm<PaymentRequestFormData>({
     initialValues: {
       request_no: "",
-      job_reference_1: prefillFromState?.job_reference_1 ?? "",
+      job_reference_1: jobReferenceFromNav,
       job_reference_2: "",
       payment_crj_did: "",
       date: new Date(),
@@ -1748,6 +1773,50 @@ function PaymentRequest() {
     closeRejectModal();
     shouldRejectRef.current = true;
     await handleSubmit(form.values);
+  };
+
+  const confirmOverride = async () => {
+    const updateId = saveResponse?.id ?? Number(requestId);
+    if (!updateId || Number.isNaN(updateId)) {
+      ToastNotification({
+        message: "Payment request id not found.",
+        type: "error",
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const raw = (await apiCallProtected.patch(
+        `${(URL as any).paymentRequest}${updateId}/`,
+        { id: updateId, status: "Override" },
+        API_HEADER,
+      )) as unknown;
+      const failureMessage = getApiFailureMessage(
+        raw,
+        "Failed to mark payment request for override approval.",
+      );
+      if (failureMessage) {
+        ToastNotification({ message: failureMessage, type: "error" });
+        return;
+      }
+      ToastNotification({
+        message:
+          "Payment request sent for override approval successfully.",
+        type: "success",
+      });
+      closeOverrideModal();
+      handlePaymentRequestBack();
+    } catch (error: unknown) {
+      ToastNotification({
+        message: getServerErrorMessage(
+          error,
+          "Failed to mark payment request for override approval.",
+        ),
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   /**
@@ -2467,6 +2536,28 @@ function PaymentRequest() {
             },
           },
         )) as any;
+
+        const putFailureMessage = getApiFailureMessage(
+          rawPut,
+          "Failed to save payment request",
+        );
+        if (putFailureMessage) {
+          const shouldOfferOverride =
+            isApproveAction &&
+            (isApiOverrideResponse(rawPut) ||
+              isCreditLimitOverrideMessage(putFailureMessage));
+          if (shouldOfferOverride) {
+            setOverrideModalMessage(putFailureMessage);
+            openOverrideModal();
+          } else {
+            ToastNotification({
+              message: putFailureMessage,
+              type: "error",
+            });
+          }
+          return;
+        }
+
         if (rawPut) {
           // Handle wrapped response: { status, message, data: {...} } or unwrapped
           const d: PaymentRequestFromApi =
@@ -2617,12 +2708,23 @@ function PaymentRequest() {
       }
     } catch (error: unknown) {
       console.error("Error saving payment request:", error);
-      ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          "Failed to save payment request",
-        type: "error",
-      });
+      const errorMessage = getServerErrorMessage(
+        error,
+        "Failed to save payment request",
+      );
+      const shouldOfferOverride =
+        isApproveAction &&
+        (isApiOverrideResponse(error) ||
+          isCreditLimitOverrideMessage(errorMessage));
+      if (shouldOfferOverride) {
+        setOverrideModalMessage(errorMessage);
+        openOverrideModal();
+      } else {
+        ToastNotification({
+          message: errorMessage,
+          type: "error",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -5031,6 +5133,95 @@ function PaymentRequest() {
               disabled={!form.values.rejected_note?.trim()}
             >
               Confirm Reject
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* ── Credit-limit Override Confirmation Modal ── */}
+      <Modal
+        opened={overrideModalOpened}
+        onClose={closeOverrideModal}
+        title={
+          <Group gap="sm" wrap="nowrap">
+            <Box
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: "#fff7ed",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <IconAlertTriangle size={20} color="#c2410c" />
+            </Box>
+            <Text
+              fw={700}
+              size="lg"
+              c="#0f172a"
+              style={{ fontFamily: "Inter", letterSpacing: "-0.01em" }}
+            >
+              Credit limit warning
+            </Text>
+          </Group>
+        }
+        size="md"
+        centered
+        radius="md"
+        padding="lg"
+        styles={{
+          header: { marginBottom: 4 },
+          title: { width: "100%" },
+          body: { paddingTop: 8 },
+        }}
+      >
+        <Stack gap="lg">
+          <Box
+            p="md"
+            style={{
+              background: "#fff7ed",
+              border: "1px solid #fed7aa",
+              borderRadius: 10,
+            }}
+          >
+            <Text
+              size="sm"
+              c="#7c2d12"
+              lh={1.55}
+              style={{ whiteSpace: "pre-wrap", fontFamily: "Inter" }}
+            >
+              {overrideModalMessage}
+            </Text>
+          </Box>
+
+          <Text
+            size="sm"
+            fw={600}
+            c="#0f172a"
+            style={{ fontFamily: "Inter" }}
+          >
+            Do you want to override and send for approval?
+          </Text>
+
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              onClick={closeOverrideModal}
+              styles={{ root: { fontFamily: "Inter" } }}
+            >
+              No
+            </Button>
+            <Button
+              color="#105476"
+              leftSection={<IconCheck size={16} />}
+              onClick={() => void confirmOverride()}
+              loading={isSubmitting}
+              styles={{ root: { fontFamily: "Inter" } }}
+            >
+              Yes
             </Button>
           </Group>
         </Stack>

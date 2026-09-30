@@ -1,6 +1,7 @@
 type ApiStatusResponse = {
   status?: boolean | string;
   message?: string;
+  override?: boolean;
 };
 
 export function isApiFailureResponse(response: unknown): boolean {
@@ -25,6 +26,44 @@ export function unwrapApiStatusBody(response: unknown): unknown {
     return inner;
   }
   return response;
+}
+
+function hasOverrideTrue(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const override = (value as { override?: unknown }).override;
+  return override === true || override === "true";
+}
+
+/** True when API body includes `override: true` (credit-limit override flow). */
+export function isApiOverrideResponse(response: unknown): boolean {
+  if (!response || typeof response !== "object") return false;
+  const record = response as Record<string, unknown>;
+  if (hasOverrideTrue(record)) return true;
+
+  const body = unwrapApiStatusBody(response);
+  if (hasOverrideTrue(body)) return true;
+
+  // Some APIs nest override under `data` even when status/message stay on the root.
+  if (hasOverrideTrue(record.data)) return true;
+  if (
+    body &&
+    typeof body === "object" &&
+    hasOverrideTrue((body as Record<string, unknown>).data)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Credit-limit block message that should open the override Yes/No modal. */
+export function isCreditLimitOverrideMessage(message: string): boolean {
+  const text = message.trim();
+  if (!text) return false;
+  return (
+    /exceeds the approved credit limit/i.test(text) ||
+    (/outstanding balance/i.test(text) && /credit limit/i.test(text))
+  );
 }
 
 /** Read `message` from `{ status, message, data }` style API payloads. */

@@ -27,6 +27,9 @@ import {
   TextInput,
   Tooltip,
   MantineProvider,
+  Modal,
+  Table,
+  Textarea,
 } from "@mantine/core";
 import {
   IconCircleCheck,
@@ -41,11 +44,14 @@ import {
   IconSearch,
   IconX,
   IconBan,
+  IconPackage,
+  IconCircleX,
 } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
+import { API_HEADER } from "../../../store/storeKeys";
 import {
   Dropdown,
   ERPListColumnHeaderFilter,
@@ -69,12 +75,17 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import dayjs from "dayjs";
-import { useDebouncedValue } from "@mantine/hooks";
+import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import {
+  getApiFailureMessage,
+  getServerErrorMessage,
+  unwrapApiStatusBody,
+} from "../../../utils/apiErrorMessage";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -114,8 +125,10 @@ type PaymentRequestRecord = {
   paid_to?: string;
   service?: string;
   service_type?: string;
+  /** Master job id string (not an array). */
   job_id?: string | number | null;
-  shipment_id?: string | null;
+  /** One or more shipment ids from the list API. */
+  shipment_id?: string | string[] | null;
   not_over?: string;
   state_code?: string;
   state_id?: number;
@@ -186,6 +199,27 @@ function displayCellValue(value: unknown): string {
   return String(value);
 }
 
+function formatJobIdCell(jobId: unknown): string {
+  if (jobId == null || jobId === "") return "-";
+  // List API returns a single job id string — never treat as array.
+  if (Array.isArray(jobId)) {
+    const first = jobId.find((v) => String(v ?? "").trim() !== "");
+    return first != null ? String(first) : "-";
+  }
+  return String(jobId);
+}
+
+function formatShipmentIdCell(shipmentId: unknown): string {
+  if (shipmentId == null || shipmentId === "") return "-";
+  if (Array.isArray(shipmentId)) {
+    const parts = shipmentId
+      .map((v) => String(v ?? "").trim())
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join(", ") : "-";
+  }
+  return String(shipmentId);
+}
+
 function formatServiceColumnValue(
   service?: string | null,
   serviceType?: string | null,
@@ -194,17 +228,6 @@ function formatServiceColumnValue(
   const type = String(serviceType ?? "").trim();
   if (svc && type) return `${svc} / ${type}`;
   return svc || type || "-";
-}
-
-function serviceMasterOptionLabel(item: Record<string, unknown>): string {
-  const service = String(item.service ?? item.full_groupage ?? "").trim();
-  const serviceType = String(item.service_type ?? item.import_export ?? "").trim();
-  if (service && serviceType) return `${service} / ${serviceType}`;
-  return (
-    service ||
-    serviceType ||
-    String(item.service_name ?? item.service_code ?? "").trim()
-  );
 }
 
 const PAYMENT_REQUEST_PAGE_SIZES = [10, 25, 50] as const;
@@ -224,6 +247,8 @@ function statusColor(status?: string): string {
       return "green";
     case "approved":
       return "orange";
+    case "override":
+      return "violet";
     case "rejected":
       return "red";
     case "unapproved":
@@ -271,8 +296,8 @@ function withPaymentRequestListUiState(
   return stored;
 }
 
-const emptyFilters = (): FilterState => ({
-  status: null,
+const emptyFilters = (overrideMode = false): FilterState => ({
+  status: overrideMode ? "Active" : null,
   date_from: dayjs().startOf("month").toDate(),
   date_to: dayjs().toDate(),
   payment_type: null,
@@ -283,13 +308,25 @@ const emptyFilters = (): FilterState => ({
   shipment_id: null,
 });
 
-const LIST_KEY = "PAYMENT_REQUEST_APPROVAL";
+const LIST_KEY_APPROVAL = "PAYMENT_REQUEST_APPROVAL";
+const LIST_KEY_OVERRIDE = "PAYMENT_REQUEST_OVERRIDE_APPROVAL";
 
-function readStoredPageSize(): number {
-  const stored = useListFilterStore.getState().getState(LIST_KEY);
+type PendingActiveJobRow = {
+  job_id: string;
+  shipment_no: string[];
+};
+
+function readStoredPageSize(listKey: string): number {
+  const stored = useListFilterStore.getState().getState(listKey);
   if (stored?.shouldRestore !== true) return 25;
   return parseStoredPageSize(stored.filters?.pageSize) ?? 25;
 }
+
+export type PaymentRequestApprovalMode = "approval" | "override";
+
+type PaymentRequestApprovalProps = {
+  mode?: PaymentRequestApprovalMode;
+};
 
 type PaymentRequestColumnVisibility = {
   sno: boolean;
@@ -346,7 +383,15 @@ function paymentRequestColumnId(
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-function PaymentRequestApproval() {
+function PaymentRequestApproval({
+  mode = "approval",
+}: PaymentRequestApprovalProps) {
+  const isOverrideMode = mode === "override";
+  const LIST_KEY = isOverrideMode ? LIST_KEY_OVERRIDE : LIST_KEY_APPROVAL;
+  const listReturnTo = isOverrideMode
+    ? "/payment-request-override-approval"
+    : "/payment-request-approval";
+
   const user = useAuthStore((s) => s.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -356,7 +401,9 @@ function PaymentRequestApproval() {
     useViewAllocationDocs();
   const [pagination, setPagination] = useState<MRT_PaginationState>(() => ({
     pageIndex: 0,
-    pageSize: readStoredPageSize(),
+    pageSize: readStoredPageSize(
+      mode === "override" ? LIST_KEY_OVERRIDE : LIST_KEY_APPROVAL,
+    ),
   }));
   const [totalRecords, setTotalRecords] = useState(0);
   const [isRestoring, setIsRestoring] = useState(true);
@@ -365,9 +412,32 @@ function PaymentRequestApproval() {
 
   const [showFilters, setShowFilters] = useState(false);
   // draftFilters: what user is editing in the panel; appliedFilters: what drives the query
-  const [draftFilters, setDraftFilters] = useState<FilterState>(emptyFilters());
-  const [appliedFilters, setAppliedFilters] =
-    useState<FilterState>(emptyFilters());
+  const [draftFilters, setDraftFilters] = useState<FilterState>(() =>
+    emptyFilters(mode === "override"),
+  );
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(() =>
+    emptyFilters(mode === "override"),
+  );
+  const [
+    pendingShipmentsOpened,
+    { open: openPendingShipments, close: closePendingShipments },
+  ] = useDisclosure(false);
+  const [pendingShipmentsLoading, setPendingShipmentsLoading] = useState(false);
+  const [pendingShipments, setPendingShipments] = useState<
+    PendingActiveJobRow[]
+  >([]);
+  const [pendingShipmentsContext, setPendingShipmentsContext] = useState("");
+  const [
+    rejectModalOpened,
+    { open: openRejectModal, close: closeRejectModal },
+  ] = useDisclosure(false);
+  const [rejectTarget, setRejectTarget] =
+    useState<PaymentRequestRecord | null>(null);
+  const [rejectedNote, setRejectedNote] = useState("");
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
+  const [statusActionLabel, setStatusActionLabel] = useState(
+    "Updating payment request…",
+  );
   const [draftCreatedBy, setDraftCreatedBy] = useState("");
   const [appliedCreatedBy, setAppliedCreatedBy] = useState("");
   const [draftPaidTo, setDraftPaidTo] = useState("");
@@ -427,7 +497,8 @@ function PaymentRequestApproval() {
     if (storedFilters) {
       const f = storedFilters;
       const restored: FilterState = {
-        status: (f.status as string) ?? null,
+        status:
+          (f.status as string) ?? (isOverrideMode ? "Active" : null),
         date_from: f.date_from ? new Date(f.date_from as string) : null,
         date_to: f.date_to ? new Date(f.date_to as string) : null,
         payment_type: (f.payment_type as string) ?? null,
@@ -460,14 +531,78 @@ function PaymentRequestApproval() {
 
   // ─── Build filter payload ─────────────────────────────────────────────────
 
-  const buildFilterPayload = useMemo(
-    () =>
-      buildPaymentRequestListPayload(
-        appliedFilters,
-        appliedCreatedBy,
-        appliedPaidTo,
-      ),
-    [appliedFilters, appliedCreatedBy, appliedPaidTo],
+  const buildFilterPayload = useMemo(() => {
+    const payload = buildPaymentRequestListPayload(
+      appliedFilters,
+      appliedCreatedBy,
+      appliedPaidTo,
+    );
+    if (isOverrideMode) {
+      payload.status = "Active";
+      payload.override = true;
+    }
+    return payload;
+  }, [appliedFilters, appliedCreatedBy, appliedPaidTo, isOverrideMode]);
+
+  const openPendingShipmentsForRow = useCallback(
+    async (row: PaymentRequestRecord) => {
+      const subledgerCode = String(row.subledger_code ?? "").trim();
+      const jobId = formatJobIdCell(row.job_id);
+      if (!subledgerCode || !jobId || jobId === "-") {
+        ToastNotification({
+          type: "error",
+          message: "Subledger code and Job Id are required for pending shipments.",
+        });
+        return;
+      }
+      setPendingShipmentsContext(
+        [row.request_no, row.paid_to].filter(Boolean).join(" · "),
+      );
+      setPendingShipments([]);
+      openPendingShipments();
+      setPendingShipmentsLoading(true);
+      try {
+        const raw = (await apiCallProtected.post(
+          URL.paymentRequestRemainingActiveJobs,
+          { subledger_code: subledgerCode, job_id: jobId },
+        )) as unknown;
+        const failureMessage = getApiFailureMessage(
+          raw,
+          "Failed to load pending shipments.",
+        );
+        if (failureMessage) {
+          ToastNotification({ type: "error", message: failureMessage });
+          return;
+        }
+        const body = unwrapApiStatusBody(raw) as {
+          data?: PendingActiveJobRow[];
+        };
+        const rows = Array.isArray(body?.data)
+          ? body.data
+          : Array.isArray((raw as { data?: unknown })?.data)
+            ? ((raw as { data: PendingActiveJobRow[] }).data)
+            : [];
+        setPendingShipments(
+          rows.map((r) => ({
+            job_id: String(r.job_id ?? ""),
+            shipment_no: Array.isArray(r.shipment_no)
+              ? r.shipment_no.map((s) => String(s))
+              : [],
+          })),
+        );
+      } catch (error: unknown) {
+        ToastNotification({
+          type: "error",
+          message: getServerErrorMessage(
+            error,
+            "Failed to load pending shipments.",
+          ),
+        });
+      } finally {
+        setPendingShipmentsLoading(false);
+      }
+    },
+    [openPendingShipments],
   );
 
   const persistListState = useCallback(
@@ -495,9 +630,10 @@ function PaymentRequestApproval() {
     isLoading: requestLoading,
     isFetching: requestFetching,
     error: requestError,
+    refetch: refetchPaymentRequests,
   } = useQuery<PaymentRequestListQueryResult>({
     queryKey: [
-      "paymentRequestApproval",
+      isOverrideMode ? "paymentRequestOverrideApproval" : "paymentRequestApproval",
       pagination.pageIndex,
       pagination.pageSize,
       JSON.stringify(buildFilterPayload),
@@ -594,6 +730,106 @@ function PaymentRequestApproval() {
     refetchOnMount: false,
   });
 
+  const patchPaymentRequestStatus = useCallback(
+    async (
+      row: PaymentRequestRecord,
+      status: "Approved" | "Rejected",
+      rejectedNoteValue?: string,
+    ) => {
+      setStatusActionLabel(
+        status === "Approved"
+          ? "Approving payment request…"
+          : "Rejecting payment request…",
+      );
+      setStatusActionLoading(true);
+      try {
+        const payload: Record<string, unknown> = {
+          id: row.id,
+          status,
+        };
+        if (status === "Rejected") {
+          payload.rejected_note = rejectedNoteValue?.trim() || null;
+        }
+        const raw = (await apiCallProtected.patch(
+          `${URL.paymentRequest}${row.id}/`,
+          payload,
+          API_HEADER,
+        )) as unknown;
+        const failureMessage = getApiFailureMessage(
+          raw,
+          `Failed to ${status === "Approved" ? "approve" : "reject"} payment request.`,
+        );
+        if (failureMessage) {
+          ToastNotification({ type: "error", message: failureMessage });
+          return false;
+        }
+        ToastNotification({
+          type: "success",
+          message:
+            status === "Approved"
+              ? "Payment request approved successfully."
+              : "Payment request rejected successfully.",
+        });
+        await refetchPaymentRequests();
+        return true;
+      } catch (error: unknown) {
+        ToastNotification({
+          type: "error",
+          message: getServerErrorMessage(
+            error,
+            `Failed to ${status === "Approved" ? "approve" : "reject"} payment request.`,
+          ),
+        });
+        return false;
+      } finally {
+        setStatusActionLoading(false);
+      }
+    },
+    [refetchPaymentRequests],
+  );
+
+  const handleOverrideApprove = useCallback(
+    (row: PaymentRequestRecord) => {
+      void patchPaymentRequestStatus(row, "Approved");
+    },
+    [patchPaymentRequestStatus],
+  );
+
+  const handleOverrideRejectClick = useCallback(
+    (row: PaymentRequestRecord) => {
+      setRejectTarget(row);
+      setRejectedNote("");
+      openRejectModal();
+    },
+    [openRejectModal],
+  );
+
+  const confirmOverrideReject = useCallback(async () => {
+    if (!rejectTarget) return;
+    if (!rejectedNote.trim()) {
+      ToastNotification({
+        type: "error",
+        message: "Rejected note is required.",
+      });
+      return;
+    }
+    const ok = await patchPaymentRequestStatus(
+      rejectTarget,
+      "Rejected",
+      rejectedNote,
+    );
+    if (ok) {
+      closeRejectModal();
+      setRejectTarget(null);
+      setRejectedNote("");
+    }
+  }, [
+    closeRejectModal,
+    patchPaymentRequestStatus,
+    rejectTarget,
+    rejectedNote,
+  ]);
+
   const requestData = paymentRequestListResult?.data ?? [];
 
   useEffect(() => {
@@ -607,7 +843,11 @@ function PaymentRequestApproval() {
     }
   }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
 
-  const isLoading = requestLoading || requestFetching || isInitialLoad;
+  // While approve/reject overlay is up, ignore list refetch so a second
+  // table-body loader does not show behind the status action overlay.
+  const isLoading =
+    !statusActionLoading &&
+    (requestLoading || requestFetching || isInitialLoad);
   const tableData = requestData ?? [];
 
   const border = "#e2e8f0";
@@ -728,7 +968,7 @@ function PaymentRequestApproval() {
   };
 
   const clearAllFilters = () => {
-    const empty = emptyFilters();
+    const empty = emptyFilters(isOverrideMode);
     setDraftFilters(empty);
     setAppliedFilters(empty);
     setDraftCreatedBy("");
@@ -953,12 +1193,7 @@ function PaymentRequestApproval() {
                 size="xs"
                 placeholder="Service"
                 apiEndpoint={URL.serviceMaster}
-                searchFields={[
-                  "service_name",
-                  "service_code",
-                  "service",
-                  "service_type",
-                ]}
+                searchFields={["service_code", "service_name"]}
                 minSearchLength={1}
                 dropdownZIndex={1000}
                 returnOriginalData
@@ -966,18 +1201,15 @@ function PaymentRequestApproval() {
                 displayValue={appliedFilters.service_display || undefined}
                 displayFormat={(item) => ({
                   value: String(item.service_code ?? ""),
-                  label: serviceMasterOptionLabel(item),
+                  label: String(item.service_code ?? ""),
                 })}
-                onChange={(value, selectedData, originalData) => {
+                onChange={(value) => {
                   const code = String(value ?? "").trim();
-                  const label = originalData
-                    ? serviceMasterOptionLabel(originalData)
-                    : String(selectedData?.label ?? "").trim();
                   commitHeaderFilters({
                     filters: (prev) => ({
                       ...prev,
                       service_code: code || null,
-                      service_display: code ? label || null : null,
+                      service_display: code || null,
                     }),
                   });
                 }}
@@ -1073,7 +1305,7 @@ function PaymentRequestApproval() {
             size="sm"
             style={{ fontFamily: erpTheme.fontSans, whiteSpace: "nowrap" }}
           >
-            {displayCellValue(row.original.job_id)}
+            {formatJobIdCell(row.original.job_id)}
           </Text>
         ),
       },
@@ -1102,57 +1334,70 @@ function PaymentRequestApproval() {
             }
           />
         ),
-        Cell: ({ row }) => (
-          <Text
-            size="sm"
-            style={{ fontFamily: erpTheme.fontSans, whiteSpace: "nowrap" }}
-          >
-            {displayCellValue(row.original.shipment_id)}
-          </Text>
-        ),
+        Cell: ({ row }) => {
+          const shipmentLabel = formatShipmentIdCell(row.original.shipment_id);
+          if (shipmentLabel === "-") return shipmentLabel;
+          return (
+            <Tooltip label={shipmentLabel} withArrow withinPortal>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: erpTheme.fontSans, maxWidth: "100%" }}
+              >
+                {shipmentLabel}
+              </Text>
+            </Tooltip>
+          );
+        },
       },
       {
         accessorKey: "status",
         header: "Status",
         size: 96,
         grow: false,
-        Header: () => (
-          <ERPListColumnHeaderFilter
-            label="Status"
-            value={appliedFilters.status ?? ""}
-            displayValue={appliedFilters.status ?? ""}
-            onChange={() => {}}
-            theme={erpTheme}
-            isEditing={editingHeaderId === "status"}
-            onStartEdit={() => openHeaderEditor("status")}
-            onStopEdit={() => collapseHeaderEditor("status")}
-            renderEditor={({ autoFocus, onClose }) => (
-              <Select
-                autoFocus={autoFocus}
-                placeholder="Select Status"
-                searchable
-                clearable
-                size="xs"
-                data={[
-                  { value: "Active", label: "Active" },
-                  { value: "Approved", label: "Approved" },
-                  { value: "Posted", label: "Posted" },
-                  { value: "Rejected", label: "Rejected" },
-                ]}
-                value={appliedFilters.status ?? ""}
-                onChange={(v) => {
-                  commitHeaderFilters({
-                    filters: (prev) => ({ ...prev, status: v ?? null }),
-                  });
-                  if (v) onClose();
-                }}
-                comboboxProps={{ zIndex: 1000 }}
-                classNames={erpListGeistSelectClassNames}
-                styles={filterFieldStyles}
-              />
-            )}
-          />
-        ),
+        Header: () =>
+          isOverrideMode ? (
+            <Text size="xs" fw={600} style={{ fontFamily: erpTheme.fontSans }}>
+              Status
+            </Text>
+          ) : (
+            <ERPListColumnHeaderFilter
+              label="Status"
+              value={appliedFilters.status ?? ""}
+              displayValue={appliedFilters.status ?? ""}
+              onChange={() => {}}
+              theme={erpTheme}
+              isEditing={editingHeaderId === "status"}
+              onStartEdit={() => openHeaderEditor("status")}
+              onStopEdit={() => collapseHeaderEditor("status")}
+              renderEditor={({ autoFocus, onClose }) => (
+                <Select
+                  autoFocus={autoFocus}
+                  placeholder="Select Status"
+                  searchable
+                  clearable
+                  size="xs"
+                  data={[
+                    { value: "Active", label: "Active" },
+                    { value: "Approved", label: "Approved" },
+                    { value: "Override", label: "Override" },
+                    { value: "Posted", label: "Posted" },
+                    { value: "Rejected", label: "Rejected" },
+                  ]}
+                  value={appliedFilters.status ?? ""}
+                  onChange={(v) => {
+                    commitHeaderFilters({
+                      filters: (prev) => ({ ...prev, status: v ?? null }),
+                    });
+                    if (v) onClose();
+                  }}
+                  comboboxProps={{ zIndex: 1000 }}
+                  classNames={erpListGeistSelectClassNames}
+                  styles={filterFieldStyles}
+                />
+              )}
+            />
+          ),
         Cell: ({ cell }) => {
           const val = cell.getValue<string>();
           if (!val) return "-";
@@ -1191,82 +1436,113 @@ function PaymentRequestApproval() {
               </ActionIcon>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconEye size={16} color={primary} />}
-                onClick={() => {
-                  persistListState(buildFilterPayload);
-                  setStoreSearch(LIST_KEY, search);
-                  setShouldRestore(LIST_KEY, true);
-                  navigate(`/payment-request/view/${row.original.id}`, {
-                    state: {
-                      fromPaymentRequestApproval: true,
-                      returnTo: "/payment-request-approval",
-                    },
-                  });
-                }}
-              >
-                View
-              </Menu.Item>
-              {row.original.status?.trim().toLowerCase() !== "rejected" && (
-                <Menu.Item
-                  leftSection={<IconEdit size={16} color={primary} />}
-                  onClick={() => {
-                    persistListState(buildFilterPayload);
-                    setStoreSearch(LIST_KEY, search);
-                    setShouldRestore(LIST_KEY, true);
-                    navigate(`/payment-request/edit/${row.original.id}`, {
-                      state: {
-                        fromPaymentRequestApproval: true,
-                        returnTo: "/payment-request-approval",
-                      },
-                    });
-                  }}
-                >
-                  Edit
-                </Menu.Item>
-              )}
-              {row.original.status?.trim().toLowerCase() === "approved" && (
-                <Menu.Item
-                  leftSection={<IconFileInvoice size={16} color={primary} />}
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        const raw = await apiCallProtected.get(
-                          `${URL.paymentRequest}${row.original.id}/`,
-                        );
-                        const prData =
-                          (raw as { data?: { data?: PaymentRequestRecord } })
-                            ?.data?.data ??
-                          (raw as { data?: PaymentRequestRecord })?.data ??
-                          row.original;
+              {isOverrideMode ? (
+                <>
+                  <Menu.Item
+                    leftSection={<IconPackage size={16} color={primary} />}
+                    onClick={() => void openPendingShipmentsForRow(row.original)}
+                  >
+                    Pending Shipments
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconCircleCheck size={16} color={primary} />}
+                    disabled={statusActionLoading}
+                    onClick={() => handleOverrideApprove(row.original)}
+                  >
+                    Approve
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<IconCircleX size={16} color="#b91c1c" />}
+                    disabled={statusActionLoading}
+                    onClick={() => handleOverrideRejectClick(row.original)}
+                  >
+                    Reject
+                  </Menu.Item>
+                </>
+              ) : (
+                <>
+                  <Menu.Item
+                    leftSection={<IconEye size={16} color={primary} />}
+                    onClick={() => {
+                      persistListState(buildFilterPayload);
+                      setStoreSearch(LIST_KEY, search);
+                      setShouldRestore(LIST_KEY, true);
+                      navigate(`/payment-request/view/${row.original.id}`, {
+                        state: {
+                          fromPaymentRequestApproval: true,
+                          returnTo: listReturnTo,
+                        },
+                      });
+                    }}
+                  >
+                    View
+                  </Menu.Item>
+                  {row.original.status?.trim().toLowerCase() !== "rejected" && (
+                    <Menu.Item
+                      leftSection={<IconEdit size={16} color={primary} />}
+                      onClick={() => {
                         persistListState(buildFilterPayload);
                         setStoreSearch(LIST_KEY, search);
                         setShouldRestore(LIST_KEY, true);
-                        navigate("/supplier-invoice/create", {
-                          state: { paymentRequestData: prData },
+                        navigate(`/payment-request/edit/${row.original.id}`, {
+                          state: {
+                            fromPaymentRequestApproval: true,
+                            returnTo: listReturnTo,
+                          },
                         });
-                      } catch {
-                        ToastNotification({
-                          type: "error",
-                          message: "Failed to load payment request details.",
-                        });
-                      }
-                    })();
-                  }}
-                >
-                  Create Supplier Invoice
-                </Menu.Item>
+                      }}
+                    >
+                      Edit
+                    </Menu.Item>
+                  )}
+                  {row.original.status?.trim().toLowerCase() === "approved" && (
+                    <Menu.Item
+                      leftSection={<IconFileInvoice size={16} color={primary} />}
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const raw = await apiCallProtected.get(
+                              `${URL.paymentRequest}${row.original.id}/`,
+                            );
+                            const prData =
+                              (raw as { data?: { data?: PaymentRequestRecord } })
+                                ?.data?.data ??
+                              (raw as { data?: PaymentRequestRecord })?.data ??
+                              row.original;
+                            persistListState(buildFilterPayload);
+                            setStoreSearch(LIST_KEY, search);
+                            setShouldRestore(LIST_KEY, true);
+                            navigate("/supplier-invoice/create", {
+                              state: {
+                                paymentRequestData: prData,
+                                returnTo: listReturnTo,
+                              },
+                            });
+                          } catch {
+                            ToastNotification({
+                              type: "error",
+                              message:
+                                "Failed to load payment request details.",
+                            });
+                          }
+                        })();
+                      }}
+                    >
+                      Create Supplier Invoice
+                    </Menu.Item>
+                  )}
+                  <Menu.Item
+                    leftSection={<IconListDetails size={16} color={primary} />}
+                    onClick={() =>
+                      void openViewAllocationDocs(
+                        String(row.original.request_no ?? ""),
+                      )
+                    }
+                  >
+                    View Allocation Docs
+                  </Menu.Item>
+                </>
               )}
-              <Menu.Item
-                leftSection={<IconListDetails size={16} color={primary} />}
-                onClick={() =>
-                  void openViewAllocationDocs(
-                    String(row.original.request_no ?? ""),
-                  )
-                }
-              >
-                View Allocation Docs
-              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         ),
@@ -1292,6 +1568,13 @@ function PaymentRequestApproval() {
       commitHeaderFilters,
       filterFieldStyles,
       openViewAllocationDocs,
+      isOverrideMode,
+      listReturnTo,
+      LIST_KEY,
+      openPendingShipmentsForRow,
+      handleOverrideApprove,
+      handleOverrideRejectClick,
+      statusActionLoading,
     ],
   );
 
@@ -1473,6 +1756,131 @@ function PaymentRequestApproval() {
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
       {viewAllocationDocsUi}
+      {statusActionLoading && (
+        <Box
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(255, 255, 255, 0.72)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Stack align="center" gap="md">
+            <Loader size="lg" color={primary} />
+            <Text
+              size="sm"
+              fw={500}
+              c={fg}
+              style={{ fontFamily: erpTheme.fontSans }}
+            >
+              {statusActionLabel}
+            </Text>
+          </Stack>
+        </Box>
+      )}
+      <Modal
+        opened={pendingShipmentsOpened}
+        onClose={closePendingShipments}
+        title={
+          pendingShipmentsContext
+            ? `Pending Shipments — ${pendingShipmentsContext}`
+            : "Pending Shipments"
+        }
+        size="lg"
+        centered
+      >
+        {pendingShipmentsLoading ? (
+          <Center py="xl">
+            <Loader size="md" color={primary} />
+          </Center>
+        ) : pendingShipments.length === 0 ? (
+          <Text c="dimmed" size="sm" py="md">
+            No pending shipments found.
+          </Text>
+        ) : (
+          <Table striped highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Job Id</Table.Th>
+                <Table.Th>Shipment No</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {pendingShipments.map((row) => (
+                <Table.Tr key={row.job_id}>
+                  <Table.Td>{row.job_id || "-"}</Table.Td>
+                  <Table.Td>
+                    {row.shipment_no.length > 0
+                      ? row.shipment_no.join(", ")
+                      : "-"}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={closePendingShipments}>
+            Close
+          </Button>
+        </Group>
+      </Modal>
+      <Modal
+        opened={rejectModalOpened}
+        onClose={() => {
+          if (statusActionLoading) return;
+          closeRejectModal();
+          setRejectTarget(null);
+          setRejectedNote("");
+        }}
+        title={
+          rejectTarget?.request_no
+            ? `Reject Payment Request — ${rejectTarget.request_no}`
+            : "Reject Payment Request"
+        }
+        size="md"
+        centered
+      >
+        <Stack gap="md">
+          <Textarea
+            label="Rejected Note"
+            placeholder="Enter reason for rejection"
+            value={rejectedNote}
+            onChange={(e) => setRejectedNote(e.currentTarget.value)}
+            rows={4}
+            withAsterisk
+            styles={{
+              label: { fontFamily: erpTheme.fontSans, fontSize: 13 },
+              input: { fontFamily: erpTheme.fontSans, fontSize: 13 },
+            }}
+          />
+          <Group justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              disabled={statusActionLoading}
+              onClick={() => {
+                closeRejectModal();
+                setRejectTarget(null);
+                setRejectedNote("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconX size={16} />}
+              loading={statusActionLoading}
+              disabled={!rejectedNote.trim()}
+              onClick={() => void confirmOverrideReject()}
+            >
+              Confirm Reject
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Box
         className={ERP_LIST_GEIST_ROOT_CLASS}
         style={{
@@ -1495,30 +1903,34 @@ function PaymentRequestApproval() {
                   value={listStats.total}
                   label="Total"
                 />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconCircleCheck size={14} color="#059669" />}
-                  iconBackground="#d1fae5"
-                  iconColor="#059669"
-                  value={listStats.approved}
-                  label="Approved"
-                />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconClock size={14} color="#d97706" />}
-                  iconBackground="#fef3c7"
-                  iconColor="#d97706"
-                  value={listStats.pending}
-                  label="Other"
-                />
-                <ERPListStatPill
-                  theme={erpTheme}
-                  icon={<IconBan size={14} color="#b91c1c" />}
-                  iconBackground="#fee2e2"
-                  iconColor="#b91c1c"
-                  value={listStats.rejected}
-                  label="Rejected"
-                />
+                {!isOverrideMode && (
+                  <>
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconCircleCheck size={14} color="#059669" />}
+                      iconBackground="#d1fae5"
+                      iconColor="#059669"
+                      value={listStats.approved}
+                      label="Approved"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconClock size={14} color="#d97706" />}
+                      iconBackground="#fef3c7"
+                      iconColor="#d97706"
+                      value={listStats.pending}
+                      label="Other"
+                    />
+                    <ERPListStatPill
+                      theme={erpTheme}
+                      icon={<IconBan size={14} color="#b91c1c" />}
+                      iconBackground="#fee2e2"
+                      iconColor="#b91c1c"
+                      value={listStats.rejected}
+                      label="Rejected"
+                    />
+                  </>
+                )}
               </>
             ),
             // secondary: (
@@ -1748,12 +2160,7 @@ function PaymentRequestApproval() {
                       label="Service"
                       placeholder="Search service"
                       apiEndpoint={URL.serviceMaster}
-                      searchFields={[
-                        "service_name",
-                        "service_code",
-                        "service",
-                        "service_type",
-                      ]}
+                      searchFields={["service_code", "service_name"]}
                       minSearchLength={1}
                       dropdownZIndex={1000}
                       returnOriginalData
@@ -1761,43 +2168,43 @@ function PaymentRequestApproval() {
                       displayValue={draftFilters.service_display || undefined}
                       displayFormat={(item) => ({
                         value: String(item.service_code ?? ""),
-                        label: serviceMasterOptionLabel(item),
+                        label: String(item.service_code ?? ""),
                       })}
-                      onChange={(value, selectedData, originalData) => {
+                      onChange={(value) => {
                         const code = String(value ?? "").trim();
-                        const label = originalData
-                          ? serviceMasterOptionLabel(originalData)
-                          : String(selectedData?.label ?? "").trim();
                         setDraftFilters((prev) => ({
                           ...prev,
                           service_code: code || null,
-                          service_display: code ? label || null : null,
+                          service_display: code || null,
                         }));
                       }}
                       styles={filterFieldStyles}
                     />
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
-                  <Box style={erpListFilterFieldCellStyle}>
-                    <Dropdown
-                      size="xs"
-                      label="Status"
-                      placeholder="Select Status"
-                      data={[
-                        { value: "Active", label: "Active" },
-                        { value: "Approved", label: "Approved" },
-                        { value: "Posted", label: "Posted" },
-                        { value: "Rejected", label: "Rejected" },
-                      ]}
-                      value={draftFilters.status}
-                      onChange={(v) => updateFilter("status", v ?? null)}
-                      clearable
-                      searchable
-                      styles={filterFieldStyles}
-                    />
-                  </Box>
-                </Grid.Col>
+                {!isOverrideMode && (
+                  <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                    <Box style={erpListFilterFieldCellStyle}>
+                      <Dropdown
+                        size="xs"
+                        label="Status"
+                        placeholder="Select Status"
+                        data={[
+                          { value: "Active", label: "Active" },
+                          { value: "Approved", label: "Approved" },
+                          { value: "Override", label: "Override" },
+                          { value: "Posted", label: "Posted" },
+                          { value: "Rejected", label: "Rejected" },
+                        ]}
+                        value={draftFilters.status}
+                        onChange={(v) => updateFilter("status", v ?? null)}
+                        clearable
+                        searchable
+                        styles={filterFieldStyles}
+                      />
+                    </Box>
+                  </Grid.Col>
+                )}
               </Grid>
             ),
           }}

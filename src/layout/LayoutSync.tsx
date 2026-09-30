@@ -176,6 +176,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/SeaExport")) {
       setActiveNav("Transportation");
       setActiveSubNav("FCL Job Generation"); // Default to FCL
+    } else if (path.startsWith("/payment-request-override-approval")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Credit Limit Override Approval");
     } else if (path.startsWith("/payment-request-approval")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment Request Approval");

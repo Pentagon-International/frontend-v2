@@ -122,6 +122,7 @@ import CreditNoteCreate from "./Transportation/Invoice/CreditNoteCreate";
 import InvoiceReverse from "./Transportation/Invoice/InvoiceReverse";
 import PaymentRequestCreate from "./Transportation/PaymentRequest/PaymentRequest";
 import PaymentRequestApproval from "./Transportation/PaymentRequest/PaymentRequestApproval";
+import PaymentRequestOverrideApproval from "./Transportation/PaymentRequest/PaymentRequestOverrideApproval";
 import AirExportJobMaster from "./Transportation/AirExportJob";
 import AirExportJobCreate from "./Transportation/AirExportJob/AirExportJobCreate";
 import AirExportHouseCreate from "./Transportation/AirExportJob/AirHouseCreate";
@@ -377,6 +378,7 @@ export {
   InvoiceReverse,
   PaymentRequestCreate,
   PaymentRequestApproval,
+  PaymentRequestOverrideApproval,
   AirExportJobMaster,
   AirExportJobCreate,
   AirExportHouseCreate,

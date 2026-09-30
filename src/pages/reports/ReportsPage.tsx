@@ -81,6 +81,11 @@ export default function ReportsPage() {
           icon: <IconFileInvoice size={28} color="#105476" />,
           path: "/reports/document-wise-outstanding",
         },
+        {
+          label: "Unadjusted Credit Report",
+          icon: <IconReceipt size={28} color="#105476" />,
+          path: "/reports/unadjusted-credit-report",
+        },
         ...(showFapiaoReports
           ? [
               {
