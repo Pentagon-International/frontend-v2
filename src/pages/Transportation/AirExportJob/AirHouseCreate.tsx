@@ -1017,7 +1017,7 @@ function HouseCreate() {
   };
 
   // Memoize additionalParams to prevent SearchableSelect from recreating fetchData on every render
-  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+  const seaTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
   // Auto-calculate chargeable weight when gross weight or volume weight changes
   const cargoGrossWeights = cargoDetails.map((c) => c.gross_weight).join(",");

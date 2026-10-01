@@ -1083,7 +1083,7 @@ function HouseCreate() {
   };
 
   // Memoize additionalParams to prevent SearchableSelect from recreating fetchData on every render
-  const seaTransportParams = useMemo(() => ({ transport_mode: "SEA" }), []);
+  const seaTransportParams = useMemo(() => ({ transport_mode: "AIR" }), []);
 
   // Similar booking check - modal and API (Air Import Job Create flow only)
   const [similarBookingModalOpen, setSimilarBookingModalOpen] = useState(false);
