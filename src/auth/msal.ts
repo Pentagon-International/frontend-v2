@@ -2,27 +2,40 @@ import {
   AuthenticationResult,
   EventMessage,
   EventType,
+  InteractionRequiredAuthError,
   InteractionStatus,
   PublicClientApplication,
   RedirectRequest,
+  SsoSilentRequest,
 } from "@azure/msal-browser";
 
 export const msalConfig = {
   auth: {
     clientId: import.meta.env.VITE_AZURE_CLIENT_ID as string,
     authority: `https://login.microsoftonline.com/${import.meta.env.VITE_AZURE_TENANT_ID}`,
-    redirectUri: import.meta.env.VITE_BASE_URL as string,
+    // Dynamic origin so localhost and production both work without hardcoded URIs
+    redirectUri: window.location.origin,
   },
   cache: {
-    cacheLocation: "sessionStorage" as const,
+    cacheLocation: "localStorage" as const,
+    storeAuthStateInCookie: true,
   },
 };
 
 export const msalInstance = new PublicClientApplication(msalConfig);
 
-/** Redirect only — do not mix with loginPopup. */
+const loginScopes = ["openid", "profile", "email"] as const;
+const domainHint = "pentagonindia.net";
+
+/** Shared redirect request — no prompt:"login" / prompt:"select_account". */
 export const loginRequest: RedirectRequest = {
-  scopes: ["openid", "profile", "email"],
+  scopes: [...loginScopes],
+  domainHint,
+};
+
+const silentRequest: SsoSilentRequest = {
+  scopes: [...loginScopes],
+  domainHint,
 };
 
 let readyPromise: Promise<AuthenticationResult | null> | null = null;
@@ -55,11 +68,28 @@ function setInteractionStatus(status: InteractionStatus) {
   statusListeners.forEach((listener) => listener(status));
 }
 
+function isInteractionRequired(error: unknown): boolean {
+  if (error instanceof InteractionRequiredAuthError) return true;
+  const code = (error as { errorCode?: string })?.errorCode;
+  return (
+    code === "interaction_required" ||
+    code === "login_required" ||
+    code === "consent_required" ||
+    code === "monitor_window_timeout"
+  );
+}
+
 function attachInteractionListeners() {
   msalInstance.addEventCallback((event: EventMessage) => {
     switch (event.eventType) {
       case EventType.HANDLE_REDIRECT_START:
         setInteractionStatus(InteractionStatus.HandleRedirect);
+        break;
+      case EventType.LOGIN_START:
+        setInteractionStatus(InteractionStatus.Login);
+        break;
+      case EventType.SSO_SILENT_START:
+        setInteractionStatus(InteractionStatus.SsoSilent);
         break;
       case EventType.ACQUIRE_TOKEN_START:
         setInteractionStatus(InteractionStatus.AcquireToken);
@@ -69,6 +99,9 @@ function attachInteractionListeners() {
         break;
       case EventType.HANDLE_REDIRECT_END:
       case EventType.LOGIN_SUCCESS:
+      case EventType.LOGIN_FAILURE:
+      case EventType.SSO_SILENT_SUCCESS:
+      case EventType.SSO_SILENT_FAILURE:
       case EventType.ACQUIRE_TOKEN_SUCCESS:
       case EventType.ACQUIRE_TOKEN_FAILURE:
       case EventType.LOGOUT_SUCCESS:
@@ -85,6 +118,9 @@ function attachInteractionListeners() {
 /**
  * On app / login-page load: initialize MSAL and finish any pending redirect.
  * Safe to call multiple times — runs once.
+ *
+ * If a prior prompt:"none" redirect failed with interaction required,
+ * falls back to an interactive loginRedirect (no forced login/select_account).
  */
 export async function ensureMsalReady(): Promise<AuthenticationResult | null> {
   if (!isMicrosoftAuthConfigured()) {
@@ -98,9 +134,20 @@ export async function ensureMsalReady(): Promise<AuthenticationResult | null> {
       await msalInstance.initialize();
       attachInteractionListeners();
 
-      const redirectResult = await msalInstance.handleRedirectPromise();
-      setInteractionStatus(InteractionStatus.None);
-      return redirectResult;
+      try {
+        const redirectResult = await msalInstance.handleRedirectPromise();
+        setInteractionStatus(InteractionStatus.None);
+        return redirectResult;
+      } catch (error) {
+        // prompt:"none" return often surfaces as interaction/login_required
+        if (isInteractionRequired(error)) {
+          setInteractionStatus(InteractionStatus.Login);
+          await msalInstance.loginRedirect(loginRequest);
+          return null;
+        }
+        setInteractionStatus(InteractionStatus.None);
+        throw error;
+      }
     })().catch((error) => {
       setInteractionStatus(InteractionStatus.None);
       throw error;
@@ -111,16 +158,52 @@ export async function ensureMsalReady(): Promise<AuthenticationResult | null> {
 }
 
 /**
- * Starts Microsoft login via redirect (same tab).
- * Does not return — the browser leaves the page; id_token is handled on return via handleRedirectPromise.
+ * Silent-first Microsoft login.
+ * - Returns AuthenticationResult when ssoSilent succeeds (has idToken).
+ * - Returns null when a redirect is started (or interaction already in progress).
  */
-export async function startMicrosoftLoginRedirect(): Promise<void> {
+export async function startMicrosoftLogin(): Promise<AuthenticationResult | null> {
   await ensureMsalReady();
 
   if (inProgress !== InteractionStatus.None) {
-    return;
+    return null;
   }
 
-  setInteractionStatus(InteractionStatus.AcquireToken);
-  await msalInstance.loginRedirect(loginRequest);
+  // a) Prefer silent SSO (Entra-joined / existing work session)
+  try {
+    setInteractionStatus(InteractionStatus.SsoSilent);
+    const result = await msalInstance.ssoSilent(silentRequest);
+    setInteractionStatus(InteractionStatus.None);
+    if (result?.idToken) {
+      return result;
+    }
+  } catch (error) {
+    setInteractionStatus(InteractionStatus.None);
+    // Fall through to redirect when silent SSO cannot complete
+    if (!isInteractionRequired(error)) {
+      console.warn("MSAL ssoSilent failed; falling back to redirect:", error);
+    }
+  }
+
+  // b) Session cookie redirect without UI
+  try {
+    setInteractionStatus(InteractionStatus.Login);
+    await msalInstance.loginRedirect({
+      ...loginRequest,
+      prompt: "none",
+    });
+    return null;
+  } catch (error) {
+    // c) Interactive redirect — do not force prompt:"login" or "select_account"
+    if (
+      (error as { errorCode?: string })?.errorCode === "interaction_in_progress"
+    ) {
+      setInteractionStatus(InteractionStatus.None);
+      throw error;
+    }
+
+    setInteractionStatus(InteractionStatus.Login);
+    await msalInstance.loginRedirect(loginRequest);
+    return null;
+  }
 }

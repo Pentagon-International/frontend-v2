@@ -25,7 +25,7 @@ import {
   ensureMsalReady,
   getMsalInteractionStatus,
   isMicrosoftAuthConfigured,
-  startMicrosoftLoginRedirect,
+  startMicrosoftLogin,
   subscribeMsalInteractionStatus,
 } from "../../../auth/msal";
 import { login, LoginFormData } from "../../../service/auth.services";
@@ -272,8 +272,19 @@ function LoginForm() {
     setIsMicrosoftLoading(true);
 
     try {
-      // Same-tab redirect only (no popup) — return handled by ensureMsalReady above
-      await startMicrosoftLoginRedirect();
+      // Silent-first SSO; if redirect starts, return is handled on remount
+      const result = await startMicrosoftLogin();
+      if (result?.idToken) {
+        await completeAzureBackendLogin(result.idToken);
+        return;
+      }
+
+      // Redirect started — leave loading on; page navigates away.
+      // If we stayed put (busy / no redirect), unlock the button.
+      if (getMsalInteractionStatus() === InteractionStatus.None) {
+        microsoftClickLock.current = false;
+        setIsMicrosoftLoading(false);
+      }
     } catch (e: unknown) {
       console.error("Microsoft login error:", e);
       const errorCode = (e as { errorCode?: string })?.errorCode;
