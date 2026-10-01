@@ -776,13 +776,16 @@ function isProbableFclContainerChargeUnit(
 
 /**
  * FCL job: match charge unit to container type and return the count of
- * container_details rows for that type.
+ * containers for that type.
+ * On house jobs (when jobCargoDetails is provided), counts only containers
+ * assigned on the house — not the full master container_details list.
  * Returns "not-container" when the unit is not a container-type unit.
  */
 function resolveFclJobContainerChargeNoOfUnit(
   unitCode: string,
   unitLabel: string | undefined,
   containerDetails: JobContainerForNoOfUnits[],
+  jobCargoDetails?: JobCargoForFclNoOfUnits[],
 ): number | "not-container" {
   const unitTokens = chargeUnitTokens(unitCode, unitLabel);
   const knownContainerTypeTokens = new Set(
@@ -803,6 +806,26 @@ function resolveFclJobContainerChargeNoOfUnit(
     const typeTokens = containerDetailTypeTokens(container);
     return typeTokens.some((token) => unitTokens.includes(token));
   });
+
+  // House job: scope to containers selected on house cargo details
+  if (jobCargoDetails != null) {
+    const houseContainerNos = new Set(
+      jobCargoDetails
+        .map((row) =>
+          String(row.container_number ?? row.container_no ?? "").trim(),
+        )
+        .filter(Boolean),
+    );
+    const houseMatchingContainers = matchingContainers.filter((container) =>
+      houseContainerNos.has(String(container.container_no ?? "").trim()),
+    );
+    // Distinct house container numbers of this type (one unit per container)
+    return new Set(
+      houseMatchingContainers
+        .map((container) => String(container.container_no ?? "").trim())
+        .filter(Boolean),
+    ).size;
+  }
 
   if (matchingContainers.length > 0) {
     return matchingContainers.length;
@@ -895,6 +918,7 @@ function resolveJobChargeNoOfUnitNumber(
       unitCode,
       unitLabel,
       context.containerDetails,
+      context.jobCargoDetails,
     );
     if (fclResult !== "not-container") {
       return fclResult;
