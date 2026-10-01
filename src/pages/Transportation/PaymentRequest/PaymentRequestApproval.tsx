@@ -736,8 +736,9 @@ function PaymentRequestApproval({
       status: "Approved" | "Rejected",
       rejectedNoteValue?: string,
     ) => {
+      const isApprove = status === "Approved";
       setStatusActionLabel(
-        status === "Approved"
+        isApprove
           ? "Approving payment request…"
           : "Rejecting payment request…",
       );
@@ -745,7 +746,9 @@ function PaymentRequestApproval({
       try {
         const payload: Record<string, unknown> = {
           id: row.id,
-          status,
+          // Credit-limit override approval uses a distinct status key
+          status:
+            isOverrideMode && isApprove ? "override_approve" : status,
         };
         if (status === "Rejected") {
           payload.rejected_note = rejectedNoteValue?.trim() || null;
@@ -757,7 +760,7 @@ function PaymentRequestApproval({
         )) as unknown;
         const failureMessage = getApiFailureMessage(
           raw,
-          `Failed to ${status === "Approved" ? "approve" : "reject"} payment request.`,
+          `Failed to ${isApprove ? "approve" : "reject"} payment request.`,
         );
         if (failureMessage) {
           ToastNotification({ type: "error", message: failureMessage });
@@ -765,10 +768,9 @@ function PaymentRequestApproval({
         }
         ToastNotification({
           type: "success",
-          message:
-            status === "Approved"
-              ? "Payment request approved successfully."
-              : "Payment request rejected successfully.",
+          message: isApprove
+            ? "Payment request approved successfully."
+            : "Payment request rejected successfully.",
         });
         await refetchPaymentRequests();
         return true;
@@ -777,7 +779,7 @@ function PaymentRequestApproval({
           type: "error",
           message: getServerErrorMessage(
             error,
-            `Failed to ${status === "Approved" ? "approve" : "reject"} payment request.`,
+            `Failed to ${isApprove ? "approve" : "reject"} payment request.`,
           ),
         });
         return false;
@@ -785,7 +787,7 @@ function PaymentRequestApproval({
         setStatusActionLoading(false);
       }
     },
-    [refetchPaymentRequests],
+    [isOverrideMode, refetchPaymentRequests],
   );
 
   const handleOverrideApprove = useCallback(
