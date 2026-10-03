@@ -26,6 +26,7 @@ import {
   Stack,
   Text,
   TextInput,
+  Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import {
@@ -83,8 +84,63 @@ type PaymentRow = Record<string, unknown> & {
   type?: string;
   status?: string;
   amount?: number | string;
+  parties?: Array<{
+    subledger_name?: string | null;
+    [key: string]: unknown;
+  }>;
   [key: string]: unknown;
 };
+
+function getPartyNamesFromRow(row: {
+  parties?: Array<{ subledger_name?: string | null }>;
+}): string[] {
+  const parties = Array.isArray(row.parties) ? row.parties : [];
+  const names = parties
+    .map((p) => String(p?.subledger_name ?? "").trim())
+    .filter(Boolean);
+  return [...new Set(names)];
+}
+
+function TruncatedNameCell({
+  fullText,
+  displayText,
+  fontFamily,
+}: {
+  fullText: string;
+  displayText: string;
+  fontFamily: string;
+}) {
+  if (!fullText) {
+    return <Text size="sm">-</Text>;
+  }
+
+  const showTooltip = fullText !== displayText || fullText.length >= 24;
+
+  return (
+    <Tooltip
+      label={fullText}
+      multiline
+      maw={400}
+      withArrow
+      disabled={!showTooltip}
+      styles={{
+        tooltip: {
+          fontFamily,
+          fontSize: 12,
+          whiteSpace: "pre-wrap",
+        },
+      }}
+    >
+      <Text
+        size="sm"
+        lineClamp={1}
+        style={{ cursor: showTooltip ? "default" : undefined }}
+      >
+        {displayText}
+      </Text>
+    </Tooltip>
+  );
+}
 
 /** `summary` on `paymentFilter` (overseas / is_agent) — totals are filter-scoped. */
 type OverseasPaymentListSummary = {
@@ -124,6 +180,7 @@ type OverseasPaymentFilters = {
 type OverseasPaymentColumnVisibility = {
   sno: boolean;
   day_book_name: boolean;
+  party_name: boolean;
   payment_no: boolean;
   date: boolean;
   type: boolean;
@@ -134,6 +191,7 @@ type OverseasPaymentColumnVisibility = {
 const overseasPaymentColumnDefault: OverseasPaymentColumnVisibility = {
   sno: true,
   day_book_name: true,
+  party_name: true,
   payment_no: true,
   date: true,
   type: true,
@@ -144,6 +202,7 @@ const overseasPaymentColumnDefault: OverseasPaymentColumnVisibility = {
 const overseasPaymentColumnLabels: Record<keyof OverseasPaymentColumnVisibility, string> = {
   sno: "S.No",
   day_book_name: "Day Book",
+  party_name: "Party name",
   payment_no: "Payment No",
   date: "Date",
   type: "Type",
@@ -464,7 +523,7 @@ export default function OverseasPaymentMaster() {
       {
         accessorKey: "day_book_name",
         header: "Day Book",
-        size: 200,
+        size: 140,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Day Book"
@@ -504,11 +563,49 @@ export default function OverseasPaymentMaster() {
             )}
           />
         ),
+        Cell: ({ row }) => {
+          const fullText = String(row.original.day_book_name ?? "").trim();
+          const displayText =
+            fullText.length > 18 ? `${fullText.slice(0, 18)}...` : fullText;
+          return (
+            <TruncatedNameCell
+              fullText={fullText}
+              displayText={displayText || "-"}
+              fontFamily={erpTheme.fontSans}
+            />
+          );
+        },
+      },
+      {
+        id: "party_name",
+        header: "Party name",
+        size: 150,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ row }) => {
+          const names = getPartyNamesFromRow(row.original);
+          const fullText = names.join(", ");
+          const displayText =
+            names.length === 0
+              ? "-"
+              : names.length === 1
+                ? names[0].length > 18
+                  ? `${names[0].slice(0, 18)}...`
+                  : names[0]
+                : `${names[0]}...`;
+          return (
+            <TruncatedNameCell
+              fullText={fullText}
+              displayText={displayText}
+              fontFamily={erpTheme.fontSans}
+            />
+          );
+        },
       },
       {
         accessorKey: "payment_no",
         header: "Payment No",
-        size: 160,
+        size: 140,
         Header: () => (
           <ERPListColumnHeaderFilter
             label="Payment No"
@@ -881,6 +978,8 @@ export default function OverseasPaymentMaster() {
     mantineTableBodyCellProps: ({ column }) => {
       const colSize = column.getSize();
       const isActions = column.id === "actions";
+      const isTruncatedTextCol =
+        column.id === "day_book_name" || column.id === "party_name";
       const extraStyles = isActions
         ? {
             // Pinned-right Actions cell. `minWidth: 80px` matches the head
@@ -904,7 +1003,9 @@ export default function OverseasPaymentMaster() {
            * and the inline filter editor.
            */
           width: colSize,
-          minWidth: colSize,
+          minWidth: isTruncatedTextCol ? 100 : colSize,
+          maxWidth: isTruncatedTextCol ? colSize : undefined,
+          overflow: isTruncatedTextCol ? "hidden" : undefined,
           padding: "8px 16px",
           fontSize: 14,
           fontFamily: erpTheme.fontSans,
@@ -917,6 +1018,8 @@ export default function OverseasPaymentMaster() {
     mantineTableHeadCellProps: ({ column }) => {
       const colSize = column.getSize();
       const isActions = column.id === "actions";
+      const isTruncatedTextCol =
+        column.id === "day_book_name" || column.id === "party_name";
       const extraStyles = isActions
         ? {
             // Pinned-right Actions header. `zIndex: 4` keeps the sticky
@@ -938,7 +1041,9 @@ export default function OverseasPaymentMaster() {
            * inline filter editor never resizes the header.
            */
           width: colSize,
-          minWidth: colSize,
+          minWidth: isTruncatedTextCol ? 100 : colSize,
+          maxWidth: isTruncatedTextCol ? colSize : undefined,
+          overflow: isTruncatedTextCol ? "hidden" : undefined,
           padding: "8px 16px",
           fontSize: 14,
           fontFamily: erpTheme.fontSans,
@@ -963,7 +1068,8 @@ export default function OverseasPaymentMaster() {
         flexGrow: 1,
         minHeight: 0,
         position: "relative",
-        overflow: "auto",
+        overflowY: "auto",
+        overflowX: "hidden",
       },
     },
   });

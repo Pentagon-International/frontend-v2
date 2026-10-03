@@ -114,9 +114,12 @@ import {
 } from "../../../utils/specialCharactersFieldValidation";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
 import {
+  buildDuplicateHouseLinkBlockedMessage,
   buildJobCreatePayloadFromBooking,
   collectLinkedBookingIds,
+  extractCustomerServiceShipmentFilterRows,
   fetchJobRecordByDetailsId,
+  getBookingsBlockedByJobHouseNumbers,
   prepareHouseDocumentIdsFromBooking,
 } from "../../../utils/bookingCreateJob";
 import {
@@ -2557,25 +2560,19 @@ function AirExportJobCreate() {
         payload,
       );
 
-      const rawList: unknown =
-        (response as unknown as { data?: unknown }).data ?? response;
-      const list = Array.isArray(rawList)
-        ? (rawList as Record<string, unknown>[])
-        : [];
+      const list = extractCustomerServiceShipmentFilterRows(response);
+      setBookingLinkBookings(list);
 
-      const existingHouseNumbers = new Set(
-        hawbDetails
-          .map((h) => String(h.hawb_no ?? "").trim())
-          .filter(Boolean),
+      const blocked = getBookingsBlockedByJobHouseNumbers(
+        list,
+        hawbDetails.map((h) => String(h.hawb_no ?? "").trim()),
       );
-
-      const eligible = list.filter((b) => {
-        const houseNo = resolveBookingHouseNumber(b);
-        if (!houseNo) return true;
-        return !existingHouseNumbers.has(houseNo);
-      });
-
-      setBookingLinkBookings(eligible);
+      if (blocked.length > 0) {
+        ToastNotification({
+          type: "warning",
+          message: buildDuplicateHouseLinkBlockedMessage(blocked, "HAWB"),
+        });
+      }
     } catch (err: unknown) {
       console.error("Error fetching eligible bookings:", err);
       ToastNotification({
@@ -2595,8 +2592,45 @@ function AirExportJobCreate() {
     mawbDetailsForm.values.is_direct,
     mawbDetailsForm.values.origin_code,
     mawbDetailsForm.values.service,
-    resolveBookingHouseNumber,
   ]);
+
+  const bookingLinkBlockedByHouse = useMemo(
+    () =>
+      getBookingsBlockedByJobHouseNumbers(
+        bookingLinkBookings,
+        hawbDetails.map((h) => String(h.hawb_no ?? "").trim()),
+      ),
+    [bookingLinkBookings, hawbDetails],
+  );
+
+  const bookingLinkBlockedIds = useMemo(
+    () => new Set(bookingLinkBlockedByHouse.map((item) => item.id)),
+    [bookingLinkBlockedByHouse],
+  );
+
+  const toggleBookingLinkSelection = useCallback(
+    (idNum: number) => {
+      if (bookingLinkBlockedIds.has(idNum)) {
+        const blockedItem = bookingLinkBlockedByHouse.find(
+          (item) => item.id === idNum,
+        );
+        ToastNotification({
+          type: "warning",
+          message: buildDuplicateHouseLinkBlockedMessage(
+            blockedItem ? [blockedItem] : bookingLinkBlockedByHouse,
+            "HAWB",
+          ),
+        });
+        return;
+      }
+      setBookingLinkSelectedIds((prev) =>
+        prev.includes(idNum)
+          ? prev.filter((id) => id !== idNum)
+          : [...prev, idNum],
+      );
+    },
+    [bookingLinkBlockedByHouse, bookingLinkBlockedIds],
+  );
 
   const handleConfirmLinkBooking = useCallback(async () => {
     if (bookingLinkSelectedIds.length === 0) return;
@@ -2605,6 +2639,20 @@ function AirExportJobCreate() {
         type: "error",
         message: "Please save the job before linking bookings.",
       });
+      return;
+    }
+
+    const blockedSelected = bookingLinkBlockedByHouse.filter((item) =>
+      bookingLinkSelectedIds.includes(item.id),
+    );
+    if (blockedSelected.length > 0) {
+      ToastNotification({
+        type: "warning",
+        message: buildDuplicateHouseLinkBlockedMessage(blockedSelected, "HAWB"),
+      });
+      setBookingLinkSelectedIds((prev) =>
+        prev.filter((id) => !bookingLinkBlockedIds.has(id)),
+      );
       return;
     }
 
@@ -2733,6 +2781,8 @@ function AirExportJobCreate() {
       setIsFetchingJobById(false);
     }
   }, [
+    bookingLinkBlockedByHouse,
+    bookingLinkBlockedIds,
     bookingLinkSelectedIds,
     hawbDetails,
     isChaMode,
@@ -5259,7 +5309,7 @@ function AirExportJobCreate() {
               <Loader color="#105476" size="lg" />
             </Center>
           ) : bookingLinkBookings.length === 0 ? (
-            <Text c="dimmed">No eligible bookings found for this route.</Text>
+            <Text c="dimmed">No eligible bookings found</Text>
           ) : (
             <ScrollArea style={{ height: 360 }}>
               <Table
@@ -5291,24 +5341,20 @@ function AirExportJobCreate() {
                         "",
                     );
                     const houseNo = resolveBookingHouseNumber(b);
+                    const isBlocked = bookingLinkBlockedIds.has(idNum);
                     return (
                       <Table.Tr
                         key={idNum}
                         style={{
-                          cursor: "pointer",
+                          cursor: isBlocked ? "not-allowed" : "pointer",
+                          opacity: isBlocked ? 0.55 : 1,
                           backgroundColor: bookingLinkSelectedIds.includes(
                             idNum,
                           )
                             ? "rgba(16, 84, 118, 0.08)"
                             : undefined,
                         }}
-                        onClick={() =>
-                          setBookingLinkSelectedIds((prev) =>
-                            prev.includes(idNum)
-                              ? prev.filter((id) => id !== idNum)
-                              : [...prev, idNum],
-                          )
-                        }
+                        onClick={() => toggleBookingLinkSelection(idNum)}
                       >
                         <Table.Td
                           onClick={(e) => e.stopPropagation()}
@@ -5316,14 +5362,9 @@ function AirExportJobCreate() {
                         >
                           <input
                             type="checkbox"
+                            disabled={isBlocked}
                             checked={bookingLinkSelectedIds.includes(idNum)}
-                            onChange={() =>
-                              setBookingLinkSelectedIds((prev) =>
-                                prev.includes(idNum)
-                                  ? prev.filter((id) => id !== idNum)
-                                  : [...prev, idNum],
-                              )
-                            }
+                            onChange={() => toggleBookingLinkSelection(idNum)}
                           />
                         </Table.Td>
                         <Table.Td style={{ paddingRight: 16 }}>
@@ -5331,6 +5372,7 @@ function AirExportJobCreate() {
                         </Table.Td>
                         <Table.Td style={{ paddingRight: 16 }}>
                           {houseNo || "-"}
+                          {isBlocked ? " (already on job)" : ""}
                         </Table.Td>
                         <Table.Td style={{ paddingRight: 16 }}>
                           {String(b.customer_name ?? "-")}
@@ -5362,7 +5404,25 @@ function AirExportJobCreate() {
             <Button
               color="#105476"
               leftSection={<IconLink size={16} />}
-              onClick={() => setBookingLinkConfirmOpen(true)}
+              onClick={() => {
+                const blockedSelected = bookingLinkBlockedByHouse.filter(
+                  (item) => bookingLinkSelectedIds.includes(item.id),
+                );
+                if (blockedSelected.length > 0) {
+                  ToastNotification({
+                    type: "warning",
+                    message: buildDuplicateHouseLinkBlockedMessage(
+                      blockedSelected,
+                      "HAWB",
+                    ),
+                  });
+                  setBookingLinkSelectedIds((prev) =>
+                    prev.filter((id) => !bookingLinkBlockedIds.has(id)),
+                  );
+                  return;
+                }
+                setBookingLinkConfirmOpen(true);
+              }}
               disabled={
                 bookingLinkSelectedIds.length === 0 || bookingLinkLoading
               }

@@ -40,6 +40,7 @@ import {
   IconFileInvoice,
   IconRefresh,
   IconPaperclip,
+  IconLink,
   IconSend,
 } from "@tabler/icons-react";
 import {
@@ -169,7 +170,15 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
-import { collectLinkedBookingIds } from "../../../utils/bookingCreateJob";
+import {
+  buildDuplicateHouseLinkBlockedMessage,
+  buildJobCreatePayloadFromBooking,
+  collectLinkedBookingIds,
+  extractCustomerServiceShipmentFilterRows,
+  fetchJobRecordByDetailsId,
+  getBookingsBlockedByJobHouseNumbers,
+  prepareHouseDocumentIdsFromBooking,
+} from "../../../utils/bookingCreateJob";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { useChaJobServiceField } from "../chaJob/useChaJobServiceField";
 import {
@@ -515,6 +524,16 @@ function AirImportJobCreate() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingJobById, setIsFetchingJobById] = useState(false);
+  const [linkingHousesLoader, setLinkingHousesLoader] = useState(false);
+  const [bookingLinkModalOpen, setBookingLinkModalOpen] = useState(false);
+  const [bookingLinkLoading, setBookingLinkLoading] = useState(false);
+  const [bookingLinkBookings, setBookingLinkBookings] = useState<
+    Record<string, unknown>[]
+  >([]);
+  const [bookingLinkSelectedIds, setBookingLinkSelectedIds] = useState<
+    number[]
+  >([]);
+  const [bookingLinkConfirmOpen, setBookingLinkConfirmOpen] = useState(false);
   const [
     vendorInvoiceAutomationShipmentNo,
     setVendorInvoiceAutomationShipmentNo,
@@ -2708,6 +2727,308 @@ function AirImportJobCreate() {
     ],
   );
 
+  const resolveBookingHouseNumber = useCallback(
+    (booking: Record<string, unknown>): string => {
+      return String(
+        booking.houseno ??
+          booking.house_no ??
+          booking.hawb_no ??
+          booking.hawb_number ??
+          booking.hbl_number ??
+          "",
+      ).trim();
+    },
+    [],
+  );
+
+  const handleOpenBookingLinkModal = useCallback(async () => {
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Please save the job before linking bookings.",
+      });
+      return;
+    }
+
+    const missingFields: string[] = [];
+    if (!mawbDetailsForm.values.service?.trim()) missingFields.push("Service");
+
+    if (!isChaMode && !mawbDetailsForm.values.origin_agent?.trim()) {
+      missingFields.push("Origin Agent");
+    }
+    if (!mawbDetailsForm.values.origin_code?.trim())
+      missingFields.push("Origin");
+    if (!mawbDetailsForm.values.destination_code?.trim())
+      missingFields.push("Destination");
+    if (!mawbDetailsForm.values.etd) missingFields.push("ETD");
+    if (!mawbDetailsForm.values.eta) missingFields.push("ETA");
+
+    if (missingFields.length > 0) {
+      ToastNotification({
+        type: "error",
+        message: `Please fill all mandatory MAWB details before linking booking: ${missingFields.join(", ")}`,
+      });
+      setActive(0);
+      return;
+    }
+
+    setBookingLinkModalOpen(true);
+    setBookingLinkLoading(true);
+    setBookingLinkBookings([]);
+    setBookingLinkSelectedIds([]);
+
+    try {
+      const payload = {
+        filters: {
+          service_type: "IMPORT",
+          status: ["BOOKED", "RECEIVED"],
+          service: mawbDetailsForm.values.service,
+          origin_code: mawbDetailsForm.values.origin_code,
+          destination_code: mawbDetailsForm.values.destination_code,
+        },
+      };
+
+      const response = await apiCallProtected.post(
+        URL.customerServiceShipmentFilter,
+        payload,
+      );
+
+      const list = extractCustomerServiceShipmentFilterRows(response);
+      setBookingLinkBookings(list);
+
+      const blocked = getBookingsBlockedByJobHouseNumbers(
+        list,
+        hawbDetails.map((h) => String(h.hawb_no ?? "").trim()),
+      );
+      if (blocked.length > 0) {
+        ToastNotification({
+          type: "warning",
+          message: buildDuplicateHouseLinkBlockedMessage(blocked, "HAWB"),
+        });
+      }
+    } catch (err: unknown) {
+      console.error("Error fetching eligible bookings:", err);
+      ToastNotification({
+        type: "error",
+        message: "Failed to fetch eligible bookings.",
+      });
+    } finally {
+      setBookingLinkLoading(false);
+    }
+  }, [
+    hawbDetails,
+    isChaMode,
+    jobData?.id,
+    mawbDetailsForm.values.destination_code,
+    mawbDetailsForm.values.etd,
+    mawbDetailsForm.values.eta,
+    mawbDetailsForm.values.origin_agent,
+    mawbDetailsForm.values.origin_code,
+    mawbDetailsForm.values.service,
+  ]);
+
+  const bookingLinkBlockedByHouse = useMemo(
+    () =>
+      getBookingsBlockedByJobHouseNumbers(
+        bookingLinkBookings,
+        hawbDetails.map((h) => String(h.hawb_no ?? "").trim()),
+      ),
+    [bookingLinkBookings, hawbDetails],
+  );
+
+  const bookingLinkBlockedIds = useMemo(
+    () => new Set(bookingLinkBlockedByHouse.map((item) => item.id)),
+    [bookingLinkBlockedByHouse],
+  );
+
+  const toggleBookingLinkSelection = useCallback(
+    (idNum: number) => {
+      if (bookingLinkBlockedIds.has(idNum)) {
+        const blockedItem = bookingLinkBlockedByHouse.find(
+          (item) => item.id === idNum,
+        );
+        ToastNotification({
+          type: "warning",
+          message: buildDuplicateHouseLinkBlockedMessage(
+            blockedItem ? [blockedItem] : bookingLinkBlockedByHouse,
+            "HAWB",
+          ),
+        });
+        return;
+      }
+      setBookingLinkSelectedIds((prev) =>
+        prev.includes(idNum)
+          ? prev.filter((id) => id !== idNum)
+          : [...prev, idNum],
+      );
+    },
+    [bookingLinkBlockedByHouse, bookingLinkBlockedIds],
+  );
+
+  const handleConfirmLinkBooking = useCallback(async () => {
+    if (bookingLinkSelectedIds.length === 0) return;
+    if (!jobData?.id) {
+      ToastNotification({
+        type: "error",
+        message: "Please save the job before linking bookings.",
+      });
+      return;
+    }
+
+    const blockedSelected = bookingLinkBlockedByHouse.filter((item) =>
+      bookingLinkSelectedIds.includes(item.id),
+    );
+    if (blockedSelected.length > 0) {
+      ToastNotification({
+        type: "warning",
+        message: buildDuplicateHouseLinkBlockedMessage(blockedSelected, "HAWB"),
+      });
+      setBookingLinkSelectedIds((prev) =>
+        prev.filter((id) => !bookingLinkBlockedIds.has(id)),
+      );
+      return;
+    }
+
+    setBookingLinkModalOpen(false);
+    const selectedIds = [...bookingLinkSelectedIds];
+    setBookingLinkSelectedIds([]);
+    setLinkingHousesLoader(true);
+    setIsFetchingJobById(true);
+
+    try {
+      const bookingResponses = await Promise.all(
+        selectedIds.map((bookingId) =>
+          getAPICall(`${URL.customerServiceShipment}${bookingId}/`, API_HEADER),
+        ),
+      );
+
+      const newHouses: Record<string, unknown>[] = [];
+      const linkedBookingIds: number[] = [];
+
+      for (let index = 0; index < bookingResponses.length; index += 1) {
+        const bookingRes = bookingResponses[index];
+        const bookingId = selectedIds[index];
+        const bookingDetail =
+          (bookingRes as Record<string, unknown>)?.data ?? bookingRes;
+        const bookingRecord = (
+          Array.isArray(bookingDetail) ? bookingDetail[0] : bookingDetail
+        ) as Record<string, unknown>;
+
+        const houseDocumentIds =
+          await prepareHouseDocumentIdsFromBooking(bookingRecord);
+        const payload = buildJobCreatePayloadFromBooking(
+          bookingRecord,
+          "air-import",
+          { houseDocumentIds },
+        );
+        const mappedHousing = Array.isArray(payload.housing_details)
+          ? payload.housing_details[0]
+          : null;
+        if (!mappedHousing || typeof mappedHousing !== "object") {
+          continue;
+        }
+
+        newHouses.push(mappedHousing as Record<string, unknown>);
+        linkedBookingIds.push(bookingId);
+      }
+
+      if (newHouses.length === 0) {
+        ToastNotification({
+          type: "error",
+          message: "Could not map booking details to a house.",
+        });
+        return;
+      }
+
+      const existingHouseIds = hawbDetails
+        .map((h) => {
+          if (h.id == null) return null;
+          const n = typeof h.id === "number" ? h.id : Number(h.id);
+          return Number.isFinite(n) && n > 0 ? { id: n } : null;
+        })
+        .filter((row): row is { id: number } => row != null);
+
+      const existingBookingIds = collectLinkedBookingIds(
+        hawbDetails,
+        (jobData as { booking_ids?: unknown }).booking_ids,
+        linkedBookingIds,
+      );
+
+      await putAPICall(
+        `${URL.base}${URL.jobCreate}`,
+        {
+          id: jobData.id,
+          ...(isChaMode ? { is_service_job: false } : {}),
+          ...(existingBookingIds.length > 0
+            ? { booking_ids: existingBookingIds }
+            : {}),
+          housing_details: [...existingHouseIds, ...newHouses],
+        },
+        API_HEADER,
+      );
+
+      const refreshedJob = await fetchJobRecordByDetailsId(Number(jobData.id));
+      if (!refreshedJob) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Houses were linked but failed to reload the job. Please refresh the page.",
+        });
+        return;
+      }
+
+      hawbDetailsLoadedRef.current = false;
+      formsInitializedFromJobDataRef.current = false;
+
+      ToastNotification({
+        type: "success",
+        message:
+          newHouses.length === 1
+            ? "Booking linked and job updated."
+            : `${newHouses.length} bookings linked and job updated.`,
+      });
+
+      navigate(`${jobModuleBasePath}/edit`, {
+        state: {
+          job: refreshedJob,
+          returnTo: location.state?.returnTo,
+          viewMode: location.state?.viewMode,
+        },
+        replace: true,
+      });
+    } catch (err: unknown) {
+      console.error("Error linking booking to house:", err);
+      const axiosErr = err as {
+        response?: {
+          data?: { message?: string; detail?: string; error?: string };
+        };
+      };
+      ToastNotification({
+        type: "error",
+        message:
+          axiosErr?.response?.data?.message ||
+          axiosErr?.response?.data?.detail ||
+          axiosErr?.response?.data?.error ||
+          "Failed to link booking.",
+      });
+    } finally {
+      setBookingLinkLoading(false);
+      setLinkingHousesLoader(false);
+      setIsFetchingJobById(false);
+    }
+  }, [
+    bookingLinkBlockedByHouse,
+    bookingLinkBlockedIds,
+    bookingLinkSelectedIds,
+    hawbDetails,
+    isChaMode,
+    jobData,
+    jobModuleBasePath,
+    location.state?.returnTo,
+    location.state?.viewMode,
+    navigate,
+  ]);
+
   // Handle edit HAWB detail
   const handleEditHawbDetail = (index: number) => {
     const hawbToEdit = hawbDetails[index];
@@ -3948,7 +4269,14 @@ function AirImportJobCreate() {
   if (isFetchingJobById) {
     return (
       <Center style={{ minHeight: "60vh" }}>
-        <Loader color="#105476" size="lg" />
+        <Stack align="center" gap="md">
+          <Loader color="#105476" size="lg" />
+          {linkingHousesLoader && (
+            <Text c="dimmed" size="sm">
+              Updating houses...
+            </Text>
+          )}
+        </Stack>
       </Center>
     );
   }
@@ -6060,6 +6388,181 @@ function AirImportJobCreate() {
         onSubmit={jobDocuments.handleSubmitDocumentsModal}
       />
 
+      <Modal
+        opened={bookingLinkModalOpen}
+        onClose={() => {
+          setBookingLinkModalOpen(false);
+          setBookingLinkSelectedIds([]);
+        }}
+        title="Link Booking"
+        centered
+        size="xl"
+      >
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Select one or more eligible bookings to create linked houses.
+          </Text>
+
+          {bookingLinkLoading ? (
+            <Center style={{ minHeight: 140 }}>
+              <Loader color="#105476" size="lg" />
+            </Center>
+          ) : bookingLinkBookings.length === 0 ? (
+            <Text c="dimmed">No eligible bookings found</Text>
+          ) : (
+            <ScrollArea style={{ height: 360 }}>
+              <Table
+                highlightOnHover
+                verticalSpacing="sm"
+                horizontalSpacing="md"
+                striped
+              >
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th style={{ width: 80, paddingRight: 16 }}>
+                      Select
+                    </Table.Th>
+                    <Table.Th style={{ paddingRight: 16 }}>Booking ID</Table.Th>
+                    <Table.Th style={{ paddingRight: 16 }}>House</Table.Th>
+                    <Table.Th style={{ paddingRight: 16 }}>Customer</Table.Th>
+                    <Table.Th style={{ paddingRight: 16 }}>Origin</Table.Th>
+                    <Table.Th>Destination</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {bookingLinkBookings.map((b) => {
+                    const idNum = Number(b.id ?? "");
+                    const bookingId = String(
+                      b.shipment_code ??
+                        b.shipment_id ??
+                        b.shipment_no ??
+                        b.id ??
+                        "",
+                    );
+                    const houseNo = resolveBookingHouseNumber(b);
+                    const isBlocked = bookingLinkBlockedIds.has(idNum);
+                    return (
+                      <Table.Tr
+                        key={idNum}
+                        style={{
+                          cursor: isBlocked ? "not-allowed" : "pointer",
+                          opacity: isBlocked ? 0.55 : 1,
+                          backgroundColor: bookingLinkSelectedIds.includes(
+                            idNum,
+                          )
+                            ? "rgba(16, 84, 118, 0.08)"
+                            : undefined,
+                        }}
+                        onClick={() => toggleBookingLinkSelection(idNum)}
+                      >
+                        <Table.Td
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ width: 80, paddingRight: 16 }}
+                        >
+                          <input
+                            type="checkbox"
+                            disabled={isBlocked}
+                            checked={bookingLinkSelectedIds.includes(idNum)}
+                            onChange={() => toggleBookingLinkSelection(idNum)}
+                          />
+                        </Table.Td>
+                        <Table.Td style={{ paddingRight: 16 }}>
+                          {bookingId || idNum}
+                        </Table.Td>
+                        <Table.Td style={{ paddingRight: 16 }}>
+                          {houseNo || "-"}
+                          {isBlocked ? " (already on job)" : ""}
+                        </Table.Td>
+                        <Table.Td style={{ paddingRight: 16 }}>
+                          {String(b.customer_name ?? "-")}
+                        </Table.Td>
+                        <Table.Td style={{ paddingRight: 16 }}>
+                          {String(b.origin_name ?? "-")}
+                        </Table.Td>
+                        <Table.Td>{String(b.destination_name ?? "-")}</Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          )}
+
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="outline"
+              color="#105476"
+              onClick={() => {
+                setBookingLinkModalOpen(false);
+                setBookingLinkSelectedIds([]);
+              }}
+              disabled={bookingLinkLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="#105476"
+              leftSection={<IconLink size={16} />}
+              onClick={() => {
+                const blockedSelected = bookingLinkBlockedByHouse.filter(
+                  (item) => bookingLinkSelectedIds.includes(item.id),
+                );
+                if (blockedSelected.length > 0) {
+                  ToastNotification({
+                    type: "warning",
+                    message: buildDuplicateHouseLinkBlockedMessage(
+                      blockedSelected,
+                      "HAWB",
+                    ),
+                  });
+                  setBookingLinkSelectedIds((prev) =>
+                    prev.filter((id) => !bookingLinkBlockedIds.has(id)),
+                  );
+                  return;
+                }
+                setBookingLinkConfirmOpen(true);
+              }}
+              disabled={
+                bookingLinkSelectedIds.length === 0 || bookingLinkLoading
+              }
+              loading={bookingLinkLoading}
+            >
+              Link Booking{bookingLinkSelectedIds.length > 1 ? "s" : ""}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={bookingLinkConfirmOpen}
+        onClose={() => setBookingLinkConfirmOpen(false)}
+        title="Confirm Link Booking"
+        centered
+      >
+        <Text size="sm" mb="md">
+          {bookingLinkSelectedIds.length === 1
+            ? "Do you want to link this booking and update the job with a new house?"
+            : `Do you want to link ${bookingLinkSelectedIds.length} bookings and update the job with new houses?`}
+        </Text>
+        <Group justify="flex-end">
+          <Button
+            variant="default"
+            onClick={() => setBookingLinkConfirmOpen(false)}
+          >
+            No
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => {
+              setBookingLinkConfirmOpen(false);
+              void handleConfirmLinkBooking();
+            }}
+          >
+            Yes
+          </Button>
+        </Group>
+      </Modal>
+
       <Group justify="space-between" mt="xl">
         <Group>
           <Button
@@ -6097,6 +6600,18 @@ function AirImportJobCreate() {
           >
             {documentsReadOnly ? "View Documents" : "Attach Documents"}
           </Button>
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              color="#105476"
+              leftSection={<IconLink size={16} />}
+              onClick={handleOpenBookingLinkModal}
+              loading={bookingLinkLoading}
+              disabled={bookingLinkLoading}
+            >
+              Link Booking
+            </Button>
+          )}
           {!isReadOnly && (
             <Button
               variant="outline"

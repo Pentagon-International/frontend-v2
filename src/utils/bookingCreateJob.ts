@@ -653,6 +653,122 @@ function toPositiveBookingId(value: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** House / HAWB number fields used on booking filter rows. */
+export function resolveBookingLinkHouseNumber(
+  booking: Record<string, unknown>,
+): string {
+  return String(
+    booking.houseno ??
+      booking.house_no ??
+      booking.hawb_no ??
+      booking.hawb_number ??
+      booking.hbl_number ??
+      "",
+  ).trim();
+}
+
+export type BookingLinkHouseConflict = {
+  id: number;
+  bookingCode: string;
+  houseNo: string;
+};
+
+/** Bookings whose house no already exists on the current job. */
+export function getBookingsBlockedByJobHouseNumbers(
+  bookings: Record<string, unknown>[],
+  existingHouseNumbers: Iterable<string>,
+): BookingLinkHouseConflict[] {
+  const existing = new Set(
+    [...existingHouseNumbers]
+      .map((value) => String(value ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const blocked: BookingLinkHouseConflict[] = [];
+  const seenIds = new Set<number>();
+
+  for (const booking of bookings) {
+    const houseNo = resolveBookingLinkHouseNumber(booking);
+    if (!houseNo || !existing.has(houseNo.toLowerCase())) continue;
+
+    const id = Number(booking.id ?? "");
+    if (!Number.isFinite(id) || id <= 0 || seenIds.has(id)) continue;
+    seenIds.add(id);
+
+    blocked.push({
+      id,
+      bookingCode: String(
+        booking.shipment_code ??
+          booking.shipment_id ??
+          booking.shipment_no ??
+          booking.id ??
+          "",
+      ),
+      houseNo,
+    });
+  }
+
+  return blocked;
+}
+
+export function buildDuplicateHouseLinkBlockedMessage(
+  blocked: BookingLinkHouseConflict[],
+  houseLabel: "HBL" | "HAWB" = "HBL",
+): string {
+  if (blocked.length === 0) return "";
+
+  if (blocked.length === 1) {
+    const item = blocked[0];
+    const code = item.bookingCode ? ` ${item.bookingCode}` : "";
+    return `Booking${code} has ${houseLabel} ${item.houseNo} which already exists on this job and cannot be linked. Please change the ${houseLabel} number on the booking.`;
+  }
+
+  const details = blocked
+    .map((item) => `${item.bookingCode || "booking"} (${item.houseNo})`)
+    .join(", ");
+  return `These bookings have ${houseLabel} numbers that already exist on this job and cannot be linked: ${details}. Please change the ${houseLabel} number on those bookings.`;
+}
+
+/**
+ * Normalize `customer-service-shipment/filter/` responses into a row array.
+ * Handles interceptor-unwrapped bodies, raw Axios responses, and nested `data`.
+ */
+export function extractCustomerServiceShipmentFilterRows(
+  response: unknown,
+): Record<string, unknown>[] {
+  const asRows = (value: unknown): Record<string, unknown>[] | null => {
+    if (Array.isArray(value)) return value as Record<string, unknown>[];
+    return null;
+  };
+
+  const fromObject = (
+    value: unknown,
+  ): Record<string, unknown>[] | null => {
+    if (!value || typeof value !== "object") return null;
+    const obj = value as Record<string, unknown>;
+    return (
+      asRows(obj.data) ??
+      asRows(obj.results) ??
+      asRows(obj.result) ??
+      null
+    );
+  };
+
+  const direct = asRows(response);
+  if (direct) return direct;
+
+  const fromRoot = fromObject(response);
+  if (fromRoot) return fromRoot;
+
+  // Raw AxiosResponse (interceptor not applied): response.data is the API body.
+  if (response && typeof response === "object") {
+    const maybeAxiosData = (response as Record<string, unknown>).data;
+    const nested = fromObject(maybeAxiosData);
+    if (nested) return nested;
+  }
+
+  return [];
+}
+
 /** Unique booking PKs from houses, job.booking_ids, and extra ids (link-booking). */
 export function collectLinkedBookingIds(
   housing?: Array<{ booking_id?: unknown }> | null,

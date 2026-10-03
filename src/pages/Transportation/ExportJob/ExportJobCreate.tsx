@@ -157,9 +157,12 @@ import {
   type HouseDocumentFields,
 } from "../../../utils/jobDocuments";
 import {
+  buildDuplicateHouseLinkBlockedMessage,
   buildJobCreatePayloadFromBooking,
   collectLinkedBookingIds,
+  extractCustomerServiceShipmentFilterRows,
   fetchJobRecordByDetailsId,
+  getBookingsBlockedByJobHouseNumbers,
   prepareHouseDocumentIdsFromBooking,
 } from "../../../utils/bookingCreateJob";
 import {
@@ -3148,25 +3151,19 @@ function ExportJobCreate() {
         payload,
       );
 
-      const rawList: unknown =
-        (response as unknown as Record<string, unknown>)?.data ?? response;
-      const list = Array.isArray(rawList)
-        ? (rawList as Record<string, unknown>[])
-        : [];
+      const list = extractCustomerServiceShipmentFilterRows(response);
+      setBookingLinkBookings(list);
 
-      const existingHouseNumbers = new Set(
-        housingDetails
-          .map((h) => String(h.hbl_number ?? "").trim())
-          .filter(Boolean),
+      const blocked = getBookingsBlockedByJobHouseNumbers(
+        list,
+        housingDetails.map((h) => String(h.hbl_number ?? "").trim()),
       );
-
-      const eligible = list.filter((b) => {
-        const houseNo = resolveBookingHouseNumber(b);
-        if (!houseNo) return true;
-        return !existingHouseNumbers.has(houseNo);
-      });
-
-      setBookingLinkBookings(eligible);
+      if (blocked.length > 0) {
+        ToastNotification({
+          type: "warning",
+          message: buildDuplicateHouseLinkBlockedMessage(blocked, "HBL"),
+        });
+      }
     } catch (err: unknown) {
       console.error("Error fetching eligible bookings:", err);
       ToastNotification({
@@ -3186,12 +3183,62 @@ function ExportJobCreate() {
     mblDetailsForm.values.origin_agent,
     mblDetailsForm.values.origin_code,
     mblDetailsForm.values.service,
-    resolveBookingHouseNumber,
   ]);
+
+  const bookingLinkBlockedByHouse = useMemo(
+    () =>
+      getBookingsBlockedByJobHouseNumbers(
+        bookingLinkBookings,
+        housingDetails.map((h) => String(h.hbl_number ?? "").trim()),
+      ),
+    [bookingLinkBookings, housingDetails],
+  );
+
+  const bookingLinkBlockedIds = useMemo(
+    () => new Set(bookingLinkBlockedByHouse.map((item) => item.id)),
+    [bookingLinkBlockedByHouse],
+  );
+
+  const toggleBookingLinkSelection = useCallback(
+    (idNum: number) => {
+      if (bookingLinkBlockedIds.has(idNum)) {
+        const blockedItem = bookingLinkBlockedByHouse.find(
+          (item) => item.id === idNum,
+        );
+        ToastNotification({
+          type: "warning",
+          message: buildDuplicateHouseLinkBlockedMessage(
+            blockedItem ? [blockedItem] : bookingLinkBlockedByHouse,
+            "HBL",
+          ),
+        });
+        return;
+      }
+      setBookingLinkSelectedIds((prev) =>
+        prev.includes(idNum)
+          ? prev.filter((id) => id !== idNum)
+          : [...prev, idNum],
+      );
+    },
+    [bookingLinkBlockedByHouse, bookingLinkBlockedIds],
+  );
 
   // Step 1 → Step 2: move to container selection
   const handleBookingLinkNext = useCallback(() => {
     if (bookingLinkSelectedIds.length === 0) return;
+    const blockedSelected = bookingLinkBlockedByHouse.filter((item) =>
+      bookingLinkSelectedIds.includes(item.id),
+    );
+    if (blockedSelected.length > 0) {
+      ToastNotification({
+        type: "warning",
+        message: buildDuplicateHouseLinkBlockedMessage(blockedSelected, "HBL"),
+      });
+      setBookingLinkSelectedIds((prev) =>
+        prev.filter((id) => !bookingLinkBlockedIds.has(id)),
+      );
+      return;
+    }
     const allNos = Array.from(
       new Set(
         containerDetailsForm.values.containers
@@ -3207,7 +3254,12 @@ function ExportJobCreate() {
     }, {});
     setBookingLinkSelectedContainersByBooking(defaultSelections);
     setBookingLinkStep("containers");
-  }, [bookingLinkSelectedIds, containerDetailsForm.values.containers]);
+  }, [
+    bookingLinkBlockedByHouse,
+    bookingLinkBlockedIds,
+    bookingLinkSelectedIds,
+    containerDetailsForm.values.containers,
+  ]);
 
   // Step 2: update job with new houses (same mapping as create-job-from-booking)
   const handleConfirmLinkBooking = useCallback(async () => {
@@ -3217,6 +3269,20 @@ function ExportJobCreate() {
         type: "error",
         message: "Please save the job before linking bookings.",
       });
+      return;
+    }
+
+    const blockedSelected = bookingLinkBlockedByHouse.filter((item) =>
+      bookingLinkSelectedIds.includes(item.id),
+    );
+    if (blockedSelected.length > 0) {
+      ToastNotification({
+        type: "warning",
+        message: buildDuplicateHouseLinkBlockedMessage(blockedSelected, "HBL"),
+      });
+      setBookingLinkSelectedIds((prev) =>
+        prev.filter((id) => !bookingLinkBlockedIds.has(id)),
+      );
       return;
     }
 
@@ -3383,6 +3449,8 @@ function ExportJobCreate() {
       setIsFetchingJobById(false);
     }
   }, [
+    bookingLinkBlockedByHouse,
+    bookingLinkBlockedIds,
     bookingLinkSelectedContainersByBooking,
     bookingLinkSelectedIds,
     containerDetailsForm.values.containers,
@@ -5988,7 +6056,7 @@ function ExportJobCreate() {
                   <Loader color="#105476" size="lg" />
                 </Center>
               ) : bookingLinkBookings.length === 0 ? (
-                <Text c="dimmed">No eligible bookings found for this route.</Text>
+                <Text c="dimmed">No eligible bookings found</Text>
               ) : (
                 <ScrollArea style={{ height: 360 }}>
                   <Table
@@ -6020,22 +6088,18 @@ function ExportJobCreate() {
                             "",
                         );
                         const houseNo = resolveBookingHouseNumber(b);
+                        const isBlocked = bookingLinkBlockedIds.has(idNum);
                         return (
                           <Table.Tr
                             key={idNum}
                             style={{
-                              cursor: "pointer",
+                              cursor: isBlocked ? "not-allowed" : "pointer",
+                              opacity: isBlocked ? 0.55 : 1,
                               backgroundColor: bookingLinkSelectedIds.includes(idNum)
                                 ? "rgba(16, 84, 118, 0.08)"
                                 : undefined,
                             }}
-                            onClick={() =>
-                              setBookingLinkSelectedIds((prev) =>
-                                prev.includes(idNum)
-                                  ? prev.filter((id) => id !== idNum)
-                                  : [...prev, idNum],
-                              )
-                            }
+                            onClick={() => toggleBookingLinkSelection(idNum)}
                           >
                             <Table.Td
                               onClick={(e) => e.stopPropagation()}
@@ -6043,14 +6107,9 @@ function ExportJobCreate() {
                             >
                               <input
                                 type="checkbox"
+                                disabled={isBlocked}
                                 checked={bookingLinkSelectedIds.includes(idNum)}
-                                onChange={() =>
-                                  setBookingLinkSelectedIds((prev) =>
-                                    prev.includes(idNum)
-                                      ? prev.filter((id) => id !== idNum)
-                                      : [...prev, idNum],
-                                  )
-                                }
+                                onChange={() => toggleBookingLinkSelection(idNum)}
                               />
                             </Table.Td>
                             <Table.Td style={{ paddingRight: 16 }}>
@@ -6058,6 +6117,7 @@ function ExportJobCreate() {
                             </Table.Td>
                             <Table.Td style={{ paddingRight: 16 }}>
                               {houseNo || "-"}
+                              {isBlocked ? " (already on job)" : ""}
                             </Table.Td>
                             <Table.Td style={{ paddingRight: 16 }}>
                               {String(b.customer_name ?? "-")}
