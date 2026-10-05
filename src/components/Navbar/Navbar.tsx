@@ -115,6 +115,9 @@ const Navbar = ({
   const showCreditLimitOverrideApproval =
     Boolean(user?.is_staff) ||
     Boolean(user?.screen_permissions?.credit_override_approval);
+  const showPaymentApprovalList = Boolean(
+    user?.screen_permissions?.payment_approval_screen,
+  );
   const showAccountsSubNav = useCanAccessAccountsSubNav();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
@@ -1264,6 +1267,21 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
+                    {showPaymentApprovalList && (
+                      <SubNavLink
+                        parent="Accounts"
+                        label="Payment Approval List"
+                        icon={IconCircleCheck}
+                        path="/payment-approval"
+                        collapsibles={{
+                          setIsSalesOpen,
+                          setIsTariffOpen,
+                          setIsCustomerServiceOpen,
+                          setIsAirOpen,
+                          setIsSeaExportOpen,
+                        }}
+                      />
+                    )}
                     <SubNavLink
                       parent="Accounts"
                       label="Overseas Payment"

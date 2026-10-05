@@ -182,6 +182,7 @@ export const URL = {
   reverseReceipt: "reverse-receipt/",
   paymentFilter: "filter/payment/",
   payment: "payment/",
+  paymentBulkApprovalStatus: "payment/bulk-approval-status/",
   reversePaymentFilter: "filter/reverse-payment/",
   reversePayment: "reverse-payment/",
   supplierInvoiceFilter: "filter/supplier-invoice/",

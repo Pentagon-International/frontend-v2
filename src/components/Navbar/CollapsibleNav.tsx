@@ -84,6 +84,7 @@ export const CollapsibleNav = ({
         activeSubNav === "Receipt Reversal" ||
         activeSubNav === "Overseas Receipt" ||
         activeSubNav === "Payment" ||
+        activeSubNav === "Payment Approval List" ||
         activeSubNav === "Overseas Payment" ||
         activeSubNav === "Payment Reversal" ||
         activeSubNav === "Payment Request Approval" ||

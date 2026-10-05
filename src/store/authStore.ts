@@ -74,6 +74,7 @@ interface ScreenPermissions {
   finance_dashboard?: boolean;
   job_profit_approval?: boolean;
   credit_override_approval?: boolean;
+  payment_approval_screen?: boolean;
   job_agent?: boolean;
 }
 

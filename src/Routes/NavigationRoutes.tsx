@@ -205,6 +205,7 @@ import OverseasReceiptMaster from "../pages/accounts/overseas-receipt/OverseasRe
 import OverseasReceiptCreate from "../pages/accounts/overseas-receipt/OverseasReceiptCreate";
 import PaymentMaster from "../pages/accounts/payment/PaymentMaster";
 import PaymentCreate from "../pages/accounts/payment/PaymentCreate";
+import PaymentApprovalMaster from "../pages/accounts/payment-approval/PaymentApprovalMaster";
 import PaymentReversal from "../pages/accounts/reverse-payment/PaymentReversal";
 import PaymentReversalMaster from "../pages/accounts/reverse-payment/PaymentReversalMaster";
 import SupplierInvoiceMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceMaster";
@@ -649,6 +650,7 @@ const NavigationRoutes = () => {
         <Route path="/payment/view" element={<PaymentCreate />} />
         <Route path="/payment/edit" element={<PaymentCreate />} />
         <Route path="/payment/create" element={<PaymentCreate />} />
+        <Route path="/payment-approval" element={<PaymentApprovalMaster />} />
         <Route path="/payment/reversal" element={<PaymentReversalMaster />} />
         <Route path="/payment/reversal/view" element={<PaymentReversal />} />
         <Route path="/payment/reversal/edit" element={<PaymentReversal />} />
