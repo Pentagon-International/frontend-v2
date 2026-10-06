@@ -258,10 +258,18 @@ function deserializeFiltersFromStore(
   return {
     ...defaults,
     ...stored,
-    date_from: stored.date_from
-      ? dayjs(stored.date_from).toDate()
-      : defaults.date_from,
-    date_to: stored.date_to ? dayjs(stored.date_to).toDate() : defaults.date_to,
+    date_from:
+      stored.date_from === undefined
+        ? defaults.date_from
+        : stored.date_from
+          ? dayjs(stored.date_from).toDate()
+          : null,
+    date_to:
+      stored.date_to === undefined
+        ? defaults.date_to
+        : stored.date_to
+          ? dayjs(stored.date_to).toDate()
+          : null,
     status: mode === "approval" ? "hold" : (stored.status ?? defaults.status),
   };
 }
@@ -607,10 +615,10 @@ export default function JobProfitVerificationMaster({
       return {
         date_from: filters.date_from
           ? dayjs(filters.date_from).format("YYYY-MM-DD")
-          : dayjs().startOf("month").format("YYYY-MM-DD"),
+          : "",
         date_to: filters.date_to
           ? dayjs(filters.date_to).format("YYYY-MM-DD")
-          : dayjs().format("YYYY-MM-DD"),
+          : "",
         branch_code: branchCode,
         country_code: countryCode,
         job_id: filters.job_id?.trim() || "",

@@ -949,7 +949,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                       borderBottom: `1px solid ${OSTD_LIST_LINE}`,
                     }}
                   >
-                    Unadjusted Bal
+                    Unadjusted Credit
                   </Table.Th>
                   <Table.Th
                     ta="center"
@@ -1501,7 +1501,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               tt="uppercase"
                               style={{ ...hdr, ...col.unadjust, verticalAlign: "middle" }}
                             >
-                              Unadjusted Bal
+                              Unadjusted Credit
                             </Table.Th>
                             <Table.Th
                               ta="center"

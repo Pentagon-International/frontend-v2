@@ -72,6 +72,7 @@ import {
   saveJobProfitBrokerage,
 } from "../../../utils/jobProfitHouseVerification";
 import useAuthStore from "../../../store/authStore";
+import { isAccountsUser } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
 import { getDefaultBranchCurrencyCode } from "../../../utils/userNumberFormat";
@@ -186,6 +187,88 @@ type JobLedgerApiResponse = {
   brokerage?: JobLedgerBrokerageRow[];
   data?: JobLedgerApiRow[];
 };
+
+function isSalespersonUser(
+  user: {
+    role_code?: string | null;
+    role?: string | null;
+    is_salesperson?: boolean | null;
+  } | null,
+): boolean {
+  if (!user) return false;
+  if (user.is_salesperson) return true;
+  const roleCode = String(user.role_code ?? "")
+    .trim()
+    .toUpperCase();
+  const roleName = String(user.role ?? "")
+    .trim()
+    .toLowerCase();
+  if (roleCode === "S" || roleCode === "SM" || roleCode === "SALES") {
+    return true;
+  }
+  return (
+    roleName === "salesman" ||
+    roleName === "salesperson" ||
+    roleName === "sales" ||
+    roleName.includes("salesman") ||
+    roleName.includes("salesperson")
+  );
+}
+
+function BrokerageSummary({
+  amount,
+  confirmedBy,
+}: {
+  amount: string;
+  confirmedBy?: React.ReactNode;
+}) {
+  return (
+    <Stack gap={4} style={{ minWidth: 148 }}>
+      <Box
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          minHeight: 22,
+          padding: "4px 10px",
+          borderRadius: 8,
+          background: "#F4F8FB",
+          border: "1px solid #D6E4EE",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Text
+          component="span"
+          style={{
+            fontFamily: "Inter",
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: "#64748b",
+            lineHeight: 1,
+          }}
+        >
+          Brokerage:
+        </Text>
+        <Text
+          component="span"
+          style={{
+            fontFamily: "Inter",
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#105476",
+            lineHeight: 1.2,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {amount}
+        </Text>
+      </Box>
+      {confirmedBy}
+    </Stack>
+  );
+}
 
 const formatJobLedgerJobLabel = (response: JobLedgerApiResponse): string => {
   return (response?.job_id ?? "").toString().trim();
@@ -433,6 +516,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
     profitIsSales === true;
+  const isPricingUser = profitIsSales === false;
+  const canViewBrokerage =
+    Boolean(user?.is_staff) ||
+    isAccountsUser(user) ||
+    (!isPricingUser &&
+      (profitIsSales === true ||
+        isSalespersonUser({
+          role_code: user?.role_code,
+          role: user?.role,
+          is_salesperson: (user as { is_salesperson?: boolean } | null)
+            ?.is_salesperson,
+        })));
+  const brokerageDisplay =
+    brokerageAmount != null &&
+    String(brokerageAmount).trim() !== "" &&
+    Number.isFinite(Number(brokerageAmount))
+      ? formatMoneyAmountForUi(Number(brokerageAmount))
+      : "-";
+  const isSalespersonLogin = profitIsSales === true;
 
   const formatProfitAuditDateTime = useCallback(
     (value: string | null | undefined) => {
@@ -442,6 +544,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     },
     [dateFormat],
   );
+
+  const confirmedByDetails = profitConfirmed ? (
+    <Stack gap={0}>
+      <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+        Confirmed by {profitConfirmedBy?.trim() || "—"}
+      </Text>
+      {profitConfirmedAt ? (
+        <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+          {formatProfitAuditDateTime(profitConfirmedAt)}
+        </Text>
+      ) : null}
+    </Stack>
+  ) : null;
 
   const handleSaveBrokerage = useCallback(async () => {
     if (!profitShipmentId) {
@@ -2144,12 +2259,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             Job Ledger
           </Text>
           <Group gap="md" align="flex-start">
+            {canViewBrokerage && !fromProfitVerification && (
+              <BrokerageSummary
+                amount={brokerageDisplay}
+                confirmedBy={!isSalespersonLogin ? confirmedByDetails : null}
+              />
+            )}
             {fromProfitVerification && Boolean(profitShipmentId) && (
               <Stack gap={4}>
-                {(showAccountsVerifyCheckbox ||
+                {(canViewBrokerage ||
+                  showAccountsVerifyCheckbox ||
                   showSalespersonVerifyCheckbox ||
                   showProfitConfirmCheckbox) && (
                   <Group gap="md" align="flex-start">
+                    {canViewBrokerage && (
+                      <BrokerageSummary
+                        amount={brokerageDisplay}
+                        confirmedBy={!isSalespersonLogin ? confirmedByDetails : null}
+                      />
+                    )}
                     {showAccountsVerifyCheckbox && (
                       <Stack gap={4}>
                         <Checkbox
@@ -2365,26 +2493,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                             />
                           </Box>
                         </Tooltip>
-                        {profitConfirmed && (
-                          <Stack gap={0}>
-                            <Text
-                              size="xs"
-                              c="dimmed"
-                              style={{ fontFamily: "Inter" }}
-                            >
-                              Confirmed by {profitConfirmedBy?.trim() || "—"}
-                            </Text>
-                            {profitConfirmedAt ? (
-                              <Text
-                                size="xs"
-                                c="dimmed"
-                                style={{ fontFamily: "Inter" }}
-                              >
-                                {formatProfitAuditDateTime(profitConfirmedAt)}
-                              </Text>
-                            ) : null}
-                          </Stack>
-                        )}
+                        {isSalespersonLogin && profitConfirmed ? confirmedByDetails : null}
                       </Stack>
                     )}
                   </Group>
@@ -2415,18 +2524,6 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                         {formatProfitAuditDateTime(
                           profitVerifiedAt || profitConfirmedAt,
                         )}
-                      </Text>
-                    ) : null}
-                  </Stack>
-                )}
-                {!showProfitConfirmCheckbox && profitConfirmed && (
-                  <Stack gap={0}>
-                    <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      Confirmed by {profitConfirmedBy?.trim() || "—"}
-                    </Text>
-                    {profitConfirmedAt ? (
-                      <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-                        {formatProfitAuditDateTime(profitConfirmedAt)}
                       </Text>
                     ) : null}
                   </Stack>

@@ -75,7 +75,7 @@ function rowAmountMetrics(row: OutstandingTableRow, currency: string): AmountMet
     { label: "Credit Limit", value: formatCell(row.amounts.credit_amount, currency) },
     { label: "Outstanding", value: formatCell(row.amounts.outstanding, currency) },
     { label: "Overdue", value: formatCell(row.amounts.overdue, currency) },
-    { label: "Unadjusted Bal", value: formatCell(row.amounts.unadjust, currency) },
+    { label: "Unadjusted Credit", value: formatCell(row.amounts.unadjust, currency) },
     { label: "DSO Days", value: row.amounts.dso_days },
     { label: "1–30", value: formatCell(row.amounts.days1_30, currency) },
     { label: "31–60", value: formatCell(row.amounts.days31_60, currency) },
@@ -618,7 +618,7 @@ export function OutstandingTable({
         <Text style={{ ...headerStyle, textAlign: "center" }}>Credit Limit</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>Outstanding</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>Overdue</Text>
-        <Text style={{ ...headerStyle, textAlign: "center" }}>Unadjusted Bal</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Unadjusted Credit</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>DSO Days</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>1–30</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>31–60</Text>
