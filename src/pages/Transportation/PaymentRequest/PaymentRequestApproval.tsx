@@ -83,6 +83,7 @@ import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import {
   getApiFailureMessage,
+  getApiResponseMessage,
   getServerErrorMessage,
   unwrapApiStatusBody,
 } from "../../../utils/apiErrorMessage";
@@ -427,6 +428,7 @@ function PaymentRequestApproval({
     PendingActiveJobRow[]
   >([]);
   const [pendingShipmentsContext, setPendingShipmentsContext] = useState("");
+  const [pendingShipmentsMessage, setPendingShipmentsMessage] = useState("");
   const [
     rejectModalOpened,
     { open: openRejectModal, close: closeRejectModal },
@@ -559,6 +561,7 @@ function PaymentRequestApproval({
         [row.request_no, row.paid_to].filter(Boolean).join(" · "),
       );
       setPendingShipments([]);
+      setPendingShipmentsMessage("");
       openPendingShipments();
       setPendingShipmentsLoading(true);
       try {
@@ -571,32 +574,46 @@ function PaymentRequestApproval({
           "Failed to load pending shipments.",
         );
         if (failureMessage) {
+          setPendingShipmentsMessage(failureMessage);
           ToastNotification({ type: "error", message: failureMessage });
           return;
         }
         const body = unwrapApiStatusBody(raw) as {
           data?: PendingActiveJobRow[];
+          message?: string;
         };
         const rows = Array.isArray(body?.data)
           ? body.data
           : Array.isArray((raw as { data?: unknown })?.data)
             ? ((raw as { data: PendingActiveJobRow[] }).data)
             : [];
-        setPendingShipments(
-          rows.map((r) => ({
-            job_id: String(r.job_id ?? ""),
-            shipment_no: Array.isArray(r.shipment_no)
-              ? r.shipment_no.map((s) => String(s))
-              : [],
-          })),
+        const mapped = rows.map((r) => ({
+          job_id: String(r.job_id ?? ""),
+          shipment_no: Array.isArray(r.shipment_no)
+            ? r.shipment_no.map((s) => String(s))
+            : [],
+        }));
+        setPendingShipments(mapped);
+        const backendMessage = getApiResponseMessage(
+          body,
+          mapped.length === 0
+            ? "No pending shipments found."
+            : "Pending shipments loaded.",
         );
+        setPendingShipmentsMessage(backendMessage);
+        ToastNotification({
+          type: mapped.length === 0 ? "warning" : "success",
+          message: backendMessage,
+        });
       } catch (error: unknown) {
+        const errorMessage = getServerErrorMessage(
+          error,
+          "Failed to load pending shipments.",
+        );
+        setPendingShipmentsMessage(errorMessage);
         ToastNotification({
           type: "error",
-          message: getServerErrorMessage(
-            error,
-            "Failed to load pending shipments.",
-          ),
+          message: errorMessage,
         });
       } finally {
         setPendingShipmentsLoading(false);
@@ -1800,7 +1817,7 @@ function PaymentRequestApproval({
           </Center>
         ) : pendingShipments.length === 0 ? (
           <Text c="dimmed" size="sm" py="md">
-            No pending shipments found.
+            {pendingShipmentsMessage || "No pending shipments found."}
           </Text>
         ) : (
           <Table striped highlightOnHover withTableBorder>

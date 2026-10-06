@@ -57,6 +57,7 @@ export type PaymentApprovalFilters = {
   type: string;
   approval_status: string;
   parties_account_name: string;
+  amount: string;
   allocation_document_no: string;
   branch_code: string;
 };
@@ -91,11 +92,11 @@ export const paymentApprovalColumnLabels: Record<
 > = {
   sno: "S.No",
   day_book_name: "Day Book",
-  party_name: "Party name",
+  party_name: "Vendor name",
   payment_no: "Payment No",
-  date: "Date",
-  type: "Type",
+  date: "PMT Date",
+  type: "PMT Type",
   amount: "Amount",
-  status: "Status",
+  status: "PMT Status",
   approval_status: "Approval Status",
 };
