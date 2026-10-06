@@ -171,7 +171,12 @@ export interface CustomerOutstandingVsOverdueItem {
   customer_name: string;
   credit_display: string;
   credit_amount: string;
+  /** Older API key for credit days. */
   credit_day: number;
+  /** Current API key for credit days. */
+  credit_days?: number | string;
+  /** Unadjusted amount. */
+  unadjust?: string | number;
   status_tags: string[];
   outstanding: string;
   overdue: string;
@@ -211,6 +216,12 @@ export interface CustomerOutstandingVsOverdueSummary {
   days_90_plus?: string | number;
   dso_days?: string | number;
   dso_days_percentage?: string;
+  unadjust?: string | number;
+  total_unadjust?: string | number;
+  credit_days?: string | number;
+  credit_day?: string | number;
+  credit_amount?: string | number;
+  total_credit_amount?: string | number;
 }
 
 export interface CustomerOutstandingVsOverdueResponse {

@@ -23,14 +23,14 @@ import {
   OST_WARN_BG,
 } from "../theme";
 
-const TABLE_SCROLL_MIN_WIDTH = 1080;
+const TABLE_SCROLL_MIN_WIDTH = 1480;
 
 function tableRowGrid(compact: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: compact
-      ? "minmax(120px, 1.35fr) repeat(9, minmax(52px, 1fr)) minmax(44px, 0.7fr)"
-      : "minmax(140px, 1.4fr) repeat(9, minmax(64px, 1fr)) minmax(56px, 0.75fr)",
+      ? "minmax(120px, 1.35fr) repeat(12, minmax(52px, 1fr)) minmax(44px, 0.7fr)"
+      : "minmax(140px, 1.4fr) repeat(12, minmax(64px, 1fr)) minmax(56px, 0.75fr)",
     gap: compact ? 8 : 12,
     alignItems: "center",
     padding: compact ? "10px 12px" : "10px 18px",
@@ -71,8 +71,11 @@ type AmountMetric = {
 
 function rowAmountMetrics(row: OutstandingTableRow, currency: string): AmountMetric[] {
   return [
+    { label: "Credit Days", value: row.amounts.credit_days },
+    { label: "Credit Limit", value: formatCell(row.amounts.credit_amount, currency) },
     { label: "Outstanding", value: formatCell(row.amounts.outstanding, currency) },
     { label: "Overdue", value: formatCell(row.amounts.overdue, currency) },
+    { label: "Unadjusted Bal", value: formatCell(row.amounts.unadjust, currency) },
     { label: "DSO Days", value: row.amounts.dso_days },
     { label: "1–30", value: formatCell(row.amounts.days1_30, currency) },
     { label: "31–60", value: formatCell(row.amounts.days31_60, currency) },
@@ -385,26 +388,35 @@ function OutstandingTableRowView({
           </Text>
         ) : null}
       </Box>
-      <Text fz={12} fw={isTotal ? 600 : 600} c={OST_INK} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+        {row.amounts.credit_days}
+      </Text>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+        {formatCell(row.amounts.credit_amount, currency)}
+      </Text>
+      <Text fz={12} fw={isTotal ? 600 : 600} c={OST_INK} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {formatCell(row.amounts.outstanding, currency)}
       </Text>
-      <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {formatCell(row.amounts.overdue, currency)}
       </Text>
-      <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+        {formatCell(row.amounts.unadjust, currency)}
+      </Text>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {row.amounts.dso_days}
       </Text>
-      <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {formatCell(row.amounts.days1_30, currency)}
       </Text>
-      <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {formatCell(row.amounts.days31_60, currency)}
       </Text>
       <Text
         fz={12}
         fw={row.highlight60Plus ? 600 : 400}
         c={row.highlight60Plus ? OST_BAD : OST_INK_3}
-        style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+        style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}
       >
         {formatCell(row.amounts.days61_90, currency)}
       </Text>
@@ -412,7 +424,7 @@ function OutstandingTableRowView({
         fz={12}
         fw={row.highlight60Plus ? 600 : 400}
         c={row.highlight60Plus ? OST_BAD : OST_INK_3}
-        style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+        style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}
       >
         {formatCell(row.amounts.days90_180, currency)}
       </Text>
@@ -420,14 +432,14 @@ function OutstandingTableRowView({
         fz={12}
         fw={row.highlight60Plus ? 600 : 400}
         c={row.highlight60Plus ? OST_BAD : OST_INK_3}
-        style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+        style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}
       >
         {formatCell(row.amounts.days180_plus, currency)}
       </Text>
-      <Text fz={12} c={OST_INK_3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+      <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {row.amounts.open_line_count}
       </Text>
-      <Box style={{ textAlign: "right" }}>
+      <Box style={{ textAlign: "center" }}>
         {isTotal ? (
           <Text fz={12} c={OST_INK_4}>
             —
@@ -602,16 +614,19 @@ export function OutstandingTable({
         }}
       >
         <Text style={{ ...headerStyle, ...stickyFirstColStyle(OST_CARD_BG) }}>{firstCol}</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>Outstanding</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>Overdue</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>DSO Days</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>1–30</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>31–60</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>61-90</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>90–180</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>180+</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>Open lines</Text>
-        <Text style={{ ...headerStyle, textAlign: "right" }}>Risk</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Credit Days</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Credit Limit</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Outstanding</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Overdue</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Unadjusted Bal</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>DSO Days</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>1–30</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>31–60</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>61-90</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>90–180</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>180+</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Open lines</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Risk</Text>
       </Box>
       {section.rows.map((row) => (
         <OutstandingTableRowView

@@ -25,6 +25,9 @@ export type OutstandingAmountCells = {
   days90_180: string;
   days180_plus: string;
   open_line_count: string;
+  unadjust: string;
+  credit_days: string;
+  credit_amount: string;
   /** Legacy combined 60+ column (fallback display). */
   days60Plus: string;
 };

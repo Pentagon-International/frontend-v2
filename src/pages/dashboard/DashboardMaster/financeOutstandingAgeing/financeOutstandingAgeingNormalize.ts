@@ -52,6 +52,9 @@ function amountsFromApi(
     days90_180?: unknown;
     days180_plus?: unknown;
     open_line_count?: unknown;
+    unadjust?: unknown;
+    credit_days?: unknown;
+    credit_amount?: unknown;
     days60Plus?: unknown;
   },
 ): OutstandingAmountCells {
@@ -77,6 +80,9 @@ function amountsFromApi(
     days90_180,
     days180_plus,
     open_line_count: rawAmount(keys.open_line_count),
+    unadjust: rawAmount(keys.unadjust),
+    credit_days: rawAmount(keys.credit_days),
+    credit_amount: rawAmount(keys.credit_amount),
     days60Plus,
   };
 }
@@ -102,6 +108,9 @@ const EMPTY_AMOUNTS: OutstandingAmountCells = {
   days90_180: "—",
   days180_plus: "—",
   open_line_count: "—",
+  unadjust: "—",
+  credit_days: "—",
+  credit_amount: "—",
   days60Plus: "—",
 };
 
@@ -128,6 +137,9 @@ function totalRowFromSummary(summary: Record<string, unknown>): OutstandingTable
       days90_180: summary.days_90_180,
       days180_plus: summary.days_180_plus,
       open_line_count: summary.open_line_count ?? summary.open_invoices,
+      unadjust: summary.unadjust ?? summary.total_unadjust,
+      credit_days: summary.credit_days ?? summary.credit_day,
+      credit_amount: summary.credit_amount ?? summary.total_credit_amount,
       days60Plus: summary.days_90_plus ?? summary.days_90,
     }),
     risk: "low",
@@ -196,6 +208,9 @@ function mapCustomerRow(raw: unknown): OutstandingTableRow {
     days90_180: row.days_90_180 ?? row.days_90,
     days180_plus: row.days_180_plus ?? row.days_180,
     open_line_count: row.open_line_count ?? row.open_line_count,
+    unadjust: row.unadjust,
+    credit_days: row.credit_days ?? row.credit_day,
+    credit_amount: row.credit_amount,
     days60Plus: row.days_90_plus ?? row.days_61_90 ?? row.days_61_plus ?? row.days_60_plus,
   });
 
@@ -248,6 +263,9 @@ function mapBranchRow(raw: unknown): OutstandingTableRow {
     days90_180: row.days_90_180,
     days180_plus: row.days_180_plus,
     open_line_count: row.open_line_count ?? row.invoice_count,
+    unadjust: row.unadjust,
+    credit_days: row.credit_days ?? row.credit_day,
+    credit_amount: row.credit_amount,
     days60Plus: row.days_90_plus ?? row.days_61_90,
   });
 

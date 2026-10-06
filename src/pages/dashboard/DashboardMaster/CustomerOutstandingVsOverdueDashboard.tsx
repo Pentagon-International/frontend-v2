@@ -187,6 +187,15 @@ function riskPillStyle(risk: string | undefined): { bg: string; fg: string; bord
   return { bg: "#DCFCE7", fg: "#15803D", border: "1px solid #BBF7D0" };
 }
 
+function formatDaysCell(value: string | number | undefined | null): string {
+  if (value === undefined || value === null || value === "") return "—";
+  return String(value);
+}
+
+function creditDaysOf(row: CustomerOutstandingVsOverdueItem): string | number | undefined {
+  return row.credit_days ?? row.credit_day;
+}
+
 function formatAmountCell(
   value: string | number | undefined | null,
   countryCode?: string | null,
@@ -210,11 +219,14 @@ const hdr = {
 /** Fixed layout: send icon; customer; numeric columns (widths sum to 100%). */
 const col = {
   send: { width: "4%", minWidth: 44, maxWidth: 52 } as const,
-  customer: { width: "20%", minWidth: 88, maxWidth: 200 } as const,
-  outstanding: { width: "11%", minWidth: 72 } as const,
-  overdue: { width: "11%", minWidth: 72 } as const,
-  aging: { width: "7.5%", minWidth: 56 } as const,
-  risk: { width: "10%", minWidth: 56 } as const,
+  customer: { width: "16%", minWidth: 88, maxWidth: 180 } as const,
+  outstanding: { width: "9%", minWidth: 72 } as const,
+  overdue: { width: "9%", minWidth: 72 } as const,
+  aging: { width: "6%", minWidth: 56 } as const,
+  unadjust: { width: "8%", minWidth: 88 } as const,
+  creditDays: { width: "6.5%", minWidth: 64 } as const,
+  creditLimit: { width: "8%", minWidth: 72 } as const,
+  risk: { width: "7%", minWidth: 56 } as const,
 };
 
 /** Match `ConversionByRepCustomerwiseEnquiryList` "Enquiries & Quotations" table. */
@@ -821,7 +833,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               highlightOnHoverColor={OSTD_LIST_HEAD_BG}
               verticalSpacing={11}
               horizontalSpacing={12}
-              miw={isMobile ? 800 : 1040}
+              miw={isMobile ? 1080 : 1360}
               style={{ tableLayout: "fixed", width: "100%", borderTop: `1px solid ${OSTD_LIST_LINE}` }}
             >
               <Table.Thead>
@@ -860,7 +872,39 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     {aggregateBySalespersonList ? "Salesperson" : "Customer"}
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
+                    fz={11}
+                    fw={500}
+                    c="#64748b"
+                    tt="uppercase"
+                    lts="0.04em"
+                    style={{
+                      ...col.creditDays,
+                      background: OSTD_LIST_HEAD_BG,
+                      padding: "10px 12px",
+                      borderBottom: `1px solid ${OSTD_LIST_LINE}`,
+                    }}
+                  >
+                    Credit Days
+                  </Table.Th>
+                  <Table.Th
+                    ta="center"
+                    fz={11}
+                    fw={500}
+                    c="#64748b"
+                    tt="uppercase"
+                    lts="0.04em"
+                    style={{
+                      ...col.creditLimit,
+                      background: OSTD_LIST_HEAD_BG,
+                      padding: "10px 12px",
+                      borderBottom: `1px solid ${OSTD_LIST_LINE}`,
+                    }}
+                  >
+                    Credit Limit
+                  </Table.Th>
+                  <Table.Th
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -876,7 +920,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     Outstanding
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -892,7 +936,23 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     Overdue
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
+                    fz={11}
+                    fw={500}
+                    c="#64748b"
+                    tt="uppercase"
+                    lts="0.04em"
+                    style={{
+                      ...col.unadjust,
+                      background: OSTD_LIST_HEAD_BG,
+                      padding: "10px 12px",
+                      borderBottom: `1px solid ${OSTD_LIST_LINE}`,
+                    }}
+                  >
+                    Unadjusted Bal
+                  </Table.Th>
+                  <Table.Th
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -908,7 +968,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     1-30
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -924,7 +984,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     31-60
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -940,7 +1000,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     61-90
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -956,7 +1016,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     90-180
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -972,7 +1032,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                     180+
                   </Table.Th>
                   <Table.Th
-                    ta="right"
+                    ta="center"
                     fz={11}
                     fw={500}
                     c="#64748b"
@@ -992,7 +1052,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
               <Table.Tbody>
                 {isLoading ? (
                   <Table.Tr>
-                    <Table.Td colSpan={10}>
+                    <Table.Td colSpan={13}>
                       <Group justify="center" py="md">
                         <Loader size="sm" color="#153F72" />
                       </Group>
@@ -1000,7 +1060,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                   </Table.Tr>
                 ) : rows.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={10}>
+                    <Table.Td colSpan={13}>
                       <Text ta="center" py="sm" size="sm" c={enquiryConversionColors.subHeading}>
                         {activeBucketFilter
                           ? "No customers with an amount in this bucket on this page."
@@ -1150,27 +1210,42 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             </Group>
                           )}
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.outstanding, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.creditDays, whiteSpace: "nowrap" }}>
+                          <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
+                            {formatDaysCell(creditDaysOf(row))}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.creditLimit, whiteSpace: "nowrap" }}>
+                          <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
+                            {formatAmountCell(row.credit_amount, amountCountryCode, displayCurrencyCode, branchCountryCode)}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.outstanding, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                             {formatAmount(row.outstanding)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.overdue, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.overdue, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                             {formatAmountCell(row.overdue, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.unadjust, whiteSpace: "nowrap" }}>
+                          <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
+                            {formatAmountCell(row.unadjust, amountCountryCode, displayCurrencyCode, branchCountryCode)}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                             {formatAmountCell(row.days_1_30, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                             {formatAmountCell(row.days_31_60, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text
                             {...OSTD_TABLE_VALUE_TEXT}
                             c={highlight61_90 ? "#EF4444" : OSTD_LIST_INK}
@@ -1179,7 +1254,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             {formatAmountCell(row.days_61_90 ?? row.days_61_plus, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text
                             {...OSTD_TABLE_VALUE_TEXT}
                             c={highlightAged ? "#EF4444" : OSTD_LIST_INK}
@@ -1188,7 +1263,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             {formatAmountCell(row.days_90_180, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.aging, whiteSpace: "nowrap" }}>
                           <Text
                             {...OSTD_TABLE_VALUE_TEXT}
                             c={highlightAged ? "#EF4444" : OSTD_LIST_INK}
@@ -1197,7 +1272,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                             {formatAmountCell(row.days_180_plus, amountCountryCode, displayCurrencyCode, branchCountryCode)}
                           </Text>
                         </Table.Td>
-                        <Table.Td ta="right" style={{ ...ostdListTd(), ...col.risk, whiteSpace: "nowrap" }}>
+                        <Table.Td ta="center" style={{ ...ostdListTd(), ...col.risk, whiteSpace: "nowrap" }}>
                           <Box
                             style={{
                               display: "inline-block",
@@ -1352,7 +1427,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         highlightOnHover
                         verticalSpacing={10}
                         horizontalSpacing="md"
-                        miw={800}
+                        miw={1280}
                         style={{ tableLayout: "fixed", width: "100%" }}
                       >
                         <Table.Thead>
@@ -1379,7 +1454,27 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               Customer
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
+                              fz={10}
+                              fw={500}
+                              c="#94A3B8"
+                              tt="uppercase"
+                              style={{ ...hdr, ...col.creditDays, verticalAlign: "middle" }}
+                            >
+                              Credit Days
+                            </Table.Th>
+                            <Table.Th
+                              ta="center"
+                              fz={10}
+                              fw={500}
+                              c="#94A3B8"
+                              tt="uppercase"
+                              style={{ ...hdr, ...col.creditLimit, verticalAlign: "middle" }}
+                            >
+                              Credit Limit
+                            </Table.Th>
+                            <Table.Th
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1389,7 +1484,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               Outstanding
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1399,7 +1494,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               Overdue
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
+                              fz={10}
+                              fw={500}
+                              c="#94A3B8"
+                              tt="uppercase"
+                              style={{ ...hdr, ...col.unadjust, verticalAlign: "middle" }}
+                            >
+                              Unadjusted Bal
+                            </Table.Th>
+                            <Table.Th
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1409,7 +1514,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               1-30
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1419,7 +1524,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               31-60
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1429,7 +1534,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               61-90
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1439,7 +1544,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               90-180
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1449,7 +1554,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                               180+
                             </Table.Th>
                             <Table.Th
-                              ta="right"
+                              ta="center"
                               fz={10}
                               fw={500}
                               c="#94A3B8"
@@ -1463,7 +1568,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                         <Table.Tbody>
                           {(drawerResponse?.data || []).length === 0 ? (
                             <Table.Tr>
-                              <Table.Td colSpan={10}>
+                              <Table.Td colSpan={13}>
                                 <Text ta="center" py="sm" fz={13} fw={500} c="#64748B">
                                   No records found
                                 </Text>
@@ -1519,27 +1624,42 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       ) : null}
                                     </Stack>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.outstanding, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.creditDays, whiteSpace: "nowrap" }}>
+                                    <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
+                                      {formatDaysCell(creditDaysOf(drow))}
+                                    </Text>
+                                  </Table.Td>
+                                  <Table.Td ta="center" style={{ ...col.creditLimit, whiteSpace: "nowrap" }}>
+                                    <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
+                                      {formatAmountCell(drow.credit_amount, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
+                                    </Text>
+                                  </Table.Td>
+                                  <Table.Td ta="center" style={{ ...col.outstanding, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                                       {formatAmount(drow.outstanding)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.overdue, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.overdue, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                                       {formatAmountCell(drow.overdue, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.unadjust, whiteSpace: "nowrap" }}>
+                                    <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
+                                      {formatAmountCell(drow.unadjust, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
+                                    </Text>
+                                  </Table.Td>
+                                  <Table.Td ta="center" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                                       {formatAmountCell(drow.days_1_30, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text {...OSTD_TABLE_VALUE_TEXT} style={ostdTableValueNumericStyle}>
                                       {formatAmountCell(drow.days_31_60, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text
                                       {...OSTD_TABLE_VALUE_TEXT}
                                       c={highlight61_90d ? "#EF4444" : OSTD_LIST_INK}
@@ -1548,7 +1668,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       {formatAmountCell(drow.days_61_90 ?? drow.days_61_plus, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text
                                       {...OSTD_TABLE_VALUE_TEXT}
                                       c={highlightAgedd ? "#EF4444" : OSTD_LIST_INK}
@@ -1557,7 +1677,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       {formatAmountCell(drow.days_90_180, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.aging, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.aging, whiteSpace: "nowrap" }}>
                                     <Text
                                       {...OSTD_TABLE_VALUE_TEXT}
                                       c={highlightAgedd ? "#EF4444" : OSTD_LIST_INK}
@@ -1566,7 +1686,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                                       {formatAmountCell(drow.days_180_plus, amountCountryCode, resolveBranchCurrency(drawerResponse?.summary?.currency), branchCountryCode)}
                                     </Text>
                                   </Table.Td>
-                                  <Table.Td ta="right" style={{ ...col.risk, whiteSpace: "nowrap" }}>
+                                  <Table.Td ta="center" style={{ ...col.risk, whiteSpace: "nowrap" }}>
                                     <Box
                                       style={{
                                         display: "inline-block",
