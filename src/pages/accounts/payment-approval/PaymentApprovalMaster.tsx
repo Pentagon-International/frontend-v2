@@ -133,6 +133,12 @@ function paymentIdOf(row: PaymentApprovalRow): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** True when both dates are set and fall on the same calendar day. */
+function isSameFilterDay(a: Date | null, b: Date | null): boolean {
+  if (!a || !b) return false;
+  return dayjs(a).isSame(dayjs(b), "day");
+}
+
 export default function PaymentApprovalMaster() {
   const user = useAuthStore((s) => s.user);
   const canAccess = Boolean(user?.screen_permissions?.payment_approval_screen);
@@ -180,6 +186,7 @@ function PaymentApprovalMasterContent() {
       type: "",
       approval_status: "PENDING",
       parties_account_name: "",
+      amount: "",
       allocation_document_no: "",
       branch_code: "",
     }),
@@ -191,7 +198,6 @@ function PaymentApprovalMasterContent() {
     pageIndex: 0,
     pageSize: 25,
   });
-  const [totalRecords, setTotalRecords] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
@@ -205,6 +211,15 @@ function PaymentApprovalMasterContent() {
   const [expanded, setExpanded] = useState<MRT_ExpandedState>({});
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Column header shows a single date only when From/To are the same day.
+  const headerDateIsSingleDay = isSameFilterDay(
+    appliedFilters.date_from,
+    appliedFilters.date_to,
+  );
+  const headerDateDisplay = headerDateIsSingleDay
+    ? dayjs(appliedFilters.date_from!).format(dateFormat)
+    : "";
 
   /** Accordion expand: only one payment row open at a time. */
   const handleExpandedChange = useCallback(
@@ -310,25 +325,32 @@ function PaymentApprovalMasterContent() {
     clearAllStore(LIST_KEY);
   };
 
-  const buildFiltersPayload = (
-    filters: PaymentApprovalFilters,
-    searchValue: string,
-  ) => {
-    // Document status is always exact POSTED on this screen; approval_status comes from filters (default PENDING).
-    const cleaned: Record<string, string> = { status_exact: "POSTED" };
-    Object.entries(filters).forEach(([key, value]) => {
-      if (key === "day_book_name") return;
-      if (key === "date_from" && value) {
-        cleaned.date_from = dayjs(value as Date).format("YYYY-MM-DD");
-      } else if (key === "date_to" && value) {
-        cleaned.date_to = dayjs(value as Date).format("YYYY-MM-DD");
-      } else if (typeof value === "string" && value.trim() !== "") {
-        cleaned[key] = value.trim();
-      }
-    });
-    if (searchValue?.trim()) cleaned.search = searchValue.trim();
-    return cleaned;
-  };
+  const buildFiltersPayload = useCallback(
+    (filters: PaymentApprovalFilters, searchValue: string) => {
+      // Document status is always exact POSTED on this screen; approval_status comes from filters (default PENDING).
+      const cleaned: Record<string, string> = { status_exact: "POSTED" };
+      Object.entries(filters).forEach(([key, value]) => {
+        if (key === "day_book_name") return;
+        if (key === "date_from" && value) {
+          cleaned.date_from = dayjs(value as Date).format("YYYY-MM-DD");
+        } else if (key === "date_to" && value) {
+          cleaned.date_to = dayjs(value as Date).format("YYYY-MM-DD");
+        } else if (typeof value === "string" && value.trim() !== "") {
+          cleaned[key] = value.trim();
+        }
+      });
+      if (searchValue?.trim()) cleaned.search = searchValue.trim();
+      return cleaned;
+    },
+    [],
+  );
+
+  // Stable query key from the real API payload (dates as YYYY-MM-DD) — avoids
+  // Date-object stringify quirks and ensures filter/clear always refetch.
+  const filtersQueryKey = useMemo(
+    () => JSON.stringify(buildFiltersPayload(appliedFilters, debouncedSearch)),
+    [appliedFilters, debouncedSearch, buildFiltersPayload],
+  );
 
   const {
     data: listResult,
@@ -340,8 +362,7 @@ function PaymentApprovalMasterContent() {
       "payment-approval",
       pagination.pageIndex,
       pagination.pageSize,
-      JSON.stringify(appliedFilters),
-      debouncedSearch,
+      filtersQueryKey,
     ],
     queryFn: async () => {
       const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
@@ -379,13 +400,29 @@ function PaymentApprovalMasterContent() {
         listRaw,
         index,
       );
-      setTotalRecords(listTotal);
-      return { data: list };
+      // Return total with the result — do not rely on side-effect state that can
+      // stay stale when React Query serves/memoizes prior query data.
+      return { data: list, total: listTotal };
     },
+    enabled: !isRestoring && search === debouncedSearch,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
   });
 
+  // Derive from the active query result only (no separate memoized total state).
   const tableData = listResult?.data ?? [];
+  const totalRecords = listResult?.total ?? 0;
   const loading = isLoading || isFetching;
+
+  // Keep page index in range when filter/clear shrinks the result set.
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(totalRecords / pagination.pageSize));
+    const maxPageIndex = totalPages - 1;
+    if (pagination.pageIndex > maxPageIndex) {
+      setPagination((p) => ({ ...p, pageIndex: maxPageIndex }));
+    }
+  }, [totalRecords, pagination.pageSize, pagination.pageIndex]);
 
   const approveMutation = useMutation({
     mutationFn: async (paymentIds: number[]) => {
@@ -556,8 +593,25 @@ function PaymentApprovalMasterContent() {
         id: "party_name",
         header: "Vendor name",
         size: 150,
-        enableColumnFilter: false,
         enableSorting: false,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Vendor name"
+            value={appliedFilters.parties_account_name}
+            displayValue={appliedFilters.parties_account_name}
+            theme={erpTheme}
+            placeholder="Filter Vendor name"
+            isEditing={editingHeaderId === "party_name"}
+            onStartEdit={() => openHeaderEditor("party_name")}
+            onStopEdit={() => collapseHeaderEditor("party_name")}
+            onChange={(nextVal) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                parties_account_name: nextVal || "",
+              }))
+            }
+          />
+        ),
         Cell: ({ row }) => {
           const names = getPartyNames(row.original);
           const fullText = names.join(", ");
@@ -623,7 +677,52 @@ function PaymentApprovalMasterContent() {
       {
         accessorKey: "date",
         header: "PMT Date",
-        size: 100,
+        size: 120,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="PMT Date"
+            value={headerDateDisplay}
+            displayValue={headerDateDisplay}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "date"}
+            onStartEdit={() => openHeaderEditor("date")}
+            onStopEdit={() => collapseHeaderEditor("date")}
+            renderEditor={({ onClose }) => (
+              <SingleDateInput
+                value={
+                  headerDateIsSingleDay ? appliedFilters.date_from : null
+                }
+                onChange={(date) => {
+                  if (date) {
+                    commitHeaderFilters((prev) => ({
+                      ...prev,
+                      date_from: date,
+                      date_to: date,
+                    }));
+                    onClose();
+                  } else {
+                    // Clear → restore default date range (not an empty range).
+                    commitHeaderFilters((prev) => ({
+                      ...prev,
+                      date_from: DEFAULT_FILTERS.date_from,
+                      date_to: DEFAULT_FILTERS.date_to,
+                    }));
+                  }
+                }}
+                placeholder="PMT Date"
+                size="xs"
+                allowDeselection
+                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
+                styles={{
+                  ...filterFieldStyles,
+                  input: { ...filterFieldStyles.input, minHeight: 26 },
+                }}
+                popoverProps={{ zIndex: 1000 }}
+              />
+            )}
+          />
+        ),
         Cell: ({ row }) => (
           <Text size="sm">
             {row.original.date
@@ -674,6 +773,24 @@ function PaymentApprovalMasterContent() {
         accessorKey: "amount",
         header: "Amount",
         size: 120,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Amount"
+            value={appliedFilters.amount}
+            displayValue={appliedFilters.amount}
+            theme={erpTheme}
+            placeholder="Filter Amount"
+            isEditing={editingHeaderId === "amount"}
+            onStartEdit={() => openHeaderEditor("amount")}
+            onStopEdit={() => collapseHeaderEditor("amount")}
+            onChange={(nextVal) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                amount: nextVal || "",
+              }))
+            }
+          />
+        ),
         Cell: ({ cell }) => {
           const val = cell.getValue<unknown>();
           if (val == null || val === "") return "-";
@@ -704,8 +821,40 @@ function PaymentApprovalMasterContent() {
       {
         accessorKey: "approval_status",
         header: "Approval Status",
-        size: 130,
-        enableColumnFilter: false,
+        size: 140,
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="Approval Status"
+            value={appliedFilters.approval_status}
+            displayValue={appliedFilters.approval_status}
+            onChange={() => {}}
+            theme={erpTheme}
+            isEditing={editingHeaderId === "approval_status"}
+            onStartEdit={() => openHeaderEditor("approval_status")}
+            onStopEdit={() => collapseHeaderEditor("approval_status")}
+            renderEditor={({ autoFocus, onClose }) => (
+              <Select
+                autoFocus={autoFocus}
+                placeholder="Select Approval Status"
+                searchable
+                clearable
+                size="xs"
+                data={APPROVAL_STATUS_OPTIONS}
+                value={appliedFilters.approval_status || ""}
+                onChange={(value) => {
+                  commitHeaderFilters((prev) => ({
+                    ...prev,
+                    approval_status: value || "",
+                  }));
+                  if (value) onClose();
+                }}
+                comboboxProps={{ zIndex: 1000 }}
+                classNames={erpListGeistSelectClassNames}
+                styles={filterFieldStyles}
+              />
+            )}
+          />
+        ),
         Cell: ({ cell }) => {
           const str = String(cell.getValue<unknown>() ?? "").trim();
           if (!str) return "-";
@@ -771,6 +920,10 @@ function PaymentApprovalMasterContent() {
       commitHeaderFilters,
       toggleSelectAllPage,
       toggleSelectOne,
+      headerDateDisplay,
+      headerDateIsSingleDay,
+      DEFAULT_FILTERS.date_from,
+      DEFAULT_FILTERS.date_to,
     ],
   );
 
@@ -1057,7 +1210,7 @@ function PaymentApprovalMasterContent() {
             opened: showFilters,
             title: "Filters",
             subtitle:
-              "POSTED payments — refine by approval status, day book, party, dates, or document",
+              "POSTED payments — refine by approval status, day book, vendor, dates, or document",
             onClose: () => setShowFilters(false),
             footer: (
               <ERPListFilterActionsFooter
@@ -1127,7 +1280,7 @@ function PaymentApprovalMasterContent() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="Date From"
+                      label="PMT Date From"
                       placeholder="YYYY-MM-DD"
                       value={draftFilters.date_from}
                       onChange={(date) =>
@@ -1145,7 +1298,7 @@ function PaymentApprovalMasterContent() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="Date To"
+                      label="PMT Date To"
                       placeholder="YYYY-MM-DD"
                       value={draftFilters.date_to}
                       onChange={(date) =>
@@ -1164,8 +1317,8 @@ function PaymentApprovalMasterContent() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <Dropdown
                       size="xs"
-                      label="Type"
-                      placeholder="Select Type"
+                      label="PMT Type"
+                      placeholder="Select PMT Type"
                       data={TYPE_OPTIONS}
                       searchable
                       value={draftFilters.type || null}
@@ -1203,13 +1356,31 @@ function PaymentApprovalMasterContent() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <TextInput
                       size="xs"
-                      label="Party name"
-                      placeholder="Party account name"
+                      label="Vendor name"
+                      placeholder="Vendor account name"
                       value={draftFilters.parties_account_name}
                       onChange={(e) =>
                         setDraftFilters((prev) => ({
                           ...prev,
                           parties_account_name: e.currentTarget.value,
+                        }))
+                      }
+                      classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                      styles={filterFieldStyles}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <TextInput
+                      size="xs"
+                      label="Amount"
+                      placeholder="e.g. 1000.00"
+                      value={draftFilters.amount}
+                      onChange={(e) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          amount: e.currentTarget.value,
                         }))
                       }
                       classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
