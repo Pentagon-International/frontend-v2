@@ -1,5 +1,10 @@
 ﻿import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
+import {
+  getCctLogo,
+  isCctCompany,
+  PDF_HEADING_COLOR,
+} from "../../../utils/pdfCompanyBranding";
 import seawayBolStamp from "../../../assets/images/seaway_BOL.png";
 import surrenderedBolStamp from "../../../assets/images/surrendered_BOL.png";
 import {
@@ -624,7 +629,7 @@ export const generateUsBillOfLadingPDF = (
     name: companyName,
     address: activeBranch?.reporting_address || activeBranch?.address || "",
   };
-  const logoImage = pentagonPrimeAmericas;
+  const logoImage = isCctCompany() ? getCctLogo() : pentagonPrimeAmericas;
 
   const carrierDetails = jobData?.carrierDetails || {};
   const mblDetails = jobData?.mblDetails || {};
@@ -918,8 +923,13 @@ export const generateUsBillOfLadingPDF = (
   const headerTextStartX =
     centerTextX - (companyNameWidth + fmcLabelWidth) / 2;
   doc.setFontSize(FONT_HEADER);
-  doc.setTextColor(0, 0, 0);
+  if (isCctCompany()) {
+    doc.setTextColor(...PDF_HEADING_COLOR);
+  } else {
+    doc.setTextColor(0, 0, 0);
+  }
   doc.text(companyName, headerTextStartX, headerRowY);
+  doc.setTextColor(0, 0, 0);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_FMC);
   doc.text(

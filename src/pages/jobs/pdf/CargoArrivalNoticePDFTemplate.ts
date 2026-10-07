@@ -1,9 +1,11 @@
 import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import {
+  drawDoCanHeaderContacts,
   getCctBranchInfoFromLogin,
   getCctLogo,
   isCctCompany,
+  PDF_HEADING_COLOR,
 } from "../../../utils/pdfCompanyBranding";
 import { formatPackageTypeNameForBol } from "../../../utils/packageTypeOptions";
 import type { CanSacWiseTotal } from "./canGstBreakup";
@@ -770,7 +772,11 @@ const drawCanHeaderSection = (
     branchInfo.name || "",
     companyTextWidth,
   );
+  if (isCctCompany()) {
+    doc.setTextColor(...PDF_HEADING_COLOR);
+  }
   doc.text(companyNameLines, companyInfoX, companyY, { align: "left" });
+  doc.setTextColor(0, 0, 0);
   companyY += companyNameLines.length * companyNameLineHeight;
 
   doc.setFont("helvetica", "normal");
@@ -782,27 +788,15 @@ const drawCanHeaderSection = (
   doc.text(companyAddressLines, companyInfoX, companyY, { align: "left" });
   companyY += companyAddressLines.length * companyAddressLineHeight;
 
-  if (branchInfo.tel) {
-    doc.text(`Telephone: ${branchInfo.tel}`, companyInfoX, companyY);
-    companyY += 3.5;
-  }
-
-  if (branchInfo.email) {
-    doc.text(`Email: ${branchInfo.email}`, companyInfoX, companyY);
-    companyY += 3.5;
-  }
-
-  const infoLine = [
-    branchInfo.pan ? `PAN NO: ${branchInfo.pan}` : "",
-    branchInfo.gstn ? `GSTN: ${branchInfo.gstn}` : "",
-  ]
-    .filter(Boolean)
-    .join("    ");
-
-  if (infoLine) {
-    doc.text(infoLine, companyInfoX, companyY);
-    companyY += 3.5;
-  }
+  companyY = drawDoCanHeaderContacts(
+    doc,
+    branchInfo,
+    companyInfoX,
+    companyY,
+    companyTextWidth,
+    companyAddressFontSize,
+    companyAddressLineHeight,
+  );
 
   return Math.max(headerStartY + headerHeight + 5, companyY + 3);
 };

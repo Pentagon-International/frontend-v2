@@ -4,6 +4,11 @@ import blSignatureVietnam from "../../../assets/images/BL_Signature_Vietnam.png"
 import seawayBolStamp from "../../../assets/images/seaway_BOL.png";
 import surrenderedBolStamp from "../../../assets/images/surrendered_BOL.png";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  getCctLogo,
+  isCctCompany,
+  PDF_HEADING_COLOR,
+} from "../../../utils/pdfCompanyBranding";
 import { resolvePackageTypeFromHousing } from "../../../utils/packageTypeOptions";
 import { generateUsBillOfLadingPDF } from "./BillOfLadingPDFTemplateUS";
 
@@ -99,9 +104,13 @@ const collectBolCountryHints = (
   return { codes, names };
 };
 
-// USA logo for India, USA, Vietnam, and China branches; empty otherwise (no fallback)
+// CCT uses cct.png. USA logo for India, USA, Vietnam, and China branches; empty otherwise (no fallback)
 const getLogoByCountry = (country: any): string | null => {
   try {
+    if (isCctCompany()) {
+      return getCctLogo();
+    }
+
     let countryName = "";
     let countryCode = "";
 
@@ -1040,9 +1049,13 @@ export const generateBillOfLadingPDF = (
       branchInfo.name || "",
       rightBoxWidth - 2 * boxPadding,
     );
+    if (isCctCompany()) {
+      doc.setTextColor(...PDF_HEADING_COLOR);
+    }
     doc.text(companyTitleLines, companySectionCenterX, rightY, {
       align: "center",
     });
+    doc.setTextColor(0, 0, 0);
     rightY += companyTitleLines.length * 3.5;
 
     if (logoImage) {

@@ -550,7 +550,7 @@ export const generateNewQuotationPDF = async (
     let logoHeight = logoMaxHeight;
     let logoFormat: "PNG" | "JPEG" = "PNG";
 
-    if (isUsPdf) {
+    if (isUsPdf && !isCctCompany()) {
       const usLogoMaxWidth = rightHalfWidth - 2;
       const usLogoMaxHeight = 22;
       const usLogo = await loadUsQuotationLogo(
