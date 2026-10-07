@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import {
   getCctBranchInfoFromLogin,
+  getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
 import { formatPackageTypeNameForBol } from "../../../utils/packageTypeOptions";
@@ -546,9 +547,13 @@ const drawCanKeyValueRow = (
   return Math.max(1, lines.length) * CAN_LINE_SPACING;
 };
 
-// USA logo for India, USA, and Vietnam branches; empty otherwise (no fallback)
+// CCT uses cct.png. USA logo for India, USA, and Vietnam branches; empty otherwise (no fallback)
 const getLogoByCountry = (country: any): string | null => {
   try {
+    if (isCctCompany()) {
+      return getCctLogo();
+    }
+
     let countryName = "";
     let countryCode = "";
 

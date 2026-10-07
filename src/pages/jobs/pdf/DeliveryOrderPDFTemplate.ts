@@ -4,6 +4,7 @@ import pentagonPrimeAmericas from "../../../assets/images/PentagonPrimeUSA.png";
 import primeLogo from "../../../assets/images/prime.png";
 import {
   getCctBranchInfoFromLogin,
+  getCctLogo,
   isCctCompany,
 } from "../../../utils/pdfCompanyBranding";
 import {
@@ -115,9 +116,13 @@ const isIndiaCountry = (country: any): boolean => {
   );
 };
 
-// India and USA use the Americas logo. Kenya and every other country fall back to prime.png.
+// CCT uses cct.png. India and USA use the Americas logo. Kenya and every other country fall back to prime.png.
 const getLogoByCountry = (country: any): string => {
   try {
+    if (isCctCompany()) {
+      return getCctLogo();
+    }
+
     let countryName = "";
     let countryCode = "";
 
