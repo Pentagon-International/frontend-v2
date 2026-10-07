@@ -52,9 +52,12 @@ type ChequeNotClearedRow = {
   date: Date | null;
   daybook: string;
   document_no: string;
+  payment_id: number | null;
+  receipt_id: number | null;
   cheque_no: string;
   cheque_date: Date | null;
   cheque_clr_date: Date | null;
+  utr_no: string;
   party: string;
   amount: number | null;
 };
@@ -64,8 +67,14 @@ type BankEntryRow = {
   narration: string;
   cheque_no: string;
   cheque_clr_date: Date | null;
+  utr_no: string;
   our_reference: string;
   amount: number | null;
+};
+
+type BankReconciliationDocument = {
+  document_name: string;
+  document_url: string;
 };
 
 type BankReconciliationForm = {
@@ -98,9 +107,12 @@ type BankReconciliationChequeLine = {
   daybook_code?: string | null;
   daybook_name?: string | null;
   document_no?: string | null;
+  payment_id?: number | null;
+  receipt_id?: number | null;
   cheque_no?: string | null;
   cheque_date?: string | null;
   chq_clrd_date?: string | null;
+  utr_no?: string | null;
   paid_to?: string | null;
   received_from?: string | null;
   amount?: string | number | null;
@@ -112,6 +124,7 @@ type BankReconciliationBankLine = {
   narration?: string | null;
   cheque_no?: string | null;
   chq_clrd_date?: string | null;
+  utr_no?: string | null;
   our_reference?: string | null;
   amount?: string | number | null;
 };
@@ -142,6 +155,10 @@ type BankReconciliationRecord = {
   cheque_deposited_lines?: BankReconciliationChequeLine[];
   bank_credit_lines?: BankReconciliationBankLine[];
   bank_debit_lines?: BankReconciliationBankLine[];
+  documents?: Array<{
+    document_name?: string | null;
+    document_url?: string | null;
+  }>;
 };
 
 type BankReconciliationGetDetailData = {
@@ -217,9 +234,12 @@ function emptyChequeRow(): ChequeNotClearedRow {
     date: null,
     daybook: "",
     document_no: "",
+    payment_id: null,
+    receipt_id: null,
     cheque_no: "",
     cheque_date: null,
     cheque_clr_date: null,
+    utr_no: "",
     party: "",
     amount: null,
   };
@@ -231,9 +251,33 @@ function emptyBankRow(): BankEntryRow {
     narration: "",
     cheque_no: "",
     cheque_clr_date: null,
+    utr_no: "",
     our_reference: "",
     amount: null,
   };
+}
+
+function parseOptionalId(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(Number(value))) return null;
+  return Number(value);
+}
+
+function mapDocuments(
+  documents:
+    | Array<{
+        document_name?: string | null;
+        document_url?: string | null;
+      }>
+    | null
+    | undefined,
+): BankReconciliationDocument[] {
+  if (!Array.isArray(documents)) return [];
+  return documents
+    .map((doc) => ({
+      document_name: String(doc?.document_name ?? "").trim(),
+      document_url: String(doc?.document_url ?? "").trim(),
+    }))
+    .filter((doc) => doc.document_name || doc.document_url);
 }
 
 function sumAmounts(
@@ -260,13 +304,22 @@ function formatChartOfAccountsLabel(
   return [c, b, a].filter(Boolean).join(" - ");
 }
 
-/** YYYY-MM-DD for BRS API payloads (local calendar day) */
-function formatDateDDMMYYYY(date: Date | null | undefined): string {
+/** YYYY-MM-DD for BRS request dates already accepted by Get Detail. */
+function formatDateYYYYMMDD(date: Date | null | undefined): string {
   if (!date) return "";
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
   return `${year}-${month}-${day}`;
+}
+
+/** DD-MM-YYYY for BRS save payloads. */
+function formatDateDDMMYYYY(date: Date | null | undefined): string {
+  if (!date) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
 }
 
 function parseApiDate(value: string | null | undefined): Date | null {
@@ -314,9 +367,12 @@ function mapChequeLineToRow(
     date: parseApiDate(line.date),
     daybook: String(line.daybook_code ?? line.daybook_name ?? "").trim(),
     document_no: String(line.document_no ?? "").trim(),
+    payment_id: parseOptionalId(line.payment_id),
+    receipt_id: parseOptionalId(line.receipt_id),
     cheque_no: String(line.cheque_no ?? "").trim(),
     cheque_date: parseApiDate(line.cheque_date),
     cheque_clr_date: parseApiDate(line.chq_clrd_date),
+    utr_no: String(line.utr_no ?? "").trim(),
     party: String(line[partyField] ?? "").trim(),
     amount: parseAmount(line.amount),
   };
@@ -328,6 +384,7 @@ function mapBankLineFromApi(line: BankReconciliationBankLine): BankEntryRow {
     narration: String(line.narration ?? "").trim(),
     cheque_no: String(line.cheque_no ?? "").trim(),
     cheque_clr_date: parseApiDate(line.chq_clrd_date),
+    utr_no: String(line.utr_no ?? "").trim(),
     our_reference: String(line.our_reference ?? "").trim(),
     amount: parseAmount(line.amount),
   };
@@ -501,6 +558,7 @@ export default function BankReconciliationCreate() {
   const [chequeDepositedApiTotal, setChequeDepositedApiTotal] = useState<
     number | null
   >(null);
+  const [documents, setDocuments] = useState<BankReconciliationDocument[]>([]);
   const { localCurrency } = useAccountsDocumentCurrencyRoe();
 
   const { data: currencyData = [] } = useQuery({
@@ -729,6 +787,7 @@ export default function BankReconciliationCreate() {
     setChequeDepositedApiTotal(
       parseAmount(brsRecord.cheque_deposited_total) ?? 0,
     );
+    setDocuments(mapDocuments(brsRecord.documents));
     setSaveResponse({
       id: brsRecord.id,
       brs_no: brsRecord.brs_no,
@@ -770,8 +829,11 @@ export default function BankReconciliationCreate() {
       date: formatDateDDMMYYYY(row.date) || null,
       daybook_id: row.daybook_id,
       document_no: row.document_no,
-      cheque_no: row.cheque_no,
+      payment_id: row.payment_id,
+      cheque_no: row.cheque_no || null,
       cheque_date: formatDateDDMMYYYY(row.cheque_date) || null,
+      chq_clrd_date: formatDateDDMMYYYY(row.cheque_clr_date) || null,
+      utr_no: row.utr_no.trim() || null,
       paid_to: row.party,
       amount: row.amount ?? 0,
     });
@@ -780,8 +842,11 @@ export default function BankReconciliationCreate() {
       date: formatDateDDMMYYYY(row.date) || null,
       daybook_id: row.daybook_id,
       document_no: row.document_no,
-      cheque_no: row.cheque_no,
+      receipt_id: row.receipt_id,
+      cheque_no: row.cheque_no || null,
       cheque_date: formatDateDDMMYYYY(row.cheque_date) || null,
+      chq_clrd_date: formatDateDDMMYYYY(row.cheque_clr_date) || null,
+      utr_no: row.utr_no.trim() || null,
       received_from: row.party,
       amount: row.amount ?? 0,
     });
@@ -789,6 +854,9 @@ export default function BankReconciliationCreate() {
     const mapBankLine = (row: BankEntryRow) => ({
       date: formatDateDDMMYYYY(row.date) || null,
       narration: row.narration,
+      cheque_no: row.cheque_no.trim() || null,
+      chq_clrd_date: formatDateDDMMYYYY(row.cheque_clr_date) || null,
+      utr_no: row.utr_no.trim() || null,
       our_reference: row.our_reference,
       amount: row.amount ?? 0,
     });
@@ -821,6 +889,7 @@ export default function BankReconciliationCreate() {
         .filter((row) => row.document_no?.trim() || row.amount != null)
         .map(mapDepositedLine),
       bank_debit_lines: filterBankLines(values.bank_debit).map(mapBankLine),
+      documents,
     };
   };
 
@@ -848,7 +917,7 @@ export default function BankReconciliationCreate() {
     const payload = {
       account_code: accountCode,
       subledger: form.values.bank_account_sub_code.trim() || "0",
-      as_on_date: formatDateDDMMYYYY(form.values.date),
+      as_on_date: formatDateYYYYMMDD(form.values.date),
     };
 
     setDetailLoading(true);
@@ -1102,7 +1171,7 @@ export default function BankReconciliationCreate() {
           <Table
             horizontalSpacing={4}
             verticalSpacing={2}
-            style={{ minWidth: 940 }}
+            style={{ minWidth: 1100 }}
           >
             <Table.Thead>
               <Table.Tr style={{ background: "#f8fafc" }}>
@@ -1112,7 +1181,8 @@ export default function BankReconciliationCreate() {
                 <Table.Th w={140}>Document No</Table.Th>
                 <Table.Th w={100}>Cheque No</Table.Th>
                 <Table.Th w={110}>Cheque Date</Table.Th>
-                <Table.Th w={120}>Cheque Clr Date</Table.Th>
+                <Table.Th w={140}>Cheque Clr Date</Table.Th>
+                <Table.Th w={150}>UTR</Table.Th>
                 <Table.Th w={160}>{partyLabel}</Table.Th>
                 <Table.Th w={110}>Amount</Table.Th>
               </Table.Tr>
@@ -1161,10 +1231,30 @@ export default function BankReconciliationCreate() {
                     />
                   </Table.Td>
                   <Table.Td>
-                    <TextInput
-                      readOnly
-                      value={formatDateDisplay(row.cheque_clr_date, dateFormat)}
+                    <SingleDateInput
+                      value={row.cheque_clr_date}
+                      onChange={(date) =>
+                        form.setFieldValue(
+                          `${field}.${index}.cheque_clr_date`,
+                          date,
+                        )
+                      }
                       styles={cellInput}
+                      disabled={isReadOnly}
+                      popoverProps={{ withinPortal: true, zIndex: 400 }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <TextInput
+                      value={row.utr_no}
+                      onChange={(e) =>
+                        form.setFieldValue(
+                          `${field}.${index}.utr_no`,
+                          e.currentTarget.value,
+                        )
+                      }
+                      styles={cellInput}
+                      readOnly={isReadOnly}
                     />
                   </Table.Td>
                   <Table.Td>
@@ -1184,7 +1274,7 @@ export default function BankReconciliationCreate() {
               <AmountColumnTotal
                 label="Total"
                 value={sectionTotal}
-                colSpan={8}
+                colSpan={9}
               />
             </Table.Tfoot>
           </Table>
@@ -1201,7 +1291,7 @@ export default function BankReconciliationCreate() {
           <Table
             horizontalSpacing={4}
             verticalSpacing={2}
-            style={{ minWidth: 860 }}
+            style={{ minWidth: 1000 }}
           >
             <Table.Thead>
               <Table.Tr style={{ background: "#f8fafc" }}>
@@ -1211,7 +1301,8 @@ export default function BankReconciliationCreate() {
                   <RequiredLabel label="Narration" required />
                 </Table.Th>
                 <Table.Th w={100}>Cheque No</Table.Th>
-                <Table.Th w={120}>Cheque Clr Date</Table.Th>
+                <Table.Th w={140}>Cheque Clr Date</Table.Th>
+                <Table.Th w={150}>UTR</Table.Th>
                 <Table.Th w={140}>Our Reference</Table.Th>
                 <Table.Th w={110}>
                   <RequiredLabel label="Amount" required />
@@ -1274,6 +1365,20 @@ export default function BankReconciliationCreate() {
                       }
                       styles={cellInput}
                       disabled={isReadOnly}
+                      popoverProps={{ withinPortal: true, zIndex: 400 }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <TextInput
+                      value={rows[index].utr_no}
+                      onChange={(e) =>
+                        form.setFieldValue(
+                          `${field}.${index}.utr_no`,
+                          e.currentTarget.value,
+                        )
+                      }
+                      styles={cellInput}
+                      readOnly={isReadOnly}
                     />
                   </Table.Td>
                   <Table.Td>
@@ -1342,7 +1447,7 @@ export default function BankReconciliationCreate() {
               <AmountColumnTotal
                 label="Total"
                 value={sumAmounts(rows)}
-                colSpan={6}
+                colSpan={7}
                 trailingEmpty
               />
             </Table.Tfoot>

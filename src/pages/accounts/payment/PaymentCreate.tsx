@@ -418,6 +418,7 @@ type PaymentListItem = {
   cheque_no?: string;
   cheque_date?: string | null;
   chq_clrd_date?: string | null;
+  utr_no?: string | null;
   dr_cr?: string;
   parties?: Array<{
     id?: number;
@@ -485,6 +486,7 @@ type PaymentFormValues = {
   cheque_no: string;
   cheque_date: Date | null;
   chq_clrd_date: Date | null;
+  utr_no: string;
   details: DetailRow[];
   adjustments: AdjustmentRow[];
   supporting_documents: SupportingDocument[];
@@ -764,6 +766,8 @@ export default function PaymentCreate({
   ] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  /** True after a UTR is stored. The value can be entered once, including on a posted payment. */
+  const [utrLocked, setUtrLocked] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
     id?: number;
     payment_no?: string;
@@ -792,6 +796,7 @@ export default function PaymentCreate({
       cheque_no: "",
       cheque_date: null,
       chq_clrd_date: null,
+      utr_no: "",
       details: [getDefaultDetailRow(localCurrency, _isReversal)],
       adjustments: [getDefaultAdjustmentRow(localCurrency)],
       supporting_documents: [] as SupportingDocument[],
@@ -947,6 +952,8 @@ export default function PaymentCreate({
     const dateVal = parseDocumentDate(paymentFromState.date);
     const chqClrdDateVal = parseDocumentDate(paymentFromState.chq_clrd_date);
     const chequeDateVal = parseDocumentDate(paymentFromState.cheque_date);
+    const utrNo = String(paymentFromState.utr_no ?? "").trim();
+    setUtrLocked(Boolean(utrNo));
     const roeVal = parseNum(paymentFromState.roe);
     const amountVal = parseNum(paymentFromState.amount);
     const localAmountVal = toLocalAmount(paymentFromState.local_amount);
@@ -1093,6 +1100,7 @@ export default function PaymentCreate({
       cheque_no: (paymentFromState.cheque_no ?? "").toString(),
       cheque_date: chequeDateVal,
       chq_clrd_date: chqClrdDateVal,
+      utr_no: utrNo,
       details: detailsForForm,
       adjustments,
     });
@@ -1741,6 +1749,7 @@ export default function PaymentCreate({
       cheque_no: values.cheque_no ?? "",
       cheque_date: formatDateDDMMYYYY(values.cheque_date),
       chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+      utr_no: (values.utr_no ?? "").trim(),
       dr_cr: (paymentFromState?.dr_cr ?? "Cr").toString(),
       parties: (values.details ?? []).map((d) => ({
         ...(d.id != null && d.id > 0 ? { id: d.id } : {}),
@@ -1827,6 +1836,7 @@ export default function PaymentCreate({
       cheque_no: values.cheque_no ?? "",
       cheque_date: formatDateDDMMYYYY(values.cheque_date),
       chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+      utr_no: (values.utr_no ?? "").trim(),
       dr_cr: "Dr",
       parties: details.map((d) => ({
         account_code: d.account_code ?? "",
@@ -1922,7 +1932,7 @@ export default function PaymentCreate({
   };
 
   const handleSubmit = async (values: PaymentFormValues) => {
-    // Posted documents: only Cheque Cleared Date may be updated via PATCH.
+    // Posted documents: Cheque Cleared Date and UTR may be updated via PATCH.
     const postedStatus = String(saveResponse?.status ?? "").toUpperCase();
     if (
       !_isReversal &&
@@ -1970,6 +1980,7 @@ export default function PaymentCreate({
             JSON.stringify({
               id,
               chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+              utr_no: (values.utr_no ?? "").trim(),
             }),
           );
           let fileIndex = 0;
@@ -2010,6 +2021,7 @@ export default function PaymentCreate({
             );
           }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          if ((values.utr_no ?? "").trim()) setUtrLocked(true);
           ToastNotification({
             type: "success",
             message: "Payment updated successfully.",
@@ -2020,13 +2032,15 @@ export default function PaymentCreate({
             {
               id,
               chq_clrd_date: formatDateDDMMYYYY(values.chq_clrd_date),
+              utr_no: (values.utr_no ?? "").trim(),
             },
             API_HEADER,
           );
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          if ((values.utr_no ?? "").trim()) setUtrLocked(true);
           ToastNotification({
             type: "success",
-            message: "Cheque Cleared Date updated successfully.",
+            message: "Payment updated successfully.",
           });
         }
       } catch (e: unknown) {
@@ -2251,6 +2265,7 @@ export default function PaymentCreate({
             );
           }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          if ((values.utr_no ?? "").trim()) setUtrLocked(true);
           ToastNotification({
             type: "success",
             message: "Payment updated successfully.",
@@ -2311,6 +2326,7 @@ export default function PaymentCreate({
             );
           }
           await queryClient.invalidateQueries({ queryKey: ["payment"] });
+          if ((values.utr_no ?? "").trim()) setUtrLocked(true);
           ToastNotification({
             type: "success",
             message: "Payment saved successfully.",
@@ -2419,6 +2435,7 @@ export default function PaymentCreate({
         }));
         setAuditPatch((prev) => appendEditPageAuditPatch(prev, res));
         await queryClient.invalidateQueries({ queryKey: ["payment"] });
+        if ((form.values.utr_no ?? "").trim()) setUtrLocked(true);
         ToastNotification({
           type: "success",
           message: "Payment posted successfully.",
@@ -2440,7 +2457,7 @@ export default function PaymentCreate({
     reversePaymentSaveResponse?.status ?? "",
   ).toUpperCase();
   const isViewRoute = pathname.includes("/view");
-  // Posted edit: allow updating Cheque Cleared Date only (PATCH).
+  // Posted edit: Cheque Cleared Date and a blank UTR can still be updated (PATCH).
   const isPostedChequeClearanceEdit =
     !_isReversal &&
     !isViewRoute &&
@@ -2465,6 +2482,7 @@ export default function PaymentCreate({
   const headerDateDisabled = isReadOnly;
   const chequeClearanceDateDisabled =
     headerDateDisabled && !isPostedChequeClearanceEdit;
+  const utrDisabled = utrLocked || chequeClearanceDateDisabled;
   const headerOtherDisabled = isReadOnly || reversalFormDisabled;
   const useNonEditableStyleOnly = isReadOnly || _isReversal;
   const headerFieldStyles = headerOtherDisabled
@@ -2509,6 +2527,26 @@ export default function PaymentCreate({
             : pathname.includes("/payment/create")
               ? "Create Payment"
               : titleOverride;
+
+  const isCashPayment = form.values.type === "CASH";
+  const utrField = (
+    <Grid.Col span={2}>
+      <TextInput
+        label="UTR"
+        placeholder="UTR"
+        value={form.values.utr_no}
+        onChange={(e) => form.setFieldValue("utr_no", e.currentTarget.value)}
+        disabled={utrDisabled}
+        styles={
+          utrDisabled
+            ? useNonEditableStyleOnly
+              ? reversalNonEditableStyles
+              : readOnlyFieldStyles
+            : undefined
+        }
+      />
+    </Grid.Col>
+  );
 
   return (
     <Box p="md" style={{ position: "relative" }}>
@@ -2919,10 +2957,12 @@ export default function PaymentCreate({
                     }
                   />
                 </Grid.Col>
+                {!isCashPayment ? utrField : null}
               </>
             )}
 
-            <Grid.Col span={12}>
+            {isCashPayment ? utrField : null}
+            <Grid.Col span={isCashPayment ? 10 : 12}>
               <Textarea
                 label="Narration"
                 placeholder="Narration"

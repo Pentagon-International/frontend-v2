@@ -65,6 +65,7 @@ import {
 import FormTextInput from "../../../components/FormTextInput";
 import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { isAccountsUser } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
@@ -164,7 +165,7 @@ type JobProfitRow = {
   salesperson_verified?: boolean;
   has_verified_profit?: boolean;
   verified?: boolean;
-  brokerage?: number | null;
+  brokerage?: number | string | null;
   brokerage_remark?: string | null;
   confirmed_by?: string | null;
   confirmed_at?: string | null;
@@ -217,6 +218,53 @@ type JobProfitListResponse = {
 type UserWithSalespersonFlag = {
   is_salesperson?: boolean;
 };
+
+function isSalespersonUser(
+  user: {
+    role_code?: string | null;
+    role?: string | null;
+    is_salesperson?: boolean | null;
+  } | null,
+): boolean {
+  if (!user) return false;
+  if (user.is_salesperson) return true;
+  const roleCode = String(user.role_code ?? "")
+    .trim()
+    .toUpperCase();
+  const roleName = String(user.role ?? "")
+    .trim()
+    .toLowerCase();
+  if (roleCode === "S" || roleCode === "SM" || roleCode === "SALES") {
+    return true;
+  }
+  return (
+    roleName === "salesman" ||
+    roleName === "salesperson" ||
+    roleName === "sales" ||
+    roleName.includes("salesman") ||
+    roleName.includes("salesperson")
+  );
+}
+
+function isPricingPersonUser(
+  user: {
+    role_code?: string | null;
+    role?: string | null;
+  } | null,
+): boolean {
+  const roleCode = String(user?.role_code ?? "")
+    .trim()
+    .toUpperCase();
+  const roleName = String(user?.role ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    roleCode === "P" ||
+    roleCode === "PRICING" ||
+    roleName === "pricing" ||
+    roleName.includes("pricing")
+  );
+}
 
 function createDefaultFilters(
   mode: JobProfitVerificationMode = "verification",
@@ -349,6 +397,18 @@ function formatCurrencyAmount(
   return currency ? `${currency} ${formatted}` : formatted;
 }
 
+function formatBrokerageAmount(
+  value: number | string | null | undefined,
+  currency?: string,
+): string {
+  if (value === null || value === undefined) return "-";
+  const raw = String(value).trim();
+  if (!raw) return "-";
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return "-";
+  return formatCurrencyAmount(amount, currency);
+}
+
 function formatGpPercent(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${value.toLocaleString(undefined, {
@@ -444,6 +504,16 @@ export default function JobProfitVerificationMaster({
   const isSalesperson = Boolean(
     (user as UserWithSalespersonFlag | null)?.is_salesperson,
   );
+  const showBrokerageColumn =
+    !isPricingPersonUser(user) &&
+    (isStaff ||
+      isAccountsUser(user) ||
+      isSalespersonUser({
+        role_code: user?.role_code,
+        role: user?.role,
+        is_salesperson: (user as UserWithSalespersonFlag | null)
+          ?.is_salesperson,
+      }));
 
   const getState = useListFilterStore((s) => s.getState);
   const setStoreFilters = useListFilterStore((s) => s.setFilters);
@@ -938,6 +1008,8 @@ export default function JobProfitVerificationMaster({
   );
 
   const loading = isLoading || isFetching || isRestoring;
+  const tableColumnCount =
+    (isApprovalMode ? 19 : 21) + (showBrokerageColumn ? 1 : 0);
   const tdPad = { padding: "10px 12px" as const };
   const tdDate = erpListBookingMasterDateTd(theme);
   const mergeTh = (minW: number, widthPx: number) => ({
@@ -1549,6 +1621,9 @@ export default function JobProfitVerificationMaster({
                       <th style={listAmountThStyle}>Volume</th>
                       <th style={listAmountThStyle}>Revenue</th>
                       <th style={listAmountThStyle}>Profit</th>
+                      {showBrokerageColumn ? (
+                        <th style={listAmountThStyle}>Brokerage</th>
+                      ) : null}
                       <th style={listGpPctThStyle}>GP (%)</th>
                       <th style={mergeTh(isApprovalMode ? 90 : 180, isApprovalMode ? 90 : 180)}>
                         {isApprovalMode ? (
@@ -1608,7 +1683,7 @@ export default function JobProfitVerificationMaster({
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={isApprovalMode ? 19 : 21} style={{ padding: 0 }}>
+                        <td colSpan={tableColumnCount} style={{ padding: 0 }}>
                           <Box style={scrollPortCenteredStyle}>
                             <Loader color="#105476" size="lg" />
                           </Box>
@@ -1616,7 +1691,7 @@ export default function JobProfitVerificationMaster({
                       </tr>
                     ) : rows.length === 0 ? (
                       <tr>
-                        <td colSpan={isApprovalMode ? 19 : 21} style={{ padding: 0 }}>
+                        <td colSpan={tableColumnCount} style={{ padding: 0 }}>
                           <Box style={scrollPortCenteredStyle}>
                             <Text c="dimmed">No job profit records found</Text>
                           </Box>
@@ -1736,6 +1811,13 @@ export default function JobProfitVerificationMaster({
                               {formatCurrencyAmount(row.our_profit, currency)}
                             </Text>
                           </td>
+                          {showBrokerageColumn ? (
+                            <td style={listAmountTdStyle}>
+                              <Text size="sm" fw={600} c={fg}>
+                                {formatBrokerageAmount(row.brokerage, currency)}
+                              </Text>
+                            </td>
+                          ) : null}
                           <td style={listGpPctTdStyle}>
                             <SignedValueBadge
                               value={row.our_gp_pct}
