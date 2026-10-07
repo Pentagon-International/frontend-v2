@@ -221,6 +221,8 @@ type ChargeRow = {
   shipment_no: string;
   charge_id: number | null;
   charge_name?: string;
+  /** GST breakup rows appended by Calculate GST do not require shipment no. */
+  is_gst_breakup?: boolean;
   currency_id: number | null;
   roe: number | null;
   amount: number | null;
@@ -537,6 +539,35 @@ function resolveSupplierGstKind(chargeName: unknown): ChargeGstKind | null {
   return null;
 }
 
+/** GST tax lines (Calculate GST / SAC breakup) are charges without a shipment. */
+function isSupplierGstChargeRow(row: {
+  charge_id?: number | null;
+  charge_name?: string;
+  is_gst_breakup?: boolean;
+  CRN?: string;
+  shipment_no?: string;
+  account_code?: string;
+  account_name?: string;
+}): boolean {
+  if (row.is_gst_breakup) return true;
+  if (
+    isGstChargeRow(row.charge_name) ||
+    resolveSupplierGstKind(row.charge_name) != null
+  ) {
+    return true;
+  }
+  const shipmentEmpty = String(row.shipment_no ?? "").trim() === "";
+  const accountFilled =
+    String(row.account_code ?? "").trim() !== "" ||
+    String(row.account_name ?? "").trim() !== "";
+  return (
+    row.charge_id != null &&
+    shipmentEmpty &&
+    accountFilled &&
+    String(row.CRN ?? "").trim().toLowerCase() === "neutral"
+  );
+}
+
 function signedByDrCr(
   amount: number,
   drCr: "Dr" | "Cr" | null | undefined,
@@ -584,6 +615,7 @@ function mapPaymentRequestChargeToSupplierRow(
         ? Number(c.charge_id)
         : null,
     charge_name: chargeName,
+    is_gst_breakup: isGstRow,
     currency_id: c.currency_id != null ? Number(c.currency_id) : null,
     roe:
       parseRoeForPayload(
@@ -782,22 +814,37 @@ function parseIsAgentFromInvoiceRecord(record: unknown): boolean | undefined {
 
 function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
-  return charges.map((c) => ({
-    id: c.id,
-    account_id: c.account_id != null ? Number(c.account_id) : null,
-    account_code: String(c.account_code ?? c.gl_account_code ?? "").trim(),
-    account_name: c.account_name ?? "",
-    subledger_code: String(c.subledger_code ?? c.sl_code ?? ""),
-    CRN: c.CRN ?? "",
-    narration: c.narration ?? "",
-    shipment_no: String(
-      c.shipment_no ?? c.job_no ?? c.job_id ?? "",
-    ).trim(),
-    charge_id: c.charge_id ?? null,
-    charge_name:
+  return charges.map((c) => {
+    const chargeName =
       (c as { charge_name?: unknown }).charge_name != null
         ? String((c as { charge_name?: unknown }).charge_name)
-        : "",
+        : "";
+    const shipmentNo = String(
+      c.shipment_no ?? c.job_no ?? c.job_id ?? "",
+    ).trim();
+    const accountCode = String(c.account_code ?? c.gl_account_code ?? "").trim();
+    const accountName = c.account_name ?? "";
+    const chargeId = c.charge_id ?? null;
+    const crn = c.CRN ?? "";
+    return {
+    id: c.id,
+    account_id: c.account_id != null ? Number(c.account_id) : null,
+    account_code: accountCode,
+    account_name: accountName,
+    subledger_code: String(c.subledger_code ?? c.sl_code ?? ""),
+    CRN: crn,
+    narration: c.narration ?? "",
+    shipment_no: shipmentNo,
+    charge_id: chargeId,
+    charge_name: chargeName,
+    is_gst_breakup: isSupplierGstChargeRow({
+      charge_id: chargeId,
+      charge_name: chargeName,
+      CRN: crn,
+      shipment_no: shipmentNo,
+      account_code: accountCode,
+      account_name: accountName,
+    }),
     currency_id: c.currency_id ?? null,
     roe:
       typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null),
@@ -814,7 +861,8 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
       return (v === "CR" || v === "DR" ? (v === "CR" ? "Cr" : "Dr") : "Dr") as
         "Dr" | "Cr";
     })(),
-  }));
+    };
+  });
 }
 
 const inputStyles = {
@@ -3103,10 +3151,13 @@ export default function SupplierInvoiceCreate({
   ): Promise<number | null> => {
     setIsSubmitting(true);
     try {
-      // Charge selected without Shipment No → infield error
+      // Charge selected without Shipment No → infield error.
+      // GST breakup rows appended by Calculate GST are charges and do not need a shipment.
       const missingShipmentAt = (values.charges_data ?? []).findIndex(
         (c) =>
-          c.charge_id != null && String(c.shipment_no ?? "").trim() === "",
+          c.charge_id != null &&
+          !isSupplierGstChargeRow(c) &&
+          String(c.shipment_no ?? "").trim() === "",
       );
       if (missingShipmentAt >= 0) {
         form.setFieldError(
@@ -4874,6 +4925,7 @@ export default function SupplierInvoiceCreate({
                                   shipment_no: String(t.shipment_no ?? ""),
                                   charge_id: chargeId,
                                   charge_name: String(t.charge_name ?? ""),
+                                  is_gst_breakup: true,
                                   currency_id:
                                     currencyId != null
                                       ? Number(currencyId)
@@ -5283,7 +5335,10 @@ export default function SupplierInvoiceCreate({
                                   form.setFieldValue,
                                 );
                               }
-                            } else if (row.charge_id != null) {
+                            } else if (
+                              row.charge_id != null &&
+                              !isSupplierGstChargeRow(row)
+                            ) {
                               clearCrjChargeRowAccountFields(
                                 index,
                                 form.setFieldValue,
@@ -5358,7 +5413,10 @@ export default function SupplierInvoiceCreate({
                                   form.setFieldValue,
                                 );
                               }
-                            } else if (row.charge_id != null) {
+                            } else if (
+                              row.charge_id != null &&
+                              !isSupplierGstChargeRow(row)
+                            ) {
                               clearCrjChargeRowAccountFields(
                                 index,
                                 form.setFieldValue,
@@ -5447,7 +5505,14 @@ export default function SupplierInvoiceCreate({
                             chargeOriginalByIndexRef.current[index] =
                               (originalData as Record<string, unknown> | null) ??
                               null;
-                            if (!shipmentNo) {
+                            const gstCharge =
+                              isGstChargeRow(nextName) ||
+                              resolveSupplierGstKind(nextName) != null;
+                            form.setFieldValue(
+                              `charges_data.${index}.is_gst_breakup`,
+                              gstCharge,
+                            );
+                            if (!shipmentNo && !gstCharge) {
                               clearCrjChargeRowAccountFields(
                                 index,
                                 form.setFieldValue,
@@ -5468,11 +5533,13 @@ export default function SupplierInvoiceCreate({
                               form.clearFieldError(
                                 `charges_data.${index}.shipment_no`,
                               );
-                              fetchSacForChargeRow(
-                                index,
-                                chargeId,
-                                shipmentNo,
-                              );
+                              if (shipmentNo) {
+                                fetchSacForChargeRow(
+                                  index,
+                                  chargeId,
+                                  shipmentNo,
+                                );
+                              }
                             }
                           }
                           if (chargeId != null) {

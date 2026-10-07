@@ -1114,6 +1114,14 @@ export default function BankReconciliationCreate() {
       return;
     }
 
+    if (differenceAmount !== 0) {
+      ToastNotification({
+        type: "error",
+        message: "Cannot post: Difference amount must be zero.",
+      });
+      return;
+    }
+
     setIsPosting(true);
     try {
       const payload = buildSavePayload("POSTED");
