@@ -44,6 +44,7 @@ function amountsFromApi(
   _row: Record<string, unknown>,
   keys: {
     outstanding: unknown;
+    net_outstanding?: unknown;
     overdue?: unknown;
     dso_days?: unknown;
     days1_30?: unknown;
@@ -72,6 +73,7 @@ function amountsFromApi(
 
   return {
     outstanding: rawAmount(keys.outstanding),
+    net_outstanding: rawAmount(keys.net_outstanding),
     overdue: rawAmount(keys.overdue),
     dso_days: rawAmount(keys.dso_days),
     days1_30: rawAmount(keys.days1_30),
@@ -100,6 +102,7 @@ function rupeesToCr(rupees: number): number {
 
 const EMPTY_AMOUNTS: OutstandingAmountCells = {
   outstanding: "—",
+  net_outstanding: "—",
   overdue: "—",
   dso_days: "—",
   days1_30: "—",
@@ -129,6 +132,7 @@ function totalRowFromSummary(summary: Record<string, unknown>): OutstandingTable
     subtitle: "",
     amounts: amountsFromApi(summary, {
       outstanding: summary.total_outstanding ?? summary.book,
+      net_outstanding: summary.total_net_outstanding ?? summary.net_outstanding,
       overdue: summary.total_overdue ?? summary.overdue,
       dso_days: summary.dso_days,
       days1_30: summary.days_1_30,
@@ -200,6 +204,7 @@ function mapCustomerRow(raw: unknown): OutstandingTableRow {
   const branchName = branchNameFromApi(row);
   const amounts = amountsFromApi(row, {
     outstanding: row.outstanding,
+    net_outstanding: row.net_outstanding,
     overdue: row.overdue,
     dso_days: row.dso_days,
     days1_30: row.days_1_30 ?? row.days1_30,
@@ -255,6 +260,7 @@ function mapBranchRow(raw: unknown): OutstandingTableRow {
     firstString(row.branch_name, row.branchName, code.toUpperCase());
   const amounts = amountsFromApi(row, {
     outstanding: row.book ?? row.outstanding,
+    net_outstanding: row.net_outstanding ?? row.total_net_outstanding,
     overdue: row.overdue,
     dso_days: row.dso_days,
     days1_30: row.days_1_30,
@@ -404,7 +410,7 @@ export function emptyFinanceOutstandingAgeing(): FinanceOutstandingAgeingData {
     currency: "",
     customer: empty,
     agent: { ...empty, tabLabel: "Agent Outstanding" },
-    pagination: { index: 0, limit: 15, total: 0, hasNext: false },
+    pagination: { index: 0, limit: 30, total: 0, hasNext: false },
   };
 }
 
@@ -415,7 +421,7 @@ export function normalizeFinanceOutstandingAgeing(
   const root = (raw ?? {}) as Record<string, unknown>;
 
   const index = safeNumber(root.index);
-  const limit = safeNumber(root.limit, 15);
+  const limit = safeNumber(root.limit, 30);
   const total = safeNumber(root.total);
   const returned = safeNumber(root.returned_count, 0);
   const rowCount = Array.isArray(root.data) ? root.data.length : 0;
@@ -438,13 +444,7 @@ export function normalizeFinanceOutstandingAgeing(
 
   if (isBranchView) {
     const branchRows = branchesRaw.length ? branchesRaw : dataRaw;
-    byBranch = buildTableSection(
-      branchRows,
-      mapBranchRow,
-      "Total",
-      summary,
-      hasNext ? Math.max(0, total - branchRows.length) : 0,
-    );
+    byBranch = buildTableSection(branchRows, mapBranchRow, "Total", summary);
     byParty = { rows: [], total: emptyTotalRow("Total") };
   } else {
     byParty = buildTableSection(dataRaw, mapCustomerRow, "Total", summary);

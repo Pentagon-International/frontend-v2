@@ -17,6 +17,7 @@ export type AgeingBucket = {
 
 export type OutstandingAmountCells = {
   outstanding: string;
+  net_outstanding: string;
   overdue: string;
   dso_days: string;
   days1_30: string;

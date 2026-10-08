@@ -16,7 +16,7 @@ export async function fetchOutstandingAgeing(
   params: OutstandingAgeingRequest,
 ): Promise<unknown> {
   const index = params.index ?? 0;
-  const limit = params.limit ?? 15;
+  const limit = params.limit ?? 30;
   const query = new URLSearchParams({
     index: String(index),
     limit: String(limit),

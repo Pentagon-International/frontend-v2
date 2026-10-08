@@ -23,14 +23,15 @@ import {
   OST_WARN_BG,
 } from "../theme";
 
-const TABLE_SCROLL_MIN_WIDTH = 1480;
+const TABLE_SCROLL_MIN_WIDTH = 1600;
+const TABLE_SCROLL_MAX_HEIGHT = "min(68vh, 720px)";
 
 function tableRowGrid(compact: boolean): CSSProperties {
   return {
     display: "grid",
     gridTemplateColumns: compact
-      ? "minmax(120px, 1.35fr) repeat(12, minmax(52px, 1fr)) minmax(44px, 0.7fr)"
-      : "minmax(140px, 1.4fr) repeat(12, minmax(64px, 1fr)) minmax(56px, 0.75fr)",
+      ? "minmax(120px, 1.35fr) repeat(13, minmax(52px, 1fr)) minmax(44px, 0.7fr)"
+      : "minmax(140px, 1.4fr) repeat(13, minmax(64px, 1fr)) minmax(56px, 0.75fr)",
     gap: compact ? 8 : 12,
     alignItems: "center",
     padding: compact ? "10px 12px" : "10px 18px",
@@ -74,8 +75,9 @@ function rowAmountMetrics(row: OutstandingTableRow, currency: string): AmountMet
     { label: "Credit Days", value: row.amounts.credit_days },
     { label: "Credit Limit", value: formatCell(row.amounts.credit_amount, currency) },
     { label: "Outstanding", value: formatCell(row.amounts.outstanding, currency) },
-    { label: "Overdue", value: formatCell(row.amounts.overdue, currency) },
     { label: "Unadjusted Credit", value: formatCell(row.amounts.unadjust, currency) },
+    { label: "Net Outstanding", value: formatCell(row.amounts.net_outstanding, currency) },
+    { label: "Overdue", value: formatCell(row.amounts.overdue, currency) },
     { label: "DSO Days", value: row.amounts.dso_days },
     { label: "1–30", value: formatCell(row.amounts.days1_30, currency) },
     { label: "31–60", value: formatCell(row.amounts.days31_60, currency) },
@@ -398,10 +400,13 @@ function OutstandingTableRowView({
         {formatCell(row.amounts.outstanding, currency)}
       </Text>
       <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
-        {formatCell(row.amounts.overdue, currency)}
+        {formatCell(row.amounts.unadjust, currency)}
+      </Text>
+      <Text fz={12} fw={isTotal ? 600 : 500} c={OST_INK} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+        {formatCell(row.amounts.net_outstanding, currency)}
       </Text>
       <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
-        {formatCell(row.amounts.unadjust, currency)}
+        {formatCell(row.amounts.overdue, currency)}
       </Text>
       <Text fz={12} c={OST_INK_3} style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
         {row.amounts.dso_days}
@@ -560,7 +565,7 @@ export function OutstandingTable({
   const isMobile = useMediaQuery("(max-width: 48em)") ?? false;
   const isCompact = useMediaQuery("(max-width: 62em)") ?? false;
   const firstCol = viewMode === "branch" ? "Branch" : partyLabel;
-  const showPagination = viewMode === "party" && pagination && pagination.total > 0;
+  const showPagination = Boolean(pagination && pagination.total > 0);
   const rowGrid = tableRowGrid(isCompact);
 
   const headerStyle = {
@@ -607,18 +612,31 @@ export function OutstandingTable({
       <Box
         style={{
           ...rowGrid,
+          position: "sticky",
+          top: 0,
+          zIndex: 3,
           paddingBottom: 8,
           borderBottom: `1px solid ${OST_LINE}`,
           color: OST_INK_4,
           background: OST_CARD_BG,
         }}
       >
-        <Text style={{ ...headerStyle, ...stickyFirstColStyle(OST_CARD_BG) }}>{firstCol}</Text>
+        <Text
+          style={{
+            ...headerStyle,
+            ...stickyFirstColStyle(OST_CARD_BG),
+            top: 0,
+            zIndex: 4,
+          }}
+        >
+          {firstCol}
+        </Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>Credit Days</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>Credit Limit</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>Outstanding</Text>
-        <Text style={{ ...headerStyle, textAlign: "center" }}>Overdue</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>Unadjusted Credit</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Net Outstanding</Text>
+        <Text style={{ ...headerStyle, textAlign: "center" }}>Overdue</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>DSO Days</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>1–30</Text>
         <Text style={{ ...headerStyle, textAlign: "center" }}>31–60</Text>
@@ -674,10 +692,11 @@ export function OutstandingTable({
         ) : null}
         <Box
           style={{
-            overflowX: isMobile ? "visible" : "auto",
+            overflow: "auto",
             WebkitOverflowScrolling: "touch",
             width: "100%",
             minWidth: 0,
+            maxHeight: TABLE_SCROLL_MAX_HEIGHT,
             marginLeft: embedded ? 0 : undefined,
             marginRight: embedded ? 0 : undefined,
           }}

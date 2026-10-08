@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Box, Flex, Skeleton } from "@mantine/core";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
@@ -22,7 +22,7 @@ import type {
 } from "./financeOutstandingAgeing/financeOutstandingAgeingTypes";
 import { OST_PAGE_BG } from "./financeOutstandingAgeing/theme";
 
-const PAGE_LIMIT = 15;
+const PAGE_LIMIT = 30;
 
 const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
   const user = useAuthStore((state) => state.user);
@@ -42,6 +42,7 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
   const [partyType] = useState<OutstandingPartyType>("customer");
   const [viewMode, setViewMode] = useState<OutstandingViewMode>("branch");
   const [pageIndex, setPageIndex] = useState(0);
+  const requestSeq = useRef(0);
   const {
     input: searchInput,
     setInput: setSearchInput,
@@ -49,14 +50,18 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
     commit: commitSearch,
   } = useDashboardChartSearch();
 
-  useEffect(() => {
+  const listQueryKey = `${viewMode}|${filters.location}|${filters.customer_name}|${filters.risk}|${committedSearch}`;
+  const [appliedListQueryKey, setAppliedListQueryKey] = useState(listQueryKey);
+  if (listQueryKey !== appliedListQueryKey) {
+    setAppliedListQueryKey(listQueryKey);
     setPageIndex(0);
-  }, [viewMode, filters.location, filters.customer_name, filters.risk, committedSearch]);
+  }
 
-  const loadDashboard = useCallback(async (searchOverride?: string) => {
+  const loadDashboard = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     setLoadError(null);
-    const searchTerm = (searchOverride ?? committedSearch).trim();
+    const searchTerm = committedSearch.trim();
     try {
       const body = await fetchOutstandingAgeing({
         company,
@@ -68,6 +73,7 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
         ...(filters.risk && { risk: filters.risk }),
         ...(searchTerm && { search: searchTerm }),
       });
+      if (seq !== requestSeq.current) return;
       setData((prev) => {
         const next = normalizeFinanceOutstandingAgeing(body, viewMode);
         const hasListOptions =
@@ -79,12 +85,13 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
         };
       });
     } catch {
+      if (seq !== requestSeq.current) return;
       setData(emptyFinanceOutstandingAgeing());
       setLoadError(
         "Unable to load outstanding & ageing data. Please refresh or try again later.",
       );
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   }, [
     company,
@@ -111,17 +118,16 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
     { value: "", label: "All locations" },
   ];
 
-  const tablePagination =
-    viewMode === "party" && data.pagination
-      ? {
-          index: pageIndex,
-          limit: PAGE_LIMIT,
-          total: data.pagination.total,
-          loading,
-          onPrev: () => setPageIndex((prev) => Math.max(0, prev - PAGE_LIMIT)),
-          onNext: () => setPageIndex((prev) => prev + PAGE_LIMIT),
-        }
-      : undefined;
+  const tablePagination = data.pagination
+    ? {
+        index: pageIndex,
+        limit: PAGE_LIMIT,
+        total: data.pagination.total,
+        loading,
+        onPrev: () => setPageIndex((prev) => Math.max(0, prev - PAGE_LIMIT)),
+        onNext: () => setPageIndex((prev) => prev + PAGE_LIMIT),
+      }
+    : undefined;
 
   return (
     <Box
@@ -156,13 +162,9 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
           onSearchInputChange={setSearchInput}
           onSearchCommit={(v) => {
             commitSearch(v);
-            setPageIndex(0);
-            void loadDashboard(v);
           }}
           onSearchClear={() => {
             commitSearch("");
-            setPageIndex(0);
-            void loadDashboard("");
           }}
           filterOptions={data.filterOptions}
           onRefresh={() => void loadDashboard()}
