@@ -16,6 +16,7 @@ import { URL } from "../api/serverUrls";
 import { API_HEADER } from "../store/storeKeys";
 import { defaultTheme } from "../theme/brandThemeDefault";
 import ToastNotification from "../components/ToastNotification";
+import { isAccountsUser } from "../pages/masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 
 export type JobProfitHouseAction = "verify" | "confirm";
 
@@ -601,12 +602,62 @@ export function canShowConfirmProfit(params: {
   return normalizeProfitStatus(params.status) === "verified";
 }
 
-/** Sales can update brokerage only after verify, before confirm. */
+export type JobProfitBrokerageAccessUser = {
+  is_salesperson?: boolean | null;
+  pricing_brokerage?: boolean | null;
+  accounts?: boolean | null;
+  is_accounts?: boolean | null;
+  role_code?: string | null;
+  role?: string | null;
+  screen_permissions?: {
+    pricing_brokerage?: boolean | null;
+  } | null;
+} | null | undefined;
+
+function isJobProfitSalespersonUser(user: JobProfitBrokerageAccessUser): boolean {
+  if (!user) return false;
+  if (user.is_salesperson === true) return true;
+  const roleCode = String(user.role_code ?? "")
+    .trim()
+    .toUpperCase();
+  const roleName = String(user.role ?? "")
+    .trim()
+    .toLowerCase();
+  if (roleCode === "S" || roleCode === "SM" || roleCode === "SALES") {
+    return true;
+  }
+  return (
+    roleName === "salesman" ||
+    roleName === "salesperson" ||
+    roleName === "sales" ||
+    roleName.includes("salesman") ||
+    roleName.includes("salesperson")
+  );
+}
+
+/** Salesperson, pricing_brokerage, or accounts may see and add brokerage. */
+export function canManageJobProfitBrokerage(
+  user: JobProfitBrokerageAccessUser,
+): boolean {
+  if (!user) return false;
+  const pricingBrokerage =
+    user.pricing_brokerage === true ||
+    user.screen_permissions?.pricing_brokerage === true;
+  const accounts =
+    user.accounts === true ||
+    user.is_accounts === true ||
+    isAccountsUser(user);
+  return isJobProfitSalespersonUser(user) || pricingBrokerage || accounts;
+}
+
+/** Brokerage can be added after verify and before confirm. */
 export function canUpdateBrokerage(params: {
   is_sales?: boolean | null;
   status?: string | null;
+  /** Salesperson, pricing_brokerage, or accounts — not limited to is_sales. */
+  allowBrokerage?: boolean;
 }): boolean {
-  if (params.is_sales !== true) return false;
+  if (params.allowBrokerage !== true && params.is_sales !== true) return false;
   if (isProfitFlowComplete(params.status)) return false;
   return normalizeProfitStatus(params.status) === "verified";
 }
@@ -717,6 +768,79 @@ export async function saveJobProfitBrokerage(options: {
   );
 }
 
+/** Add brokerage from the job profit verification list. */
+export function runAddJobProfitBrokerage(options: {
+  shipmentId: string;
+  initialBrokerage?: number | string | null;
+  initialBrokerageRemark?: string | null;
+  onSuccess?: (response?: JobProfitHousePatchResult) => void;
+}) {
+  const shipmentId = String(options.shipmentId ?? "").trim();
+  if (!shipmentId) {
+    ToastNotification({
+      type: "error",
+      message: "Shipment number not found.",
+    });
+    return;
+  }
+
+  let loading = false;
+  let error: string | null = null;
+
+  mountPortal(({ update, destroy }) => {
+    const render = () => {
+      update(
+        <AddBrokerageModal
+          shipmentId={shipmentId}
+          initialBrokerage={options.initialBrokerage}
+          initialRemark={options.initialBrokerageRemark}
+          loading={loading}
+          error={error}
+          onClose={() => {
+            if (!loading) destroy();
+          }}
+          onSubmit={(values) => {
+            if (loading) return;
+            if (!hasExistingBrokerage(values.brokerage)) {
+              error = "Brokerage amount is required";
+              render();
+              return;
+            }
+            loading = true;
+            error = null;
+            render();
+
+            void (async () => {
+              try {
+                const response = await saveJobProfitBrokerage({
+                  shipmentId,
+                  brokerage: values.brokerage,
+                  brokerageRemark: values.brokerageRemark,
+                });
+                ToastNotification({
+                  type: "success",
+                  message: response?.message ?? "Brokerage saved successfully",
+                });
+                destroy();
+                options.onSuccess?.(response);
+              } catch (err: unknown) {
+                loading = false;
+                error = resolveApiErrorMessage(
+                  err,
+                  "Failed to save brokerage.",
+                );
+                ToastNotification({ type: "error", message: error });
+                render();
+              }
+            })();
+          }}
+        />,
+      );
+    };
+    render();
+  });
+}
+
 function ConfirmActionModal({
   title,
   message,
@@ -765,6 +889,103 @@ function ConfirmActionModal({
           {confirmLabel}
         </Button>
       </Group>
+    </Modal>
+  );
+}
+
+function AddBrokerageModal({
+  shipmentId,
+  initialBrokerage,
+  initialRemark,
+  loading,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  shipmentId: string;
+  initialBrokerage?: number | string | null;
+  initialRemark?: string | null;
+  loading: boolean;
+  error?: string | null;
+  onClose: () => void;
+  onSubmit: (values: {
+    brokerage: number | string | null;
+    brokerageRemark: string;
+  }) => void;
+}) {
+  const [brokerage, setBrokerage] = useState<string | number | null>(
+    initialBrokerage ?? null,
+  );
+  const [remark, setRemark] = useState(String(initialRemark ?? ""));
+
+  return (
+    <Modal
+      opened
+      onClose={onClose}
+      title={
+        <Text fw={600} size="md" style={{ fontFamily: "Inter" }}>
+          Add Brokerage
+        </Text>
+      }
+      centered
+      zIndex={400}
+      closeOnClickOutside={!loading}
+      closeOnEscape={!loading}
+      withCloseButton={!loading}
+    >
+      <Stack gap="sm">
+        <Text size="sm" c="dimmed" style={{ fontFamily: "Inter" }}>
+          Add brokerage for shipment {shipmentId}.
+        </Text>
+        <NumberInput
+          label="Brokerage amount"
+          placeholder="Enter amount"
+          value={brokerage ?? undefined}
+          onChange={(value) => setBrokerage(value === "" ? null : value)}
+          min={0}
+          decimalScale={2}
+          thousandSeparator=","
+          hideControls
+          withAsterisk
+          styles={{
+            label: { fontFamily: "Inter", fontSize: 13, fontWeight: 500 },
+            input: { fontFamily: "Inter" },
+          }}
+        />
+        <Textarea
+          label="Brokerage remark"
+          placeholder="Enter remark"
+          value={remark}
+          onChange={(e) => setRemark(e.currentTarget.value)}
+          minRows={2}
+          styles={{
+            label: { fontFamily: "Inter", fontSize: 13, fontWeight: 500 },
+            input: { fontFamily: "Inter" },
+          }}
+        />
+        {error ? (
+          <Text size="sm" c="red" style={{ fontFamily: "Inter" }}>
+            {error}
+          </Text>
+        ) : null}
+        <Group justify="flex-end" gap="xs">
+          <Button variant="subtle" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            loading={loading}
+            onClick={() =>
+              onSubmit({
+                brokerage,
+                brokerageRemark: remark,
+              })
+            }
+          >
+            Save
+          </Button>
+        </Group>
+      </Stack>
     </Modal>
   );
 }

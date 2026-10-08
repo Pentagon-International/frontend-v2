@@ -76,6 +76,7 @@ interface ScreenPermissions {
   credit_override_approval?: boolean;
   payment_approval_screen?: boolean;
   job_agent?: boolean;
+  pricing_brokerage?: boolean;
 }
 
 interface User {
@@ -88,6 +89,9 @@ interface User {
   email?: string;
   is_staff: boolean;
   is_manager: boolean;
+  is_salesperson?: boolean;
+  pricing_brokerage?: boolean;
+  accounts?: boolean;
   role_code?: string | null;
   role?: string | null;
   company: Company;
@@ -110,6 +114,9 @@ interface AuthStore {
     username: string;
     is_staff: boolean;
     is_manager: boolean;
+    is_salesperson?: boolean;
+    pricing_brokerage?: boolean;
+    accounts?: boolean;
     role_code?: string | null;
     role?: string | null;
     company: Company;
@@ -171,6 +178,11 @@ const useAuthStore = create<AuthStore>((set) => ({
       email: data.user_identifier, // Using user_identifier as email
       is_staff: data.is_staff,
       is_manager: data.is_manager,
+      is_salesperson: data.is_salesperson === true,
+      pricing_brokerage:
+        data.pricing_brokerage === true ||
+        data.screen_permissions?.pricing_brokerage === true,
+      accounts: data.accounts === true,
       role_code: data.role_code ?? null,
       role: data.role ?? null,
       company: data.company,

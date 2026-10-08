@@ -55,6 +55,7 @@ import {
   runGlobalSearchQuery,
 } from "../../../utils/globalSearchNavigation";
 import {
+  canManageJobProfitBrokerage,
   canShowConfirmProfit,
   canShowSalespersonVerify,
   canUpdateBrokerage,
@@ -475,12 +476,14 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     }),
   );
 
+  const canManageBrokerage = canManageJobProfitBrokerage(user);
   const showBrokerageForm =
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
     canUpdateBrokerage({
       is_sales: profitIsSales,
       status: profitStatus,
+      allowBrokerage: canManageBrokerage,
     }) &&
     !brokerageAlreadySaved;
 
@@ -517,17 +520,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     Boolean(profitShipmentId) &&
     profitIsSales === true;
   const isPricingUser = profitIsSales === false;
-  const canViewBrokerage =
-    Boolean(user?.is_staff) ||
-    isAccountsUser(user) ||
-    (!isPricingUser &&
-      (profitIsSales === true ||
-        isSalespersonUser({
-          role_code: user?.role_code,
-          role: user?.role,
-          is_salesperson: (user as { is_salesperson?: boolean } | null)
-            ?.is_salesperson,
-        })));
+  const canViewBrokerage = fromProfitVerification
+    ? canManageBrokerage || profitIsSales === true
+    : Boolean(user?.is_staff) ||
+      isAccountsUser(user) ||
+      (!isPricingUser &&
+        (profitIsSales === true ||
+          isSalespersonUser({
+            role_code: user?.role_code,
+            role: user?.role,
+            is_salesperson: (user as { is_salesperson?: boolean } | null)
+              ?.is_salesperson,
+          })));
   const brokerageDisplay =
     brokerageAmount != null &&
     String(brokerageAmount).trim() !== "" &&

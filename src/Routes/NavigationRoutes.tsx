@@ -265,6 +265,7 @@ import AgingOutstanding from "../pages/reports/agingOutstanding/AgingOutstanding
 import ReportsPage from "../pages/reports/ReportsPage";
 import SubledgerOutstanding from "../pages/reports/subledgerOutsyanding/SubledgerOutstanding";
 import PurchaseRegister from "../pages/reports/purchaseRegister/PurchaseRegister";
+import SalesRegister from "../pages/reports/salesRegister/SalesRegister";
 import GstReport from "../pages/reports/gstReport/GstReport";
 import IrnReport from "../pages/reports/irnReport/IrnReport";
 import FapiaoReport from "../pages/reports/fapiaoReport/FapiaoReport";
@@ -585,6 +586,7 @@ const NavigationRoutes = () => {
             element={<SubledgerOutstanding />}
           />
           <Route path="purchase-register" element={<PurchaseRegister />} />
+          <Route path="sales-register" element={<SalesRegister />} />
           <Route path="gst-report" element={<GstReport />} />
           <Route path="irn-report" element={<IrnReport />} />
           <Route

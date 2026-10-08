@@ -5,6 +5,7 @@ import {
   IconBook2,
   IconReportMoney,
   IconShoppingCart,
+  IconCash,
   IconScale,
   IconChartBar,
   IconReport,
@@ -65,6 +66,11 @@ export default function ReportsPage() {
           label: "Purchase Register",
           icon: <IconShoppingCart size={28} color="#105476" />,
           path: "/reports/purchase-register",
+        },
+        {
+          label: "Sales Register",
+          icon: <IconCash size={28} color="#105476" />,
+          path: "/reports/sales-register",
         },
         {
           label: "GST Register Report",

@@ -49,6 +49,9 @@ type LoginResponse = {
   username: string;
   is_staff: boolean;
   is_manager: boolean;
+  is_salesperson?: boolean;
+  pricing_brokerage?: boolean;
+  accounts?: boolean;
   role_code?: string | null;
   role?: string | null;
   company: {
@@ -86,6 +89,7 @@ type LoginResponse = {
     credit_override_approval?: boolean;
     payment_approval_screen?: boolean;
     job_agent?: boolean;
+    pricing_brokerage?: boolean;
   };
 };
 
@@ -144,6 +148,9 @@ function LoginForm() {
       username: data.username,
       is_staff: data.is_staff,
       is_manager: data.is_manager,
+      is_salesperson: data.is_salesperson,
+      pricing_brokerage: data.pricing_brokerage,
+      accounts: data.accounts,
       role_code: data.role_code,
       role: data.role,
       company: data.company,

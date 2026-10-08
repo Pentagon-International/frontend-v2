@@ -65,7 +65,6 @@ import {
 import FormTextInput from "../../../components/FormTextInput";
 import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { isAccountsUser } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import useAuthStore from "../../../store/authStore";
 import {
   bindMoneyWholeNumberMode,
@@ -76,12 +75,17 @@ import useDateFormat from "../../../hooks/useDateFormat";
 import { getFilterBranchMasterOptions } from "../../../service/dashboard.service";
 import { getDefaultBranchCurrencyFromUser } from "../../../utils/exchangeRateRoe";
 import {
+  canManageJobProfitBrokerage,
   canShowSalespersonVerify,
+  canUpdateBrokerage,
   getProfitStatusLabel,
+  hasExistingBrokerage,
   isAccountsProfitVerified,
   isSalespersonProfitVerified,
+  pickProfitHouseAuditFields,
   pickProfitHouseRecord,
   PROFIT_STATUS_FILTER_OPTIONS,
+  runAddJobProfitBrokerage,
   runJobProfitAccountsVerify,
   runJobProfitHoldDecision,
   runJobProfitSalespersonVerify,
@@ -218,53 +222,6 @@ type JobProfitListResponse = {
 type UserWithSalespersonFlag = {
   is_salesperson?: boolean;
 };
-
-function isSalespersonUser(
-  user: {
-    role_code?: string | null;
-    role?: string | null;
-    is_salesperson?: boolean | null;
-  } | null,
-): boolean {
-  if (!user) return false;
-  if (user.is_salesperson) return true;
-  const roleCode = String(user.role_code ?? "")
-    .trim()
-    .toUpperCase();
-  const roleName = String(user.role ?? "")
-    .trim()
-    .toLowerCase();
-  if (roleCode === "S" || roleCode === "SM" || roleCode === "SALES") {
-    return true;
-  }
-  return (
-    roleName === "salesman" ||
-    roleName === "salesperson" ||
-    roleName === "sales" ||
-    roleName.includes("salesman") ||
-    roleName.includes("salesperson")
-  );
-}
-
-function isPricingPersonUser(
-  user: {
-    role_code?: string | null;
-    role?: string | null;
-  } | null,
-): boolean {
-  const roleCode = String(user?.role_code ?? "")
-    .trim()
-    .toUpperCase();
-  const roleName = String(user?.role ?? "")
-    .trim()
-    .toLowerCase();
-  return (
-    roleCode === "P" ||
-    roleCode === "PRICING" ||
-    roleName === "pricing" ||
-    roleName.includes("pricing")
-  );
-}
 
 function createDefaultFilters(
   mode: JobProfitVerificationMode = "verification",
@@ -504,16 +461,7 @@ export default function JobProfitVerificationMaster({
   const isSalesperson = Boolean(
     (user as UserWithSalespersonFlag | null)?.is_salesperson,
   );
-  const showBrokerageColumn =
-    !isPricingPersonUser(user) &&
-    (isStaff ||
-      isAccountsUser(user) ||
-      isSalespersonUser({
-        role_code: user?.role_code,
-        role: user?.role,
-        is_salesperson: (user as UserWithSalespersonFlag | null)
-          ?.is_salesperson,
-      }));
+  const showBrokerageColumn = canManageJobProfitBrokerage(user);
 
   const getState = useListFilterStore((s) => s.getState);
   const setStoreFilters = useListFilterStore((s) => s.setFilters);
@@ -830,6 +778,12 @@ export default function JobProfitVerificationMaster({
                 ...(patchRow.confirmed_at != null
                   ? { confirmed_at: String(patchRow.confirmed_at) }
                   : {}),
+                ...(patchRow.brokerage != null
+                  ? { brokerage: patchRow.brokerage as number | string }
+                  : {}),
+                ...(patchRow.brokerage_remark != null
+                  ? { brokerage_remark: String(patchRow.brokerage_remark) }
+                  : {}),
               };
             }),
           };
@@ -860,6 +814,34 @@ export default function JobProfitVerificationMaster({
               status: "accounts_verified",
             },
           );
+          refreshProfitList();
+        },
+      });
+    },
+    [mergeHouseProfitPatchIntoList, refreshProfitList],
+  );
+
+  const handleAddBrokerage = useCallback(
+    (row: JobProfitRow) => {
+      const shipmentId = row.subjob_no?.trim();
+      if (!shipmentId) {
+        ToastNotification({
+          type: "error",
+          message: "Shipment number not found.",
+        });
+        return;
+      }
+      runAddJobProfitBrokerage({
+        shipmentId,
+        initialBrokerage: row.brokerage,
+        initialBrokerageRemark: row.brokerage_remark,
+        onSuccess: (response) => {
+          const audit = pickProfitHouseAuditFields(response, shipmentId);
+          mergeHouseProfitPatchIntoList(shipmentId, {
+            brokerage: audit.brokerage,
+            brokerage_remark: audit.brokerage_remark,
+            ...(audit.status ? { status: audit.status } : {}),
+          });
           refreshProfitList();
         },
       });
@@ -1813,9 +1795,81 @@ export default function JobProfitVerificationMaster({
                           </td>
                           {showBrokerageColumn ? (
                             <td style={listAmountTdStyle}>
-                              <Text size="sm" fw={600} c={fg}>
-                                {formatBrokerageAmount(row.brokerage, currency)}
-                              </Text>
+                              {(() => {
+                                const brokerageRemark =
+                                  row.brokerage_remark?.trim() || "";
+                                const canAddBrokerage =
+                                  !isApprovalMode &&
+                                  canUpdateBrokerage({
+                                    status: row.status,
+                                    allowBrokerage: true,
+                                  }) &&
+                                  !hasExistingBrokerage(row.brokerage);
+                                const amountNode = (
+                                  <Text size="sm" fw={600} c={fg}>
+                                    {formatBrokerageAmount(
+                                      row.brokerage,
+                                      currency,
+                                    )}
+                                  </Text>
+                                );
+                                return (
+                                  <Stack gap={4}>
+                                    {brokerageRemark ? (
+                                      <Tooltip
+                                        label={brokerageRemark}
+                                        multiline
+                                        maw={360}
+                                        withArrow
+                                        styles={{
+                                          tooltip: {
+                                            fontFamily: theme.fontSans,
+                                            fontSize: 12,
+                                            whiteSpace: "pre-wrap",
+                                          },
+                                        }}
+                                      >
+                                        {amountNode}
+                                      </Tooltip>
+                                    ) : (
+                                      amountNode
+                                    )}
+                                    {brokerageRemark ? (
+                                      <Text
+                                        size="xs"
+                                        c={muted}
+                                        style={{
+                                          maxWidth: 160,
+                                          whiteSpace: "normal",
+                                          wordBreak: "break-word",
+                                        }}
+                                      >
+                                        {brokerageRemark}
+                                      </Text>
+                                    ) : null}
+                                    {canAddBrokerage ? (
+                                      <Button
+                                        size="compact-xs"
+                                        variant="subtle"
+                                        onClick={() =>
+                                          handleAddBrokerage(row)
+                                        }
+                                        styles={{
+                                          root: {
+                                            fontFamily: theme.fontSans,
+                                            fontWeight: 600,
+                                            color: primary,
+                                            paddingInline: 0,
+                                            height: "auto",
+                                          },
+                                        }}
+                                      >
+                                        Add Brokerage
+                                      </Button>
+                                    ) : null}
+                                  </Stack>
+                                );
+                              })()}
                             </td>
                           ) : null}
                           <td style={listGpPctTdStyle}>
@@ -1865,7 +1919,9 @@ export default function JobProfitVerificationMaster({
                                     {holdRemark || "—"}
                                   </Text>
                                 );
-                                if (!brokerageRemark) return remarkNode;
+                                if (!brokerageRemark || !showBrokerageColumn) {
+                                  return remarkNode;
+                                }
                                 return (
                                   <Tooltip
                                     label={brokerageRemark}
