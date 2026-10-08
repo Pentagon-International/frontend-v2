@@ -179,6 +179,7 @@ export interface CustomerOutstandingVsOverdueItem {
   unadjust?: string | number;
   status_tags: string[];
   outstanding: string;
+  net_outstanding?: string | number;
   overdue: string;
   days_1_30: string;
   days_31_60: string;
@@ -199,6 +200,8 @@ export interface CustomerOutstandingVsOverdueItem {
 
 export interface CustomerOutstandingVsOverdueSummary {
   total_outstanding: string;
+  total_net_outstanding?: string | number;
+  net_outstanding?: string | number;
   total_overdue: string;
   total_outstanding_percentage: string;
   total_overdue_percentage: string;
@@ -934,7 +937,7 @@ export const getCustomerOutstandingVsOverdueData = async (
       ? 5
       : Number.isFinite(filters.limit)
         ? Number(filters.limit)
-        : 15;
+        : 30;
     const queryParams = new URLSearchParams();
     queryParams.append("index", String(index));
     queryParams.append("limit", String(limit));

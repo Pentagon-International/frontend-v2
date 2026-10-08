@@ -26,6 +26,11 @@ import {
   resolveAutoUnitForNewCharge,
 } from "../utils/chargeCalculationTypeUnit";
 import {
+  ESTIMATE_SUPPLIER_ENDPOINT,
+  estimateSupplierDisplayFormat,
+  estimateSupplierPostBody,
+} from "../utils/estimateSupplierSearch";
+import {
   calcEstimatesTotalCost,
   formatJobSummaryAmount,
   parseSummaryAmount,
@@ -172,20 +177,6 @@ function normalizePpCc(value: unknown): string {
   if (raw === "PP" || raw === "PREPAID") return "Prepaid";
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return String(value ?? "").trim();
-}
-
-const ESTIMATE_SUPPLIER_ENDPOINT = `${URL.customerFilter}?exclude-category=customer&index=0&limit=25`;
-
-function estimateSupplierPostBody(query: string) {
-  const q = query.trim();
-  return { filters: q ? { customer_name: q } : {} };
-}
-
-function estimateSupplierDisplayFormat(item: Record<string, unknown>) {
-  return {
-    value: String(item.customer_code ?? ""),
-    label: String(item.customer_name ?? ""),
-  };
 }
 
 export type EstimatesSectionProps = {
