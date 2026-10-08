@@ -96,6 +96,8 @@ import {
   getPartyGstFromPrimaryAddress,
   isPrqTdsChargeRow,
   type PartyAddressLike,
+  chargeMatchesSelectedParty,
+  prefillChargesRequirePartySelection,
   recalculatePrqChargeAmounts,
   resolvePartyTdsSectionCode,
   resolveStateCodeFromPartyAddress,
@@ -1293,6 +1295,21 @@ function PaymentRequest() {
 
   // ─── Prefill from Air Export Job (Create PR) ───────────────────────────────
   // Use initialValues from location.state so charges are set on first render (no useEffect timing)
+  const prefillChargeSources = useMemo(() => {
+    if (requestId) return [] as Array<Record<string, unknown>>;
+    const sources = (
+      location.state as {
+        chargesFromEstimates?: Array<Record<string, unknown>>;
+      } | null
+    )?.chargesFromEstimates;
+    return Array.isArray(sources) ? sources : [];
+  }, [location.state, requestId]);
+
+  const deferChargesUntilParty = useMemo(
+    () => prefillChargesRequirePartySelection(prefillChargeSources),
+    [prefillChargeSources],
+  );
+
   const prefillFromState = useMemo(() => {
     if (requestId) return null;
     return mapChargesFromState(location.state);
@@ -1354,7 +1371,9 @@ function PaymentRequest() {
       rejected_note: "",
       on_hold_note: "",
       location_gst_no: branchLocationGstNo,
-      charges: prefillFromState?.charges ?? [emptyCharge()],
+      charges: deferChargesUntilParty
+        ? [emptyCharge()]
+        : (prefillFromState?.charges ?? [emptyCharge()]),
     },
     validate: {
       date: (v) => (!v ? "Date is required" : null),
@@ -1512,9 +1531,68 @@ function PaymentRequest() {
     form,
   ]);
 
+  const partyChargeApplySeqRef = useRef(0);
+
+  const applyPrefillChargesForSelectedParty = useCallback(
+    (partyCode: string, partyName: string) => {
+      if (!deferChargesUntilParty) return;
+      const seq = ++partyChargeApplySeqRef.current;
+      const filtered = prefillChargeSources.filter((charge) =>
+        chargeMatchesSelectedParty(charge, partyCode, partyName),
+      );
+      const mapped = mapChargesFromState({ chargesFromEstimates: filtered });
+      const charges = (mapped?.charges ?? []).map((charge) => {
+        const { amount: calcAmount, amount_in_local: calcLocal } =
+          recalculatePrqChargeAmounts(charge);
+        const amount = charge.amount ?? calcAmount;
+        const amount_in_local =
+          charge.amount_in_local ??
+          (amount != null && charge.roe != null && charge.roe > 0
+            ? clampAmount(amount * charge.roe)
+            : calcLocal);
+        return { ...charge, amount, amount_in_local };
+      });
+      form.setFieldValue(
+        "charges",
+        charges.length > 0 ? charges : [emptyCharge()],
+      );
+      if (charges.length === 0) return;
+
+      const chargesWithIds = charges
+        .map((charge, idx) => ({ charge, originalIdx: idx }))
+        .filter(({ charge }) => charge.charge_id != null);
+      if (chargesWithIds.length === 0) return;
+
+      fetchGetEffectiveSac(
+        chargesWithIds.map(({ charge }) => ({
+          charge_id: charge.charge_id!,
+          service_id: jobServiceId as number,
+        })),
+      ).then((data) => {
+        if (partyChargeApplySeqRef.current !== seq) return;
+        data.forEach((item, responseIdx) => {
+          const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
+          if (
+            originalIdx !== undefined &&
+            item?.sac_code != null &&
+            item.sac_code !== ""
+          ) {
+            form.setFieldValue(
+              `charges.${originalIdx}.tax_code`,
+              item.sac_code,
+            );
+          }
+        });
+      });
+    },
+    [deferChargesUntilParty, form, jobServiceId, prefillChargeSources],
+  );
+
   // ─── Prefill Paid To from Air Export Job Supplier ──────────────────────
   useEffect(() => {
     if (isEditOrViewMode) return;
+    // House/job charges are applied only after the user selects the party.
+    if (deferChargesUntilParty) return;
     // Avoid repeated overriding during re-renders.
     if (form.values.paid_to_type?.trim()) return;
 
@@ -1694,6 +1772,7 @@ function PaymentRequest() {
     })();
   }, [
     isEditOrViewMode,
+    deferChargesUntilParty,
     location.state,
     stateOptions,
     tdsSectionOptions,
@@ -1704,6 +1783,7 @@ function PaymentRequest() {
 
   // ─── Derive PRQ amount/local amount from prefilled qty × cost/unit × ROE ──
   useEffect(() => {
+    if (deferChargesUntilParty) return;
     if (isEditOrViewMode || !prefillFromState?.charges?.length) return;
 
     let changed = false;
@@ -1736,6 +1816,7 @@ function PaymentRequest() {
 
   // ─── Batch-fetch SAC codes for charges prefilled from location.state ─────
   useEffect(() => {
+    if (deferChargesUntilParty) return;
     if (!prefillFromState?.charges?.length) return;
     const chargesWithIds = prefillFromState.charges
       .map((c, idx) => ({ charge: c, originalIdx: idx }))
@@ -3337,6 +3418,10 @@ function PaymentRequest() {
                   form.setFieldValue("paid_to", "");
                   setAccountNameDisplay(null);
                   setPartyAddresses([]);
+                  if (deferChargesUntilParty) {
+                    partyChargeApplySeqRef.current += 1;
+                    form.setFieldValue("charges", [emptyCharge()]);
+                  }
                 }}
                 readOnly={formFieldsReadOnly}
                 styles={inputStyles}
@@ -3405,6 +3490,10 @@ function PaymentRequest() {
                     form.setFieldValue("state_code_1", "");
                     form.setFieldValue("tds_section_code", "");
                     setPartyAddresses([]);
+                    if (deferChargesUntilParty) {
+                      partyChargeApplySeqRef.current += 1;
+                      form.setFieldValue("charges", [emptyCharge()]);
+                    }
                     return;
                   }
 
@@ -3425,6 +3514,10 @@ function PaymentRequest() {
                   );
 
                   applyPartyAddressState(findPrimaryPartyAddress(addresses));
+                  applyPrefillChargesForSelectedParty(
+                    nextAccountCode,
+                    selectedAccountName,
+                  );
                 }}
                 minSearchLength={3}
                 dropdownZIndex={chargesDropdownZIndex}

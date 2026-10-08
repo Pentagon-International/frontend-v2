@@ -98,6 +98,11 @@ import {
 } from "../../../utils/houseChargesPayload";
 import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import {
+  ESTIMATE_SUPPLIER_ENDPOINT,
+  estimateSupplierDisplayFormat,
+  estimateSupplierPostBody,
+} from "../../../utils/estimateSupplierSearch";
+import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
   HOUSE_CARGO_WEIGHT_DECIMALS,
@@ -6378,12 +6383,10 @@ function HouseCreate() {
                   <Grid.Col span={1.1}>
                     <SearchableSelect
                       placeholder="Type supplier"
-                      apiEndpoint={URL.supplierByType}
+                      apiEndpoint={ESTIMATE_SUPPLIER_ENDPOINT}
+                      postBody={estimateSupplierPostBody}
                       searchFields={["customer_name", "customer_code"]}
-                      displayFormat={(item: Record<string, unknown>) => ({
-                        value: String(item.customer_code ?? ""),
-                        label: String(item.customer_name ?? ""),
-                      })}
+                      displayFormat={estimateSupplierDisplayFormat}
                       value={
                         charge.supplier_code
                           ? String(charge.supplier_code)

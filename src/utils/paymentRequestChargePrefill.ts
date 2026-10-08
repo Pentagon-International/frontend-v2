@@ -22,6 +22,8 @@ export type ChargeSourceForPrqPrefill = {
   total_cost?: number | null;
   cost_local_amount?: number | null;
   local_amount?: number | null;
+  supplier_code?: string | null;
+  supplier_name?: string | null;
 };
 
 export type PaymentRequestChargePrefillContext = {
@@ -506,7 +508,43 @@ export function mapChargeToPaymentRequestPrefill(
       (totalCost != null && roe != null
         ? clampPrqAmount(totalCost * roe)
         : null),
+    supplier_code: String(charge.supplier_code ?? "").trim(),
+    supplier_name: String(charge.supplier_name ?? "").trim(),
   };
+}
+
+export function normalizePartyMatchKey(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+/** Match a charge supplier to the party selected on Payment Request. */
+export function chargeMatchesSelectedParty(
+  charge: { supplier_code?: unknown; supplier_name?: unknown },
+  partyCode: unknown,
+  partyName: unknown,
+): boolean {
+  const codeKey = normalizePartyMatchKey(partyCode);
+  const nameKey = normalizePartyMatchKey(partyName);
+  const rowCode = normalizePartyMatchKey(charge.supplier_code);
+  const rowName = normalizePartyMatchKey(charge.supplier_name);
+  if (codeKey && rowCode && rowCode === codeKey) return true;
+  if (nameKey && rowName && rowName === nameKey) return true;
+  return false;
+}
+
+/** Job/house PRQ navigations carry a supplier on each charge and wait for party selection. */
+export function prefillChargesRequirePartySelection(
+  charges: Array<Record<string, unknown>> | null | undefined,
+): boolean {
+  if (!Array.isArray(charges) || charges.length === 0) return false;
+  return charges.some(
+    (charge) =>
+      normalizePartyMatchKey(charge.supplier_code) !== "" ||
+      normalizePartyMatchKey(charge.supplier_name) !== "",
+  );
 }
 
 export type EstimateRowForMasterPrq = ChargeSourceForPrqPrefill & {

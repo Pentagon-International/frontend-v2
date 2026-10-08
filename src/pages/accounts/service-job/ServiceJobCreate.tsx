@@ -69,6 +69,11 @@ import {
 } from "../../../utils/jobFormReadOnly";
 import { buildMasterJobCreatePrqPrefill } from "../../../utils/paymentRequestChargePrefill";
 import {
+  ESTIMATE_SUPPLIER_ENDPOINT,
+  estimateSupplierDisplayFormat,
+  estimateSupplierPostBody,
+} from "../../../utils/estimateSupplierSearch";
+import {
   JobMasterPartyDetailsPanel,
   type JobMasterPartyDetailsValues,
   type PartyAddressOption,
@@ -520,11 +525,6 @@ const PORT_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
 const CHARGE_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
   value: String(item.id ?? ""),
   label: String(item.charge_name ?? ""),
-});
-
-const SUPPLIER_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
-  value: String(item.customer_code ?? ""),
-  label: String(item.customer_name ?? ""),
 });
 
 const AGENT_DISPLAY_FORMAT = (item: Record<string, unknown>) => ({
@@ -1216,9 +1216,10 @@ function ServiceJobChargesSection({
           <Grid.Col span={1.1}>
             <SearchableSelect
               placeholder="Type supplier"
-              apiEndpoint={URL.supplierByType}
+              apiEndpoint={ESTIMATE_SUPPLIER_ENDPOINT}
+              postBody={estimateSupplierPostBody}
               searchFields={["customer_name", "customer_code"]}
-              displayFormat={SUPPLIER_DISPLAY_FORMAT}
+              displayFormat={estimateSupplierDisplayFormat}
               value={charge.supplier_code ? String(charge.supplier_code) : null}
               displayValue={charge.supplier_name || undefined}
               readOnly={readOnly}
