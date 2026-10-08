@@ -556,9 +556,13 @@ type HousingDetail = HouseDocumentFields & {
     volume: HouseCargoWeightValue;
     chargeable_weight: HouseCargoWeightValue;
     haz: boolean | null;
+    un_no?: string;
+    class_name?: string;
+    pkg_group?: string;
     package_type?: string;
     package_type_name?: string;
   }>;
+  dimension_data?: unknown[];
   charges?: Array<{
     id?: number | string; // ID from backend when editing
     charge_id?: number | null;
@@ -1701,6 +1705,9 @@ function ImportJobCreate() {
                           : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
                             ? false
                             : null,
+                        un_no: String(cargo.un_no ?? ""),
+                        class_name: String(cargo.class_name ?? ""),
+                        pkg_group: String(cargo.pkg_group ?? ""),
                         package_type: pickPackageTypeCodeFromCargo(
                           cargo as Record<string, unknown>,
                         ),
@@ -1709,6 +1716,16 @@ function ImportJobCreate() {
                           : "",
                       }),
                     )
+                  : [],
+              dimension_data: Array.isArray(
+                (house as { dimension_data?: unknown[] }).dimension_data,
+              )
+                ? (house as { dimension_data: unknown[] }).dimension_data
+                : Array.isArray(
+                      (house as { dimension_details?: unknown[] })
+                        .dimension_details,
+                    )
+                  ? (house as { dimension_details: unknown[] }).dimension_details
                   : [],
               charges:
                 house.charges &&
@@ -4574,7 +4591,19 @@ function ImportJobCreate() {
               cargo.volume,
               "ocean",
             ),
-            haz: cargo.haz,
+            haz: cargo.haz === true || cargo.haz === "Yes",
+            un_no:
+              cargo.haz === true || cargo.haz === "Yes"
+                ? cargo.un_no || null
+                : null,
+            class_name:
+              cargo.haz === true || cargo.haz === "Yes"
+                ? cargo.class_name || null
+                : null,
+            pkg_group:
+              cargo.haz === true || cargo.haz === "Yes"
+                ? cargo.pkg_group || null
+                : null,
             package_type_code:
               pickPackageTypeCodeFromCargo(cargo as Record<string, unknown>) ||
               null,

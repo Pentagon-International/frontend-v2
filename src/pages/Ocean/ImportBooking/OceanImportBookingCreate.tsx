@@ -18,6 +18,7 @@ import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { EDIT_PAGE_AUDIT_SIDEBAR_Z_INDEX } from "../../../utils/editPageAuditInfo";
 import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
 import { mapEnquirySalesPersonToBookingRouted } from "../../../utils/mapEnquirySalesPersonToBookingRouted";
+import { buildBookingHazDimPrefill } from "../../../utils/dimensionCargoSync";
 
 function OceanImportBookingCreate() {
   const navigate = useNavigate();
@@ -142,9 +143,8 @@ function OceanImportBookingCreate() {
       cha_name: "",
       cha_address_id: 0,
 
-      // Stepper 3 - Commodity Details
-      // For FCL: map from quotationData.cargo_details (dynamic, multiple rows). For LCL/AIR: from serviceDetails
-      is_hazardous: serviceDetails.hazardous_cargo || false,
+      // Stepper 3 - Commodity Details (haz + dims from enquiry/quotation shapes)
+      ...buildBookingHazDimPrefill(serviceDetails),
       commodity_description: "",
       marks_no: "",
       cargo_details:

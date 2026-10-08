@@ -47,7 +47,11 @@ import {
 import { useNavigate } from "react-router-dom";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
-import { Dropdown, PartyAddressField, ToastNotification } from "../../../components";
+import {
+  Dropdown,
+  PartyAddressField,
+  ToastNotification,
+} from "../../../components";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
@@ -69,6 +73,7 @@ import {
   fetchAirExportBookingAirPdf,
   resolveBookingPrimaryKey,
 } from "../../../utils/airWayBillPdf";
+import { fetchWarehouseReceiptPdf } from "../../../utils/warehouseReceiptPdf";
 import {
   getDefaultBookingChargeCurrencyFields,
   ROE_DECIMAL_PLACES,
@@ -117,6 +122,14 @@ import BookingPackageTypeDropdown from "../../../components/BookingPackageTypeDr
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useBookingPageDocuments } from "../../../hooks/useBookingPageDocuments";
 import { parseJobDocumentsFromApi } from "../../../utils/jobDocuments";
+import BookingDimensionsSection from "../../../components/booking/BookingDimensionsSection";
+import {
+  type DimensionRow,
+  mapDimensionDataToFormRows,
+  getDimensionUnitFromData,
+  dimensionDetailsForPayload,
+  coerceHazardousFlag,
+} from "../../../utils/dimensionCargoSync";
 import { commonSearchAPI } from "../../../service/searchApi";
 import AirBookingCarrierSelect from "../components/AirBookingCarrierSelect";
 import { pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
@@ -240,8 +253,13 @@ interface FormValues {
 
   // Commodity Details
   is_hazardous: boolean;
+  un_no: string;
+  class_name: string;
+  pkg_group: string;
   commodity_description: string;
   marks_no: string;
+  dimension_unit: string;
+  dimensions: DimensionRow[];
   cargo_details: CargoDetail[];
 
   // Pickup Details
@@ -405,8 +423,25 @@ const validationSchema = yup.object({
 
   // Commodity Details - All optional
   is_hazardous: yup.boolean(),
+  un_no: yup.string().when("is_hazardous", {
+    is: true,
+    then: (s) => s.required("UN No is required when hazardous"),
+    otherwise: (s) => s.notRequired(),
+  }),
+  class_name: yup.string().when("is_hazardous", {
+    is: true,
+    then: (s) => s.required("Class is required when hazardous"),
+    otherwise: (s) => s.notRequired(),
+  }),
+  pkg_group: yup.string().when("is_hazardous", {
+    is: true,
+    then: (s) => s.required("PKG Group is required when hazardous"),
+    otherwise: (s) => s.notRequired(),
+  }),
   commodity_description: yup.string(),
   marks_no: yup.string(),
+  dimension_unit: yup.string(),
+  dimensions: yup.array(),
   cargo_details: yup.array().of(
     yup.object({
       no_of_packages: yup.number().when("$service", {
@@ -699,6 +734,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [draftAwbPreviewOpen, setDraftAwbPreviewOpen] = useState(false);
   const [draftAwbPdfBlob, setDraftAwbPdfBlob] = useState<string | null>(null);
+  const [warehouseReceiptPreviewOpen, setWarehouseReceiptPreviewOpen] =
+    useState(false);
+  const [warehouseReceiptPdfBlob, setWarehouseReceiptPdfBlob] = useState<
+    string | null
+  >(null);
   const [sendEmailOpened, { open: openSendEmail, close: closeSendEmail }] =
     useDisclosure(false);
   const [activePdfBlob, setActivePdfBlob] = useState<string | null>(null);
@@ -1224,9 +1264,30 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       cha_address: String(data.cha_address || ""),
 
       // Commodity Details
-      is_hazardous: Boolean(data.is_hazardous),
+      is_hazardous: coerceHazardousFlag(
+        data.is_hazardous ?? data.hazardous_cargo,
+      ),
+      un_no: String(data.un_no || ""),
+      class_name: String(data.class_name || data.class || ""),
+      pkg_group: String(data.pkg_group || ""),
       commodity_description: String(data.commodity_description || ""),
       marks_no: String(data.marks_no || ""),
+      dimension_unit:
+        Array.isArray(data.dimensions) &&
+        (data.dimensions as unknown[]).length > 0
+          ? String(data.dimension_unit || "Centimeter")
+          : Array.isArray(data.dimension_data) &&
+              (data.dimension_data as unknown[]).length > 0
+            ? getDimensionUnitFromData(data.dimension_data as unknown[])
+            : String(data.dimension_unit || "Centimeter"),
+      dimensions:
+        Array.isArray(data.dimensions) &&
+        (data.dimensions as unknown[]).length > 0
+          ? (data.dimensions as DimensionRow[])
+          : Array.isArray(data.dimension_data) &&
+              (data.dimension_data as unknown[]).length > 0
+            ? mapDimensionDataToFormRows(data.dimension_data as unknown[])
+            : [],
       cargo_details: data.cargo_details
         ? (data.cargo_details as Array<Record<string, unknown>>).map(
             (cargo: Record<string, unknown>) => ({
@@ -1433,8 +1494,13 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
 
       // Commodity Details
       is_hazardous: false,
+      un_no: "",
+      class_name: "",
+      pkg_group: "",
       commodity_description: "",
       marks_no: "",
+      dimension_unit: "Centimeter",
+      dimensions: [],
       cargo_details: [
         {
           no_of_packages: undefined,
@@ -1554,25 +1620,23 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         originalData &&
         (originalData as Record<string, unknown>).addresses_data
       ) {
-        const addressesData = (
-          originalData as Record<string, unknown>
-        ).addresses_data as Array<{
+        const addressesData = (originalData as Record<string, unknown>)
+          .addresses_data as Array<{
           id: number;
           address: string;
           email?: string;
           address_type?: string;
         }>;
         const addressOptions = addressesData.map((addr) => ({
-                          value: addr.address,
-                          label: addr.address,
-                          email: addr.email || "",
-                          id: addr.id,
-                        }));
+          value: addr.address,
+          label: addr.address,
+          email: addr.email || "",
+          id: addr.id,
+        }));
         setShipperAddressOptions(addressOptions);
 
         const primary = addressesData?.find(
-          (a) =>
-            String(a.address_type || "").toUpperCase() === "PRIMARY",
+          (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
         );
         if (primary) {
           form.setFieldValue("shipper_address_id", primary.id);
@@ -3141,8 +3205,20 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         trigger_updates: form.values.trigger_updates,
 
         is_hazardous: form.values.is_hazardous,
+        un_no: form.values.is_hazardous ? form.values.un_no || null : null,
+        class_name: form.values.is_hazardous
+          ? form.values.class_name || null
+          : null,
+        pkg_group: form.values.is_hazardous
+          ? form.values.pkg_group || null
+          : null,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+        ...dimensionDetailsForPayload(
+          form.values.service || "AIR",
+          form.values.dimensions,
+          form.values.dimension_unit,
+        ),
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
@@ -3304,8 +3380,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   };
 
   const draftAwbFileLabel = String(
-    jobData?.shipment_code ??
-      (resolveBookingPrimaryKey(jobData) || "booking"),
+    jobData?.shipment_code ?? (resolveBookingPrimaryKey(jobData) || "booking"),
   );
 
   const handleDraftAirwayBillPreview = async () => {
@@ -3366,6 +3441,72 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
   const handleDraftAwbPrint = () => {
     if (draftAwbPdfBlob) {
       const win = window.open(draftAwbPdfBlob, "_blank");
+      if (win) win.print();
+    }
+  };
+
+  const warehouseReceiptFileLabel = String(
+    jobData?.shipment_code ?? (resolveBookingPrimaryKey(jobData) || "booking"),
+  );
+
+  const handleWarehouseReceiptPreview = async () => {
+    const bookingId = resolveBookingPrimaryKey(jobData);
+    if (!bookingId) {
+      ToastNotification({
+        type: "error",
+        message: "Booking ID not found for Warehouse Receipt",
+      });
+      return;
+    }
+
+    setWarehouseReceiptPreviewOpen(true);
+    setWarehouseReceiptPdfBlob(null);
+    try {
+      const blob = await fetchWarehouseReceiptPdf(bookingId);
+      const pdfUrl = window.URL.createObjectURL(blob);
+      setWarehouseReceiptPdfBlob(pdfUrl);
+    } catch (error) {
+      console.error("Error fetching Warehouse Receipt PDF:", error);
+      ToastNotification({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to load Warehouse Receipt PDF",
+      });
+      setWarehouseReceiptPreviewOpen(false);
+    }
+  };
+
+  const handleWarehouseReceiptClosePreview = () => {
+    setWarehouseReceiptPreviewOpen(false);
+    if (warehouseReceiptPdfBlob) {
+      window.URL.revokeObjectURL(warehouseReceiptPdfBlob);
+    }
+    setWarehouseReceiptPdfBlob(null);
+  };
+
+  const handleWarehouseReceiptDownloadPDF = () => {
+    if (warehouseReceiptPdfBlob) {
+      const link = document.createElement("a");
+      link.href = warehouseReceiptPdfBlob;
+      link.download = `Warehouse-Receipt-${warehouseReceiptFileLabel}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleOpenSendEmailForWarehouseReceipt = () => {
+    setActivePdfBlob(warehouseReceiptPdfBlob);
+    setActiveFileName(`Warehouse-Receipt-${warehouseReceiptFileLabel}.pdf`);
+    setActiveDocumentLabel("Warehouse Receipt");
+    openSendEmail();
+  };
+
+  const handleWarehouseReceiptPrint = () => {
+    if (warehouseReceiptPdfBlob) {
+      const win = window.open(warehouseReceiptPdfBlob, "_blank");
       if (win) win.print();
     }
   };
@@ -3713,6 +3854,88 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
         </Stack>
       </Modal>
 
+      {/* Warehouse Receipt PDF Preview Modal (edit mode only; dummy data) */}
+      <Modal
+        opened={warehouseReceiptPreviewOpen}
+        onClose={handleWarehouseReceiptClosePreview}
+        title="Warehouse Receipt"
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {warehouseReceiptPdfBlob ? (
+            <>
+              <iframe
+                src={warehouseReceiptPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Warehouse Receipt Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleWarehouseReceiptClosePreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleWarehouseReceiptPrint}
+                  leftSection={<IconPrinter size={16} />}
+                >
+                  Print
+                </Button>
+                <Button
+                  onClick={handleWarehouseReceiptDownloadPDF}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+                <Button
+                  onClick={handleOpenSendEmailForWarehouseReceipt}
+                  leftSection={<IconSend size={16} />}
+                  color="#105476"
+                  variant="outline"
+                >
+                  Send Email
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Generating PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
+
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}
@@ -3879,6 +4102,25 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     onClick={handleDraftAirwayBillPreview}
                   >
                     Draft Airway Bill
+                  </Menu.Item>
+                )}
+                {isEditMode && resolveBookingPrimaryKey(jobData) > 0 && (
+                  <Menu.Item
+                    leftSection={<IconFileDescription size={16} />}
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": { backgroundColor: "#F8F9FA" },
+                      },
+                    }}
+                    onClick={handleWarehouseReceiptPreview}
+                  >
+                    Warehouse Receipt
                   </Menu.Item>
                 )}
               </Menu.Dropdown>
@@ -4683,7 +4925,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     selectPlaceholder="Select shipper address"
                     value={form.values.shipper_address || ""}
                     options={shipperAddressOptions}
-                    partyKey={form.values.shipper_code || form.values.shipper_name || ""}
+                    partyKey={
+                      form.values.shipper_code || form.values.shipper_name || ""
+                    }
                     onChange={(next, option) => {
                       form.setFieldValue("shipper_address", next);
                       form.setFieldValue(
@@ -4696,7 +4940,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         form.setFieldValue("shipper_email", "");
                       }
                     }}
-                    error={form.errors.shipper_address_id || form.errors.shipper_address}
+                    error={
+                      form.errors.shipper_address_id ||
+                      form.errors.shipper_address
+                    }
                   />
                 </Grid.Col>
               </Grid>
@@ -4826,7 +5073,11 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     selectPlaceholder="Select consignee address"
                     value={form.values.consignee_address || ""}
                     options={consigneeAddressOptions}
-                    partyKey={form.values.consignee_code || form.values.consignee_name || ""}
+                    partyKey={
+                      form.values.consignee_code ||
+                      form.values.consignee_name ||
+                      ""
+                    }
                     onChange={(next, option) => {
                       form.setFieldValue("consignee_address", next);
                       form.setFieldValue(
@@ -4839,7 +5090,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         form.setFieldValue("consignee_email", "");
                       }
                     }}
-                    error={form.errors.consignee_address_id || form.errors.consignee_address}
+                    error={
+                      form.errors.consignee_address_id ||
+                      form.errors.consignee_address
+                    }
                   />
                 </Grid.Col>
               </Grid>
@@ -4969,7 +5223,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         form.setFieldValue("forwarder_email", "");
                       }
                     }}
-                    error={form.errors.forwarder_address_id || form.errors.forwarder_address}
+                    error={
+                      form.errors.forwarder_address_id ||
+                      form.errors.forwarder_address
+                    }
                   />
                 </Grid.Col>
               </Grid>
@@ -5000,7 +5257,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setDestinationAgentDisplayName(null);
                         setAgentAddressOptions([]);
                         form.setFieldValue("destination_agent_address_id", 0);
-                          form.setFieldValue("destination_agent_address", "");
+                        form.setFieldValue("destination_agent_address", "");
                         form.setFieldValue("destination_agent_address", "");
                         form.setFieldValue("destination_agent_email", "");
                         return;
@@ -5084,12 +5341,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         option?.id != null ? Number(option.id) || 0 : 0,
                       );
                       if (option?.email) {
-                        form.setFieldValue("destination_agent_email", option.email);
+                        form.setFieldValue(
+                          "destination_agent_email",
+                          option.email,
+                        );
                       } else if (!next) {
                         form.setFieldValue("destination_agent_email", "");
                       }
                     }}
-                    error={form.errors.destination_agent_address_id || form.errors.destination_agent_address}
+                    error={
+                      form.errors.destination_agent_address_id ||
+                      form.errors.destination_agent_address
+                    }
                   />
                 </Grid.Col>
               </Grid>
@@ -5120,7 +5383,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setBillingCustomerDisplayName(null);
                         setBillingCustomerAddressOptions([]);
                         form.setFieldValue("billing_customer_address_id", 0);
-                          form.setFieldValue("billing_customer_address", "");
+                        form.setFieldValue("billing_customer_address", "");
                         form.setFieldValue("billing_customer_address", "");
                         return;
                       }
@@ -5190,7 +5453,10 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         option?.id != null ? Number(option.id) || 0 : 0,
                       );
                     }}
-                    error={form.errors.billing_customer_address_id || form.errors.billing_customer_address}
+                    error={
+                      form.errors.billing_customer_address_id ||
+                      form.errors.billing_customer_address
+                    }
                   />
                 </Grid.Col>
               </Grid>
@@ -5295,7 +5561,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           "notify1_customer_address",
                           primaryAddr?.value || "",
                         );
-                        setNotifyCustomerAddressSearch(primaryAddr?.value || "");
+                        setNotifyCustomerAddressSearch(
+                          primaryAddr?.value || "",
+                        );
                         setNotifyCustomerSearch(name);
                         setNotifyCustomerSelectedId(value);
                       }}
@@ -5318,11 +5586,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     selectPlaceholder="Select notify address"
                     value={form.values.notify1_customer_address || ""}
                     options={notifyCustomerAddressOptions}
-                    partyKey={form.values.notify1_customer_name || notifyCustomerSelectedId || ""}
+                    partyKey={
+                      form.values.notify1_customer_name ||
+                      notifyCustomerSelectedId ||
+                      ""
+                    }
                     onChange={(next, option) => {
                       form.setFieldValue("notify1_customer_address", next);
                       if (option?.email) {
-                        form.setFieldValue("notify1_customer_email", option.email);
+                        form.setFieldValue(
+                          "notify1_customer_email",
+                          option.email,
+                        );
                       } else if (!next) {
                         form.setFieldValue("notify1_customer_email", "");
                       }
@@ -5434,7 +5709,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           "notify2_customer_address",
                           primaryAddr?.value || "",
                         );
-                        setNotify2CustomerAddressSearch(primaryAddr?.value || "");
+                        setNotify2CustomerAddressSearch(
+                          primaryAddr?.value || "",
+                        );
                         setNotify2CustomerSearch(name);
                         setNotify2CustomerSelectedId(value);
                       }}
@@ -5457,11 +5734,18 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     selectPlaceholder="Select notify address"
                     value={form.values.notify2_customer_address || ""}
                     options={notify2CustomerAddressOptions}
-                    partyKey={form.values.notify2_customer_name || notify2CustomerSelectedId || ""}
+                    partyKey={
+                      form.values.notify2_customer_name ||
+                      notify2CustomerSelectedId ||
+                      ""
+                    }
                     onChange={(next, option) => {
                       form.setFieldValue("notify2_customer_address", next);
                       if (option?.email) {
-                        form.setFieldValue("notify2_customer_email", option.email);
+                        form.setFieldValue(
+                          "notify2_customer_email",
+                          option.email,
+                        );
                       } else if (!next) {
                         form.setFieldValue("notify2_customer_email", "");
                       }
@@ -5497,7 +5781,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         setChaDisplayName(null);
                         setChaAddressOptions([]);
                         form.setFieldValue("cha_address_id", 0);
-                          form.setFieldValue("cha_address", "");
+                        form.setFieldValue("cha_address", "");
                         form.setFieldValue("cha_address", "");
                         return;
                       }
@@ -5562,7 +5846,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         option?.id != null ? Number(option.id) || 0 : 0,
                       );
                     }}
-                    error={form.errors.cha_address_id || form.errors.cha_address}
+                    error={
+                      form.errors.cha_address_id || form.errors.cha_address
+                    }
                   />
                 </Grid.Col>
               </Grid>
@@ -5607,13 +5893,19 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     error={form.errors.marks_no}
                   />
                 </Grid.Col>
-                <Grid.Col span={6}>
+                <Grid.Col span={form.values.is_hazardous ? 1.5 : 6}>
                   <Radio.Group
                     label="Hazardous Cargo"
                     value={form.values.is_hazardous ? "true" : "false"}
-                    onChange={(value) =>
-                      form.setFieldValue("is_hazardous", value === "true")
-                    }
+                    onChange={(value) => {
+                      const haz = value === "true";
+                      form.setFieldValue("is_hazardous", haz);
+                      if (!haz) {
+                        form.setFieldValue("un_no", "");
+                        form.setFieldValue("class_name", "");
+                        form.setFieldValue("pkg_group", "");
+                      }
+                    }}
                     styles={{
                       root: {
                         fontFamily: "Inter",
@@ -5632,6 +5924,49 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     </Group>
                   </Radio.Group>
                 </Grid.Col>
+                {form.values.is_hazardous && (
+                  <>
+                    <Grid.Col span={1.5}>
+                      <FormTextInput
+                        label="UN No"
+                        placeholder="Enter UN number"
+                        format="normal"
+                        value={form.values.un_no}
+                        onChange={(e) =>
+                          form.setFieldValue("un_no", e.currentTarget.value)
+                        }
+                        error={form.errors.un_no as string}
+                        required
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.5}>
+                      <FormTextInput
+                        label="Class"
+                        placeholder="Enter hazard class"
+                        format="normal"
+                        value={form.values.class_name}
+                        onChange={(e) =>
+                          form.setFieldValue("class_name", e.currentTarget.value)
+                        }
+                        error={form.errors.class_name as string}
+                        required
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.5}>
+                      <FormTextInput
+                        label="PKG Group"
+                        placeholder="Enter packaging group"
+                        format="normal"
+                        value={form.values.pkg_group}
+                        onChange={(e) =>
+                          form.setFieldValue("pkg_group", e.currentTarget.value)
+                        }
+                        error={form.errors.pkg_group as string}
+                        required
+                      />
+                    </Grid.Col>
+                  </>
+                )}
               </Grid>
               <Divider my="md" />
 
@@ -5704,6 +6039,31 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                       </Grid.Col>
                     </Grid>
                   )}
+                  {form.values.service === "AIR" && (
+                    <BookingDimensionsSection
+                      service="AIR"
+                      dimensionUnit={form.values.dimension_unit || "Centimeter"}
+                      rows={form.values.dimensions}
+                      onUnitChange={(u) =>
+                        form.setFieldValue("dimension_unit", u)
+                      }
+                      onRowsChange={(rows) =>
+                        form.setFieldValue("dimensions", rows)
+                      }
+                      onTotalsChange={({ totalPieces, totalVolWeight }) => {
+                        if (totalPieces > 0)
+                          form.setFieldValue(
+                            "cargo_details.0.no_of_packages",
+                            totalPieces,
+                          );
+                        if (totalVolWeight > 0)
+                          form.setFieldValue(
+                            "cargo_details.0.volume_weight",
+                            totalVolWeight,
+                          );
+                      }}
+                    />
+                  )}
 
                   {/* LCL Service Cargo Details - Single Fields */}
                   {form.values.service === "LCL" && (
@@ -5762,6 +6122,31 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                     </Grid>
+                  )}
+                  {form.values.service === "LCL" && (
+                    <BookingDimensionsSection
+                      service="LCL"
+                      dimensionUnit={form.values.dimension_unit || "Centimeter"}
+                      rows={form.values.dimensions}
+                      onUnitChange={(u) =>
+                        form.setFieldValue("dimension_unit", u)
+                      }
+                      onRowsChange={(rows) =>
+                        form.setFieldValue("dimensions", rows)
+                      }
+                      onTotalsChange={({ totalPieces, totalVolWeight }) => {
+                        if (totalPieces > 0)
+                          form.setFieldValue(
+                            "cargo_details.0.no_of_packages",
+                            totalPieces,
+                          );
+                        if (totalVolWeight > 0)
+                          form.setFieldValue(
+                            "cargo_details.0.volume",
+                            totalVolWeight,
+                          );
+                      }}
+                    />
                   )}
 
                   {/* FCL Service Cargo Details */}

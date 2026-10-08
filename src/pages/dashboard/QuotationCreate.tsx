@@ -112,6 +112,7 @@ import { buildEnquiryServicePayload } from "../../utils/buildEnquiryServicePaylo
 import { buildCustomerCreatePayloadFields } from "../../utils/customerSelection";
 import { type OtherServiceOption } from "../../utils/otherServiceType";
 import { resolveQuotationCreateNavigation } from "../../utils/quotationCreateJobNav";
+import { buildQuotationServiceHazDimFields } from "../../utils/dimensionCargoSync";
 
 /** Currency / per-unit amounts: always 2 decimal places. */
 function clampCurrencyAmount(value: number | null | undefined): number | null {
@@ -804,7 +805,45 @@ function QuotationCreate({
       quotationDataToUse &&
       Array.isArray(quotationDataToUse)
     ) {
-      return quotationDataToUse.map((quotation: any) => ({
+      const enquiryServices = Array.isArray(actualEnquiryData?.services)
+        ? actualEnquiryData.services
+        : [];
+      return quotationDataToUse.map((quotation: any) => {
+        const enquiryService =
+          enquiryServices.find(
+            (s: any) =>
+              s?.id === quotation.service_id ||
+              s?.service_id === quotation.service_id,
+          ) || null;
+        const hazSource = enquiryService || quotation;
+        const isHazardous = Boolean(
+          quotation.hazardous_cargo ?? hazSource.hazardous_cargo ?? false,
+        );
+        const resolvedUnNo = isHazardous
+          ? (quotation.un_no ?? hazSource.un_no ?? null)
+          : null;
+        const resolvedClassName = isHazardous
+          ? (quotation.class_name ??
+            quotation.class ??
+            hazSource.class_name ??
+            hazSource.class ??
+            null)
+          : null;
+        const resolvedPkgGroup = isHazardous
+          ? (quotation.pkg_group ?? hazSource.pkg_group ?? null)
+          : null;
+        const mapCargoHaz = (cargo: any = {}) => ({
+          ...cargo,
+          hazardous_cargo: isHazardous ? "Yes" : "No",
+          un_no: cargo?.un_no ?? resolvedUnNo,
+          class: cargo?.class_name ?? cargo?.class ?? resolvedClassName,
+          class_name: cargo?.class_name ?? cargo?.class ?? resolvedClassName,
+          pkg_group: cargo?.pkg_group ?? resolvedPkgGroup,
+        });
+        const sourceCargoDetails = Array.isArray(quotation.cargo_details)
+          ? quotation.cargo_details
+          : [];
+        return {
         id: quotation.service_id,
         service: quotation.service_type as
           | "AIR"
@@ -824,7 +863,31 @@ function QuotationCreate({
         delivery: false, // Not available in quotation data
         pickup_location: "",
         delivery_location: "",
-        hazardous_cargo: quotation.hazardous_cargo || false,
+        hazardous_cargo: isHazardous,
+        un_no: resolvedUnNo,
+        class_name: resolvedClassName,
+        pkg_group: resolvedPkgGroup,
+        // Enquiry-parity cargo shape (filter_quotations now includes haz on cargo_details)
+        cargo_details:
+          sourceCargoDetails.length > 0
+            ? sourceCargoDetails.map(mapCargoHaz)
+            : [
+                mapCargoHaz({
+                  no_of_packages: null,
+                  gross_weight: null,
+                }),
+              ],
+        dimension_data: Array.isArray(quotation.dimension_data)
+          ? quotation.dimension_data
+          : Array.isArray(quotation.dimension_details)
+            ? quotation.dimension_details
+            : Array.isArray(hazSource.dimension_data)
+              ? hazSource.dimension_data
+              : Array.isArray(hazSource.dimension_details)
+                ? hazSource.dimension_details
+                : [],
+        dimension_unit:
+          quotation.dimension_unit || hazSource.dimension_unit || undefined,
         stackable:
           quotation.stackable !== undefined ? quotation.stackable : true, // Include stackable
         shipment_terms_code_read: quotation.shipment_terms_code || "",
@@ -832,26 +895,27 @@ function QuotationCreate({
         // Add FCL specific details if available
         // For OTHERS, let EnquiryCreate determine structure based on service_code lookup
         fcl_details:
-          quotation.service_type === "FCL" && quotation.cargo_details
-            ? quotation.cargo_details.map((cargo: any) => ({
+          quotation.service_type === "FCL" && sourceCargoDetails.length > 0
+            ? sourceCargoDetails.map((cargo: any) => ({
                 // id: Math.random(), // Generate temporary ID
                 container_type_code: cargo.container_type_code,
                 container_type: cargo.container_type || "",
                 container_name: cargo.container_type || "",
                 no_of_containers: cargo.no_of_containers || 0,
                 gross_weight: cargo.gross_weight || null,
+                ...mapCargoHaz(cargo),
               }))
             : // For OTHERS, include fcl_details if cargo_details has container_type_code
               // EnquiryCreate will determine the correct structure based on service_code
               quotation.service_type === "OTHERS" &&
-                quotation.cargo_details &&
-                quotation.cargo_details.some((c: any) => c.container_type_code)
-              ? quotation.cargo_details.map((cargo: any) => ({
+                sourceCargoDetails.some((c: any) => c.container_type_code)
+              ? sourceCargoDetails.map((cargo: any) => ({
                   container_type_code: cargo.container_type_code,
                   container_type: cargo.container_type || "",
                   container_name: cargo.container_type || "",
                   no_of_containers: cargo.no_of_containers || 0,
                   gross_weight: cargo.gross_weight || null,
+                  ...mapCargoHaz(cargo),
                 }))
               : undefined,
         // Add AIR/LCL specific details if available
@@ -889,7 +953,8 @@ function QuotationCreate({
           quotation.cargo_details?.[0]?.chargeable_volume
             ? quotation.cargo_details[0].chargeable_volume
             : null,
-      }));
+      };
+      });
     }
 
     // For create mode, use existing logic
@@ -1480,6 +1545,19 @@ function QuotationCreate({
         pickup_location: service.pickup_location || "",
         delivery_location: service.delivery_location || "",
         hazardous_cargo: service.hazardous_cargo || false,
+        un_no: (service as any).un_no ?? null,
+        class_name:
+          (service as any).class_name ?? (service as any).class ?? null,
+        pkg_group: (service as any).pkg_group ?? null,
+        cargo_details: Array.isArray((service as any).cargo_details)
+          ? (service as any).cargo_details
+          : undefined,
+        dimension_data: Array.isArray((service as any).dimension_data)
+          ? (service as any).dimension_data
+          : Array.isArray((service as any).dimension_details)
+            ? (service as any).dimension_details
+            : [],
+        dimension_unit: (service as any).dimension_unit || undefined,
         stackable:
           (service as any).stackable !== undefined
             ? (service as any).stackable
@@ -2751,7 +2829,18 @@ function QuotationCreate({
       return;
     }
 
-    // Merge quotation codes into service details so booking form can prefill origin, destination, shipment terms
+    // Prefer enquiry service for haz/dims (quotation snapshot often only has hazardous_cargo bool)
+    const enquiryService =
+      Array.isArray(actualEnquiryData?.services) &&
+      actualEnquiryData.services.find(
+        (s: any) =>
+          s?.id === selectedService.id ||
+          s?.service_id === selectedService.id,
+      );
+    const hazDimFields = buildQuotationServiceHazDimFields(
+      (enquiryService || selectedService) as Record<string, unknown>,
+      quotationForService as Record<string, unknown>,
+    );
     const serviceDetails = {
       ...selectedService,
       origin_code:
@@ -2777,6 +2866,7 @@ function QuotationCreate({
         quotationForService.shipment_terms ??
         quotationForService.shipment_terms_name ??
         selectedService.shipment_terms_name,
+      ...hazDimFields,
     };
 
     const trade = quotationForService.trade || selectedService.trade;
@@ -7923,6 +8013,26 @@ function QuotationCreate({
                           pickup_location: service.pickup_location || "",
                           delivery_location: service.delivery_location || "",
                           hazardous_cargo: service.hazardous_cargo || false,
+                          un_no: (service as any).un_no ?? null,
+                          class_name:
+                            (service as any).class_name ??
+                            (service as any).class ??
+                            null,
+                          pkg_group: (service as any).pkg_group ?? null,
+                          cargo_details: Array.isArray(
+                            (service as any).cargo_details,
+                          )
+                            ? (service as any).cargo_details
+                            : undefined,
+                          dimension_data: Array.isArray(
+                            (service as any).dimension_data,
+                          )
+                            ? (service as any).dimension_data
+                            : Array.isArray((service as any).dimension_details)
+                              ? (service as any).dimension_details
+                              : [],
+                          dimension_unit:
+                            (service as any).dimension_unit || undefined,
                           stackable:
                             (service as any).stackable !== undefined
                               ? (service as any).stackable

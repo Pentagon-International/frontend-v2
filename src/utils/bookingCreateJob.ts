@@ -345,7 +345,16 @@ function mapCargoDetails(
     String(booking.service ?? "")
       .trim()
       .toUpperCase() === "FCL";
-  const haz = booking.is_hazardous ?? "";
+  // BE requires UN/Class/PKG when haz=True — only send haz when complete
+  // so Booking→Job (incl. inland / legacy incomplete) does not fail cargo create.
+  const un_no = String(booking.un_no ?? "").trim() || null;
+  const class_name = String(booking.class_name ?? "").trim() || null;
+  const pkg_group = String(booking.pkg_group ?? "").trim() || null;
+  const haz =
+    Boolean(booking.is_hazardous) && !!un_no && !!class_name && !!pkg_group;
+  const hazFields = haz
+    ? { haz: true, un_no, class_name, pkg_group }
+    : { haz: false };
 
   // Ocean FCL: expand nested `containers[]` into house cargo rows (one per container_no).
   if (isFclOcean) {
@@ -373,7 +382,7 @@ function mapCargoDetails(
               container.chargeable_weight ??
               row.chargeable_weight ??
               "",
-            haz,
+            ...hazFields,
           });
         }
         continue;
@@ -386,10 +395,40 @@ function mapCargoDetails(
         gross_weight: row.gross_weight || "",
         volume: row.volume ?? "",
         chargeable_weight: row.chargeable_weight || "",
-        haz,
+        ...hazFields,
       });
     }
-    return expanded;
+    if (expanded.length > 0) return expanded;
+    // FCL with no cargo rows: still emit haz so container remap keeps booking haz
+    return [
+      {
+        container_no: null,
+        no_of_packages: toNumberOrNull(booking.no_of_packages),
+        package_type: "",
+        package_type_code: null,
+        gross_weight: booking.gross_weight || "",
+        volume: booking.volume ?? "",
+        chargeable_weight: booking.chargeable_weight || "",
+        ...hazFields,
+      },
+    ];
+  }
+
+  if (cargo.length === 0) {
+    return [
+      {
+        no_of_packages: toNumberOrNull(booking.no_of_packages),
+        package_type: "",
+        package_type_code: null,
+        gross_weight: booking.gross_weight || "",
+        volume:
+          transport === "air"
+            ? booking.volume_weight ?? booking.volume ?? ""
+            : booking.volume ?? "",
+        chargeable_weight: booking.chargeable_weight || "",
+        ...hazFields,
+      },
+    ];
   }
 
   return cargo.map((c) => {
@@ -407,7 +446,7 @@ function mapCargoDetails(
           ? row.volume_weight ?? row.volume ?? ""
           : row.volume ?? "",
       chargeable_weight: row.chargeable_weight || "",
-      haz,
+      ...hazFields,
     };
   });
 }
@@ -929,6 +968,8 @@ function buildAirHousing(
   trade: string,
   houseDocumentIds?: number[],
 ) {
+  // Dimensions: do not send dimension_details — BE attaches booking rows
+  // (Shipment_dimension_details) onto the house by setting housing_details_id.
   return {
     hawb_no: resolveBookingHouseNumber(booking),
     origin_code: booking.origin_code || booking.origin_code_read || "",
@@ -992,6 +1033,8 @@ function buildOceanHousing(
   mode: BookingCreateJobMode,
   houseDocumentIds?: number[],
 ) {
+  // Dimensions: do not send dimension_details — BE attaches booking rows
+  // (Shipment_dimension_details) onto the house by setting housing_details_id.
   const housing: Record<string, unknown> = {
     hbl_number: resolveBookingHouseNumber(booking),
     origin_code: booking.origin_code || booking.origin_code_read || "",

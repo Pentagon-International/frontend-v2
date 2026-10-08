@@ -502,6 +502,9 @@ type HousingDetail = HouseDocumentFields & {
     volume: HouseCargoWeightValue;
     chargeable_weight: HouseCargoWeightValue;
     haz: boolean | null;
+    un_no?: string;
+    class_name?: string;
+    pkg_group?: string;
   }>;
   charges?: Array<{
     id?: number | string; // ID from backend when editing
@@ -1533,8 +1536,21 @@ function ExportJobCreate() {
                           : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
                             ? false
                             : null,
+                        un_no: String(cargo.un_no ?? ""),
+                        class_name: String(cargo.class_name ?? ""),
+                        pkg_group: String(cargo.pkg_group ?? ""),
                       }),
                     )
+                  : [],
+              dimension_data: Array.isArray(
+                (house as { dimension_data?: unknown[] }).dimension_data,
+              )
+                ? (house as { dimension_data: unknown[] }).dimension_data
+                : Array.isArray(
+                      (house as { dimension_details?: unknown[] })
+                        .dimension_details,
+                    )
+                  ? (house as { dimension_details: unknown[] }).dimension_details
                   : [],
               charges: resolveHouseChargesSource(house, "mbl").map((charge) =>
                 mapExportJobHouseChargeRow(charge as Record<string, unknown>),
@@ -3895,7 +3911,19 @@ function ExportJobCreate() {
               cargo.volume,
               "ocean",
             ),
-            haz: cargo.haz,
+            haz: cargo.haz === true || cargo.haz === "Yes",
+            un_no:
+              cargo.haz === true || cargo.haz === "Yes"
+                ? cargo.un_no || null
+                : null,
+            class_name:
+              cargo.haz === true || cargo.haz === "Yes"
+                ? cargo.class_name || null
+                : null,
+            pkg_group:
+              cargo.haz === true || cargo.haz === "Yes"
+                ? cargo.pkg_group || null
+                : null,
           })),
           // Each housing detail has its own mbl_charges
           mbl_charges: (() => {

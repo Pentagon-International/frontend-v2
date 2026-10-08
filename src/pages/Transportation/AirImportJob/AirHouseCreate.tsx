@@ -178,6 +178,14 @@ import RequiredLabel from "../../../components/RequiredLabel";
 import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
 import FormTextArea from "../../../components/FormTextArea";
 import FormNumberInput from "../../../components/FormNumberInput";
+import BookingDimensionsSection from "../../../components/booking/BookingDimensionsSection";
+import { airHouseCargoSpans } from "../../../utils/houseCargoGridSpans";
+import {
+  type DimensionRow,
+  mapDimensionDataToFormRows,
+  getDimensionUnitFromData,
+  dimensionDetailsForPayload,
+} from "../../../utils/dimensionCargoSync";
 import {
   SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
   hasInvalidNumericInputCharacters,
@@ -258,6 +266,9 @@ type CargoDetail = {
   volume: HouseCargoWeightValue;
   chargeable_weight: HouseCargoWeightValue;
   haz: string;
+  un_no?: string;
+  class_name?: string;
+  pkg_group?: string;
 };
 
 // Type definitions for charges (charge_id, unit_id, currency_id sent in payload; id for update)
@@ -448,8 +459,15 @@ function HouseCreate() {
       volume: null,
       chargeable_weight: null,
       haz: "",
+      un_no: "",
+      class_name: "",
+      pkg_group: "",
     },
   ]);
+
+  // House-level dimensions (AIR)
+  const [dimensionUnit, setDimensionUnit] = useState("Centimeter");
+  const [dimensions, setDimensions] = useState<DimensionRow[]>([]);
 
   // State for cargo details validation errors
   const [cargoErrors, setCargoErrors] = useState<
@@ -1312,6 +1330,9 @@ function HouseCreate() {
           volume: volumeFromRow,
           chargeable_weight,
           haz,
+          un_no: String(c.un_no ?? rb.un_no ?? ""),
+          class_name: String(c.class_name ?? rb.class_name ?? ""),
+          pkg_group: String(c.pkg_group ?? rb.pkg_group ?? ""),
         };
       });
       setCargoDetails(mapped.length > 0 ? mapped : []);
@@ -1328,8 +1349,17 @@ function HouseCreate() {
           rb.chargeable_volume ?? rb.chargeable_weight,
         ),
         haz,
+        un_no: String(rb.un_no ?? ""),
+        class_name: String(rb.class_name ?? ""),
+        pkg_group: String(rb.pkg_group ?? ""),
       };
       setCargoDetails([row]);
+    }
+
+    const bookingDimData = rb.dimension_data as unknown[] | undefined;
+    if (Array.isArray(bookingDimData) && bookingDimData.length > 0) {
+      setDimensions(mapDimensionDataToFormRows(bookingDimData));
+      setDimensionUnit(getDimensionUnitFromData(bookingDimData));
     }
 
     // Charges from rate_details - use unit_id, currency_id from API
@@ -1670,6 +1700,9 @@ function HouseCreate() {
             volume: volume_weight_final,
             chargeable_weight,
             haz,
+            un_no: String(cargo.un_no || ""),
+            class_name: String(cargo.class_name || ""),
+            pkg_group: String(cargo.pkg_group || ""),
           };
           const notSet: string[] = [];
           if (row.no_of_packages == null) notSet.push("no_of_packages");
@@ -1707,6 +1740,12 @@ function HouseCreate() {
           count: loadedCargoDetails.length,
         });
       }
+    }
+
+    const dimData = (editData as { dimension_data?: unknown[] }).dimension_data;
+    if (Array.isArray(dimData) && dimData.length > 0) {
+      setDimensions(mapDimensionDataToFormRows(dimData));
+      setDimensionUnit(getDimensionUnitFromData(dimData));
     }
 
     // Load charges - prefer non-empty charges, then mawb_charges/mbl_charges
@@ -2709,18 +2748,24 @@ function HouseCreate() {
   const buildUpdatedHousingDetailsFromForm = () => {
     // Prepare cargo details (container_number removed for Air)
     // Keep payload stable; only round known numeric cargo fields to 2dp
-    const cargoDetailsForPayload = cargoDetails.map((cargo) => ({
-      ...cargo,
-      gross_weight: formatHouseCargoWeightForPayload(
-        (cargo as any).gross_weight,
-      ),
-      volume: formatHouseCargoWeightForPayload((cargo as any).volume),
-      chargeable_weight: formatHouseCargoChargeableForPayload(
-        (cargo as any).gross_weight,
-        (cargo as any).volume,
-        "air",
-      ),
-    }));
+    const cargoDetailsForPayload = cargoDetails.map((cargo) => {
+      const isHaz = cargo.haz === "Yes" || cargo.haz === "true";
+      return {
+        ...cargo,
+        gross_weight: formatHouseCargoWeightForPayload(
+          (cargo as any).gross_weight,
+        ),
+        volume: formatHouseCargoWeightForPayload((cargo as any).volume),
+        chargeable_weight: formatHouseCargoChargeableForPayload(
+          (cargo as any).gross_weight,
+          (cargo as any).volume,
+          "air",
+        ),
+        un_no: isHaz ? cargo.un_no || null : null,
+        class_name: isHaz ? cargo.class_name || null : null,
+        pkg_group: isHaz ? cargo.pkg_group || null : null,
+      };
+    });
 
     // Get current form values - ensure we're using the latest form state
     const currentFormValues = form.values;
@@ -2807,6 +2852,7 @@ function HouseCreate() {
       events: currentFormValues.events ?? [],
       cargo_details: cargoDetailsForPayload,
       charges: getMeaningfulHouseCharges(chargesForm.values.charges),
+      ...dimensionDetailsForPayload("AIR", dimensions, dimensionUnit),
       ...(similarBookingId != null && { booking_id: similarBookingId }),
       ...pickHouseDocumentFields(housePageDocuments.getNavigationState()),
     };
@@ -3080,6 +3126,7 @@ function HouseCreate() {
         marks_no: form.values.marks_no,
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => {
+          const isHaz = cargo.haz === "Yes" || cargo.haz === "true";
           const packageTypeName =
             resolvePackageTypeName(
               cargo.package_type,
@@ -3097,9 +3144,13 @@ function HouseCreate() {
               cargo.volume,
               "air",
             ),
-            haz: cargo.haz === "Yes",
+            haz: isHaz,
+            un_no: isHaz ? cargo.un_no || null : null,
+            class_name: isHaz ? cargo.class_name || null : null,
+            pkg_group: isHaz ? cargo.pkg_group || null : null,
           };
         }),
+        ...dimensionDetailsForPayload("AIR", dimensions, dimensionUnit),
         mawb_charges: (() => {
           const meaningfulCharges = getMeaningfulHouseCharges(
             chargesForm.values.charges as HouseChargeLike[],
@@ -4586,6 +4637,13 @@ function HouseCreate() {
 
             {/* Dynamic Cargo Rows */}
             <Box mb="md">
+              {(() => {
+                const showHazDetailsCols = cargoDetails.some(
+                  (c) => c.haz === "Yes" || c.haz === "true",
+                );
+                const cargoSpans = airHouseCargoSpans(showHazDetailsCols);
+                return (
+                  <>
               <Grid
                 mb="xs"
                 style={{
@@ -4594,37 +4652,54 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={2}>
+                <Grid.Col span={cargoSpans.packageType}>
                   <RequiredLabel label="Package Type" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={cargoSpans.noOfPackages}>
                   <RequiredLabel label="No of Packages" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={cargoSpans.gross}>
                   <RequiredLabel label="Gross Weight (KG)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={cargoSpans.volume}>
                   <RequiredLabel label="Volume (KG)" required={true} />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={cargoSpans.chargeable}>
                   <RequiredLabel
                     label="Chargeable Weight (KG)"
                     required={false}
                   />
                 </Grid.Col>
-                <Grid.Col span={1.8}>
+                <Grid.Col span={cargoSpans.haz}>
                   <RequiredLabel label="Haz" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1}>
+                {showHazDetailsCols && (
+                  <>
+                    <Grid.Col span={cargoSpans.un}>
+                      <RequiredLabel label="UN No" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={cargoSpans.className}>
+                      <RequiredLabel label="Class" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={cargoSpans.pkg}>
+                      <RequiredLabel label="PKG Group" required={false} />
+                    </Grid.Col>
+                  </>
+                )}
+                <Grid.Col span={cargoSpans.actions}>
                   <Text size="xs" fw={600}>
                     Actions
                   </Text>
                 </Grid.Col>
               </Grid>
 
-              {cargoDetails.map((cargo, index) => (
-                <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={2}>
+              {cargoDetails.map((cargo, index) => {
+                const isHazRow =
+                  cargo.haz === "Yes" || cargo.haz === "true";
+                return (
+                <Fragment key={index}>
+                <Grid gutter="sm" mb="xs">
+                  <Grid.Col span={cargoSpans.packageType}>
                     <Dropdown
                       placeholder="Package Type"
                       searchable
@@ -4641,7 +4716,7 @@ function HouseCreate() {
                       clearable
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={cargoSpans.noOfPackages}>
                     <FormNumberInput
                       placeholder="Enter No of Packages"
                       min={0}
@@ -4684,7 +4759,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.no_of_packages}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={cargoSpans.gross}>
                     <FormNumberInput
                       placeholder="Enter Gross Weight"
                       min={0}
@@ -4748,7 +4823,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.gross_weight}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={cargoSpans.volume}>
                     <FormNumberInput
                       placeholder="Enter Volume Weight"
                       min={0}
@@ -4811,7 +4886,7 @@ function HouseCreate() {
                       error={cargoErrors[index]?.volume}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={cargoSpans.chargeable}>
                     <FormTextInput
                       placeholder=""
                       format="normal"
@@ -4824,26 +4899,92 @@ function HouseCreate() {
                       disabled
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.8}>
+                  <Grid.Col span={cargoSpans.haz}>
                     <Dropdown
                       placeholder="Select Haz"
                       searchable
                       data={[
-                        { value: "true", label: "Yes" },
-                        { value: "false", label: "No" },
+                        { value: "Yes", label: "Yes" },
+                        { value: "No", label: "No" },
                       ]}
-                      value={cargo.haz || null}
+                      value={
+                        cargo.haz === "true" || cargo.haz === "Yes"
+                          ? "Yes"
+                          : cargo.haz === "false" || cargo.haz === "No"
+                            ? "No"
+                            : cargo.haz || null
+                      }
                       onChange={(value) => {
                         const updated = [...cargoDetails];
+                        const nextHaz = value || "";
                         updated[index] = {
                           ...updated[index],
-                          haz: value || "",
+                          haz: nextHaz,
+                          ...(nextHaz !== "Yes"
+                            ? { un_no: "", class_name: "", pkg_group: "" }
+                            : {}),
                         };
                         setCargoDetails(updated);
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1}>
+                  {showHazDetailsCols &&
+                    (isHazRow ? (
+                      <>
+                        <Grid.Col span={cargoSpans.un}>
+                          <FormTextInput
+                            placeholder="UN No"
+                            format="normal"
+                            value={cargo.un_no || ""}
+                            onChange={(e) => {
+                              const updated = [...cargoDetails];
+                              updated[index] = {
+                                ...updated[index],
+                                un_no: e.currentTarget.value,
+                              };
+                              setCargoDetails(updated);
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={cargoSpans.className}>
+                          <FormTextInput
+                            placeholder="Class"
+                            format="normal"
+                            value={cargo.class_name || ""}
+                            onChange={(e) => {
+                              const updated = [...cargoDetails];
+                              updated[index] = {
+                                ...updated[index],
+                                class_name: e.currentTarget.value,
+                              };
+                              setCargoDetails(updated);
+                            }}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={cargoSpans.pkg}>
+                          <FormTextInput
+                            placeholder="PKG Group"
+                            format="normal"
+                            value={cargo.pkg_group || ""}
+                            onChange={(e) => {
+                              const updated = [...cargoDetails];
+                              updated[index] = {
+                                ...updated[index],
+                                pkg_group: e.currentTarget.value,
+                              };
+                              setCargoDetails(updated);
+                            }}
+                          />
+                        </Grid.Col>
+                      </>
+                    ) : (
+                      <>
+                        <Grid.Col span={cargoSpans.un} />
+                        <Grid.Col span={cargoSpans.className} />
+                        <Grid.Col span={cargoSpans.pkg} />
+                      </>
+                    ))}
+                  <Grid.Col span={cargoSpans.actions}>
                     <Group gap="xs">
                       {cargoDetails.length > 1 && (
                         <Button
@@ -4877,6 +5018,9 @@ function HouseCreate() {
                                 volume: null,
                                 chargeable_weight: null,
                                 haz: "",
+                                un_no: "",
+                                class_name: "",
+                                pkg_group: "",
                               },
                             ]);
                           }}
@@ -4887,7 +5031,25 @@ function HouseCreate() {
                     </Group>
                   </Grid.Col>
                 </Grid>
-              ))}
+                </Fragment>
+                );
+              })}
+                  </>
+                );
+              })()}
+            </Box>
+
+            <Box mt="md">
+              <BookingDimensionsSection
+                headerTitle="Dimensions"
+                service="AIR"
+                dimensionUnit={dimensionUnit}
+                rows={dimensions}
+                onUnitChange={setDimensionUnit}
+                onRowsChange={setDimensions}
+                onTotalsChange={() => {}}
+                readOnly={isReadOnly}
+              />
             </Box>
           </Box>
         </Tabs.Panel>
