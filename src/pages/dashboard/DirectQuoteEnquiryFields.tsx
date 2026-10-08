@@ -538,6 +538,17 @@ export default function DirectQuoteEnquiryFields({
         (service: Record<string, unknown>, index: number) => {
           const pickup = service.pickup;
           const delivery = service.delivery;
+          const cargo0 =
+            Array.isArray(service.cargo_details) && service.cargo_details[0]
+              ? (service.cargo_details[0] as {
+                  hazardous_cargo?: string;
+                  un_no?: string | null;
+                  class?: string | null;
+                  class_name?: string | null;
+                  pkg_group?: string | null;
+                })
+              : null;
+          const isHazardous = cargo0?.hazardous_cargo === "Yes";
           return {
             ...service,
             id: service.id ?? index + 1,
@@ -546,11 +557,12 @@ export default function DirectQuoteEnquiryFields({
             shipment_terms_code_read: service.shipment_terms_code,
             pickup: pickup === "true" || pickup === true,
             delivery: delivery === "true" || delivery === true,
-            hazardous_cargo:
-              Array.isArray(service.cargo_details) &&
-              service.cargo_details[0] &&
-              (service.cargo_details[0] as { hazardous_cargo?: string })
-                .hazardous_cargo === "Yes",
+            hazardous_cargo: isHazardous,
+            un_no: isHazardous ? cargo0?.un_no ?? null : null,
+            class_name: isHazardous
+              ? cargo0?.class ?? cargo0?.class_name ?? null
+              : null,
+            pkg_group: isHazardous ? cargo0?.pkg_group ?? null : null,
           };
         },
       ),

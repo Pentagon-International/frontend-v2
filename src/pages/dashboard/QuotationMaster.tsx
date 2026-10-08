@@ -111,6 +111,7 @@ import {
 import { useDebouncedValue } from "@mantine/hooks";
 import { type OtherServiceOption } from "../../utils/otherServiceType";
 import { resolveQuotationCreateNavigation } from "../../utils/quotationCreateJobNav";
+import { buildQuotationServiceHazDimFields } from "../../utils/dimensionCargoSync";
 
 const fetchOtherServices = async () => {
   const response = await getAPICall(
@@ -2243,6 +2244,7 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       container_type_code:
         firstCargo?.container_type_code || firstCargo?.container_type,
       no_of_containers: firstCargo?.no_of_containers,
+      ...buildQuotationServiceHazDimFields(service as Record<string, unknown>),
     };
 
     const trade = service.trade;

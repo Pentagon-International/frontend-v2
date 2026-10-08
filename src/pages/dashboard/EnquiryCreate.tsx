@@ -274,6 +274,7 @@ import {
   resolveEffectiveServiceType,
   usesAirCargoStructure,
 } from "../../utils/otherServiceType";
+import { resolveEnquiryHazCargoFields } from "../../utils/dimensionCargoSync";
 const fetchEnquiry = async () => {
   try {
     const requestBody = { filters: { status: "ACTIVE" } };
@@ -1066,7 +1067,9 @@ function EnquiryCreate() {
         servicePayload.un_no =
           cargo?.hazardous_cargo === "Yes" ? cargo?.un_no || null : null;
         servicePayload.class_name =
-          cargo?.hazardous_cargo === "Yes" ? cargo?.class || null : null;
+          cargo?.hazardous_cargo === "Yes"
+            ? cargo?.class || cargo?.class_name || null
+            : null;
         servicePayload.pkg_group =
           cargo?.hazardous_cargo === "Yes" ? cargo?.pkg_group || null : null;
 
@@ -2339,10 +2342,7 @@ function EnquiryCreate() {
                     container_type_code:
                       fcl.container_type_code || fcl.container_type || null,
                     no_of_containers: fcl.no_of_containers || null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service, fcl),
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
@@ -2370,10 +2370,7 @@ function EnquiryCreate() {
                     chargable_volume: null,
                     container_type_code: null,
                     no_of_containers: null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service),
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2394,10 +2391,7 @@ function EnquiryCreate() {
                       : null,
                     container_type_code: null,
                     no_of_containers: null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service),
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2422,10 +2416,7 @@ function EnquiryCreate() {
                       : null,
                     container_type_code: null,
                     no_of_containers: null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service),
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2574,10 +2565,7 @@ function EnquiryCreate() {
                     container_type_code:
                       fcl.container_type_code || fcl.container_type || null,
                     no_of_containers: fcl.no_of_containers || null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service, fcl),
                     stackable: service.stackable ? "Yes" : "No",
                   })
                 );
@@ -2605,10 +2593,7 @@ function EnquiryCreate() {
                     chargable_volume: null,
                     container_type_code: null,
                     no_of_containers: null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service),
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2629,10 +2614,7 @@ function EnquiryCreate() {
                       : null,
                     container_type_code: null,
                     no_of_containers: null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service),
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2657,10 +2639,7 @@ function EnquiryCreate() {
                       : null,
                     container_type_code: null,
                     no_of_containers: null,
-                    hazardous_cargo: service.hazardous_cargo ? "Yes" : "No",
-                    un_no: service.un_no || null,
-                    class: service.class_name || service.class || null,
-                    pkg_group: service.pkg_group || null,
+                    ...resolveEnquiryHazCargoFields(service),
                     stackable: service.stackable ? "Yes" : "No",
                   },
                 ];
@@ -2795,15 +2774,7 @@ function EnquiryCreate() {
               container_type_code:
                 fcl.container_type_code || fcl.container_type || null,
               no_of_containers: fcl.no_of_containers || null,
-              hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
-              un_no: enq.un_no || fcl.un_no || null,
-              class:
-                enq.class_name ||
-                fcl.class_name ||
-                enq.class ||
-                fcl.class ||
-                null,
-              pkg_group: enq.pkg_group || fcl.pkg_group || null,
+              ...resolveEnquiryHazCargoFields(enq, fcl),
               stackable: enq.stackable ? "Yes" : "No",
             }));
           } else if (
@@ -2830,10 +2801,7 @@ function EnquiryCreate() {
                 chargable_volume: null,
                 container_type_code: null,
                 no_of_containers: null,
-                hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
-                un_no: enq.un_no || null,
-                class: enq.class_name || enq.class || null,
-                pkg_group: enq.pkg_group || null,
+                ...resolveEnquiryHazCargoFields(enq),
                 stackable: enq.stackable ? "Yes" : "No",
               },
             ];
@@ -2854,10 +2822,7 @@ function EnquiryCreate() {
                   : null,
                 container_type_code: null,
                 no_of_containers: null,
-                hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
-                un_no: enq.un_no || null,
-                class: enq.class_name || enq.class || null,
-                pkg_group: enq.pkg_group || null,
+                ...resolveEnquiryHazCargoFields(enq),
                 stackable: enq.stackable ? "Yes" : "No",
               },
             ];
@@ -2882,10 +2847,7 @@ function EnquiryCreate() {
                   : null,
                 container_type_code: null,
                 no_of_containers: null,
-                hazardous_cargo: enq.hazardous_cargo ? "Yes" : "No",
-                un_no: enq.un_no || null,
-                class: enq.class_name || enq.class || null,
-                pkg_group: enq.pkg_group || null,
+                ...resolveEnquiryHazCargoFields(enq),
                 stackable: enq.stackable ? "Yes" : "No",
               },
             ];

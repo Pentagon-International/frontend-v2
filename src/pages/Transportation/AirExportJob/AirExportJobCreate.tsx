@@ -328,6 +328,9 @@ type HAWBDetail = HouseDocumentFields & {
     volume: HouseCargoWeightValue;
     chargeable_weight: HouseCargoWeightValue;
     haz: string;
+    un_no?: string;
+    class_name?: string;
+    pkg_group?: string;
   }>;
   charges?: Array<{
     id?: number;
@@ -1423,8 +1426,21 @@ function AirExportJobCreate() {
                           : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
                             ? "No"
                             : "",
+                        un_no: String(cargo.un_no ?? ""),
+                        class_name: String(cargo.class_name ?? ""),
+                        pkg_group: String(cargo.pkg_group ?? ""),
                       }),
                     )
+                  : [],
+              dimension_data: Array.isArray(
+                (house as { dimension_data?: unknown[] }).dimension_data,
+              )
+                ? (house as { dimension_data: unknown[] }).dimension_data
+                : Array.isArray(
+                      (house as { dimension_details?: unknown[] })
+                        .dimension_details,
+                    )
+                  ? (house as { dimension_details: unknown[] }).dimension_details
                   : [],
               charges: (() => {
                 const chargesArray = (house.charges || house.mawb_charges) as
@@ -3351,6 +3367,9 @@ function AirExportJobCreate() {
                   "air",
                 ) ?? "",
               haz: c.haz === "Yes",
+              un_no: c.haz === "Yes" ? c.un_no || null : null,
+              class_name: c.haz === "Yes" ? c.class_name || null : null,
+              pkg_group: c.haz === "Yes" ? c.pkg_group || null : null,
             })),
             mawb_charges: (() => {
               const chargeSource =

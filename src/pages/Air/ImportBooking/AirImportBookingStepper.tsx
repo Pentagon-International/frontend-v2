@@ -104,6 +104,14 @@ import RequiredLabel from "../../../components/RequiredLabel";
 import BookingPackageTypeDropdown from "../../../components/BookingPackageTypeDropdown";
 import JobDocumentsModal from "../../../components/JobDocumentsModal";
 import { useBookingPageDocuments } from "../../../hooks/useBookingPageDocuments";
+import BookingDimensionsSection from "../../../components/booking/BookingDimensionsSection";
+import {
+  type DimensionRow,
+  mapDimensionDataToFormRows,
+  getDimensionUnitFromData,
+  dimensionDetailsForPayload,
+  coerceHazardousFlag,
+} from "../../../utils/dimensionCargoSync";
 import { parseJobDocumentsFromApi } from "../../../utils/jobDocuments";
 import { commonSearchAPI } from "../../../service/searchApi";
 import AirBookingCarrierSelect from "../components/AirBookingCarrierSelect";
@@ -230,8 +238,13 @@ interface FormValues {
 
   // Commodity Details
   is_hazardous: boolean;
+  un_no: string;
+  class_name: string;
+  pkg_group: string;
   commodity_description: string;
   marks_no: string;
+  dimension_unit: string;
+  dimensions: DimensionRow[];
   cargo_details: CargoDetail[];
 
   // Pickup Details
@@ -398,8 +411,25 @@ const validationSchema = yup.object({
 
   // Commodity Details - All optional
   is_hazardous: yup.boolean(),
+  un_no: yup.string().when("is_hazardous", {
+    is: true,
+    then: (s) => s.required("UN No is required when hazardous"),
+    otherwise: (s) => s.notRequired(),
+  }),
+  class_name: yup.string().when("is_hazardous", {
+    is: true,
+    then: (s) => s.required("Class is required when hazardous"),
+    otherwise: (s) => s.notRequired(),
+  }),
+  pkg_group: yup.string().when("is_hazardous", {
+    is: true,
+    then: (s) => s.required("PKG Group is required when hazardous"),
+    otherwise: (s) => s.notRequired(),
+  }),
   commodity_description: yup.string(),
   marks_no: yup.string(),
+  dimension_unit: yup.string(),
+  dimensions: yup.array(),
   cargo_details: yup.array().of(
     yup.object({
       no_of_packages: yup.number().when("$service", {
@@ -1168,9 +1198,20 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       cha_address: String(data.cha_address || ""),
 
       // Commodity Details
-      is_hazardous: Boolean(data.is_hazardous),
+      is_hazardous: coerceHazardousFlag(
+        data.is_hazardous ?? data.hazardous_cargo,
+      ),
+      un_no: String(data.un_no || ""),
+      class_name: String(data.class_name || data.class || ""),
+      pkg_group: String(data.pkg_group || ""),
       commodity_description: String(data.commodity_description || ""),
       marks_no: String(data.marks_no || ""),
+      dimension_unit: Array.isArray(data.dimension_data) && (data.dimension_data as unknown[]).length > 0
+        ? getDimensionUnitFromData(data.dimension_data as unknown[])
+        : "Centimeter",
+      dimensions: Array.isArray(data.dimension_data) && (data.dimension_data as unknown[]).length > 0
+        ? mapDimensionDataToFormRows(data.dimension_data as unknown[])
+        : [],
       cargo_details: data.cargo_details
         ? (data.cargo_details as Array<Record<string, unknown>>).map(
             (cargo: Record<string, unknown>) => ({
@@ -1385,8 +1426,13 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
       // Commodity Details
       is_hazardous: false,
+      un_no: "",
+      class_name: "",
+      pkg_group: "",
       commodity_description: "",
       marks_no: "",
+      dimension_unit: "Centimeter",
+      dimensions: [],
       cargo_details: [
         {
           no_of_packages: undefined,
@@ -2847,8 +2893,16 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
         // Commodity Details
         is_hazardous: form.values.is_hazardous,
+        un_no: form.values.is_hazardous ? (form.values.un_no || null) : null,
+        class_name: form.values.is_hazardous ? (form.values.class_name || null) : null,
+        pkg_group: form.values.is_hazardous ? (form.values.pkg_group || null) : null,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+        ...dimensionDetailsForPayload(
+          form.values.service || "AIR",
+          form.values.dimensions,
+          form.values.dimension_unit,
+        ),
         cargo_details: form.values.cargo_details.map((cargo) => {
           const cargoPayload: Record<string, unknown> = {
             no_of_packages: cargo.no_of_packages || null,
@@ -5264,13 +5318,19 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     error={form.errors.marks_no}
                   />
                 </Grid.Col>
-                <Grid.Col span={6}>
+                <Grid.Col span={form.values.is_hazardous ? 1.5 : 6}>
                   <Radio.Group
                     label="Hazardous Cargo"
                     value={form.values.is_hazardous ? "true" : "false"}
-                    onChange={(value) =>
-                      form.setFieldValue("is_hazardous", value === "true")
-                    }
+                    onChange={(value) => {
+                      const haz = value === "true";
+                      form.setFieldValue("is_hazardous", haz);
+                      if (!haz) {
+                        form.setFieldValue("un_no", "");
+                        form.setFieldValue("class_name", "");
+                        form.setFieldValue("pkg_group", "");
+                      }
+                    }}
                     styles={{
                       root: {
                         fontFamily: "Inter",
@@ -5289,6 +5349,43 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     </Group>
                   </Radio.Group>
                 </Grid.Col>
+                {form.values.is_hazardous && (
+                  <>
+                    <Grid.Col span={1.5}>
+                      <FormTextInput
+                        label="UN No"
+                        placeholder="Enter UN number"
+                        format="normal"
+                        value={form.values.un_no}
+                        onChange={(e) => form.setFieldValue("un_no", e.currentTarget.value)}
+                        error={form.errors.un_no as string}
+                        required
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.5}>
+                      <FormTextInput
+                        label="Class"
+                        placeholder="Enter hazard class"
+                        format="normal"
+                        value={form.values.class_name}
+                        onChange={(e) => form.setFieldValue("class_name", e.currentTarget.value)}
+                        error={form.errors.class_name as string}
+                        required
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={1.5}>
+                      <FormTextInput
+                        label="PKG Group"
+                        placeholder="Enter packaging group"
+                        format="normal"
+                        value={form.values.pkg_group}
+                        onChange={(e) => form.setFieldValue("pkg_group", e.currentTarget.value)}
+                        error={form.errors.pkg_group as string}
+                        required
+                      />
+                    </Grid.Col>
+                  </>
+                )}
               </Grid>
               <Divider my="md" />
 
@@ -5361,6 +5458,19 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       </Grid.Col>
                     </Grid>
                   )}
+                  {form.values.service === "AIR" && (
+                    <BookingDimensionsSection
+                      service="AIR"
+                      dimensionUnit={form.values.dimension_unit || "Centimeter"}
+                      rows={form.values.dimensions}
+                      onUnitChange={(u) => form.setFieldValue("dimension_unit", u)}
+                      onRowsChange={(rows) => form.setFieldValue("dimensions", rows)}
+                      onTotalsChange={({ totalPieces, totalVolWeight }) => {
+                        if (totalPieces > 0) form.setFieldValue("cargo_details.0.no_of_packages", totalPieces);
+                        if (totalVolWeight > 0) form.setFieldValue("cargo_details.0.volume_weight", totalVolWeight);
+                      }}
+                    />
+                  )}
 
                   {/* LCL Service Cargo Details - Single Fields */}
                   {form.values.service === "LCL" && (
@@ -5419,6 +5529,19 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                         />
                       </Grid.Col>
                     </Grid>
+                  )}
+                  {form.values.service === "LCL" && (
+                    <BookingDimensionsSection
+                      service="LCL"
+                      dimensionUnit={form.values.dimension_unit || "Centimeter"}
+                      rows={form.values.dimensions}
+                      onUnitChange={(u) => form.setFieldValue("dimension_unit", u)}
+                      onRowsChange={(rows) => form.setFieldValue("dimensions", rows)}
+                      onTotalsChange={({ totalPieces, totalVolWeight }) => {
+                        if (totalPieces > 0) form.setFieldValue("cargo_details.0.no_of_packages", totalPieces);
+                        if (totalVolWeight > 0) form.setFieldValue("cargo_details.0.volume", totalVolWeight);
+                      }}
+                    />
                   )}
 
                   {/* FCL Service Cargo Details */}
