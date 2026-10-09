@@ -224,12 +224,14 @@ function getUnitServiceType(transportMode: string): string {
   return isAirTransportMode(transportMode) ? "AIR" : "SEA";
 }
 
+/** Port master filter from the selected service. AIR and SEA are sent; Common and Inland are omitted. */
 function getPortTransportParams(
   transportMode: string,
 ): { transport_mode: string } | undefined {
-  const mode = (transportMode || "").trim();
-  if (!mode) return undefined;
-  return { transport_mode: isAirTransportMode(mode) ? "AIR" : "SEA" };
+  const mode = (transportMode || "").trim().toUpperCase();
+  if (mode === "AIR") return { transport_mode: "AIR" };
+  if (mode === "SEA") return { transport_mode: "SEA" };
+  return undefined;
 }
 
 function getInvoiceServiceType(transportMode: string): string {
@@ -1580,13 +1582,9 @@ export default function ServiceJobCreate() {
     [transportMode],
   );
 
-  const portsEnabled = Boolean(form.values.service_id && portTransportParams);
+  const portsEnabled = Boolean(form.values.service_id);
 
-  const portSelectKey = useMemo(
-    () =>
-      `${form.values.service_id}-${portTransportParams?.transport_mode ?? ""}`,
-    [form.values.service_id, portTransportParams?.transport_mode],
-  );
+  const portSelectKey = `${form.values.service_id}-${portTransportParams?.transport_mode ?? "all"}`;
 
   const handleOriginPortChange = useCallback(
     (code: string, name: string) => {
