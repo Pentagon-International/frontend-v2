@@ -143,6 +143,10 @@ import {
   HouseFreightCertificateMenuItem,
   useHouseFreightCertificatePreview,
 } from "../../jobs/pdf/HouseFreightCertificatePreview";
+import {
+  HouseTransportInstructionMenuItem,
+  useHouseTransportInstructionPreview,
+} from "../../jobs/pdf/HouseTransportInstructionPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
@@ -279,7 +283,7 @@ type HouseDetailsForm = {
     eventType: string | null;
     eventDate: Date | null;
   }>;
-};
+} & HousePickupDeliveryFormValues;
 
 // Type definitions for cargo details
 type CargoDetail = {
@@ -421,6 +425,13 @@ const normalizeFreightPpCc = (value: unknown): string => {
   const normalized = normalizePpCc(value);
   return normalized || "Collect";
 };
+
+import { HousePickupDeliveryFields } from "../HousePickupDeliveryFields";
+import {
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+  type HousePickupDeliveryFormValues,
+} from "../housePickupDelivery";
 
 function HouseCreate() {
   const navigate = useNavigate();
@@ -867,6 +878,15 @@ function HouseCreate() {
       setActivePdfBlob(pdfBlobUrl);
       setActiveFileName(fileName);
       setActiveDocumentLabel("Freight Certificate");
+      openSendEmail();
+    },
+  });
+  const transportInstruction = useHouseTransportInstructionPreview({
+    housingId: isEditMode ? editData?.id : null,
+    onSendEmail: (pdfBlobUrl, fileName) => {
+      setActivePdfBlob(pdfBlobUrl);
+      setActiveFileName(fileName);
+      setActiveDocumentLabel("Transport Instruction");
       openSendEmail();
     },
   });
@@ -1369,6 +1389,7 @@ function HouseCreate() {
           ?.notify1_customer_email ?? "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
+      ...readHousePickupDelivery(editData),
       note: (editData as { note?: string } | undefined)?.note || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
@@ -3028,6 +3049,7 @@ function HouseCreate() {
       notify1_customer_email: form.values.notify1_customer_email,
       commodity_description: form.values.commodity_description,
       marks_no: form.values.marks_no,
+      ...housePickupDeliveryPayload(form.values),
       note: form.values.note || "",
       sub_item_no: form.values.sub_item_no,
       ref_no: form.values.ref_no,
@@ -3322,6 +3344,7 @@ function HouseCreate() {
       notify1_customer_email: v.notify1_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
+      ...housePickupDeliveryPayload(v),
       note: v.note || "",
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
@@ -3468,6 +3491,7 @@ function HouseCreate() {
         sub_item_no: form.values.sub_item_no,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+      ...housePickupDeliveryPayload(form.values),
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => {
           const packageTypeName =
@@ -3735,6 +3759,7 @@ function HouseCreate() {
         notify_customer1_email: notifyEmail,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+      ...housePickupDeliveryPayload(form.values),
         note: form.values.note || "",
         bl_type: form.values.bl_type || "",
         pp_cc: freightPpCc,
@@ -4416,6 +4441,13 @@ function HouseCreate() {
                   }
                 />
               )}
+              {!isChaMode && transportInstruction.enabled && (
+                <HouseTransportInstructionMenuItem
+                  onClick={() =>
+                    transportInstruction.openPreview(editData?.id)
+                  }
+                />
+              )}
               <Menu.Item
                 leftSection={
                   <Box
@@ -4672,6 +4704,20 @@ function HouseCreate() {
             Cargo Details
           </Tabs.Tab>
           <Tabs.Tab
+            value="5"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 5 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 5 ? 600 : 400,
+            }}
+          >
+            Pickup & Delivery
+          </Tabs.Tab>
+          <Tabs.Tab
             value="3"
             style={{
               textAlign: "center",
@@ -4702,6 +4748,10 @@ function HouseCreate() {
             </Tabs.Tab>
           )}
         </Tabs.List>
+
+        <Tabs.Panel value="5">
+          <HousePickupDeliveryFields form={form} readOnly={isReadOnly} />
+        </Tabs.Panel>
 
         <Tabs.Panel value="0">
           <Group align="center" mb="xs">
@@ -7547,6 +7597,7 @@ function HouseCreate() {
       </Modal>
 
       {freightCertificate.modal}
+      {transportInstruction.modal}
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}

@@ -97,6 +97,10 @@ import {
   HouseFreightCertificateMenuItem,
   useHouseFreightCertificatePreview,
 } from "../../jobs/pdf/HouseFreightCertificatePreview";
+import {
+  HouseTransportInstructionMenuItem,
+  useHouseTransportInstructionPreview,
+} from "../../jobs/pdf/HouseTransportInstructionPreview";
 import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import { ImportMasterShipperNameField } from "../ImportMasterShipperNameField";
@@ -165,6 +169,11 @@ import {
 } from "../../../utils/jobHousingEventsFromPatch";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  houseHasPickupDeliveryFields,
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+} from "../housePickupDelivery";
 import { navigateWithReturnTo } from "../../../utils/globalSearchNavigation";
 import {
   parseJobSaveResponse,
@@ -194,11 +203,15 @@ import {
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
 import {
+  dubaiBoeNumberPayload,
   emptyChaMasterCustoms,
   formatChaJobDateForPayload,
+  isDubaiBranchUser,
   pickChaMasterCustomsPayload,
   readChaMasterCustoms,
+  readStoredBoeNumber,
   resolveChaJobDate,
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
@@ -637,6 +650,15 @@ function AirImportJobCreate() {
       openSendEmail();
     },
   });
+  const transportInstruction = useHouseTransportInstructionPreview({
+    housingId: null,
+    onSendEmail: (pdfBlobUrl, fileName) => {
+      setActivePdfBlob(pdfBlobUrl);
+      setActiveFileName(fileName);
+      setActiveDocumentLabel("Transport Instruction");
+      openSendEmail();
+    },
+  });
   const { user } = useAuthStore();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -675,6 +697,7 @@ function AirImportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
 
   useChaJobEditHydration(
     mode,
@@ -822,6 +845,7 @@ function AirImportJobCreate() {
               : null;
           })(),
       ...emptyChaMasterCustoms(),
+      boe_no: readStoredBoeNumber(location.state?.mawbDetails, jobData),
       igm_no:
         (jobData as { igm_no?: string } | undefined)?.igm_no ||
         location.state?.mawbDetails?.igm_no ||
@@ -1594,6 +1618,7 @@ function AirImportJobCreate() {
                   ? String(house.commodity_description)
                   : "",
                 marks_no: house.marks_no ? String(house.marks_no) : "",
+                ...readHousePickupDelivery(house),
                 note: (house as { note?: unknown }).note
                   ? String((house as { note?: unknown }).note)
                   : "",
@@ -3908,6 +3933,9 @@ function AirImportJobCreate() {
               chaConfig.serviceType,
             )
           : {}),
+        ...(showDubaiBoeNumber
+          ? dubaiBoeNumberPayload(mawbDetailsForm.values.boe_no)
+          : {}),
         igm_no: mawbDetailsForm.values.igm_no
           ? mawbDetailsForm.values.igm_no.trim()
           : null,
@@ -4030,6 +4058,9 @@ function AirImportJobCreate() {
             hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
+          ...(houseHasPickupDeliveryFields(hawb)
+            ? housePickupDeliveryPayload(hawb)
+            : {}),
           note: hawb.note || "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
@@ -4963,6 +4994,11 @@ function AirImportJobCreate() {
 
             {/* IGM details row */}
             <Grid mb="xl">
+              <DubaiBoeNumberField
+                visible={showDubaiBoeNumber}
+                readOnly={isReadOnly}
+                form={mawbDetailsForm}
+              />
               {!isChaMode && (
                 <Grid.Col span={3}>
                   <Dropdown
@@ -6870,6 +6906,13 @@ function AirImportJobCreate() {
                               }
                             />
                           )}
+                          {hawb.id != null && Number(hawb.id) > 0 && !isChaMode && (
+                            <HouseTransportInstructionMenuItem
+                              onClick={() =>
+                                transportInstruction.openPreview(hawb.id)
+                              }
+                            />
+                          )}
 
                           <HouseEventsMenuItem
                             onClick={() => handleOpenHouseEvents(index)}
@@ -7531,6 +7574,7 @@ function AirImportJobCreate() {
       </Modal>
 
       {freightCertificate.modal}
+      {transportInstruction.modal}
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}

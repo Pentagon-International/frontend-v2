@@ -92,9 +92,21 @@ import {
 } from "../../../utils/jobFormReadOnly";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
+import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
+import {
+  dubaiBoeNumberPayload,
+  isDubaiBranchUser,
+  readBoeNumber,
+  readStoredBoeNumber,
+} from "../chaJob/chaJobCustomsFields";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
+import {
+  houseHasPickupDeliveryFields,
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+} from "../housePickupDelivery";
 import FormTextInput from "../../../components/FormTextInput";
 import FormTextArea from "../../../components/FormTextArea";
 import { roundToDecimals } from "../../../utils/numberInputUtils";
@@ -204,6 +216,7 @@ type MAWBDetailsForm = {
   atd: Date | null;
   ata: Date | null;
   job_date: Date | null;
+  boe_no: string;
   shipper_id: string;
   shipper_name: string;
   shipper_email: string;
@@ -602,6 +615,7 @@ function InlandExportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const showDubaiBoeNumber = isDubaiBranchUser(user);
   const documentsReadOnly = isViewOnly;
 
   const { data: inlandExportServices = [] } = useQuery({
@@ -741,6 +755,7 @@ function InlandExportJobCreate() {
           (jobData as { note?: unknown } | undefined)?.note ??
           "",
       ),
+      boe_no: readStoredBoeNumber(location.state?.mawbDetails, jobData),
       is_direct:
         parseBoolean(
           jobData?.is_direct ?? location.state?.mawbDetails?.is_direct,
@@ -882,6 +897,7 @@ function InlandExportJobCreate() {
       service_name: mawbDetailsForm.values.service_name || "",
       pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
       note: mawbDetailsForm.values.note || "",
+      boe_no: mawbDetailsForm.values.boe_no || "",
       is_direct: mawbDetailsForm.values.is_direct,
       agent_code: mawbDetailsForm.values.agent_code || "",
       agent_name: mawbDetailsForm.values.agent_name || "",
@@ -1061,6 +1077,7 @@ function InlandExportJobCreate() {
             (jobData as Record<string, unknown>).freight,
           ),
           note: String((jobData as { note?: unknown }).note ?? ""),
+          boe_no: readBoeNumber(jobData),
           is_direct: parseBoolean(jobData.is_direct) || false,
           // Use agent_code and agent_name from API response, fallback to old fields for backward compatibility
           agent_code: jobData.agent_code || jobData.origin_agent || "",
@@ -1112,6 +1129,7 @@ function InlandExportJobCreate() {
             note: String(
               (savedMawbDetailsFromState as { note?: unknown }).note ?? "",
             ),
+            boe_no: readStoredBoeNumber(savedMawbDetailsFromState, jobData),
             is_direct: parseBoolean(savedMawbDetailsFromState.is_direct),
             agent_code: savedMawbDetailsFromState.agent_code || "",
             agent_name: savedMawbDetailsFromState.agent_name || "",
@@ -1346,6 +1364,7 @@ function InlandExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              ...readHousePickupDelivery(house),
               note: (house as { note?: unknown }).note
                 ? String((house as { note?: unknown }).note)
                 : "",
@@ -2126,6 +2145,7 @@ function InlandExportJobCreate() {
               (savedMawbDetails as { pp_cc?: string }).pp_cc,
             ),
             note: String((savedMawbDetails as { note?: unknown })?.note ?? ""),
+            boe_no: readStoredBoeNumber(savedMawbDetails, jobData),
             is_direct: parseBoolean(savedMawbDetails.is_direct),
             agent_code: savedMawbDetails.agent_code || "",
             agent_name: savedMawbDetails.agent_name || "",
@@ -2718,6 +2738,9 @@ function InlandExportJobCreate() {
         ),
         pp_cc: mawbDetailsForm.values.pp_cc || "Collect",
         note: mawbDetailsForm.values.note || "",
+        ...(showDubaiBoeNumber
+          ? dubaiBoeNumberPayload(mawbDetailsForm.values.boe_no)
+          : {}),
         is_direct: mawbDetailsForm.values.is_direct,
         agent: mawbDetailsForm.values.agent_code?.trim() || null,
         origin_code: mawbDetailsForm.values.origin_code,
@@ -2865,6 +2888,9 @@ function InlandExportJobCreate() {
           notify2_customer_email: hawb.notify2_customer_email ?? "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
+          ...(houseHasPickupDeliveryFields(hawb)
+            ? housePickupDeliveryPayload(hawb)
+            : {}),
           note: hawb.note || "",
           sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
           ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
@@ -3708,6 +3734,11 @@ function InlandExportJobCreate() {
                   {...mawbDetailsForm.getInputProps("note")}
                 />
               </Grid.Col>
+              <DubaiBoeNumberField
+                visible={showDubaiBoeNumber}
+                readOnly={isReadOnly}
+                form={mawbDetailsForm}
+              />
 
               <Grid.Col span={3}>
                 <Dropdown

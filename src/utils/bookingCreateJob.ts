@@ -8,6 +8,10 @@ import { API_HEADER } from "../store/storeKeys";
 import useAuthStore from "../store/authStore";
 import { ToastNotification } from "../components";
 import {
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+} from "../pages/Transportation/housePickupDelivery";
+import {
   costLocalAmountForPayload,
   roundChargeAmount,
   roundLocalChargeAmount,
@@ -927,10 +931,66 @@ export async function prepareHouseDocumentIdsFromBooking(
   return uploadedIds;
 }
 
+const PICKUP_DELIVERY_DETAIL_KEYS = [
+  "pickup_location",
+  "pickup_from",
+  "pickup_from_name",
+  "pickup_from_code",
+  "pickup_from_code_read",
+  "pickup_address",
+  "pickup_address_text",
+  "pickup_address_id",
+  "pickup_address_id_read",
+  "planned_pickup_date",
+  "actual_pickup_date",
+  "transporter_code",
+  "transporter_code_read",
+  "transporter_name",
+  "transporter_email",
+  "delivery_location",
+  "delivery_from",
+  "delivery_from_name",
+  "delivery_from_code",
+  "delivery_from_code_read",
+  "delivery_address",
+  "delivery_address_text",
+  "delivery_address_id",
+  "delivery_address_id_read",
+  "planned_delivery_date",
+  "actual_delivery_date",
+] as const;
+
+function bookingNeedsPickupDeliveryDetail(
+  booking: Record<string, unknown>,
+): boolean {
+  return ![
+    "pickup_from_code",
+    "pickup_from_code_read",
+    "pickup_address_id",
+    "pickup_address_id_read",
+    "delivery_from_code",
+    "delivery_from_code_read",
+    "delivery_address_id",
+    "delivery_address_id_read",
+  ].some((key) => key in booking);
+}
+
+function pickupDeliveryFieldsFromBooking(
+  detail: Record<string, unknown>,
+): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const key of PICKUP_DELIVERY_DETAIL_KEYS) {
+    if (key in detail) picked[key] = detail[key];
+  }
+  return picked;
+}
+
 export async function resolveBookingRecordForJobCreate(
   booking: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  if (getBookingDocumentRows(booking).length > 0) {
+  const hasDocuments = getBookingDocumentRows(booking).length > 0;
+  const needsPickupDetail = bookingNeedsPickupDeliveryDetail(booking);
+  if (hasDocuments && !needsPickupDetail) {
     return booking;
   }
 
@@ -956,6 +1016,9 @@ export async function resolveBookingRecordForJobCreate(
         : null;
     if (!detail) return booking;
 
+    if (hasDocuments) {
+      return { ...booking, ...pickupDeliveryFieldsFromBooking(detail) };
+    }
     return { ...booking, ...detail };
   } catch (err) {
     console.error("Error fetching booking for job create documents:", err);
@@ -1024,6 +1087,7 @@ function buildAirHousing(
       : [],
     events: mapBookingEventsForJob(booking),
     ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
+    ...housePickupDeliveryPayload(readHousePickupDelivery(booking)),
   };
 }
 
@@ -1087,6 +1151,7 @@ function buildOceanHousing(
     cargo_details: mapCargoDetails(booking),
     events: mapBookingEventsForJob(booking),
     ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
+    ...housePickupDeliveryPayload(readHousePickupDelivery(booking)),
   };
 
   const profile = getOceanBookingChargeProfile(mode, booking);

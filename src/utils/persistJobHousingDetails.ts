@@ -610,6 +610,11 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     payload.document_ids = job.document_ids;
   }
 
+  const carriedBoeNo = firstFilled(mbl.boe_no, job.boe_no);
+  if (carriedBoeNo != null && String(carriedBoeNo).trim() !== "") {
+    payload.boe_no = String(carriedBoeNo).trim();
+  }
+
   if (options?.clearOriginDestinationAgent) {
     payload.agent = null;
     // CHA master customs live on the consol. Forward them when present in

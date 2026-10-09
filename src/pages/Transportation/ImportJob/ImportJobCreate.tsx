@@ -76,6 +76,10 @@ import {
   HouseFreightCertificateMenuItem,
   useHouseFreightCertificatePreview,
 } from "../../jobs/pdf/HouseFreightCertificatePreview";
+import {
+  HouseTransportInstructionMenuItem,
+  useHouseTransportInstructionPreview,
+} from "../../jobs/pdf/HouseTransportInstructionPreview";
 import { generateDeliveryOrderPDF } from "../../jobs/pdf/DeliveryOrderPDFTemplate";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
@@ -105,6 +109,11 @@ import {
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {  } from "../../../utils/invoiceDocumentNumber";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  houseHasPickupDeliveryFields,
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+} from "../housePickupDelivery";
 import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
 import {
   getJobFormReadOnlyTabProps,
@@ -211,11 +220,15 @@ import {
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
 import {
+  dubaiBoeNumberPayload,
   emptyChaMasterCustoms,
   formatChaJobDateForPayload,
+  isDubaiBranchUser,
   pickChaMasterCustomsPayload,
   readChaMasterCustoms,
+  readStoredBoeNumber,
   resolveChaJobDate,
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
@@ -757,6 +770,15 @@ function ImportJobCreate() {
       openSendEmail();
     },
   });
+  const transportInstruction = useHouseTransportInstructionPreview({
+    housingId: null,
+    onSendEmail: (pdfBlobUrl, fileName) => {
+      setActivePdfBlob(pdfBlobUrl);
+      setActiveFileName(fileName);
+      setActiveDocumentLabel("Transport Instruction");
+      openSendEmail();
+    },
+  });
 
   // Accounts tab: invoice list from filter/invoice API
   const {
@@ -876,6 +898,7 @@ function ImportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
   const documentsReadOnly = isViewOnly;
 
   useChaJobEditHydration(
@@ -995,6 +1018,7 @@ function ImportJobCreate() {
           })
         : null,
       ...emptyChaMasterCustoms(),
+      boe_no: readStoredBoeNumber(location.state?.mblDetails, jobData),
       igm_no: "",
       igm_date: null,
       item_no: "",
@@ -1625,6 +1649,7 @@ function ImportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              ...readHousePickupDelivery(house),
               note: (house as { note?: unknown }).note
                 ? String((house as { note?: unknown }).note)
                 : "",
@@ -4395,6 +4420,9 @@ function ImportJobCreate() {
               chaConfig.serviceType,
             )
           : {}),
+        ...(showDubaiBoeNumber
+          ? dubaiBoeNumberPayload(mblDetailsForm.values.boe_no)
+          : {}),
         igm_no: mblDetailsForm.values.igm_no
           ? mblDetailsForm.values.igm_no.trim()
           : null,
@@ -4541,6 +4569,9 @@ function ImportJobCreate() {
               .notify1_customer_email ?? "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
+          ...(houseHasPickupDeliveryFields(house)
+            ? housePickupDeliveryPayload(house)
+            : {}),
           note: house.note || "",
           bl_type: house.bl_type || "",
           sub_item_no: house.sub_item_no || "",
@@ -5583,6 +5614,11 @@ function ImportJobCreate() {
 
             {/* IGM details row */}
             <Grid mb="xl">
+              <DubaiBoeNumberField
+                visible={showDubaiBoeNumber}
+                readOnly={isReadOnly}
+                form={mblDetailsForm}
+              />
               {!isChaMode && (
                 <Grid.Col span={3}>
                   <Dropdown
@@ -8097,6 +8133,13 @@ function ImportJobCreate() {
                               }
                             />
                           )}
+                          {house.id != null && Number(house.id) > 0 && !isChaMode && (
+                            <HouseTransportInstructionMenuItem
+                              onClick={() =>
+                                transportInstruction.openPreview(house.id)
+                              }
+                            />
+                          )}
                           <Menu.Item
                             leftSection={
                               <Box
@@ -8618,6 +8661,7 @@ function ImportJobCreate() {
       </Modal>
 
       {freightCertificate.modal}
+      {transportInstruction.modal}
       <SendPdfEmailModal
         opened={sendEmailOpened}
         onClose={closeSendEmail}

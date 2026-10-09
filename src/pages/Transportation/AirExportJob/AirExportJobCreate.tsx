@@ -80,6 +80,11 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { readJobFormActiveTabFromLocation } from "../../../utils/jobFinanceDocuments";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  houseHasPickupDeliveryFields,
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+} from "../housePickupDelivery";
 import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
 import {
   getJobFormReadOnlyTabProps,
@@ -192,11 +197,15 @@ import {
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
 import {
+  dubaiBoeNumberPayload,
   emptyChaMasterCustoms,
   formatChaJobDateForPayload,
+  isDubaiBranchUser,
   pickChaMasterCustomsPayload,
   readChaMasterCustoms,
+  readStoredBoeNumber,
   resolveChaJobDate,
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
@@ -660,6 +669,7 @@ function AirExportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
 
   useChaJobEditHydration(
     mode,
@@ -808,6 +818,7 @@ function AirExportJobCreate() {
               : null;
           })(),
       ...emptyChaMasterCustoms(),
+      boe_no: readStoredBoeNumber(location.state?.mawbDetails, jobData),
       shipper_id: location.state?.mawbDetails?.shipper_id || "",
       shipper_name:
         String(
@@ -1398,6 +1409,7 @@ function AirExportJobCreate() {
                 : "",
               is_agreed_charges: parseBoolean(house.is_agreed_charges),
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              ...readHousePickupDelivery(house),
               note: (house as { note?: unknown }).note
                 ? String((house as { note?: unknown }).note)
                 : "",
@@ -3172,6 +3184,9 @@ function AirExportJobCreate() {
               chaConfig.serviceType,
             )
           : {}),
+        ...(showDubaiBoeNumber
+          ? dubaiBoeNumberPayload(mawbDetailsForm.values.boe_no)
+          : {}),
         carrier_code: carrierDetailsForm.values.carrier_code,
         voyage_number: carrierDetailsForm.values.flight_number || null,
         mbl_date: carrierDetailsForm.values.mawb_date
@@ -3318,6 +3333,9 @@ function AirExportJobCreate() {
             handling_information: hawb.handling_information || null,
             is_agreed_charges: hawb.is_agreed_charges ?? false,
             marks_no: hawb.marks_no || null,
+            ...(houseHasPickupDeliveryFields(hawb)
+              ? housePickupDeliveryPayload(hawb)
+              : {}),
             note: hawb.note || "",
             sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
             ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
@@ -4297,6 +4315,11 @@ function AirExportJobCreate() {
               <ChaMasterCustomsFields
                 isChaMode={isChaMode}
                 serviceType={chaConfig?.serviceType}
+                readOnly={isReadOnly}
+                form={mawbDetailsForm}
+              />
+              <DubaiBoeNumberField
+                visible={showDubaiBoeNumber}
                 readOnly={isReadOnly}
                 form={mawbDetailsForm}
               />

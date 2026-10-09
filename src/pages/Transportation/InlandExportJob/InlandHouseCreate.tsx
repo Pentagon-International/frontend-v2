@@ -226,7 +226,7 @@ type HAWBDetailsForm = {
     eventType: string | null;
     eventDate: Date | null;
   }>;
-};
+} & HousePickupDeliveryFormValues;
 
 // Type definitions for cargo details
 type CargoDetail = {
@@ -343,6 +343,13 @@ const normalizePpCc = (value: unknown): string => {
   if (raw === "CC" || raw === "COLLECT") return "Collect";
   return "";
 };
+
+import { HousePickupDeliveryFields } from "../HousePickupDeliveryFields";
+import {
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+  type HousePickupDeliveryFormValues,
+} from "../housePickupDelivery";
 
 function HouseCreate() {
   const navigate = useNavigate();
@@ -735,6 +742,7 @@ function HouseCreate() {
           ?.notify2_customer_email ?? "",
       commodity_description: editData?.commodity_description || "",
       marks_no: editData?.marks_no || "",
+      ...readHousePickupDelivery(editData),
       note: (editData as { note?: string } | undefined)?.note || "",
       sub_item_no:
         (editData as { sub_item_no?: string } | undefined)?.sub_item_no || "",
@@ -1118,6 +1126,7 @@ function HouseCreate() {
             .notify2_customer_email ?? "",
         commodity_description: editData.commodity_description || "",
         marks_no: editData.marks_no || "",
+        ...readHousePickupDelivery(editData),
         note: (editData as { note?: string }).note || "",
         ref_no: (editData as { ref_no?: string }).ref_no || "",
       });
@@ -2495,6 +2504,7 @@ function HouseCreate() {
       notify2_customer_email: v.notify2_customer_email,
       commodity_description: v.commodity_description,
       marks_no: v.marks_no,
+      ...housePickupDeliveryPayload(v),
       note: v.note || "",
       sub_item_no: v.sub_item_no,
       ref_no: v.ref_no,
@@ -2798,6 +2808,7 @@ function HouseCreate() {
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
+      ...housePickupDeliveryPayload(form.values),
         note: form.values.note || "",
         cargo_details: cargoDetails.map((cargo) => ({
           no_of_packages: cargo.no_of_packages,
@@ -3270,6 +3281,20 @@ function HouseCreate() {
             Cargo Details
           </Tabs.Tab>
           <Tabs.Tab
+            value="5"
+            style={{
+              textAlign: "center",
+              padding: "12px",
+              backgroundColor: "transparent",
+              borderBottom: active === 5 ? "3px solid #105476" : "none",
+              color: "#105476",
+              fontSize: 16,
+              fontWeight: active === 5 ? 600 : 400,
+            }}
+          >
+            Pickup & Delivery
+          </Tabs.Tab>
+          <Tabs.Tab
             value="3"
             style={{
               textAlign: "center",
@@ -3300,6 +3325,10 @@ function HouseCreate() {
             </Tabs.Tab>
           )}
         </Tabs.List>
+
+        <Tabs.Panel value="5">
+          <HousePickupDeliveryFields form={form} readOnly={isReadOnly} />
+        </Tabs.Panel>
 
         <Tabs.Panel value="0">
           <Group align="center" mb="xs">

@@ -77,6 +77,11 @@ import { JobReverseInvoiceAccountMenu } from "../../../components/JobReverseInvo
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { readJobFormActiveTabFromLocation } from "../../../utils/jobFinanceDocuments";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
+import {
+  houseHasPickupDeliveryFields,
+  housePickupDeliveryPayload,
+  readHousePickupDelivery,
+} from "../housePickupDelivery";
 import { isJobClosed, isJobOpenedAsView } from "../../../utils/closeJob";
 import {
   getJobFormReadOnlyTabProps,
@@ -190,11 +195,15 @@ import {
 import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
+import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
 import {
+  dubaiBoeNumberPayload,
   emptyChaMasterCustoms,
   formatChaJobDateForPayload,
+  isDubaiBranchUser,
   pickChaMasterCustomsPayload,
   readChaMasterCustoms,
+  readStoredBoeNumber,
   resolveChaJobDate,
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
@@ -843,6 +852,7 @@ function ExportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
 
   useChaJobEditHydration(
     mode,
@@ -963,6 +973,7 @@ function ExportJobCreate() {
           })
         : null,
       ...emptyChaMasterCustoms(),
+      boe_no: readStoredBoeNumber(location.state?.mblDetails, jobData),
       shipper_id: "",
       shipper_name: "",
       shipper_email: "",
@@ -1473,6 +1484,7 @@ function ExportJobCreate() {
                 ? String(house.commodity_description)
                 : "",
               marks_no: house.marks_no ? String(house.marks_no) : "",
+              ...readHousePickupDelivery(house),
               note: (house as { note?: unknown }).note
                 ? String((house as { note?: unknown }).note)
                 : "",
@@ -3734,6 +3746,9 @@ function ExportJobCreate() {
               chaConfig.serviceType,
             )
           : {}),
+        ...(showDubaiBoeNumber
+          ? dubaiBoeNumberPayload(mblDetailsForm.values.boe_no)
+          : {}),
         is_direct: mblDetailsForm.values.is_direct,
         carrier_code: carrierDetailsForm.values.carrier_code,
         vessel_name: carrierDetailsForm.values.vessel_name || null,
@@ -3860,6 +3875,9 @@ function ExportJobCreate() {
           notify2_customer_email: house.notify2_customer_email ?? "",
           commodity_description: house.commodity_description || "",
           marks_no: house.marks_no || "",
+          ...(houseHasPickupDeliveryFields(house)
+            ? housePickupDeliveryPayload(house)
+            : {}),
           note: house.note || "",
           bl_type: house.bl_type || "",
           sub_item_no: house.sub_item_no || "",
@@ -4873,6 +4891,11 @@ function ExportJobCreate() {
 
             {/* Direct */}
             <Grid mb="sm">
+              <DubaiBoeNumberField
+                visible={showDubaiBoeNumber}
+                readOnly={isReadOnly}
+                form={mblDetailsForm}
+              />
               {!isChaMode && (
                 <Grid.Col span={3}>
                   <Dropdown
