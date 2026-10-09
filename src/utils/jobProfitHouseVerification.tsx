@@ -603,6 +603,7 @@ export function canShowConfirmProfit(params: {
 }
 
 export type JobProfitBrokerageAccessUser = {
+  is_staff?: boolean | null;
   is_salesperson?: boolean | null;
   pricing_brokerage?: boolean | null;
   accounts?: boolean | null;
@@ -613,6 +614,22 @@ export type JobProfitBrokerageAccessUser = {
     pricing_brokerage?: boolean | null;
   } | null;
 } | null | undefined;
+
+function isJobProfitAdminUser(user: JobProfitBrokerageAccessUser): boolean {
+  if (!user) return false;
+  if (user.is_staff === true) return true;
+  const roleCode = String(user.role_code ?? "")
+    .trim()
+    .toUpperCase();
+  const roleName = String(user.role ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    roleCode === "ADMIN" ||
+    roleName === "admin" ||
+    roleName.includes("admin")
+  );
+}
 
 function isJobProfitSalespersonUser(user: JobProfitBrokerageAccessUser): boolean {
   if (!user) return false;
@@ -635,7 +652,7 @@ function isJobProfitSalespersonUser(user: JobProfitBrokerageAccessUser): boolean
   );
 }
 
-/** Salesperson, pricing_brokerage, or accounts may see and add brokerage. */
+/** Admin, salesperson, pricing_brokerage, or accounts may see and add brokerage. */
 export function canManageJobProfitBrokerage(
   user: JobProfitBrokerageAccessUser,
 ): boolean {
@@ -647,7 +664,12 @@ export function canManageJobProfitBrokerage(
     user.accounts === true ||
     user.is_accounts === true ||
     isAccountsUser(user);
-  return isJobProfitSalespersonUser(user) || pricingBrokerage || accounts;
+  return (
+    isJobProfitAdminUser(user) ||
+    isJobProfitSalespersonUser(user) ||
+    pricingBrokerage ||
+    accounts
+  );
 }
 
 /** Brokerage can be added after verify and before confirm. */

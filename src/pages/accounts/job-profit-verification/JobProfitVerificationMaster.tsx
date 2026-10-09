@@ -991,7 +991,7 @@ export default function JobProfitVerificationMaster({
 
   const loading = isLoading || isFetching || isRestoring;
   const tableColumnCount =
-    (isApprovalMode ? 19 : 21) + (showBrokerageColumn ? 1 : 0);
+    (isApprovalMode ? 19 : 21) + (showBrokerageColumn ? 2 : 0);
   const tdPad = { padding: "10px 12px" as const };
   const tdDate = erpListBookingMasterDateTd(theme);
   const mergeTh = (minW: number, widthPx: number) => ({
@@ -1604,7 +1604,10 @@ export default function JobProfitVerificationMaster({
                       <th style={listAmountThStyle}>Revenue</th>
                       <th style={listAmountThStyle}>Profit</th>
                       {showBrokerageColumn ? (
-                        <th style={listAmountThStyle}>Brokerage</th>
+                        <>
+                          <th style={listAmountThStyle}>Brokerage</th>
+                          <th style={mergeTh(180, 180)}>Brokerage Remark</th>
+                        </>
                       ) : null}
                       <th style={listGpPctThStyle}>GP (%)</th>
                       <th style={mergeTh(isApprovalMode ? 90 : 180, isApprovalMode ? 90 : 180)}>
@@ -1794,83 +1797,62 @@ export default function JobProfitVerificationMaster({
                             </Text>
                           </td>
                           {showBrokerageColumn ? (
-                            <td style={listAmountTdStyle}>
-                              {(() => {
-                                const brokerageRemark =
-                                  row.brokerage_remark?.trim() || "";
-                                const canAddBrokerage =
-                                  !isApprovalMode &&
-                                  canUpdateBrokerage({
-                                    status: row.status,
-                                    allowBrokerage: true,
-                                  }) &&
-                                  !hasExistingBrokerage(row.brokerage);
-                                const amountNode = (
-                                  <Text size="sm" fw={600} c={fg}>
-                                    {formatBrokerageAmount(
-                                      row.brokerage,
-                                      currency,
-                                    )}
-                                  </Text>
-                                );
-                                return (
-                                  <Stack gap={4}>
-                                    {brokerageRemark ? (
-                                      <Tooltip
-                                        label={brokerageRemark}
-                                        multiline
-                                        maw={360}
-                                        withArrow
-                                        styles={{
-                                          tooltip: {
-                                            fontFamily: theme.fontSans,
-                                            fontSize: 12,
-                                            whiteSpace: "pre-wrap",
-                                          },
-                                        }}
-                                      >
-                                        {amountNode}
-                                      </Tooltip>
-                                    ) : (
-                                      amountNode
-                                    )}
-                                    {brokerageRemark ? (
-                                      <Text
-                                        size="xs"
-                                        c={muted}
-                                        style={{
-                                          maxWidth: 160,
-                                          whiteSpace: "normal",
-                                          wordBreak: "break-word",
-                                        }}
-                                      >
-                                        {brokerageRemark}
+                            <>
+                              <td style={listAmountTdStyle}>
+                                {(() => {
+                                  const canAddBrokerage =
+                                    !isApprovalMode &&
+                                    canUpdateBrokerage({
+                                      status: row.status,
+                                      allowBrokerage: true,
+                                    }) &&
+                                    !hasExistingBrokerage(row.brokerage);
+                                  return (
+                                    <Stack gap={4}>
+                                      <Text size="sm" fw={600} c={fg}>
+                                        {formatBrokerageAmount(
+                                          row.brokerage,
+                                          currency,
+                                        )}
                                       </Text>
-                                    ) : null}
-                                    {canAddBrokerage ? (
-                                      <Button
-                                        size="compact-xs"
-                                        variant="subtle"
-                                        onClick={() =>
-                                          handleAddBrokerage(row)
-                                        }
-                                        styles={{
-                                          root: {
-                                            fontFamily: theme.fontSans,
-                                            fontWeight: 600,
-                                            color: primary,
-                                            paddingInline: 0,
-                                            height: "auto",
-                                          },
-                                        }}
-                                      >
-                                        Add Brokerage
-                                      </Button>
-                                    ) : null}
-                                  </Stack>
-                                );
-                              })()}
-                            </td>
+                                      {canAddBrokerage ? (
+                                        <Button
+                                          size="compact-xs"
+                                          variant="subtle"
+                                          onClick={() =>
+                                            handleAddBrokerage(row)
+                                          }
+                                          styles={{
+                                            root: {
+                                              fontFamily: theme.fontSans,
+                                              fontWeight: 600,
+                                              color: primary,
+                                              paddingInline: 0,
+                                              height: "auto",
+                                            },
+                                          }}
+                                        >
+                                          Add Brokerage
+                                        </Button>
+                                      ) : null}
+                                    </Stack>
+                                  );
+                                })()}
+                              </td>
+                              <td style={tdPad}>
+                                <Text
+                                  size="sm"
+                                  c={row.brokerage_remark?.trim() ? fg : muted}
+                                  style={{
+                                    maxWidth: 220,
+                                    whiteSpace: "normal",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {row.brokerage_remark?.trim() || "—"}
+                                </Text>
+                              </td>
+                            </>
                           ) : null}
                           <td style={listGpPctTdStyle}>
                             <SignedValueBadge
@@ -1898,48 +1880,17 @@ export default function JobProfitVerificationMaster({
                           </td>
                           {isApprovalMode ? (
                             <td style={tdPad}>
-                              {(() => {
-                                const holdRemark =
-                                  row.hold_remark?.trim() || "";
-                                const brokerageRemark =
-                                  row.brokerage_remark?.trim() || "";
-                                const remarkNode = (
-                                  <Text
-                                    size="sm"
-                                    c={holdRemark ? fg : muted}
-                                    style={{
-                                      maxWidth: 280,
-                                      whiteSpace: "normal",
-                                      wordBreak: "break-word",
-                                      cursor: brokerageRemark
-                                        ? "default"
-                                        : undefined,
-                                    }}
-                                  >
-                                    {holdRemark || "—"}
-                                  </Text>
-                                );
-                                if (!brokerageRemark || !showBrokerageColumn) {
-                                  return remarkNode;
-                                }
-                                return (
-                                  <Tooltip
-                                    label={brokerageRemark}
-                                    multiline
-                                    maw={360}
-                                    withArrow
-                                    styles={{
-                                      tooltip: {
-                                        fontFamily: theme.fontSans,
-                                        fontSize: 12,
-                                        whiteSpace: "pre-wrap",
-                                      },
-                                    }}
-                                  >
-                                    {remarkNode}
-                                  </Tooltip>
-                                );
-                              })()}
+                              <Text
+                                size="sm"
+                                c={row.hold_remark?.trim() ? fg : muted}
+                                style={{
+                                  maxWidth: 280,
+                                  whiteSpace: "normal",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {row.hold_remark?.trim() || "—"}
+                              </Text>
                             </td>
                           ) : null}
                           {!isApprovalMode ? (

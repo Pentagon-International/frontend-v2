@@ -8,6 +8,8 @@ import {
   resolveGlobalSearchItemLocation,
   runGlobalSearchQuery,
   type GlobalSearchItem,
+  type GlobalSearchNavigateOptions,
+  type ResolvedDocumentLocation,
 } from "./globalSearchNavigation";
 
 const normalizeSourceKey = (value: string): string =>
@@ -71,6 +73,120 @@ function pathWithViewMode(path: string, statusUpper: string): string {
   return path.replace(/\/edit(?=\/|$)/, "/view");
 }
 
+export type OpenDocumentInNewTabResult =
+  | "opened"
+  | "multiple"
+  | "not_found"
+  | "blocked"
+  | "error";
+
+function closeTab(tab: Window | null) {
+  if (!tab) return;
+  try {
+    tab.close();
+  } catch {
+    // ignore
+  }
+}
+
+function assignResolvedDocumentToTab(
+  tab: Window,
+  resolved: ResolvedDocumentLocation,
+  stashState = false,
+): void {
+  const statusUpper = String(
+    resolved.state.status ??
+      resolved.state.document_status ??
+      resolved.state.approved ??
+      "",
+  )
+    .trim()
+    .toUpperCase();
+
+  let path = pathWithViewMode(resolved.path, statusUpper);
+  const state = {
+    ...resolved.state,
+    actionType: statusUpper === "POSTED" ? "view" : "edit",
+  };
+
+  const isIdInPath = /\/(?:edit|view)\/\d+\/?$/.test(path);
+  if (!isIdInPath || stashState) {
+    const key = stashOpenedDocumentState(state);
+    const joiner = path.includes("?") ? "&" : "?";
+    path = `${path}${joiner}${ALLOC_DOC_OPEN_QUERY}=${encodeURIComponent(key)}`;
+  }
+
+  tab.location.href = new window.URL(path, window.location.origin).toString();
+  try {
+    tab.opener = null;
+  } catch {
+    // ignore
+  }
+}
+
+/** Opens one global-search document in a new tab. Call from a click handler. */
+export async function openGlobalSearchItemInNewTab(
+  item: GlobalSearchItem,
+  options?: GlobalSearchNavigateOptions,
+): Promise<OpenDocumentInNewTabResult> {
+  const newTab = window.open("about:blank", "_blank");
+  if (!newTab) return "blocked";
+
+  try {
+    const resolved = await resolveGlobalSearchItemLocation(item, options);
+    if (!resolved) {
+      closeTab(newTab);
+      return "not_found";
+    }
+    assignResolvedDocumentToTab(newTab, resolved, true);
+    return "opened";
+  } catch (e) {
+    console.error("Failed to open document in a new tab", e);
+    closeTab(newTab);
+    return "error";
+  }
+}
+
+/**
+ * Resolves a document number and opens it in a new tab.
+ * The blank tab is opened immediately so the browser treats it as a user gesture.
+ */
+export async function openSearchedDocumentInNewTab(
+  documentNo: string,
+  options?: GlobalSearchNavigateOptions,
+): Promise<OpenDocumentInNewTabResult> {
+  const query = documentNo.trim();
+  if (!query) return "not_found";
+
+  const newTab = window.open("about:blank", "_blank");
+  if (!newTab) return "blocked";
+
+  try {
+    const normalized = await runGlobalSearchQuery(query);
+    const items = globalSearchItemsFromResponse(normalized);
+    if (items.length === 0) {
+      closeTab(newTab);
+      return "not_found";
+    }
+    if (items.length > 1) {
+      closeTab(newTab);
+      return "multiple";
+    }
+
+    const resolved = await resolveGlobalSearchItemLocation(items[0], options);
+    if (!resolved) {
+      closeTab(newTab);
+      return "not_found";
+    }
+    assignResolvedDocumentToTab(newTab, resolved, true);
+    return "opened";
+  } catch (e) {
+    console.error("Failed to open document in a new tab", e);
+    closeTab(newTab);
+    return "error";
+  }
+}
+
 /**
  * Opens an allocation source document in a new tab (same stash/hydrator pattern
  * as Document Allocation).
@@ -122,47 +238,11 @@ export async function openAllocationSourceDocumentInNewTab(
         type: "warning",
         message: "Navigation is not configured for this document type.",
       });
-      try {
-        newTab.close();
-      } catch {
-        // ignore
-      }
+      closeTab(newTab);
       return;
     }
 
-    const statusUpper = String(
-      resolved.state.status ??
-        resolved.state.document_status ??
-        resolved.state.approved ??
-        "",
-    )
-      .trim()
-      .toUpperCase();
-
-    let path = pathWithViewMode(resolved.path, statusUpper);
-    const state = {
-      ...resolved.state,
-      actionType: statusUpper === "POSTED" ? "view" : "edit",
-    };
-
-    // Id-in-path routes (invoice, JV, …) load by URL; others need allocOpen stash
-    // (receipt / payment / overseas / reversals / supplier invoice), same as Document Allocation.
-    const isIdInPath = /\/(?:edit|view)\/\d+\/?$/.test(path);
-    if (!isIdInPath) {
-      const key = stashOpenedDocumentState(state);
-      const joiner = path.includes("?") ? "&" : "?";
-      path = `${path}${joiner}${ALLOC_DOC_OPEN_QUERY}=${encodeURIComponent(key)}`;
-    }
-
-    newTab.location.href = new window.URL(
-      path,
-      window.location.origin,
-    ).toString();
-    try {
-      newTab.opener = null;
-    } catch {
-      // ignore
-    }
+    assignResolvedDocumentToTab(newTab, resolved);
   } catch (e) {
     console.error("Failed to open allocation source document", e);
     ToastNotification({

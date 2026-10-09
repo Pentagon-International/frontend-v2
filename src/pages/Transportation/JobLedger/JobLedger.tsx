@@ -55,6 +55,10 @@ import {
   runGlobalSearchQuery,
 } from "../../../utils/globalSearchNavigation";
 import {
+  openGlobalSearchItemInNewTab,
+  openSearchedDocumentInNewTab,
+} from "../../../utils/openAllocationSourceDocument";
+import {
   canManageJobProfitBrokerage,
   canShowConfirmProfit,
   canShowSalespersonVerify,
@@ -73,7 +77,6 @@ import {
   saveJobProfitBrokerage,
 } from "../../../utils/jobProfitHouseVerification";
 import useAuthStore from "../../../store/authStore";
-import { isAccountsUser } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
 import { getDefaultBranchCurrencyCode } from "../../../utils/userNumberFormat";
@@ -188,33 +191,6 @@ type JobLedgerApiResponse = {
   brokerage?: JobLedgerBrokerageRow[];
   data?: JobLedgerApiRow[];
 };
-
-function isSalespersonUser(
-  user: {
-    role_code?: string | null;
-    role?: string | null;
-    is_salesperson?: boolean | null;
-  } | null,
-): boolean {
-  if (!user) return false;
-  if (user.is_salesperson) return true;
-  const roleCode = String(user.role_code ?? "")
-    .trim()
-    .toUpperCase();
-  const roleName = String(user.role ?? "")
-    .trim()
-    .toLowerCase();
-  if (roleCode === "S" || roleCode === "SM" || roleCode === "SALES") {
-    return true;
-  }
-  return (
-    roleName === "salesman" ||
-    roleName === "salesperson" ||
-    roleName === "sales" ||
-    roleName.includes("salesman") ||
-    roleName.includes("salesperson")
-  );
-}
 
 function BrokerageSummary({
   amount,
@@ -519,19 +495,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
     profitIsSales === true;
-  const isPricingUser = profitIsSales === false;
-  const canViewBrokerage = fromProfitVerification
-    ? canManageBrokerage || profitIsSales === true
-    : Boolean(user?.is_staff) ||
-      isAccountsUser(user) ||
-      (!isPricingUser &&
-        (profitIsSales === true ||
-          isSalespersonUser({
-            role_code: user?.role_code,
-            role: user?.role,
-            is_salesperson: (user as { is_salesperson?: boolean } | null)
-              ?.is_salesperson,
-          })));
+  const canViewBrokerage = fromProfitVerification && canManageBrokerage;
   const brokerageDisplay =
     brokerageAmount != null &&
     String(brokerageAmount).trim() !== "" &&
@@ -763,6 +727,41 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
 
       setDocumentNavLoading(true);
       try {
+        if (fromProfitVerification) {
+          const opened = await openSearchedDocumentInNewTab(
+            query,
+            getDocumentNavigationOptions(),
+          );
+          if (opened === "opened") return;
+          if (opened === "blocked") {
+            ToastNotification({
+              type: "warning",
+              message:
+                "Popup blocked. Please allow popups to open the document in a new tab.",
+            });
+            return;
+          }
+          if (opened === "multiple") {
+            const normalized = await runGlobalSearchQuery(query);
+            const items = globalSearchItemsFromResponse(normalized);
+            setDocumentSearchResults(items);
+            setDocumentSearchModalOpen(true);
+            return;
+          }
+          if (opened === "not_found") {
+            ToastNotification({
+              type: "warning",
+              message: "No document found for this document number.",
+            });
+            return;
+          }
+          ToastNotification({
+            type: "error",
+            message: "Failed to open document. Please try again.",
+          });
+          return;
+        }
+
         const result = await navigateFromGlobalSearchDocumentNo(
           navigate,
           query,
@@ -795,7 +794,12 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         setDocumentNavLoading(false);
       }
     },
-    [documentNavLoading, getDocumentNavigationOptions, navigate],
+    [
+      documentNavLoading,
+      fromProfitVerification,
+      getDocumentNavigationOptions,
+      navigate,
+    ],
   );
 
   const handleDocumentSearchResultPick = useCallback(
@@ -803,6 +807,30 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       setDocumentSearchModalOpen(false);
       setDocumentNavLoading(true);
       try {
+        if (fromProfitVerification) {
+          const opened = await openGlobalSearchItemInNewTab(
+            item,
+            getDocumentNavigationOptions(),
+          );
+          if (opened === "opened") return;
+          if (opened === "blocked") {
+            ToastNotification({
+              type: "warning",
+              message:
+                "Popup blocked. Please allow popups to open the document in a new tab.",
+            });
+            return;
+          }
+          ToastNotification({
+            type: opened === "not_found" ? "warning" : "error",
+            message:
+              opened === "not_found"
+                ? "Navigation is not configured for this document type."
+                : "Failed to open document. Please try again.",
+          });
+          return;
+        }
+
         const ok = await openGlobalSearchItem(
           navigate,
           item,
@@ -824,7 +852,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         setDocumentSearchResults([]);
       }
     },
-    [getDocumentNavigationOptions, navigate],
+    [fromProfitVerification, getDocumentNavigationOptions, navigate],
   );
 
   // Filter functions
@@ -1619,6 +1647,11 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       c="#105476"
                       td="underline"
                       style={{ fontFamily: "Inter", display: "block" }}
+                      onClick={(event) => {
+                        if (!fromProfitVerification) return;
+                        event.preventDefault();
+                        window.open(href, "_blank", "noopener,noreferrer");
+                      }}
                     >
                       {name}
                     </Anchor>
@@ -1849,7 +1882,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         },
       },
     ],
-    [amountColumnLabel, handleDocumentNumberClick],
+    [amountColumnLabel, fromProfitVerification, handleDocumentNumberClick],
   );
 
   const tableMinWidth = useMemo(
@@ -2263,12 +2296,6 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             Job Ledger
           </Text>
           <Group gap="md" align="flex-start">
-            {canViewBrokerage && !fromProfitVerification && (
-              <BrokerageSummary
-                amount={brokerageDisplay}
-                confirmedBy={!isSalespersonLogin ? confirmedByDetails : null}
-              />
-            )}
             {fromProfitVerification && Boolean(profitShipmentId) && (
               <Stack gap={4}>
                 {(canViewBrokerage ||
