@@ -373,7 +373,7 @@ export default function ChequeClearance() {
       accountCode: null,
       subledger: "0",
       chequeNo: "",
-      chequeStatus: "CLEARED",
+      chequeStatus: "UNCLEARED",
     },
     validate: yupResolver(filterSchema),
     validateInputOnBlur: true,
@@ -466,7 +466,7 @@ export default function ChequeClearance() {
       accountCode: null,
       subledger: "0",
       chequeNo: "",
-      chequeStatus: "CLEARED",
+      chequeStatus: "UNCLEARED",
     });
     form.clearErrors();
     setSelectedAccount(null);
@@ -1040,7 +1040,7 @@ export default function ChequeClearance() {
                       data={CHEQUE_STATUS_OPTIONS}
                       value={form.values.chequeStatus}
                       onChange={(value) =>
-                        form.setFieldValue("chequeStatus", value || "CLEARED")
+                        form.setFieldValue("chequeStatus", value || "UNCLEARED")
                       }
                       withAsterisk
                       size="xs"
