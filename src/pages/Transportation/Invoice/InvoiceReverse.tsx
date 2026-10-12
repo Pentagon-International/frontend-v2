@@ -816,6 +816,58 @@ function pickDrCrRaw(
   return String(raw);
 }
 
+/**
+ * Source document for a new reverse is a credit note.
+ * Credit note header is Cr and its charges are Dr. Invoice header is Dr.
+ * Does not treat a saved invoice reversal (header Cr after inversion) as a credit note.
+ */
+function isCreditNoteBeingReversed(
+  data: {
+    document_type?: unknown;
+    day_book_type?: unknown;
+    dr_cr?: string | null;
+    Dr_cr?: string | null;
+    Dr_Cr?: string | null;
+    charges?: Array<{
+      dr_cr?: string | null;
+      Dr_Cr?: string | null;
+      charge_tax?: boolean | null;
+      is_tax_row?: boolean;
+      charge_code?: string | null;
+      charge_name?: string | null;
+    }>;
+  } | null | undefined,
+  navState: unknown,
+): boolean {
+  if (isCreditNoteSourceDocument(data, navState)) return true;
+  const rec =
+    navState && typeof navState === "object"
+      ? (navState as Record<string, unknown>)
+      : {};
+  const book = String(data?.day_book_type ?? rec.day_book_type ?? "")
+    .trim()
+    .toUpperCase();
+  if (book === "CRN") return true;
+  if (book === "INV") return false;
+  const header = String(pickDrCrRaw(data ?? {}) ?? "")
+    .trim()
+    .toLowerCase();
+  if (header !== "cr") return false;
+  const charges = (data?.charges ?? []).filter(
+    (charge) =>
+      charge.charge_tax !== true &&
+      !isReverseTaxChargeRow({
+        is_tax_row: charge.is_tax_row === true,
+        charge_code: charge.charge_code,
+        charge_name: charge.charge_name,
+      }),
+  );
+  return (
+    charges.length > 0 &&
+    charges.every((charge) => resolveChargeDrCr(charge) === "Dr")
+  );
+}
+
 function resolveHeaderDrCr(
   value: string | null | undefined,
   emptyFallback: "Dr" | "Cr" = "Cr",
@@ -977,6 +1029,7 @@ type ReversableDataResponse = {
   day_book_type?: string;
   daybook_id?: number;
   daybook_name?: string;
+  document_type?: string;
   document_no?: string;
   reverse_document_no?: string;
   document_date?: string;
@@ -1452,9 +1505,16 @@ function InvoiceReverse() {
     if (editingExisting) return false;
     return isCreditNoteSourceDocument(null, st);
   });
-  const totalsNetDirection: TotalsNetDirection = isCreditNoteReversal
-    ? "crMinusDr"
-    : "drMinusCr";
+  /** New reverse of a credit note. Tax rows use this even when other reversal Dr/Cr stays unchanged. */
+  const creditNoteSourceRef = useRef(false);
+  const [creditNoteReversalTotals, setCreditNoteReversalTotals] = useState(
+    () => isCreditNoteReversal,
+  );
+  // Invoice reversal nets Dr − Cr. Credit note reversal nets Cr − Dr.
+  const totalsNetDirection: TotalsNetDirection =
+    isCreditNoteReversal || creditNoteReversalTotals
+      ? "crMinusDr"
+      : "drMinusCr";
   const headerDrCr: "Dr" | "Cr" = isCreditNoteReversal ? "Dr" : "Cr";
   const chargeDefaultDrCr: "Dr" | "Cr" = isCreditNoteReversal ? "Cr" : "Dr";
   const [chargesTabActive, setChargesTabActive] = useState<string>("charges");
@@ -2224,6 +2284,9 @@ function InvoiceReverse() {
       invoice_document_no?: string;
     } | null;
     const st = location.state as NavState;
+    const creditNoteFromNav = isCreditNoteSourceDocument(null, st);
+    creditNoteSourceRef.current = creditNoteFromNav;
+    setCreditNoteReversalTotals(creditNoteFromNav);
     if (st?.financeReverseRecord) {
       setReversalRecordData(st.financeReverseRecord as Record<string, unknown>);
     }
@@ -2252,9 +2315,11 @@ function InvoiceReverse() {
           }
           const loaded = data as ReversableDataResponse;
           // Existing reverse: header Dr means this was a credit-note reversal.
-          setIsCreditNoteReversal(
-            String(loaded.Dr_Cr ?? "").toLowerCase() === "dr",
-          );
+          const creditNoteReversal =
+            String(loaded.Dr_Cr ?? "").toLowerCase() === "dr";
+          creditNoteSourceRef.current = creditNoteReversal;
+          setCreditNoteReversalTotals(creditNoteReversal);
+          setIsCreditNoteReversal(creditNoteReversal);
           enableChargeAmountAutoCalcRef.current = false;
           applyReversableDataToReverseForm(loaded, form, {
             setIsAgentInvoice,
@@ -2319,6 +2384,9 @@ function InvoiceReverse() {
         const data = ((res as { data?: ReversableDataResponse })?.data ??
           res) as ReversableDataResponse;
         const isCnSource = isCreditNoteSourceDocument(data, st);
+        const creditNoteSource = isCreditNoteBeingReversed(data, st);
+        creditNoteSourceRef.current = creditNoteSource;
+        setCreditNoteReversalTotals(creditNoteSource);
         setIsCreditNoteReversal(isCnSource);
         enableChargeAmountAutoCalcRef.current = false;
         applyReversableDataToReverseForm(data, form, {
@@ -2465,7 +2533,12 @@ function InvoiceReverse() {
         localCurrencyCode,
         currencyId,
       );
-      const taxRowDrCr = chargeDefaultDrCr;
+      // Credit note tax rows are Dr. Credit-note reversal sends the opposite (Cr).
+      // Invoice reversal keeps chargeDefaultDrCr and is not changed here.
+      const taxRowDrCr: "Dr" | "Cr" =
+        isCreditNoteReversal || creditNoteSourceRef.current
+          ? "Cr"
+          : chargeDefaultDrCr;
 
       // Same as InvoiceCreate: resolve GST rates at post time (cache or refetch).
       const gstRatesForCharges: (GstRates | null)[] =
