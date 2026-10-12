@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { MRT_PaginationState } from "mantine-react-table";
 import {
   ActionIcon,
@@ -251,7 +258,9 @@ function serializeFiltersForStore(
     date_from: filters.date_from
       ? dayjs(filters.date_from).format("YYYY-MM-DD")
       : null,
-    date_to: filters.date_to ? dayjs(filters.date_to).format("YYYY-MM-DD") : null,
+    date_to: filters.date_to
+      ? dayjs(filters.date_to).format("YYYY-MM-DD")
+      : null,
   };
 }
 
@@ -482,9 +491,8 @@ export default function JobProfitVerificationMaster({
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 1000);
   const [showFilters, setShowFilters] = useState(false);
-  const [draftFilters, setDraftFilters] = useState<JobProfitVerificationFilters>(
-    () => createDefaultFilters(mode),
-  );
+  const [draftFilters, setDraftFilters] =
+    useState<JobProfitVerificationFilters>(() => createDefaultFilters(mode));
   const [appliedFilters, setAppliedFilters] =
     useState<JobProfitVerificationFilters>(() => createDefaultFilters(mode));
   const [isRestoring, setIsRestoring] = useState(true);
@@ -508,7 +516,10 @@ export default function JobProfitVerificationMaster({
     return () => observer.disconnect();
   }, []);
 
-  const openHeaderEditor = useCallback((id: string) => setEditingHeaderId(id), []);
+  const openHeaderEditor = useCallback(
+    (id: string) => setEditingHeaderId(id),
+    [],
+  );
   const collapseHeaderEditor = useCallback(
     (id: string) => setEditingHeaderId((cur) => (cur === id ? null : cur)),
     [],
@@ -674,7 +685,14 @@ export default function JobProfitVerificationMaster({
       setShouldRestore(LIST_KEY, true);
       navigate(path, { state });
     },
-    [LIST_KEY, appliedFilters, navigate, persistFiltersToStore, search, setShouldRestore],
+    [
+      LIST_KEY,
+      appliedFilters,
+      navigate,
+      persistFiltersToStore,
+      search,
+      setShouldRestore,
+    ],
   );
 
   const handleOpenHouseLedger = useCallback(
@@ -706,6 +724,23 @@ export default function JobProfitVerificationMaster({
         confirmed_by: row.confirmed_by ?? null,
         confirmed_at: row.confirmed_at ?? null,
         fromJobProfitVerification: true,
+        jobReturnTo: listReturnPath,
+      });
+    },
+    [listReturnPath, persistListAndNavigate],
+  );
+
+  const handleOpenMasterLedger = useCallback(
+    (row: JobProfitRow) => {
+      const jobNo = row.job_no?.trim();
+      if (!jobNo) return;
+
+      const ledgerJobId = stripJobIdServicePrefix(jobNo);
+
+      // Master ledger omits house identifiers (hbl_hawb_no / shipment_id).
+      persistListAndNavigate("/job-ledger", {
+        jobId: ledgerJobId,
+        job_id: ledgerJobId,
         jobReturnTo: listReturnPath,
       });
     },
@@ -930,7 +965,10 @@ export default function JobProfitVerificationMaster({
       isStaff,
     ],
     queryFn: async () => {
-      const filtersPayload = buildFiltersPayload(appliedFilters, debouncedSearch);
+      const filtersPayload = buildFiltersPayload(
+        appliedFilters,
+        debouncedSearch,
+      );
       const response = (await apiCallProtected.post(
         URL.jobProfitVerification,
         {
@@ -1047,7 +1085,10 @@ export default function JobProfitVerificationMaster({
 
   return (
     <MantineProvider theme={erpListGeistMantineTheme}>
-      <Box className={ERP_LIST_GEIST_ROOT_CLASS} style={erpListGeistRootTypography}>
+      <Box
+        className={ERP_LIST_GEIST_ROOT_CLASS}
+        style={erpListGeistRootTypography}
+      >
         <ERPListScreen
           theme={theme}
           className={ERP_LIST_GEIST_ROOT_CLASS}
@@ -1134,7 +1175,7 @@ export default function JobProfitVerificationMaster({
               />
             ),
             children: (
-              <Grid gutter={{ base: "md", md: "lg" }} align="stretch" >
+              <Grid gutter={{ base: "md", md: "lg" }} align="stretch">
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
@@ -1326,7 +1367,9 @@ export default function JobProfitVerificationMaster({
                         size="xs"
                         label="Salesperson"
                         placeholder={
-                          salespersonsLoading ? "Loading..." : "Select salesperson"
+                          salespersonsLoading
+                            ? "Loading..."
+                            : "Select salesperson"
                         }
                         data={salespersonOptions}
                         value={draftFilters.salesperson || null}
@@ -1467,7 +1510,11 @@ export default function JobProfitVerificationMaster({
                           onStopEdit={() => collapseHeaderEditor("route")}
                           onChange={() => {}}
                           renderEditor={({ autoFocus }) => (
-                            <Group gap={4} wrap="nowrap" style={{ width: "100%" }}>
+                            <Group
+                              gap={4}
+                              wrap="nowrap"
+                              style={{ width: "100%" }}
+                            >
                               <Box style={{ flex: 1, minWidth: 0 }}>
                                 <SearchableSelect
                                   autoFocus={autoFocus}
@@ -1475,16 +1522,21 @@ export default function JobProfitVerificationMaster({
                                   apiEndpoint={URL.portMaster}
                                   searchFields={["port_code", "port_name"]}
                                   placeholder="Origin"
-                                  displayFormat={(item: Record<string, unknown>) => ({
+                                  displayFormat={(
+                                    item: Record<string, unknown>,
+                                  ) => ({
                                     value: String(item.port_code),
                                     label: `${item.port_name} (${item.port_code})`,
                                   })}
                                   value={appliedFilters.origin_code}
-                                  displayValue={appliedFilters.origin_port_label}
+                                  displayValue={
+                                    appliedFilters.origin_port_label
+                                  }
                                   onChange={(value, selectedData) =>
                                     commitHeaderFilters({
                                       origin_code: value || "",
-                                      origin_port_label: selectedData?.label || "",
+                                      origin_port_label:
+                                        selectedData?.label || "",
                                     })
                                   }
                                   minSearchLength={1}
@@ -1499,7 +1551,9 @@ export default function JobProfitVerificationMaster({
                                   apiEndpoint={URL.portMaster}
                                   searchFields={["port_code", "port_name"]}
                                   placeholder="Destination"
-                                  displayFormat={(item: Record<string, unknown>) => ({
+                                  displayFormat={(
+                                    item: Record<string, unknown>,
+                                  ) => ({
                                     value: String(item.port_code),
                                     label: `${item.port_name} (${item.port_code})`,
                                   })}
@@ -1508,7 +1562,8 @@ export default function JobProfitVerificationMaster({
                                   onChange={(value, selectedData) =>
                                     commitHeaderFilters({
                                       destination_code: value || "",
-                                      destination_name: selectedData?.label || "",
+                                      destination_name:
+                                        selectedData?.label || "",
                                     })
                                   }
                                   minSearchLength={1}
@@ -1538,7 +1593,11 @@ export default function JobProfitVerificationMaster({
                               size="xs"
                               placeholder="Customer"
                               apiEndpoint={URL.customer}
-                              searchFields={["customer_code", "customer_name", "name"]}
+                              searchFields={[
+                                "customer_code",
+                                "customer_name",
+                                "name",
+                              ]}
                               returnOriginalData
                               value={appliedFilters.customer_code}
                               displayValue={appliedFilters.customer_label}
@@ -1549,7 +1608,9 @@ export default function JobProfitVerificationMaster({
                                 });
                               }}
                               displayFormat={(item) => ({
-                                value: String(item.customer_code ?? item.id ?? ""),
+                                value: String(
+                                  item.customer_code ?? item.id ?? "",
+                                ),
                                 label: String(
                                   item.customer_name ?? item.name ?? "",
                                 ).trim(),
@@ -1558,8 +1619,8 @@ export default function JobProfitVerificationMaster({
                               dropdownZIndex={1000}
                               classNames={erpListGeistSelectClassNames}
                               styles={filterFieldStyles}
-                              />
-                            )}
+                            />
+                          )}
                         />
                       </th>
                       {!isSalesperson ? (
@@ -1572,7 +1633,9 @@ export default function JobProfitVerificationMaster({
                             placeholder="Salesperson"
                             isEditing={editingHeaderId === "salesperson"}
                             onStartEdit={() => openHeaderEditor("salesperson")}
-                            onStopEdit={() => collapseHeaderEditor("salesperson")}
+                            onStopEdit={() =>
+                              collapseHeaderEditor("salesperson")
+                            }
                             onChange={() => {}}
                             renderEditor={({ autoFocus, onClose }) => (
                               <Select
@@ -1584,7 +1647,9 @@ export default function JobProfitVerificationMaster({
                                 data={salespersonOptions}
                                 value={appliedFilters.salesperson || null}
                                 onChange={(value) => {
-                                  commitHeaderFilters({ salesperson: value ?? "" });
+                                  commitHeaderFilters({
+                                    salesperson: value ?? "",
+                                  });
                                   onClose();
                                 }}
                                 disabled={salespersonsLoading}
@@ -1610,7 +1675,12 @@ export default function JobProfitVerificationMaster({
                         </>
                       ) : null}
                       <th style={listGpPctThStyle}>GP (%)</th>
-                      <th style={mergeTh(isApprovalMode ? 90 : 180, isApprovalMode ? 90 : 180)}>
+                      <th
+                        style={mergeTh(
+                          isApprovalMode ? 90 : 180,
+                          isApprovalMode ? 90 : 180,
+                        )}
+                      >
                         {isApprovalMode ? (
                           "Status"
                         ) : (
@@ -1662,7 +1732,9 @@ export default function JobProfitVerificationMaster({
                       {!isApprovalMode ? (
                         <th style={mergeTh(150, 150)}>Confirmed By</th>
                       ) : null}
-                      <th style={erpListStickyActionThStyle(theme, 96)}>Actions</th>
+                      <th style={erpListStickyActionThStyle(theme, 96)}>
+                        Actions
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1697,7 +1769,17 @@ export default function JobProfitVerificationMaster({
                             className={ERP_LIST_GEIST_MONO_CLASS}
                             style={tdPad}
                           >
-                            <Text size="sm" fw={600} c={fg}>
+                            <Text
+                              size="sm"
+                              fw={600}
+                              c={row.job_no?.trim() ? primary : fg}
+                              style={{
+                                cursor: row.job_no?.trim()
+                                  ? "pointer"
+                                  : "default",
+                              }}
+                              onClick={() => handleOpenMasterLedger(row)}
+                            >
                               {row.job_no || "—"}
                             </Text>
                           </td>
@@ -1739,9 +1821,15 @@ export default function JobProfitVerificationMaster({
                               c={row.quotation_id != null ? primary : fg}
                               style={{
                                 cursor:
-                                  row.quotation_id != null ? "pointer" : "default",
+                                  row.quotation_id != null
+                                    ? "pointer"
+                                    : "default",
                               }}
-                              onClick={() => handleOpenQuotation(row.quotation_id ?? undefined)}
+                              onClick={() =>
+                                handleOpenQuotation(
+                                  row.quotation_id ?? undefined,
+                                )
+                              }
                             >
                               {row.quotation_no?.trim() || "—"}
                             </Text>
@@ -1772,13 +1860,19 @@ export default function JobProfitVerificationMaster({
                           </td>
                           <td style={listAmountTdStyle}>
                             <Text size="sm" fw={600} c={fg}>
-                              {formatCurrencyAmount(row.quoted_revenue, currency)}
+                              {formatCurrencyAmount(
+                                row.quoted_revenue,
+                                currency,
+                              )}
                             </Text>
                           </td>
                           <td style={listAmountBadgeTdStyle}>
                             <SignedValueBadge
                               value={row.quoted_profit}
-                              label={formatCurrencyAmount(row.quoted_profit, currency)}
+                              label={formatCurrencyAmount(
+                                row.quoted_profit,
+                                currency,
+                              )}
                             />
                           </td>
                           <td style={listAmountTdStyle}>

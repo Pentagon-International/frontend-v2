@@ -88,6 +88,47 @@ function normalizeDocumentType(value: unknown): string {
     .toLowerCase();
 }
 
+/** Credit notes cannot be reversed. Invoice reversal stays available for invoices. */
+function isCreditNoteFinanceDocument(row: JobFinanceDocument): boolean {
+  const docType = normalizeDocumentType(row.document_type).replace(
+    /[\s-]+/g,
+    "_",
+  );
+  if (
+    docType === "credit_note" ||
+    docType === "crn" ||
+    docType === "cn" ||
+    docType === "cdn"
+  ) {
+    return true;
+  }
+
+  const bookType = String(
+    row.day_book_type ?? row.day_book_document_type ?? "",
+  )
+    .trim()
+    .toUpperCase();
+  if (bookType === "CRN" || bookType === "CN" || bookType === "CDN") {
+    return true;
+  }
+
+  const bookName = String(row.day_book_name ?? "")
+    .trim()
+    .toLowerCase();
+  if (
+    bookName === "crn" ||
+    bookName === "cn" ||
+    bookName.includes("credit note")
+  ) {
+    return true;
+  }
+
+  const headerDrCr = String(row.Dr_Cr ?? row.dr_cr ?? "")
+    .trim()
+    .toLowerCase();
+  return headerDrCr === "cr";
+}
+
 function canEditPaymentRequest(status?: string | null): boolean {
   const s = String(status ?? "")
     .trim()
@@ -355,7 +396,7 @@ export function JobAccountsDocumentsTable({
               />
             </>
           ) : null}
-          {isPosted && !isReadOnly ? (
+          {isPosted && !isReadOnly && !isCreditNoteFinanceDocument(row) ? (
             <Menu.Item
               leftSection={
                 <MenuIcon>

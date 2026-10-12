@@ -131,6 +131,19 @@ function MainSectionHeader() {
     return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
   }, [fullName]);
 
+  const activeBranch = useMemo(
+    () =>
+      user?.branches?.find((branch) => branch.is_default) ||
+      user?.branches?.[0] ||
+      null,
+    [user?.branches],
+  );
+  const activeBranchName = String(activeBranch?.branch_name ?? "").trim();
+  const activeBranchCode = String(activeBranch?.branch_code ?? "").trim();
+  const showBranchCode =
+    Boolean(activeBranchCode) &&
+    activeBranchCode.toLowerCase() !== activeBranchName.toLowerCase();
+
   return (
     <>
       <Flex
@@ -335,24 +348,55 @@ function MainSectionHeader() {
           </Tooltip> */}
           <UnstyledButton
             onClick={handleProfileClick}
-            aria-label="Open profile menu"
-            style={{ lineHeight: 0 }}
+            aria-label={
+              activeBranchName
+                ? `Open profile menu. Active branch ${activeBranchName}`
+                : "Open profile menu"
+            }
           >
-            <Box
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                backgroundColor: `${headerPrimary}1a`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text size="xs" fw={600} c={headerPrimary}>
-                {avatarInitials}
-              </Text>
-            </Box>
+            <Group gap={8} wrap="nowrap" align="center">
+              {activeBranchName ? (
+                <Box style={{ textAlign: "right", maxWidth: 200, minWidth: 0 }}>
+                  <Text
+                    size="xs"
+                    fw={600}
+                    c={headerFg}
+                    lh={1.2}
+                    lineClamp={1}
+                    title={activeBranchName}
+                  >
+                    {activeBranchName}
+                  </Text>
+                  {showBranchCode ? (
+                    <Text
+                      c={headerMuted}
+                      lh={1.2}
+                      lineClamp={1}
+                      title={activeBranchCode}
+                      style={{ fontSize: 10 }}
+                    >
+                      {activeBranchCode}
+                    </Text>
+                  ) : null}
+                </Box>
+              ) : null}
+              <Box
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  backgroundColor: `${headerPrimary}1a`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Text size="xs" fw={600} c={headerPrimary}>
+                  {avatarInitials}
+                </Text>
+              </Box>
+            </Group>
           </UnstyledButton>
         </Group>
       </Flex>

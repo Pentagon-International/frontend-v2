@@ -381,7 +381,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const inferredHblHawbFinal: string | null =
     (navState?.hbl_hawb_no as string | null) ?? null;
 
-  const jobReturnTo = (navState?.jobReturnTo as string | undefined)?.trim() ?? "";
+  const jobReturnTo =
+    (navState?.jobReturnTo as string | undefined)?.trim() ?? "";
   const jobReturnToState = navState?.jobReturnToState;
   const fromProfitVerification =
     Boolean(navState?.fromJobProfitVerification) ||
@@ -557,10 +558,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       }
       // Brokerage save may return hold_remark for margin checks, but hold status
       // only applies after the salesperson confirms — keep Confirm enabled.
-      if (
-        audit.status &&
-        normalizeProfitStatus(audit.status) !== "hold"
-      ) {
+      if (audit.status && normalizeProfitStatus(audit.status) !== "hold") {
         setProfitStatus(audit.status);
       }
       ToastNotification({
@@ -690,7 +688,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       return;
     }
 
-    const serviceName = (navState?.service_name as string | undefined)?.trim() ?? "";
+    const serviceName =
+      (navState?.service_name as string | undefined)?.trim() ?? "";
     const fallbackPath = JOB_EDIT_PATH_BY_SERVICE_NAME[serviceName];
     if (fallbackPath && filters.jobNo) {
       navigate(fallbackPath, {
@@ -1074,8 +1073,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             message?: string;
             error?: string;
           };
-          message =
-            parsed.detail || parsed.message || parsed.error || message;
+          message = parsed.detail || parsed.message || parsed.error || message;
         } catch {
           /* keep default */
         }
@@ -2306,7 +2304,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                     {canViewBrokerage && (
                       <BrokerageSummary
                         amount={brokerageDisplay}
-                        confirmedBy={!isSalespersonLogin ? confirmedByDetails : null}
+                        confirmedBy={
+                          !isSalespersonLogin ? confirmedByDetails : null
+                        }
                       />
                     )}
                     {showAccountsVerifyCheckbox && (
@@ -2336,7 +2336,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                                   response,
                                   profitShipmentId,
                                 );
-                                setProfitStatus(audit.status || "accounts_verified");
+                                setProfitStatus(
+                                  audit.status || "accounts_verified",
+                                );
                                 setAccountsVerified(true);
                                 if (audit.accounts_by) {
                                   setAccountsBy(audit.accounts_by);
@@ -2420,9 +2422,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                                       response,
                                       profitShipmentId,
                                     );
-                                    setProfitStatus(
-                                      audit.status || "verified",
-                                    );
+                                    setProfitStatus(audit.status || "verified");
                                     setSalespersonVerified(true);
                                     if (audit.verified_by) {
                                       setProfitVerifiedBy(audit.verified_by);
@@ -2524,7 +2524,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                             />
                           </Box>
                         </Tooltip>
-                        {isSalespersonLogin && profitConfirmed ? confirmedByDetails : null}
+                        {isSalespersonLogin && profitConfirmed
+                          ? confirmedByDetails
+                          : null}
                       </Stack>
                     )}
                   </Group>
@@ -2536,29 +2538,42 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       Verified by {accountsBy?.trim() || "—"}
                     </Text>
                     {accountsAt ? (
-                      <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
+                      <Text
+                        size="xs"
+                        c="dimmed"
+                        style={{ fontFamily: "Inter" }}
+                      >
                         {formatProfitAuditDateTime(accountsAt)}
                       </Text>
                     ) : null}
                   </Stack>
                 )}
-                {!showSalespersonVerifyCheckbox && salespersonVerifiedChecked && (
-                  <Stack gap={0}>
-                    <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-                      Verified by{" "}
-                      {profitVerifiedBy?.trim() ||
-                        profitConfirmedBy?.trim() ||
-                        "—"}
-                    </Text>
-                    {profitVerifiedAt || profitConfirmedAt ? (
-                      <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-                        {formatProfitAuditDateTime(
-                          profitVerifiedAt || profitConfirmedAt,
-                        )}
+                {!showSalespersonVerifyCheckbox &&
+                  salespersonVerifiedChecked && (
+                    <Stack gap={0}>
+                      <Text
+                        size="xs"
+                        c="dimmed"
+                        style={{ fontFamily: "Inter" }}
+                      >
+                        Verified by{" "}
+                        {profitVerifiedBy?.trim() ||
+                          profitConfirmedBy?.trim() ||
+                          "—"}
                       </Text>
-                    ) : null}
-                  </Stack>
-                )}
+                      {profitVerifiedAt || profitConfirmedAt ? (
+                        <Text
+                          size="xs"
+                          c="dimmed"
+                          style={{ fontFamily: "Inter" }}
+                        >
+                          {formatProfitAuditDateTime(
+                            profitVerifiedAt || profitConfirmedAt,
+                          )}
+                        </Text>
+                      ) : null}
+                    </Stack>
+                  )}
               </Stack>
             )}
             {!fromProfitVerification && (
@@ -2625,12 +2640,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             >
               {/* Filters */}
             </Button>
-            <Menu
-              withinPortal
-              position="bottom-end"
-              shadow="md"
-              width={240}
-            >
+            <Menu withinPortal position="bottom-end" shadow="md" width={240}>
               <Menu.Target>
                 <ActionIcon
                   variant="outline"

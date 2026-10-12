@@ -738,16 +738,31 @@ function parseApiMoneyAmount(
   return parseMoneyInputValue(String(value));
 }
 
-/** Keep adj_curr / adj_local in sync; adj_curr is the editable source of truth. */
+/**
+ * Keep adj_curr / adj_local in sync; adj_curr is the editable source of truth.
+ * Receipt reversal copies the source allocation amounts and only flips Dr/Cr.
+ * Allocation invoice_roe is often null, so curr × roe must not replace adj_local_amount.
+ */
 function normalizeAdjustmentAmounts(
   adjustments: AdjustmentRow[],
+  options?: { preserveLocalAmount?: boolean },
 ): AdjustmentRow[] {
   return adjustments.map((a) => {
     const curr = a.adj_curr_amount;
     if (curr == null || !Number.isFinite(curr)) return a;
+    const clampedCurr = clampAmount(curr);
+    if (options?.preserveLocalAmount) {
+      return {
+        ...a,
+        adj_curr_amount: clampedCurr,
+        adj_local_amount:
+          a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
+            ? clampLocalAmount(a.adj_local_amount)
+            : a.adj_local_amount,
+      };
+    }
     const roe =
       a.roe != null && Number.isFinite(a.roe) && a.roe !== 0 ? a.roe : 1;
-    const clampedCurr = clampAmount(curr);
     return {
       ...a,
       adj_curr_amount: clampedCurr,
@@ -817,6 +832,11 @@ export default function ReceiptCreate({
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourceReceiptIdForReversalRef = useRef<number | null>(null);
   const sourceReceiptNoForReversalRef = useRef<string>("");
+  /** Hydration from the list is not a user edit — skip amount recalculation until those rows are on the form. */
+  const skipAmountRecalcOnHydrateRef = useRef(false);
+  const prevPartyLocalRef = useRef<string | null>(null);
+  const prevPartyAmountsRef = useRef<string | null>(null);
+  const prevHeaderAmountRoeRef = useRef<string | null>(null);
 
   const {
     localCurrency,
@@ -1117,15 +1137,22 @@ export default function ReceiptCreate({
           })
         : [getDefaultAdjustmentRow(localCurrency)];
 
-    const normalizedAdjustments = normalizeAdjustmentAmounts(adjustments);
-    // Edit: allocation Dr/Cr from the list drives party and header amounts.
-    // TDS rows keep saved amounts. Reversal keeps the reversed receipt values.
-    const detailsForForm = _isReversal
-      ? details
-      : computeDetailsSyncedFromAllocations(details, normalizedAdjustments);
-    const headerAmounts = _isReversal
-      ? { amount: amountVal, local_amount: localAmountVal }
-      : computeHeaderAmountsFromDetails(detailsForForm, false);
+    // Show the stored receipt. Allocation invoice_roe is often null, so
+    // adj_curr × roe must not replace adj_local, and party/header must not
+    // be derived from that until the user edits an unposted receipt.
+    const normalizedAdjustments = normalizeAdjustmentAmounts(adjustments, {
+      preserveLocalAmount: true,
+    });
+    const detailsForForm = details;
+    const headerAmounts = { amount: amountVal, local_amount: localAmountVal };
+    prevPartyLocalRef.current = detailsForForm
+      .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
+      .join(";");
+    prevPartyAmountsRef.current = detailsForForm
+      .map((d) => `${d.dr_cr}|${d.amount ?? ""}`)
+      .join(";");
+    prevHeaderAmountRoeRef.current = `${headerAmounts.amount ?? ""}|${roeVal ?? 1}`;
+    skipAmountRecalcOnHydrateRef.current = true;
 
     setLoadedDetails(detailsForForm);
     form.setValues({
@@ -1252,17 +1279,42 @@ export default function ReceiptCreate({
     .map((d) => `${d.dr_cr}|${d.amount ?? ""}`)
     .join(";");
   const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
-  const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
-  const prevPartyAmountsRef = useRef(partyAmountsSnapshot);
-  const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
 
   useEffect(() => {
+    if (
+      prevPartyLocalRef.current == null ||
+      prevPartyAmountsRef.current == null ||
+      prevHeaderAmountRoeRef.current == null
+    ) {
+      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+      prevPartyAmountsRef.current = partyAmountsSnapshot;
+      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+      return;
+    }
+
     const partyLocalChanged =
       prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
     const partyAmountsChanged =
       prevPartyAmountsRef.current !== partyAmountsSnapshot;
     const headerAmountRoeChanged =
       prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
+    const isPostedReceipt =
+      !_isReversal &&
+      String(receiptFromState?.status ?? "").toUpperCase() === "POSTED";
+
+    // Load effect already stored the saved snapshots. Do not treat that as an edit,
+    // and do not replace those snapshots with the pre-hydration form.
+    if (skipAmountRecalcOnHydrateRef.current) {
+      return;
+    }
+
+    // Posted receipts stay as stored.
+    if (isPostedReceipt) {
+      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+      prevPartyAmountsRef.current = partyAmountsSnapshot;
+      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+      return;
+    }
 
     // Reversal keeps the reversed receipt header; backend handles Dr/Cr.
     if (_isReversal) {
@@ -1322,6 +1374,7 @@ export default function ReceiptCreate({
     partyAmountsSnapshot,
     headerAmountRoeKey,
     _isReversal,
+    receiptFromState?.status,
   ]);
 
   /** Skip one amount→local recalculation after allocation sync (adj local is the source). */
@@ -1387,6 +1440,25 @@ export default function ReceiptCreate({
       skipPartyLocalFromAmountRef.current = false;
       return;
     }
+    const isPostedReceipt =
+      !_isReversal &&
+      String(receiptFromState?.status ?? "").toUpperCase() === "POSTED";
+    // Hydration and posted receipts keep the stored party amounts.
+    // Clear the flag only after the saved rows are actually on the form.
+    if (skipAmountRecalcOnHydrateRef.current) {
+      const hydrated =
+        prevPartyLocalRef.current ===
+          (form.values.details ?? [])
+            .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
+            .join(";") &&
+        prevPartyAmountsRef.current ===
+          (form.values.details ?? [])
+            .map((d) => `${d.dr_cr}|${d.amount ?? ""}`)
+            .join(";");
+      if (hydrated) skipAmountRecalcOnHydrateRef.current = false;
+      return;
+    }
+    if (isPostedReceipt) return;
     // Reversal keeps the reversed party amounts; do not derive them from allocations.
     if (_isReversal) return;
     form.values.details.forEach((row, idx) => {
@@ -1422,7 +1494,7 @@ export default function ReceiptCreate({
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
     });
-  }, [detailsSnapshotForLocal, localCurrency, _isReversal]);
+  }, [detailsSnapshotForLocal, localCurrency, _isReversal, receiptFromState?.status]);
 
   const showChequeSection = form.values.type !== "CASH";
 
@@ -2125,7 +2197,9 @@ export default function ReceiptCreate({
       return hasAmounts || hasDocument;
     });
 
-    const adjustments = normalizeAdjustmentAmounts(values.adjustments ?? []);
+    const adjustments = normalizeAdjustmentAmounts(values.adjustments ?? [], {
+      preserveLocalAmount: _isReversal || loadedFromListState,
+    });
     // Reversal keeps the reversed receipt values; backend handles Dr/Cr.
     const syncedDetails = _isReversal
       ? (values.details ?? [])
@@ -2486,7 +2560,9 @@ export default function ReceiptCreate({
       });
       form.setFieldValue(
         "adjustments",
-        normalizeAdjustmentAmounts(nextAdjustments),
+        normalizeAdjustmentAmounts(nextAdjustments, {
+          preserveLocalAmount: true,
+        }),
       );
     }
 
@@ -3779,6 +3855,7 @@ export default function ReceiptCreate({
                                     ? { ...a, adj_curr_amount: newCurr }
                                     : a,
                                 ),
+                                { preserveLocalAmount: _isReversal },
                               );
                             form.setFieldValue(
                               "adjustments",

@@ -2284,9 +2284,6 @@ function InvoiceReverse() {
       invoice_document_no?: string;
     } | null;
     const st = location.state as NavState;
-    const creditNoteFromNav = isCreditNoteSourceDocument(null, st);
-    creditNoteSourceRef.current = creditNoteFromNav;
-    setCreditNoteReversalTotals(creditNoteFromNav);
     if (st?.financeReverseRecord) {
       setReversalRecordData(st.financeReverseRecord as Record<string, unknown>);
     }
@@ -2366,6 +2363,12 @@ function InvoiceReverse() {
       };
     }
 
+    if (isCreditNoteSourceDocument(null, st)) {
+      setLoadError("Credit notes cannot be reversed.");
+      setLoading(false);
+      return;
+    }
+
     const docNo = st?.document_no?.trim() ?? "";
     if (!docNo) {
       setLoadError(
@@ -2383,11 +2386,18 @@ function InvoiceReverse() {
         if (cancelled) return;
         const data = ((res as { data?: ReversableDataResponse })?.data ??
           res) as ReversableDataResponse;
-        const isCnSource = isCreditNoteSourceDocument(data, st);
-        const creditNoteSource = isCreditNoteBeingReversed(data, st);
-        creditNoteSourceRef.current = creditNoteSource;
-        setCreditNoteReversalTotals(creditNoteSource);
-        setIsCreditNoteReversal(isCnSource);
+        if (
+          isCreditNoteSourceDocument(data, st) ||
+          isCreditNoteBeingReversed(data, st)
+        ) {
+          const message = "Credit notes cannot be reversed.";
+          setLoadError(message);
+          ToastNotification({ message, type: "error" });
+          return;
+        }
+        creditNoteSourceRef.current = false;
+        setCreditNoteReversalTotals(false);
+        setIsCreditNoteReversal(false);
         enableChargeAmountAutoCalcRef.current = false;
         applyReversableDataToReverseForm(data, form, {
           setIsAgentInvoice,
