@@ -230,6 +230,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/subledger-enquiry")) {
       setActiveNav("Desk");
       setActiveSubNav("Subledger Enquiry");
+    } else if (path.startsWith("/cheque-clearance")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Cheque Clearance");
     } else if (path.startsWith("/document-allocation")) {
       setActiveNav("Desk");
       setActiveSubNav("Document Allocation");

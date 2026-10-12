@@ -19,6 +19,8 @@ export interface ERPListFilterPanelProps {
   children: ReactNode;
   /** Clear / Apply row. */
   footer?: ReactNode;
+  /** Shorter padding. Other screens keep the default height. */
+  compact?: boolean;
   theme?: ErpListTheme;
 }
 
@@ -33,14 +35,15 @@ export function ERPListFilterPanel({
   closeLabel = "Close filters",
   children,
   footer,
+  compact = false,
   theme = DEFAULT_ERP_LIST_THEME,
 }: ERPListFilterPanelProps) {
   return (
     <Box
       mx={ERP_LIST_FULL_BLEED_MX}
       px={ERP_LIST_INNER_PAD_X}
-      pt="sm"
-      pb="md"
+      pt={compact ? 6 : "sm"}
+      pb={compact ? 6 : "md"}
       style={{
         flexShrink: 0,
         backgroundColor: theme.pageBg,
@@ -64,7 +67,7 @@ export function ERPListFilterPanel({
           wrap="nowrap"
           gap="sm"
           px="md"
-          py={10}
+          py={compact ? 6 : 10}
           style={{
             backgroundColor: theme.headerBg,
             borderBottom: `1px solid ${theme.border}`,
@@ -73,8 +76,8 @@ export function ERPListFilterPanel({
           <Group gap={10} wrap="nowrap" align="center">
             <Box
               style={{
-                width: 32,
-                height: 32,
+                width: compact ? 24 : 32,
+                height: compact ? 24 : 32,
                 borderRadius: 8,
                 backgroundColor: `${theme.primary}14`,
                 display: "flex",
@@ -118,7 +121,7 @@ export function ERPListFilterPanel({
             <IconX size={16} />
           </ActionIcon>
         </Group>
-        <Box p={{ base: "md", sm: "lg" }}>
+        <Box p={compact ? "xs" : { base: "md", sm: "lg" }}>
           {children}
           {footer}
         </Box>

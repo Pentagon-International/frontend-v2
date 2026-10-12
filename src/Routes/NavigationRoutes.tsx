@@ -244,6 +244,7 @@ import Pipeline from "../pages/dashboard/Pipeline";
 import PipelineCreate from "../pages/dashboard/PipelineCreate";
 import useAuthStore from "../store/authStore";
 import SubledgerEnquiry from "../pages/accounts/subledger-enquiry/SubledgerEnquiry";
+import ChequeClearance from "../pages/accounts/cheque-clearance/ChequeClearance";
 import DocumentAllocation from "../pages/accounts/document-allocation/DocumentAllocation";
 import DocumentAllocationList from "../pages/accounts/document-allocation/DocumentAllocationList";
 import Checker from "../pages/accounts/checker/Checker";
@@ -776,6 +777,7 @@ const NavigationRoutes = () => {
           element={<JournalVoucherReversal />}
         />
         <Route path="/subledger-enquiry" element={<SubledgerEnquiry />} />
+        <Route path="/cheque-clearance" element={<ChequeClearance />} />
         <Route
           path="/document-allocation"
           element={<DocumentAllocationList />}

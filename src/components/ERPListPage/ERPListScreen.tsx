@@ -27,6 +27,8 @@ export type ERPListScreenTableConfig = {
   selectionBar?: ReactNode;
   footer?: ReactNode;
   mainPy?: ERPListTableCardProps["mainPy"];
+  /** Stretch the table body so its scrollbar sits at the bottom of the card. */
+  fillBody?: boolean;
   children: ReactNode;
 };
 
@@ -92,6 +94,7 @@ export function ERPListScreen({
           onClose={filters.onClose}
           closeLabel={filters.closeLabel}
           footer={filters.footer}
+          compact={filters.compact}
         >
           {filters.children}
         </ERPListFilterPanel>
@@ -102,6 +105,7 @@ export function ERPListScreen({
         footer={table.footer}
         mainPy={table.mainPy ?? (embedded ? "xs" : "md")}
         flush={embedded}
+        fillBody={table.fillBody}
       >
         {table.children}
       </ERPListTableCard>
