@@ -492,6 +492,11 @@ type HousingDetail = HouseDocumentFields & {
   pp_cc?: string;
   /** @deprecated Prefer `pp_cc`; kept for API/PDF backward compatibility */
   freight?: string;
+  events?: Array<{
+    id?: number;
+    type: string;
+    date: string;
+  }>;
   summary?: {
     total_no_of_packages?: number | string;
     total_gross_weight?: number | string;
@@ -1511,6 +1516,33 @@ function ExportJobCreate() {
               pp_cc: normalizeFreightPpCc(
                 (house as { pp_cc?: unknown }).pp_cc ?? house.freight,
               ),
+              events: Array.isArray(
+                (
+                  house as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events,
+              )
+                ? (
+                    (
+                      house as {
+                        events?: Array<{
+                          id?: number;
+                          type?: string;
+                          date?: string;
+                        }>;
+                      }
+                    ).events ?? []
+                  ).map((e) => ({
+                    id: e.id != null ? Number(e.id) : undefined,
+                    type: String(e.type ?? ""),
+                    date: String(e.date ?? ""),
+                  }))
+                : [],
               summary:
                 house.summary &&
                 typeof house.summary === "object" &&

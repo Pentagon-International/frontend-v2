@@ -337,6 +337,11 @@ type HAWBDetail = HouseDocumentFields & {
     supplier_name?: string | null;
   }>;
   mawb_charges?: Array<Record<string, unknown>>;
+  events?: Array<{
+    id?: number;
+    type: string;
+    date: string;
+  }>;
   summary?: {
     total_local_sell?: number | string | null;
     total_local_cost?: number | string | null;
@@ -1479,6 +1484,33 @@ function InlandExportJobCreate() {
                 }
                 return [];
               })(),
+              events: Array.isArray(
+                (
+                  house as {
+                    events?: Array<{
+                      id?: number;
+                      type?: string;
+                      date?: string;
+                    }>;
+                  }
+                ).events,
+              )
+                ? (
+                    (
+                      house as {
+                        events?: Array<{
+                          id?: number;
+                          type?: string;
+                          date?: string;
+                        }>;
+                      }
+                    ).events ?? []
+                  ).map((e) => ({
+                    id: e.id != null ? Number(e.id) : undefined,
+                    type: String(e.type ?? ""),
+                    date: String(e.date ?? ""),
+                  }))
+                : [],
               summary: (() => {
                 const raw = house.summary;
                 if (!raw || typeof raw !== "object" || Array.isArray(raw)) {

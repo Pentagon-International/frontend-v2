@@ -3133,6 +3133,7 @@ function HouseCreate() {
                 <Select
                   placeholder="Select event type"
                   data={eventTypeOptions}
+                  searchable
                   value={row.eventType}
                   onChange={(value) =>
                     updateEventRow(index, "eventType", value ?? null)
