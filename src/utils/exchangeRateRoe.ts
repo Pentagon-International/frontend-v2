@@ -12,6 +12,7 @@ export type CurrencyMasterItem = {
 };
 
 export const ROE_CANNOT_BE_ONE_FIELD = "ROE can't be 1";
+export const ROE_REQUIRED_FIELD = "ROE is required";
 export const ROE_CANNOT_BE_ONE_TOAST =
   "ROE cannot be 1 when currency differs from local currency";
 
@@ -65,11 +66,28 @@ export function getDefaultBookingChargeCurrencyFields(
   };
 }
 
-export const formatExchangeSellRate = (sellRate: string | number): number => {
+/** Sell rate from exchange-rate master. Missing or invalid rates stay null — never 1. */
+export const formatExchangeSellRate = (
+  sellRate: string | number | null | undefined,
+): number | null => {
+  if (sellRate == null || sellRate === "") return null;
   const num = typeof sellRate === "string" ? parseFloat(sellRate) : sellRate;
-  if (!Number.isFinite(num)) return 1;
-  return roundToDecimals(num, ROE_DECIMAL_PLACES) ?? 1;
+  if (!Number.isFinite(num) || num <= 0) return null;
+  return roundToDecimals(num, ROE_DECIMAL_PLACES) ?? null;
 };
+
+/**
+ * ROE applied to a currency that is not the branch currency.
+ * A master rate of 1 is not usable and must not be filled in.
+ */
+export function acceptForeignExchangeRate(
+  rate: number | null | undefined,
+): number | null {
+  if (rate == null || !Number.isFinite(rate) || rate <= 0 || rate === 1) {
+    return null;
+  }
+  return rate;
+}
 
 /** Round ROE to at most 6 decimal places for API payloads. */
 export const roundRoeForPayload = (
@@ -214,7 +232,7 @@ export const validateRoeForCurrency = (
     branchCurrencyId?: string | null;
   },
 ): string | null => {
-  if (roe === null || roe === undefined) return "ROE is required";
+  if (roe === null || roe === undefined) return ROE_REQUIRED_FIELD;
 
   const branchCurrencyId = options?.branchCurrencyId ?? "";
   const base = branchCurrency?.trim().toUpperCase() ?? "";

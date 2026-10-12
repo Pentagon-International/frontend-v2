@@ -3974,11 +3974,15 @@ export default function SupplierInvoiceCreate({
                     : pathname.includes("/reversal/view")
                       ? "View Supplier Invoice Reverse"
                       : (titleOverride ??
-                        (isEditMode
-                          ? "Edit Supplier Invoice"
-                          : isViewMode
-                            ? "View Supplier Invoice"
-                            : "Create Supplier Invoice"))}
+                        (pathname.includes("/supplier-invoice/credit-note")
+                          ? isViewMode
+                            ? "View Credit Note Cost"
+                            : "Edit Credit Note Cost"
+                          : isEditMode
+                            ? "Edit Supplier Invoice"
+                            : isViewMode
+                              ? "View Supplier Invoice"
+                              : "Create Supplier Invoice"))}
             </Text>
           </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">

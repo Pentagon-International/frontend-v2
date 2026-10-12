@@ -71,6 +71,12 @@ import {
   formatMoneyAmountForUi,
   getAmountDecimalScale,
 } from "../../../utils/nonDecimalMoneyAmount";
+import {
+  acceptForeignExchangeRate,
+  fetchExchangeRateMaster,
+  ROE_REQUIRED_FIELD,
+  validateRoeForCurrency,
+} from "../../../utils/exchangeRateRoe";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -1359,21 +1365,20 @@ function buildReverseChargePayload(
       sgstRate,
       igstRate,
     );
-    // Same taxable base as Invoice save (header), with local fallback.
-    const taxBase =
-      headerAmount || toPayloadAmount(charge.amount_in_local) || 0;
+    // GST amounts always follow the local amount, matching the rate fields.
+    const taxBase = Number(charge.amount_in_local ?? 0);
     const igstAmt =
       hasSez || sameState || igstRate <= 0
         ? 0
-        : clampGstAmount(taxBase * (Number(igstRate) / 100));
+        : clampGstAmount((taxBase * Number(igstRate)) / 100);
     const cgstAmt =
       hasSez || !sameState || cgstRate <= 0
         ? 0
-        : clampGstAmount(taxBase * (Number(cgstRate) / 100));
+        : clampGstAmount((taxBase * Number(cgstRate)) / 100);
     const sgstAmt =
       hasSez || !sameState || sgstRate <= 0
         ? 0
-        : clampGstAmount(taxBase * (Number(sgstRate) / 100));
+        : clampGstAmount((taxBase * Number(sgstRate)) / 100);
     return {
       ...base,
       igst_rate: igstRate,
@@ -1403,6 +1408,10 @@ function InvoiceReverse() {
       }
     | undefined;
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
+  const defaultBranchCurrencyId =
+    defaultBranch?.currency?.currency_id != null
+      ? String(defaultBranch.currency.currency_id)
+      : "";
   const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
   const canPostDocuments = useCanPostDocuments();
   const { openViewAllocationDocs, viewAllocationDocsUi } =
@@ -1659,7 +1668,14 @@ function InvoiceReverse() {
       document_date: (value) => (!value ? "Document Date is required" : null),
       due_date: (value) => (!value ? "Due Date is required" : null),
       currency: (value) => (!value ? "Currency is required" : null),
-      roe: (value) => (value === null ? "ROE is required" : null),
+      roe: (value, values) =>
+        validateRoeForCurrency(
+          values.currency,
+          value,
+          defaultBranchCurrency,
+          true,
+          { branchCurrencyId: defaultBranchCurrencyId },
+        ),
     },
   });
 
@@ -1839,42 +1855,58 @@ function InvoiceReverse() {
     }));
   }, [unitData]);
 
-  // Helper: ROE based on currency and user's country (same as InvoiceCreate)
-  const getRoeValue = useCallback(
-    (currency: string): number => {
-      const userCountryCode = user?.country?.country_code;
-      const currencyUpper = currency?.toUpperCase();
-      if (userCountryCode === "IN") {
-        if (currencyUpper === "INR") return 1;
-        if (currencyUpper === "USD") return 88.75;
-      } else if (userCountryCode === "AE") {
-        if (currencyUpper === "AED") return 1;
-        if (currencyUpper === "USD") return 3.67;
-      }
-      return 1;
+  const roeCacheRef = useRef<Map<string, number>>(new Map());
+  const pendingRoeFetchesRef = useRef<Map<string, Promise<number | null>>>(
+    new Map(),
+  );
+  const billingCurrencyRef = useRef("");
+  const chargeCurrencyRequestRef = useRef<Record<number, string>>({});
+
+  const isBaseCurrency = useCallback(
+    (currency: string | null | undefined): boolean => {
+      const base = defaultBranchCurrency.trim().toUpperCase();
+      const code = currency?.trim().toUpperCase() ?? "";
+      return base !== "" && code !== "" && code === base;
     },
-    [user?.country?.country_code],
+    [defaultBranchCurrency],
   );
 
-  // Auto-set ROE when charge currency changes (charge has currency but no ROE)
-  const chargeCurrencies = form.values.charges.map((c) => c.currency).join(",");
-  useEffect(() => {
-    const updatedCharges = form.values.charges.map((charge) => {
-      let roe = charge.roe;
-      if (charge.currency && (roe === null || roe === undefined)) {
-        roe = getRoeValue(charge.currency);
-      }
-      if (roe !== charge.roe) {
-        return { ...charge, roe: roe ?? null };
-      }
-      return charge;
-    });
-    const hasChanges = updatedCharges.some(
-      (charge, index) => charge.roe !== form.values.charges[index]?.roe,
-    );
-    if (hasChanges) form.setFieldValue("charges", updatedCharges);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargeCurrencies, getRoeValue]);
+  const ensureRoeForCurrency = useCallback(
+    async (currency: string): Promise<number | null> => {
+      const currencyUpper = currency?.trim().toUpperCase();
+      if (!currencyUpper) return null;
+      if (isBaseCurrency(currencyUpper)) return 1;
+
+      const cached = roeCacheRef.current.get(currencyUpper);
+      if (cached !== undefined && cached !== 1) return cached;
+      if (!activeBranchCountryCode) return null;
+
+      const pending = pendingRoeFetchesRef.current.get(currencyUpper);
+      if (pending) return pending;
+
+      const fetchPromise = (async (): Promise<number | null> => {
+        try {
+          const rate = acceptForeignExchangeRate(
+            await fetchExchangeRateMaster(
+              activeBranchCountryCode,
+              currencyUpper,
+            ),
+          );
+          if (rate != null) roeCacheRef.current.set(currencyUpper, rate);
+          return rate;
+        } catch (error) {
+          console.error("Error fetching exchange rate:", error);
+          return null;
+        } finally {
+          pendingRoeFetchesRef.current.delete(currencyUpper);
+        }
+      })();
+
+      pendingRoeFetchesRef.current.set(currencyUpper, fetchPromise);
+      return fetchPromise;
+    },
+    [activeBranchCountryCode, isBaseCurrency],
+  );
 
   // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit (InvoiceCreate parity — charge ROE is not multiplied here)
   const chargeAmountPerUnits = form.values.charges
@@ -2842,8 +2874,14 @@ function InvoiceReverse() {
       if (charge.charge_id == null)
         err.charge_id = "Charge is required";
       if (!charge.currency) err.currency = "Currency is required";
-      if (charge.roe === null || charge.roe === undefined)
-        err.roe = "ROE is required";
+      const roeError = validateRoeForCurrency(
+        charge.currency,
+        charge.roe,
+        defaultBranchCurrency,
+        true,
+        { branchCurrencyId: defaultBranchCurrencyId },
+      );
+      if (roeError) err.roe = roeError;
       if (charge.amount === null || charge.amount === undefined)
         err.amount = "Currency Amount is required";
       if (
@@ -2859,11 +2897,16 @@ function InvoiceReverse() {
     });
     if (invalidCharges) {
       setChargeErrors(chargeErrs);
-      ToastNotification({
-        message:
-          "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount).",
-        type: "error",
-      });
+      const onlyRoeErrors = Object.values(chargeErrs).every(
+        (err) => Object.keys(err).every((key) => key === "roe"),
+      );
+      if (!onlyRoeErrors) {
+        ToastNotification({
+          message:
+            "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount).",
+          type: "error",
+        });
+      }
       return;
     }
     setChargeErrors({});
@@ -3633,9 +3676,59 @@ function InvoiceReverse() {
                 placeholder="Select currency"
                 data={currencyOptions}
                 value={form.values.currency || null}
-                onChange={(value) =>
-                  form.setFieldValue("currency", value ?? "")
-                }
+                onChange={(value) => {
+                  const newCurrency = value ?? "";
+                  const billingUpper = newCurrency.trim().toUpperCase();
+                  billingCurrencyRef.current = newCurrency;
+                  form.setFieldValue("currency", newCurrency);
+                  if (!newCurrency) {
+                    form.setFieldValue("roe", null);
+                    form.setFieldError("roe", ROE_REQUIRED_FIELD);
+                    return;
+                  }
+                  if (isBaseCurrency(newCurrency)) {
+                    form.setFieldValue("roe", 1);
+                    form.clearFieldError("roe");
+                    setChargeErrors((prev) => {
+                      const next = { ...prev };
+                      let changed = false;
+                      form.values.charges.forEach((charge, index) => {
+                        if (
+                          String(charge.currency ?? "")
+                            .trim()
+                            .toUpperCase() !== billingUpper
+                        ) {
+                          return;
+                        }
+                        if (!next[index]?.roe) return;
+                        const row = { ...next[index] };
+                        delete row.roe;
+                        if (Object.keys(row).length === 0) delete next[index];
+                        else next[index] = row;
+                        changed = true;
+                      });
+                      return changed ? next : prev;
+                    });
+                    return;
+                  }
+                  form.setFieldValue("roe", null);
+                  form.clearFieldError("roe");
+                  void ensureRoeForCurrency(newCurrency).then((roe) => {
+                    if (
+                      billingCurrencyRef.current?.trim().toUpperCase() !==
+                      billingUpper
+                    ) {
+                      return;
+                    }
+                    const usable = acceptForeignExchangeRate(roe);
+                    form.setFieldValue("roe", usable);
+                    if (usable == null) {
+                      form.setFieldError("roe", ROE_REQUIRED_FIELD);
+                    } else {
+                      form.clearFieldError("roe");
+                    }
+                  });
+                }}
                 searchable
                 withAsterisk
                 // disabled={isReadOnly}
@@ -3648,16 +3741,32 @@ function InvoiceReverse() {
                 label="ROE"
                 placeholder="ROE"
                 value={form.values.roe ?? undefined}
-                onChange={(value) =>
-                  form.setFieldValue(
-                    "roe",
+                onChange={(value) => {
+                  if (isBaseCurrency(form.values.currency)) {
+                    form.setFieldValue("roe", 1);
+                    form.clearFieldError("roe");
+                    return;
+                  }
+                  const numValue =
                     typeof value === "number"
                       ? value
                       : value === ""
                         ? null
-                        : parseFloat(String(value)) || null,
-                  )
-                }
+                        : parseFloat(String(value)) || null;
+                  form.setFieldValue("roe", numValue);
+                  const headerRoeError = validateRoeForCurrency(
+                    form.values.currency,
+                    numValue,
+                    defaultBranchCurrency,
+                    true,
+                    { branchCurrencyId: defaultBranchCurrencyId },
+                  );
+                  if (headerRoeError) {
+                    form.setFieldError("roe", headerRoeError);
+                  } else {
+                    form.clearFieldError("roe");
+                  }
+                }}
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
                 withAsterisk
@@ -4096,9 +4205,10 @@ function InvoiceReverse() {
                           data={currencyOptions}
                           value={charge.currency || null}
                           onChange={(value) => {
+                            const code = value ?? "";
                             form.setFieldValue(
                               `charges.${index}.currency`,
-                              value ?? "",
+                              code,
                             );
                             if (chargeErrors[index]?.currency) {
                               const newErrors = { ...chargeErrors };
@@ -4109,6 +4219,57 @@ function InvoiceReverse() {
                               }
                               setChargeErrors(newErrors);
                             }
+                            if (!code) {
+                              form.setFieldValue(`charges.${index}.roe`, null);
+                              return;
+                            }
+                            const requestedCurrency = code.trim().toUpperCase();
+                            chargeCurrencyRequestRef.current[index] =
+                              requestedCurrency;
+                            if (isBaseCurrency(code)) {
+                              form.setFieldValue(`charges.${index}.roe`, 1);
+                              setChargeErrors((prev) => {
+                                if (!prev[index]?.roe) return prev;
+                                const next = { ...prev };
+                                if (next[index]) {
+                                  delete next[index].roe;
+                                  if (Object.keys(next[index]).length === 0) {
+                                    delete next[index];
+                                  }
+                                }
+                                return next;
+                              });
+                              return;
+                            }
+                            form.setFieldValue(`charges.${index}.roe`, null);
+                            void ensureRoeForCurrency(code).then((roe) => {
+                              if (
+                                chargeCurrencyRequestRef.current[index] !==
+                                requestedCurrency
+                              ) {
+                                return;
+                              }
+                              const usable = acceptForeignExchangeRate(roe);
+                              form.setFieldValue(
+                                `charges.${index}.roe`,
+                                usable,
+                              );
+                              setChargeErrors((prev) => {
+                                const next = { ...prev };
+                                if (usable == null) {
+                                  next[index] = {
+                                    ...(next[index] ?? {}),
+                                    roe: ROE_REQUIRED_FIELD,
+                                  };
+                                } else if (next[index]?.roe) {
+                                  delete next[index].roe;
+                                  if (Object.keys(next[index]).length === 0) {
+                                    delete next[index];
+                                  }
+                                }
+                                return next;
+                              });
+                            });
                           }}
                           searchable
                           withAsterisk
@@ -4123,23 +4284,53 @@ function InvoiceReverse() {
                           value={charge.roe ?? undefined}
                           onChange={(v) => {
                             enableChargeAmountAutoCalcRef.current = true;
-                            form.setFieldValue(
-                              `charges.${index}.roe`,
+                            const numValue =
                               typeof v === "number"
                                 ? v
                                 : v === ""
                                   ? null
-                                  : parseFloat(String(v)) || null,
-                            );
-                            if (chargeErrors[index]?.roe) {
-                              const newErrors = { ...chargeErrors };
-                              if (newErrors[index]) {
-                                delete newErrors[index].roe;
-                                if (Object.keys(newErrors[index]).length === 0)
-                                  delete newErrors[index];
-                              }
-                              setChargeErrors(newErrors);
+                                  : parseFloat(String(v)) || null;
+                            if (isBaseCurrency(charge.currency)) {
+                              form.setFieldValue(`charges.${index}.roe`, 1);
+                              setChargeErrors((prev) => {
+                                if (!prev[index]?.roe) return prev;
+                                const next = { ...prev };
+                                if (next[index]) {
+                                  delete next[index].roe;
+                                  if (Object.keys(next[index]).length === 0) {
+                                    delete next[index];
+                                  }
+                                }
+                                return next;
+                              });
+                              return;
                             }
+                            form.setFieldValue(
+                              `charges.${index}.roe`,
+                              numValue,
+                            );
+                            const roeError = validateRoeForCurrency(
+                              charge.currency,
+                              numValue,
+                              defaultBranchCurrency,
+                              true,
+                              { branchCurrencyId: defaultBranchCurrencyId },
+                            );
+                            setChargeErrors((prev) => {
+                              const next = { ...prev };
+                              if (roeError) {
+                                next[index] = {
+                                  ...(next[index] ?? {}),
+                                  roe: roeError,
+                                };
+                              } else if (next[index]?.roe) {
+                                delete next[index].roe;
+                                if (Object.keys(next[index]).length === 0) {
+                                  delete next[index];
+                                }
+                              }
+                              return next;
+                            });
                           }}
                           hideControls
                           withAsterisk

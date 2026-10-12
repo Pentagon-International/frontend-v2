@@ -39,6 +39,7 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
@@ -2634,7 +2635,9 @@ export function DebitCreditNoteCreateBase({
           color="#105476"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() =>
-            navigate(
+            navigateFinanceReturn(
+              navigate,
+              location.state,
               showTradeFields
                 ? "/debit-credit-note-trade"
                 : "/debit-credit-note-non-trade",

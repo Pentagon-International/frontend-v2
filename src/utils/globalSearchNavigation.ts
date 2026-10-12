@@ -123,6 +123,44 @@ export const fetchGlobalSearchModuleRecord = async (
   return record as Record<string, unknown>;
 };
 
+const JOB_FINANCE_BASE: Record<string, string> = {
+  air_export: "/air/export-job",
+  air_import: "/air/import-job",
+  ocean_export: "/SeaExport/export-job",
+  ocean_import: "/SeaExport/import-job",
+  inland_export: "/inland/export-job",
+  inland_import: "/inland/import-job",
+  service_job: "/service-job",
+};
+
+const jobFinanceEditPath = (
+  sub: string | null,
+  segment: "invoice" | "credit-note",
+  id: string,
+): { path: string; needsState: boolean } => {
+  const base = sub ? JOB_FINANCE_BASE[sub] : undefined;
+  if (base) {
+    return { path: `${base}/${segment}/edit/${id}`, needsState: false };
+  }
+  if (segment === "invoice") {
+    return { path: `/invoice/edit/${id}`, needsState: false };
+  }
+  return { path: `/credit-note/edit/${id}`, needsState: false };
+};
+
+const isCreditNoteCostSub = (sub: string | null): boolean =>
+  sub === "cost" ||
+  sub === "credit_note_cost" ||
+  sub === "supplier" ||
+  sub === "supplier_invoice";
+
+const creditNoteCostEditPath = (
+  id: string,
+): { path: string; needsState: boolean } => ({
+  path: `/supplier-invoice/credit-note/edit/${id}`,
+  needsState: false,
+});
+
 export const globalSearchModuleToRoute = (
   module: string,
   sub: string | null,
@@ -170,21 +208,14 @@ export const globalSearchModuleToRoute = (
         return { path: "/cha/ocean-import-job/edit", needsState: true };
       return null;
     case "invoice":
-      if (sub === "air_export")
-        return { path: `/air/export-job/invoice/edit/${id}`, needsState: false };
-      if (sub === "air_import")
-        return { path: `/air/import-job/invoice/edit/${id}`, needsState: false };
-      if (sub === "ocean_export")
-        return { path: `/SeaExport/export-job/invoice/edit/${id}`, needsState: false };
-      if (sub === "ocean_import")
-        return { path: `/SeaExport/import-job/invoice/edit/${id}`, needsState: false };
-      if (sub === "inland_export")
-        return { path: `/inland/export-job/invoice/edit/${id}`, needsState: false };
-      if (sub === "inland_import")
-        return { path: `/inland/import-job/invoice/edit/${id}`, needsState: false };
-      if (sub === "service_job")
-        return { path: `/service-job/invoice/edit/${id}`, needsState: false };
-      return { path: `/invoice/edit/${id}`, needsState: false };
+      return jobFinanceEditPath(sub, "invoice", id);
+    case "credit_note":
+      if (isCreditNoteCostSub(sub)) return creditNoteCostEditPath(id);
+      return jobFinanceEditPath(sub, "credit-note", id);
+    case "credit_note_cost":
+    case "cost_credit_note":
+    case "supplier_credit_note":
+      return creditNoteCostEditPath(id);
     case "reverse_invoice":
       return { path: "/invoice-reverse", needsState: true };
     case "journal_voucher":
@@ -205,6 +236,11 @@ export const globalSearchModuleToRoute = (
       return { path: "/overseas-payment/edit", needsState: true };
     case "reverse_payment":
       return { path: "/payment/reversal/edit", needsState: true };
+    case "debit_credit_note":
+      return {
+        path: `/debit-credit-note-non-trade/edit/${id}`,
+        needsState: true,
+      };
     default:
       return null;
   }
@@ -294,6 +330,28 @@ export async function resolveGlobalSearchItemLocation(
         ...baseState,
         job: record,
         bookingId,
+      },
+    };
+  }
+
+  if (module === "debit_credit_note") {
+    const rec = record as Record<string, unknown>;
+    const noteType = String(rec.type ?? rec.note_type ?? "")
+      .trim()
+      .toLowerCase();
+    const statusUpper = String(rec.status ?? rec.document_status ?? "")
+      .trim()
+      .toUpperCase();
+    const seg = statusUpper === "POSTED" ? "view" : "edit";
+    const base =
+      noteType === "trade"
+        ? "/debit-credit-note-trade"
+        : "/debit-credit-note-non-trade";
+    return {
+      path: `${base}/${seg}/${id}`,
+      state: {
+        data: record,
+        ...baseState,
       },
     };
   }

@@ -613,6 +613,9 @@ const NavigationRoutes = () => {
         <Route path="/invoice" element={<InvoiceCreate />} />
         <Route path="/invoice/edit/:id" element={<InvoiceCreate />} />
         <Route path="/invoice/view/:id" element={<InvoiceCreate />} />
+        <Route path="/credit-note" element={<CreditNoteCreate />} />
+        <Route path="/credit-note/edit/:id" element={<CreditNoteCreate />} />
+        <Route path="/credit-note/view/:id" element={<CreditNoteCreate />} />
         <Route path="/invoice-reverse" element={<InvoiceReverse />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/receipt" element={<ReceiptMaster />} />
@@ -694,6 +697,14 @@ const NavigationRoutes = () => {
         />
         <Route
           path="/supplier-invoice/view/:id"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice/credit-note/edit/:id"
+          element={<SupplierInvoiceCreate />}
+        />
+        <Route
+          path="/supplier-invoice/credit-note/view/:id"
           element={<SupplierInvoiceCreate />}
         />
         <Route
@@ -794,6 +805,9 @@ const NavigationRoutes = () => {
           <Route path="invoice" element={<InvoiceCreate />} />
           <Route path="invoice/edit/:id" element={<InvoiceCreate />} />
           <Route path="invoice/view/:id" element={<InvoiceCreate />} />
+          <Route path="credit-note" element={<CreditNoteCreate />} />
+          <Route path="credit-note/edit/:id" element={<CreditNoteCreate />} />
+          <Route path="credit-note/view/:id" element={<CreditNoteCreate />} />
           <Route path="invoice/reverse" element={<InvoiceReverse />} />
         </Route>
         <Route path="/job-closure" element={<JobClosure />} />

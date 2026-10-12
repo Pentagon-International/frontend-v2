@@ -17,10 +17,13 @@ const normalizeSourceKey = (value: string): string =>
 
 const SOURCE_TO_MODULES: Record<string, string[]> = {
   invoice: ["invoice"],
-  credit_note: ["invoice"],
-  creditnote: ["invoice"],
-  cn: ["invoice"],
-  crn: ["invoice"],
+  credit_note: ["credit_note"],
+  creditnote: ["credit_note"],
+  cn: ["credit_note"],
+  crn: ["credit_note"],
+  credit_note_cost: ["credit_note_cost"],
+  cost_credit_note: ["cost_credit_note"],
+  supplier_credit_note: ["supplier_credit_note"],
   cdn: ["invoice"],
   receipt: ["receipt", "overseas_receipt"],
   overseas_receipt: ["overseas_receipt", "receipt"],

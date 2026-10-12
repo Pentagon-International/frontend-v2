@@ -158,6 +158,18 @@ export async function openFinanceDocument(
         state: { ...record, ...baseExtras, invoiceData: record },
       });
       return;
+    case "credit_note":
+      navigate(`/credit-note/${seg}/${id}`, {
+        state: { ...record, ...baseExtras, invoiceData: record },
+      });
+      return;
+    case "credit_note_cost":
+    case "cost_credit_note":
+    case "supplier_credit_note":
+      navigate(`/supplier-invoice/credit-note/${seg}/${id}`, {
+        state: { ...baseExtras },
+      });
+      return;
     case "reverse_invoice": {
       const rec = record as Record<string, unknown>;
       navigate("/invoice-reverse", {
