@@ -152,6 +152,7 @@ const Navbar = ({
       location.pathname.startsWith("/journal-voucher") ||
       location.pathname.startsWith("/journal-voucher-reversal") ||
       location.pathname.startsWith("/subledger-enquiry") ||
+      location.pathname.startsWith("/cheque-clearance") ||
       location.pathname.startsWith("/document-allocation") ||
       location.pathname.startsWith("/debit-credit-note-trade") ||
       location.pathname.startsWith("/debit-credit-note-non-trade") ||
@@ -1406,6 +1407,19 @@ const Navbar = ({
                       label="Subledger Enquiry"
                       icon={IconSearch}
                       path="/subledger-enquiry"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
+                      label="Cheque Clearance"
+                      icon={IconBuildingBank}
+                      path="/cheque-clearance"
                       collapsibles={{
                         setIsSalesOpen,
                         setIsTariffOpen,

@@ -181,6 +181,8 @@ export const URL = {
   receipt: "receipt/",
   reverseReceipt: "reverse-receipt/",
   paymentFilter: "filter/payment/",
+  chequeClearanceFilter: "filter/cheque-clearance/",
+  chequeClearanceBulkUpdate: "cheque-clearance/bulk-update/",
   payment: "payment/",
   paymentBulkApprovalStatus: "payment/bulk-approval-status/",
   reversePaymentFilter: "filter/reverse-payment/",

@@ -14,6 +14,12 @@ export interface ERPListTableCardProps {
   /** Outer vertical padding for the card block (default matches Air Export). */
   mainPy?: "xs" | "sm" | "md" | "lg";
   /**
+   * When `true`, the table body fills the card and scrolls inside it.
+   * Default keeps the existing content-height scroll.
+   * @default false
+   */
+  fillBody?: boolean;
+  /**
    * When `true`, no horizontal `px` on the outer `main` wrapper (e.g. embedded in dashboard panels).
    * @default false
    */
@@ -29,6 +35,7 @@ export function ERPListTableCard({
   footer,
   theme = DEFAULT_ERP_LIST_THEME,
   mainPy = "md",
+  fillBody = false,
   flush = false,
 }: ERPListTableCardProps) {
   return (
@@ -58,7 +65,9 @@ export function ERPListTableCard({
           style={{
             flex: 1,
             minHeight: 0,
-            overflow: "auto",
+            overflow: fillBody ? "hidden" : "auto",
+            display: fillBody ? "flex" : undefined,
+            flexDirection: fillBody ? "column" : undefined,
             backgroundColor: theme.cardBg,
             // Visible width for loaders inside a horizontally scrolling table.
             containerType: "inline-size",
