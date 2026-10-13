@@ -1296,11 +1296,11 @@ function AirImportBookingMaster() {
       ),
       houseno: (
         <ERPListColumnHeaderFilter
-          label="House No"
+          label="HAWB No"
           value={filterForm.values.houseno ?? ""}
           displayValue={filterForm.values.houseno ?? ""}
           theme={erpTheme}
-          placeholder="Filter House No"
+          placeholder="Filter HAWB No"
           isEditing={editingHeaderId === "houseno"}
           onStartEdit={() => openHeaderEditor("houseno")}
           onStopEdit={() => collapseHeaderEditor("houseno")}
@@ -1457,11 +1457,11 @@ function AirImportBookingMaster() {
       ),
       mawb: (
         <ERPListColumnHeaderFilter
-          label="MAWB"
+          label="MAWB No"
           value={filterForm.values.mawb_no ?? ""}
           displayValue={filterForm.values.mawb_no ?? ""}
           theme={erpTheme}
-          placeholder="Filter MAWB"
+          placeholder="Filter MAWB No"
           isEditing={editingHeaderId === "mawb"}
           onStartEdit={() => openHeaderEditor("mawb")}
           onStopEdit={() => collapseHeaderEditor("mawb")}
@@ -1871,8 +1871,8 @@ function AirImportBookingMaster() {
                       <FormTextInput
                         format="capital"
                         size="xs"
-                        label="House No"
-                        placeholder="Enter House No"
+                        label="HAWB No"
+                        placeholder="Enter HAWB No"
                         styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
                         value={filterForm.values.houseno ?? ""}
                         onChange={(e) =>
@@ -1920,8 +1920,8 @@ function AirImportBookingMaster() {
                       <FormTextInput
                         format="capital"
                         size="xs"
-                        label="MAWB"
-                        placeholder="Enter MAWB"
+                        label="MAWB No"
+                        placeholder="Enter MAWB No"
                         styles={AIR_IMPORT_FILTER_UNIFIED_STYLES}
                         value={filterForm.values.mawb_no ?? ""}
                         onChange={(e) =>

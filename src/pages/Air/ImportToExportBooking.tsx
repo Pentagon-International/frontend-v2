@@ -778,11 +778,11 @@ function AirImportToExportBooking() {
       ),
       houseno: (
         <ERPListColumnHeaderFilter
-          label="House No"
+          label="HAWB No"
           value={filterForm.values.houseno ?? ""}
           displayValue={filterForm.values.houseno ?? ""}
           theme={theme}
-          placeholder="Filter House No"
+          placeholder="Filter HAWB No"
           isEditing={editingHeaderId === "houseno"}
           onStartEdit={() => openHeaderEditor("houseno")}
           onStopEdit={() => collapseHeaderEditor("houseno")}
@@ -936,11 +936,11 @@ function AirImportToExportBooking() {
       ),
       mawb: (
         <ERPListColumnHeaderFilter
-          label="MAWB"
+          label="MAWB No"
           value={filterForm.values.mawb_no ?? ""}
           displayValue={filterForm.values.mawb_no ?? ""}
           theme={theme}
-          placeholder="Filter MAWB"
+          placeholder="Filter MAWB No"
           isEditing={editingHeaderId === "mawb"}
           onStartEdit={() => openHeaderEditor("mawb")}
           onStopEdit={() => collapseHeaderEditor("mawb")}
@@ -1656,7 +1656,7 @@ function AirImportToExportBooking() {
               opened: showFilters,
               title: "Filters",
               subtitle:
-                "Refine air import-to-export bookings by reference, customer, route, house, customer service, MAWB, or date",
+                "Refine air import-to-export bookings by reference, customer, route, HAWB No, customer service, MAWB No, or date",
               onClose: () => setShowFilters(false),
               footer: (
                 <ERPListFilterActionsFooter
@@ -1789,8 +1789,8 @@ function AirImportToExportBooking() {
                     <FormTextInput
                       format="capital"
                       size="xs"
-                      label="House No"
-                      placeholder="Enter House No"
+                      label="HAWB No"
+                      placeholder="Enter HAWB No"
                       styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                       value={filterForm.values.houseno ?? ""}
                       onChange={(e) =>
@@ -1820,8 +1820,8 @@ function AirImportToExportBooking() {
                     <FormTextInput
                       format="capital"
                       size="xs"
-                      label="MAWB"
-                      placeholder="Enter MAWB"
+                      label="MAWB No"
+                      placeholder="Enter MAWB No"
                       styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                       value={filterForm.values.mawb_no ?? ""}
                       onChange={(e) =>

@@ -338,7 +338,7 @@ const carrierDetailsSchema = yup.object({
   carrier_name: yup.string().required("Carrier is required"),
   vessel_name: yup.string().required("Vessel Name is required"),
   voyage_number: yup.string().required("Voyage Number is required"),
-  mbl_number: yup.string().required("MBL Number is required"),
+  mbl_number: yup.string().required("MBL No is required"),
   mbl_date: yup.date().nullable(),
 });
 
@@ -3581,7 +3581,7 @@ function ExportJobCreate() {
       const missingFields: string[] = [];
 
       if (!house.hbl_number?.trim()) {
-        missingFields.push("HBL Number");
+        missingFields.push("HBL No");
       }
       if (!house.origin_code?.trim()) {
         missingFields.push("Origin");
@@ -5031,9 +5031,9 @@ function ExportJobCreate() {
               <Grid.Col span={2.4}>
                 <FormTextInput
                   format="capital"
-                  label="MBL Number"
+                  label="MBL No"
                   required
-                  placeholder="Enter MBL number"
+                  placeholder="Enter MBL No"
                   {...carrierDetailsForm.getInputProps("mbl_number")}
                 />
               </Grid.Col>
@@ -6154,7 +6154,7 @@ function ExportJobCreate() {
                           Select
                         </Table.Th>
                         <Table.Th style={{ paddingRight: 16 }}>Booking ID</Table.Th>
-                        <Table.Th style={{ paddingRight: 16 }}>House</Table.Th>
+                        <Table.Th style={{ paddingRight: 16 }}>HBL No</Table.Th>
                         <Table.Th style={{ paddingRight: 16 }}>Customer</Table.Th>
                         <Table.Th style={{ paddingRight: 16 }}>Origin</Table.Th>
                         <Table.Th>Destination</Table.Th>
@@ -6888,7 +6888,7 @@ function ExportJobCreate() {
 
                   <Grid.Col span={2}>
                     <Text size="sm" fw={500} c="dimmed">
-                      HBL Number
+                      HBL No
                     </Text>
                     <Text size="sm" mb="sm">
                       {house.hbl_number || "-"}

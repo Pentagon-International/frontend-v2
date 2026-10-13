@@ -1789,8 +1789,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       });
     }
 
-    // In edit mode or create-from-quotation, ensure the quotation_id from initialData is in options
-    if ((isEditMode || isFromQuotationFlow) && initialData?.quotation_id) {
+    // Keep the mapped quotation selectable (edit, create-from-quotation, and duplicate)
+    if (initialData?.quotation_id) {
       const quotationIdValue = String(initialData.quotation_id);
       const exists = options.some((opt) => opt.value === quotationIdValue);
       if (!exists) {
@@ -1802,7 +1802,7 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
 
     return options;
-  }, [quotationsData, isEditMode, initialData, isFromQuotationFlow]);
+  }, [quotationsData, initialData]);
 
   // Quotation flow: when is_booked false set charges; when is_booked true fetch existing booking
   const lastBookedIdRef = useRef<number | null>(null);
@@ -3820,8 +3820,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 <Grid.Col span={4}>
                   <FormTextInput
                     format="capital"
-                    label="HAWB Number"
-                    placeholder="Enter HAWB Number"
+                    label="HAWB No"
+                    placeholder="Enter HAWB No"
                     value={form.values.houseno}
                     onChange={(e) => {
                       form.setFieldValue("houseno", e.target.value);
@@ -3832,8 +3832,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 <Grid.Col span={4}>
                   <FormTextInput
                     format="capital"
-                    label="MAWB Number"
-                    placeholder="Enter MAWB Number"
+                    label="MAWB No"
+                    placeholder="Enter MAWB No"
                     value={form.values.master_no}
                     onChange={(e) => {
                       form.setFieldValue("master_no", e.target.value);

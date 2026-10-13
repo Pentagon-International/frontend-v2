@@ -44,7 +44,6 @@ export function prepareBookingDuplicateData(
     carrier_booking_no: _carrierBookingNo,
     igm_no: _igmNo,
     igm_date: _igmDate,
-    quotation_id: _quotationId,
     quotation_primary_id: _quotationPrimaryId,
     ...rest
   } = booking;

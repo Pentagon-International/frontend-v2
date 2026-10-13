@@ -215,6 +215,30 @@ const EMPTY_PARTY_DETAILS: JobMasterPartyDetailsValues = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function getServiceJobDocumentLabels(transportMode: string): {
+  houseNo: string;
+  masterNo: string;
+  masterDate: string;
+} {
+  const mode = (transportMode || "").trim().toUpperCase();
+  if (mode === "SEA" || mode === "OCEAN") {
+    return { houseNo: "HBL No", masterNo: "MBL No", masterDate: "MBL Date" };
+  }
+  if (
+    mode === "INLAND" ||
+    mode === "NA" ||
+    mode === "ROAD" ||
+    mode === "RAIL"
+  ) {
+    return {
+      houseNo: "TWB No",
+      masterNo: "WayBill No",
+      masterDate: "Waybill Date",
+    };
+  }
+  return { houseNo: "HAWB No", masterNo: "MAWB No", masterDate: "MAWB Date" };
+}
+
 function isAirTransportMode(transportMode: string): boolean {
   const mode = (transportMode || "").trim().toUpperCase();
   return mode === "AIR" || mode === "NA";
@@ -1551,8 +1575,7 @@ export default function ServiceJobCreate() {
   );
   const defaultPpCc = getDefaultPpCcFromService(selectedService?.import_export);
   const isSeaJob = Boolean(transportMode) && !isAirTransportMode(transportMode);
-  const awbFieldLabel = isSeaJob ? "BL Number" : "AWB Number";
-  const awbFieldPlaceholder = isSeaJob ? "Enter BL number" : "Enter AWB number";
+  const documentLabels = getServiceJobDocumentLabels(transportMode);
 
   useEffect(() => {
     const next = resolveServiceJobDate(
@@ -2884,8 +2907,8 @@ export default function ServiceJobCreate() {
               <Grid.Col span={4}>
                 <FormTextInput
                   format="capital"
-                  label="AWB"
-                  placeholder="Enter AWB number"
+                  label={documentLabels.houseNo}
+                  placeholder={`Enter ${documentLabels.houseNo}`}
                   readOnly={isReadOnly}
                   {...form.getInputProps("hbl_number")}
                 />
@@ -2894,8 +2917,8 @@ export default function ServiceJobCreate() {
               <Grid.Col span={4}>
                 <FormTextInput
                   format="capital"
-                  label="MBL No"
-                  placeholder="Enter MBL number"
+                  label={documentLabels.masterNo}
+                  placeholder={`Enter ${documentLabels.masterNo}`}
                   readOnly={isReadOnly}
                   {...form.getInputProps("mbl_number")}
                 />
@@ -2903,7 +2926,7 @@ export default function ServiceJobCreate() {
 
               <Grid.Col span={4}>
                 <SingleDateInput
-                  label="MBL Date"
+                  label={documentLabels.masterDate}
                   placeholder="YYYY-MM-DD"
                   value={form.values.mbl_date}
                   onChange={(value: Date | null) => {

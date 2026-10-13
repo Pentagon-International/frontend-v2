@@ -7,6 +7,10 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "./jobSaveResponse";
+import {
+  formatApiFailureForToast,
+  isApiFailureResponse,
+} from "./apiErrorMessage";
 import { collectLinkedBookingIds } from "./bookingCreateJob";
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 import {
@@ -33,6 +37,27 @@ function formatDateYmd(value: unknown): string | null {
   if (value == null || value === "") return null;
   const d = dayjs(value as string | Date);
   return d.isValid() ? d.format("YYYY-MM-DD") : null;
+}
+
+const HOUSE_PICKUP_DATE_KEYS = [
+  "planned_pickup_date",
+  "actual_pickup_date",
+  "planned_delivery_date",
+  "actual_delivery_date",
+] as const;
+
+/** Date-only API values. Present keys only, so omitted dates stay untouched. */
+function withNormalizedPickupDates(
+  house: Record<string, unknown>,
+): Record<string, unknown> {
+  const dates: Record<string, string | null> = {};
+  let hasDate = false;
+  for (const key of HOUSE_PICKUP_DATE_KEYS) {
+    if (!(key in house)) continue;
+    hasDate = true;
+    dates[key] = formatDateYmd(house[key]);
+  }
+  return hasDate ? { ...house, ...dates } : house;
 }
 
 function formatMasterDate(
@@ -412,7 +437,7 @@ function sanitizeHousingDetailsForPayload(
     if (!house || typeof house !== "object" || Array.isArray(house)) {
       return house;
     }
-    const h = house as Record<string, unknown>;
+    const h = withNormalizedPickupDates(house as Record<string, unknown>);
     const rawCharges = pickRawHouseCharges(h, chargeKey);
 
     // Air jobs accept house charges only on `mawb_charges`.
@@ -818,12 +843,28 @@ export async function persistJobHousingDetails(
     chargeKey,
     options,
   );
-  const response = await putAPICall(URL.jobCreate, payload, API_HEADER);
-  const parsed = parseJobSaveResponse(response, fallbackMessage);
-  return {
-    message: parsed.message,
-    job: parsed.job ? normalizeOceanHousingCharges(parsed.job) : null,
-  };
+  try {
+    const response = await putAPICall(URL.jobCreate, payload, API_HEADER);
+    if (isApiFailureResponse(response)) {
+      const body = response as { message?: string; data?: unknown };
+      const failure = new Error(
+        typeof body.message === "string" && body.message.trim()
+          ? body.message.trim()
+          : "Failed to update job",
+      );
+      (failure as Error & { details?: unknown }).details = body.data;
+      throw failure;
+    }
+    const parsed = parseJobSaveResponse(response, fallbackMessage);
+    return {
+      message: parsed.message,
+      job: parsed.job ? normalizeOceanHousingCharges(parsed.job) : null,
+    };
+  } catch (err) {
+    throw new Error(
+      formatApiFailureForToast(err, "Failed to save house details"),
+    );
+  }
 }
 
 export function resolveHouseJobIdFromLocationState(

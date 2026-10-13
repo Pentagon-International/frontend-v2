@@ -141,8 +141,8 @@ const jobDetailsSchema = yup.object({
   carrier_code: yup.string().required("Carrier is required"),
   master_no: yup
   .string()
-    .required("MAWB Number is required")
-    .matches(/^[A-Za-z0-9]{11}$/, "MAWB Number must be exactly 11 characters"),
+    .required("WayBill No is required")
+    .matches(/^[A-Za-z0-9]{11}$/, "WayBill No must be exactly 11 characters"),
   master_date: yup.string().optional(),
   flight_no: yup.string().optional(),
 });
@@ -964,8 +964,8 @@ function InlandExportJobGenerationCreate() {
               <Grid.Col span={3}>
                 <FormTextInput
                   format="capital"
-                  label="Master No"
-                  placeholder="Enter master number"
+                  label="WayBill No"
+                  placeholder="Enter WayBill No"
                   maxLength={11}
                   {...jobDetailsForm.getInputProps("master_no")}
                   disabled={isReadOnly}
@@ -973,7 +973,7 @@ function InlandExportJobGenerationCreate() {
               </Grid.Col>
               <Grid.Col span={3}>
                 <SingleDateInput
-                  label="Master Date"
+                  label="Waybill Date"
                   value={jobDetailsForm.values.master_date ? dayjs(jobDetailsForm.values.master_date).toDate() : null}
                   onChange={(date) => jobDetailsForm.setFieldValue("master_date", date ? dayjs(date).format("YYYY-MM-DD") : "")}
                   disabled={isReadOnly}

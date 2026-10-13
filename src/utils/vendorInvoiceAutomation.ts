@@ -469,7 +469,8 @@ export function buildVendorInvoiceOverrideDraft(
     Inv_crn_amount: toAmountString(extracted?.Inv_crn_amount),
     status: textValue(extracted?.status) || "UNPOSTED",
     agent_id: idString(extracted?.agent_id),
-    agent_name: textValue(extracted?.agent_name),
+    // Unresolved master id → leave the name blank so the user picks the vendor.
+    agent_name: idString(extracted?.agent_id) ? textValue(extracted?.agent_name) : "",
     Dr_Cr: headerDrCr,
     charges_data: charges,
   };

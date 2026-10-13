@@ -2194,7 +2194,7 @@ function HouseCreate() {
     const errors: Record<string, string> = {};
 
     if (!form.values.hawb_number?.trim()) {
-      errors.hawb_number = "AWB Number is required";
+      errors.hawb_number = "TWB No is required";
     }
     if (!form.values.origin_code?.trim()) {
       errors.origin_code = "Origin is required";
@@ -2853,7 +2853,7 @@ function HouseCreate() {
     if (pdfBlob) {
       const link = document.createElement("a");
       link.href = pdfBlob;
-      link.download = `Cargo-Arrival-Notice-${form.values.hawb_number || "AWB"}.pdf`;
+      link.download = `Cargo-Arrival-Notice-${form.values.hawb_number || "Transport-Way-Bill"}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2867,7 +2867,7 @@ function HouseCreate() {
   const handleOpenSendEmailForCan = () => {
     setActivePdfBlob(pdfBlob);
     setActiveFileName(
-      `Cargo-Arrival-Notice-${form.values.hawb_number || "AWB"}.pdf`,
+      `Cargo-Arrival-Notice-${form.values.hawb_number || "Transport-Way-Bill"}.pdf`,
     );
     setActiveDocumentLabel("Cargo Arrival Notice");
     openSendEmail();
@@ -2879,10 +2879,10 @@ function HouseCreate() {
         <Group gap="md">
           <Text size="xl" fw={600} c="#105476">
             {isViewOnly
-              ? "View AWB Details"
+              ? "View TWB Details"
               : isEditMode
-                ? "Edit AWB Details"
-                : "Create AWB Details"}
+                ? "Edit TWB Details"
+                : "Create TWB Details"}
           </Text>
           {isEditMode && editData?.shipment_id && (
             <Badge color="#105476" size="md" variant="light">
@@ -2995,6 +2995,8 @@ function HouseCreate() {
                     setActive(3);
                     return;
                   }
+                  handleSave();
+                } else if (active === 5) {
                   handleSave();
                 }
               }}
@@ -3309,9 +3311,9 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 <FormTextInput
                   format="capital"
-                  label="AWB Number"
+                  label="TWB No"
                   required
-                  placeholder="Enter AWB Number"
+                  placeholder="Enter TWB No"
                   {...form.getInputProps("hawb_number")}
                   error={form.errors.hawb_number}
                 />

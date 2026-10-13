@@ -2324,7 +2324,7 @@ function HouseCreate() {
     const errors: Record<string, string> = {};
 
     if (!form.values.hawb_no?.trim()) {
-      errors.hawb_no = "HAWB Number is required";
+      errors.hawb_no = "HAWB No is required";
     }
     if (!form.values.origin_code?.trim()) {
       errors.origin_code = "Origin is required";
@@ -3217,6 +3217,8 @@ function HouseCreate() {
                     return;
                   }
                   handleSave();
+                } else if (active === 5) {
+                  handleSave();
                 }
               }}
             >
@@ -3579,9 +3581,9 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 <FormTextInput
                   format="capital"
-                  label="HAWB Number"
+                  label="HAWB No"
                   required
-                  placeholder="Enter HAWB Number"
+                  placeholder="Enter HAWB No"
                   {...form.getInputProps("hawb_no")}
                   readOnly={!isChaMode || isViewOnly}
                   error={form.errors.hawb_no}

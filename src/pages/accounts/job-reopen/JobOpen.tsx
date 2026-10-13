@@ -652,8 +652,8 @@ function JobOpen() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
                       format="capital"
-                      label="MBL Number"
-                      placeholder="Enter MBL Number"
+                      label="MBL No"
+                      placeholder="Enter MBL No"
                       size="xs"
                       styles={filterFieldStyles}
                       value={draftFilters.mbl_number}
@@ -856,7 +856,7 @@ function JobOpen() {
                             value={appliedFilters.mbl_number}
                             displayValue={appliedFilters.mbl_number}
                             theme={theme}
-                            placeholder="Filter MBL"
+                            placeholder="Filter MBL No"
                             isEditing={editingHeaderId === "mbl_number"}
                             onStartEdit={() => openHeaderEditor("mbl_number")}
                             onStopEdit={() => collapseHeaderEditor("mbl_number")}

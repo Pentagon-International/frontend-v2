@@ -1350,8 +1350,8 @@ function OceanJobGenerationCreate() {
               <Grid.Col span={3}>
                 <FormTextInput
                   format="capital"
-                  label="Master No"
-                  placeholder="Enter master number"
+                  label="MBL No"
+                  placeholder="Enter MBL No"
                   {...jobDetailsForm.getInputProps("master_no")}
                   disabled={isReadOnly}
                 />
@@ -1359,7 +1359,7 @@ function OceanJobGenerationCreate() {
 
               <Grid.Col span={3}>
                 <SingleDateInput
-                  label="Master Date"
+                  label="MBL Date"
                   value={
                     jobDetailsForm.values.master_date
                       ? dayjs(jobDetailsForm.values.master_date).toDate()

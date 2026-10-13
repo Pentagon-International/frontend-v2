@@ -1574,7 +1574,7 @@ function AirExportBookingMaster() {
         Destination: r.destination_code_read || r.destination_code || "",
         Status: normalizeBookingStatus(r.status),
         "Last Milestone": getLastMilestoneLabel(r),
-        MAWB: r.mawb_no ?? "",
+        "MAWB No": r.mawb_no ?? "",
         Flight: r.flight_no ?? "",
         Pcs: pw.pieces,
         "Weight kg": pw.weight,
@@ -1936,6 +1936,9 @@ function AirExportBookingMaster() {
     borderBottom: `1px solid ${border}`,
     whiteSpace: "nowrap",
     userSelect: "none",
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
     ...(typeof minWidthPx === "number"
       ? { minWidth: minWidthPx, width: minWidthPx }
       : {}),
@@ -2333,8 +2336,8 @@ function AirExportBookingMaster() {
                       <FormTextInput
                         format="capital"
                         size="xs"
-                        label="House No"
-                        placeholder="Enter House No"
+                        label="HAWB No"
+                        placeholder="Enter HAWB No"
                         styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
                         value={filterForm.values.houseno ?? ""}
                         onChange={(e) =>
@@ -2382,8 +2385,8 @@ function AirExportBookingMaster() {
                       <FormTextInput
                         format="capital"
                         size="xs"
-                        label="MAWB"
-                        placeholder="Enter MAWB"
+                        label="MAWB No"
+                        placeholder="Enter MAWB No"
                         styles={AIR_EXPORT_FILTER_UNIFIED_STYLES}
                         value={filterForm.values.mawb_no ?? ""}
                         onChange={(e) =>
@@ -2489,11 +2492,11 @@ function AirExportBookingMaster() {
                       {visibleColumns.houseno && (
                         <th style={headerThStyle("left", 140)}>
                           <ERPListColumnHeaderFilter
-                            label="House No"
+                            label="HAWB No"
                             value={filterForm.values.houseno ?? ""}
                             displayValue={filterForm.values.houseno ?? ""}
                             theme={erpTheme}
-                            placeholder="Filter House No"
+                            placeholder="Filter HAWB No"
                             isEditing={editingHeaderId === "houseno"}
                             onStartEdit={() => openHeaderEditor("houseno")}
                             onStopEdit={() => collapseHeaderEditor("houseno")}
@@ -2701,11 +2704,11 @@ function AirExportBookingMaster() {
                       {visibleColumns.mawb && (
                         <th style={headerThStyle("left", 160)}>
                           <ERPListColumnHeaderFilter
-                            label="MAWB"
+                            label="MAWB No"
                             value={filterForm.values.mawb_no ?? ""}
                             displayValue={filterForm.values.mawb_no ?? ""}
                             theme={erpTheme}
-                            placeholder="Filter MAWB"
+                            placeholder="Filter MAWB No"
                             isEditing={editingHeaderId === "mawb"}
                             onStartEdit={() => openHeaderEditor("mawb")}
                             onStopEdit={() => collapseHeaderEditor("mawb")}
