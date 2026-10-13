@@ -75,6 +75,7 @@ import {
   runJobProfitHouseAction,
   runJobProfitSalespersonVerify,
   saveJobProfitBrokerage,
+  type JobProfitHousePatchResult,
 } from "../../../utils/jobProfitHouseVerification";
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -151,11 +152,137 @@ type JobLedgerBrokerageRow = {
   accounts_by?: string | null;
   accounts_at?: string | null;
   verified?: boolean | null;
+  salesperson_verified?: boolean | null;
   verified_by?: string | null;
   verified_at?: string | null;
   confirmed_by?: string | null;
   confirmed_at?: string | null;
 };
+
+type MasterProfitPatchKind = "accounts" | "pricing" | "confirm";
+
+function brokerageShipmentId(row: JobLedgerBrokerageRow): string {
+  return String(row.shipment_id ?? "").trim();
+}
+
+function latestBrokerageAudit(
+  rows: JobLedgerBrokerageRow[],
+  atKey: "accounts_at" | "verified_at" | "confirmed_at",
+): JobLedgerBrokerageRow | null {
+  let best: JobLedgerBrokerageRow | null = null;
+  let bestTime = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    const raw = row[atKey];
+    const time = raw ? dayjs(raw).valueOf() : Number.NaN;
+    if (!Number.isFinite(time)) continue;
+    if (time >= bestTime) {
+      best = row;
+      bestTime = time;
+    }
+  }
+  return best ?? rows[rows.length - 1] ?? null;
+}
+
+function mergeMasterProfitPatch(
+  rows: JobLedgerBrokerageRow[],
+  shipmentIds: string[],
+  response: JobProfitHousePatchResult | undefined,
+  kind: MasterProfitPatchKind,
+): JobLedgerBrokerageRow[] {
+  const raw = response?.data;
+  const records = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object"
+      ? [raw]
+      : [];
+  const wanted = new Set(
+    shipmentIds.map((id) => String(id ?? "").trim()).filter(Boolean),
+  );
+  return rows.map((row) => {
+    const id = brokerageShipmentId(row);
+    if (!wanted.has(id)) return row;
+    const audit =
+      records.find(
+        (item) => String(item?.shipment_id ?? "").trim() === id,
+      ) ?? (records.length === 1 && wanted.size === 1 ? records[0] : undefined);
+    const statusFromAudit =
+      typeof audit?.status === "string" && audit.status.trim()
+        ? audit.status.trim()
+        : null;
+    if (kind === "accounts") {
+      return {
+        ...row,
+        accounts_verified: true,
+        accounts_by:
+          audit?.accounts_by != null
+            ? String(audit.accounts_by)
+            : row.accounts_by,
+        accounts_at:
+          audit?.accounts_at != null
+            ? String(audit.accounts_at)
+            : row.accounts_at,
+        status: statusFromAudit ?? "accounts_verified",
+        verified: audit?.verified === true ? true : row.verified,
+        verified_by:
+          audit?.verified_by != null
+            ? String(audit.verified_by)
+            : row.verified_by,
+        verified_at:
+          audit?.verified_at != null
+            ? String(audit.verified_at)
+            : row.verified_at,
+        confirmed_by:
+          audit?.confirmed_by != null
+            ? String(audit.confirmed_by)
+            : row.confirmed_by,
+        confirmed_at:
+          audit?.confirmed_at != null
+            ? String(audit.confirmed_at)
+            : row.confirmed_at,
+      };
+    }
+    if (kind === "pricing") {
+      return {
+        ...row,
+        verified: true,
+        salesperson_verified: true,
+        status: statusFromAudit ?? "verified",
+        verified_by:
+          audit?.verified_by != null
+            ? String(audit.verified_by)
+            : row.verified_by,
+        verified_at:
+          audit?.verified_at != null
+            ? String(audit.verified_at)
+            : row.verified_at,
+        confirmed_by:
+          audit?.confirmed_by != null
+            ? String(audit.confirmed_by)
+            : row.confirmed_by,
+        confirmed_at:
+          audit?.confirmed_at != null
+            ? String(audit.confirmed_at)
+            : row.confirmed_at,
+      };
+    }
+    return {
+      ...row,
+      status: statusFromAudit ?? "confirmed",
+      verified_by:
+        audit?.verified_by != null ? String(audit.verified_by) : row.verified_by,
+      verified_at:
+        audit?.verified_at != null ? String(audit.verified_at) : row.verified_at,
+      confirmed_by:
+        audit?.confirmed_by != null
+          ? String(audit.confirmed_by)
+          : row.confirmed_by,
+      confirmed_at:
+        audit?.confirmed_at != null
+          ? String(audit.confirmed_at)
+          : row.confirmed_at,
+    };
+  });
+}
 
 type JobLedgerApiRow = {
   sno?: number;
@@ -387,6 +514,8 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const fromProfitVerification =
     Boolean(navState?.fromJobProfitVerification) ||
     jobReturnTo.includes("/job-profit-verification");
+  const isMasterProfitLedger =
+    fromProfitVerification && !String(inferredHblHawbFinal ?? "").trim();
 
   const navShipmentId = String(
     navState?.shipment_id ??
@@ -400,6 +529,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   ).trim();
 
   const [profitShipmentId, setProfitShipmentId] = useState(navShipmentId);
+  const [profitBrokerageRows, setProfitBrokerageRows] = useState<
+    JobLedgerBrokerageRow[]
+  >([]);
+  const [masterBrokerageLoaded, setMasterBrokerageLoaded] = useState(false);
   const [profitIsSales] = useState<boolean | null>(
     typeof navState?.is_sales === "boolean" ? navState.is_sales : null,
   );
@@ -454,9 +587,13 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   );
 
   const canManageBrokerage = canManageJobProfitBrokerage(user);
+  const masterShipmentRows = isMasterProfitLedger ? profitBrokerageRows : [];
+  const masterHasManyShipments = masterShipmentRows.length > 1;
   const showBrokerageForm =
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
+    !masterHasManyShipments &&
+    (!isMasterProfitLedger || masterBrokerageLoaded) &&
     canUpdateBrokerage({
       is_sales: profitIsSales,
       status: profitStatus,
@@ -473,30 +610,134 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   });
   const profitConfirmed = isProfitConfirmed(profitStatus);
   const profitOnHold = isProfitOnHold(profitStatus);
+  const masterAccountsTargets = masterShipmentRows
+    .filter(
+      (row) =>
+        !isAccountsProfitVerified({
+          accounts_verified: row.accounts_verified,
+        }),
+    )
+    .map(brokerageShipmentId)
+    .filter(Boolean);
+  const masterSalesTargets = masterShipmentRows
+    .filter((row) =>
+      canShowSalespersonVerify({
+        is_sales: profitIsSales,
+        status: row.status,
+        accounts_verified: row.accounts_verified,
+      }),
+    )
+    .map(brokerageShipmentId)
+    .filter(Boolean);
+  const masterConfirmTargets = masterShipmentRows
+    .filter((row) =>
+      canShowConfirmProfit({
+        is_sales: profitIsSales,
+        status: row.status,
+      }),
+    )
+    .map(brokerageShipmentId)
+    .filter(Boolean);
+  const masterAccountsVerifiedChecked =
+    masterShipmentRows.length > 0 && masterAccountsTargets.length === 0;
+  const masterSalespersonVerifiedChecked =
+    masterShipmentRows.length > 0 &&
+    masterShipmentRows.every((row) =>
+      isSalespersonProfitVerified({
+        salesperson_verified: row.salesperson_verified,
+        verified: row.verified,
+        status: row.status,
+      }),
+    );
+  const masterProfitConfirmed =
+    masterShipmentRows.length > 0 &&
+    masterShipmentRows.every((row) => isProfitConfirmed(row.status));
+  const masterPricingOnHold =
+    masterSalesTargets.length === 0 &&
+    masterShipmentRows.some((row) => isProfitOnHold(row.status));
+  const masterConfirmOnHold =
+    masterConfirmTargets.length === 0 &&
+    masterShipmentRows.some((row) => isProfitOnHold(row.status));
+  const accountsVerifiedCheckedView = masterHasManyShipments
+    ? masterAccountsVerifiedChecked
+    : accountsVerifiedChecked;
+  const salespersonVerifiedCheckedView = masterHasManyShipments
+    ? masterSalespersonVerifiedChecked
+    : salespersonVerifiedChecked;
+  const profitConfirmedView = masterHasManyShipments
+    ? masterProfitConfirmed
+    : profitConfirmed;
+  const pricingHoldTooltip = masterHasManyShipments
+    ? masterPricingOnHold
+    : profitOnHold;
+  const confirmHoldTooltip = masterHasManyShipments
+    ? masterConfirmOnHold
+    : profitOnHold;
   // No status-based key for accounts — checkbox stays unchecked until the user verifies.
-  const canAccountsVerifyNow = !accountsVerifiedChecked;
-  const canSalespersonVerifyNow = canShowSalespersonVerify({
-    is_sales: profitIsSales,
-    status: profitStatus,
-    accounts_verified: accountsVerifiedChecked,
-  });
-  const canConfirmNow = canShowConfirmProfit({
-    is_sales: profitIsSales,
-    status: profitStatus,
-  });
+  const canAccountsVerifyNow = masterHasManyShipments
+    ? masterAccountsTargets.length > 0
+    : !accountsVerifiedChecked;
+  const canSalespersonVerifyNow = masterHasManyShipments
+    ? masterSalesTargets.length > 0
+    : canShowSalespersonVerify({
+        is_sales: profitIsSales,
+        status: profitStatus,
+        accounts_verified: accountsVerifiedChecked,
+      });
+  const canConfirmNow = masterHasManyShipments
+    ? masterConfirmTargets.length > 0
+    : canShowConfirmProfit({
+        is_sales: profitIsSales,
+        status: profitStatus,
+      });
+  const hasProfitShipmentContext = isMasterProfitLedger
+    ? masterBrokerageLoaded &&
+      (Boolean(profitShipmentId) || masterHasManyShipments)
+    : Boolean(profitShipmentId);
   const showAccountsVerifyCheckbox =
     fromProfitVerification &&
-    Boolean(profitShipmentId) &&
+    hasProfitShipmentContext &&
     (profitIsSales === true || profitIsSales === false);
   const showSalespersonVerifyCheckbox =
     fromProfitVerification &&
-    Boolean(profitShipmentId) &&
+    hasProfitShipmentContext &&
     (profitIsSales === true || profitIsSales === false);
   const showProfitConfirmCheckbox =
     fromProfitVerification &&
-    Boolean(profitShipmentId) &&
+    hasProfitShipmentContext &&
     profitIsSales === true;
-  const canViewBrokerage = fromProfitVerification && canManageBrokerage;
+  const canViewBrokerage =
+    fromProfitVerification && canManageBrokerage && !masterHasManyShipments;
+  const latestAccountsAudit = latestBrokerageAudit(
+    masterShipmentRows,
+    "accounts_at",
+  );
+  const latestPricingAudit = latestBrokerageAudit(
+    masterShipmentRows,
+    "verified_at",
+  );
+  const latestConfirmAudit = latestBrokerageAudit(
+    masterShipmentRows,
+    "confirmed_at",
+  );
+  const accountsByView = masterHasManyShipments
+    ? (latestAccountsAudit?.accounts_by ?? null)
+    : accountsBy;
+  const accountsAtView = masterHasManyShipments
+    ? (latestAccountsAudit?.accounts_at ?? null)
+    : accountsAt;
+  const profitVerifiedByView = masterHasManyShipments
+    ? (latestPricingAudit?.verified_by ?? null)
+    : profitVerifiedBy;
+  const profitVerifiedAtView = masterHasManyShipments
+    ? (latestPricingAudit?.verified_at ?? null)
+    : profitVerifiedAt;
+  const profitConfirmedByView = masterHasManyShipments
+    ? (latestConfirmAudit?.confirmed_by ?? null)
+    : profitConfirmedBy;
+  const profitConfirmedAtView = masterHasManyShipments
+    ? (latestConfirmAudit?.confirmed_at ?? null)
+    : profitConfirmedAt;
   const brokerageDisplay =
     brokerageAmount != null &&
     String(brokerageAmount).trim() !== "" &&
@@ -514,14 +755,14 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     [dateFormat],
   );
 
-  const confirmedByDetails = profitConfirmed ? (
+  const confirmedByDetails = profitConfirmedView ? (
     <Stack gap={0}>
       <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-        Confirmed by {profitConfirmedBy?.trim() || "—"}
+        Confirmed by {profitConfirmedByView?.trim() || "—"}
       </Text>
-      {profitConfirmedAt ? (
+      {profitConfirmedAtView ? (
         <Text size="xs" c="dimmed" style={{ fontFamily: "Inter" }}>
-          {formatProfitAuditDateTime(profitConfirmedAt)}
+          {formatProfitAuditDateTime(profitConfirmedAtView)}
         </Text>
       ) : null}
     </Stack>
@@ -1125,13 +1366,22 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       const brokerageRows = Array.isArray(result?.brokerage)
         ? result.brokerage
         : [];
+      const shipmentBrokerageRows = brokerageRows.filter((row) =>
+        Boolean(brokerageShipmentId(row)),
+      );
+      if (isMasterProfitLedger) {
+        setProfitBrokerageRows(shipmentBrokerageRows);
+        setMasterBrokerageLoaded(true);
+      }
       const matchedBrokerage =
         brokerageRows.find(
           (row) =>
             String(row.shipment_id ?? "").trim() ===
             String(profitShipmentId || navShipmentId).trim(),
         ) ?? brokerageRows[0];
-      if (matchedBrokerage) {
+      if (isMasterProfitLedger && shipmentBrokerageRows.length > 1) {
+        setProfitShipmentId("");
+      } else if (matchedBrokerage) {
         const matchedShipment = String(
           matchedBrokerage.shipment_id ?? "",
         ).trim();
@@ -1164,6 +1414,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         }
         if (
           matchedBrokerage.verified === true ||
+          matchedBrokerage.salesperson_verified === true ||
           matchedBrokerage.confirmed_by != null
         ) {
           setSalespersonVerified(true);
@@ -2294,7 +2545,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
             Job Ledger
           </Text>
           <Group gap="md" align="flex-start">
-            {fromProfitVerification && Boolean(profitShipmentId) && (
+            {fromProfitVerification && hasProfitShipmentContext && (
               <Stack gap={4}>
                 {(canViewBrokerage ||
                   showAccountsVerifyCheckbox ||
@@ -2313,9 +2564,9 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       <Stack gap={4}>
                         <Checkbox
                           label="Accounts Verify"
-                          checked={accountsVerifiedChecked}
+                          checked={accountsVerifiedCheckedView}
                           disabled={
-                            accountsVerifiedChecked || !canAccountsVerifyNow
+                            accountsVerifiedCheckedView || !canAccountsVerifyNow
                           }
                           styles={{
                             label: {
@@ -2326,9 +2577,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                             },
                           }}
                           onChange={() => {
-                            if (!canAccountsVerifyNow || !profitShipmentId) {
+                            if (!canAccountsVerifyNow) return;
+                            if (masterHasManyShipments) {
+                              const targets = [...masterAccountsTargets];
+                              runJobProfitAccountsVerify({
+                                shipmentIds: targets,
+                                onSuccess: (response) => {
+                                  setProfitBrokerageRows((prev) =>
+                                    mergeMasterProfitPatch(
+                                      prev,
+                                      targets,
+                                      response,
+                                      "accounts",
+                                    ),
+                                  );
+                                },
+                              });
                               return;
                             }
+                            if (!profitShipmentId) return;
                             runJobProfitAccountsVerify({
                               shipmentId: profitShipmentId,
                               onSuccess: (response) => {
@@ -2362,22 +2629,22 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                             });
                           }}
                         />
-                        {accountsVerifiedChecked && (
+                        {accountsVerifiedCheckedView && (
                           <Stack gap={0}>
                             <Text
                               size="xs"
                               c="dimmed"
                               style={{ fontFamily: "Inter" }}
                             >
-                              Verified by {accountsBy?.trim() || "—"}
+                              Verified by {accountsByView?.trim() || "—"}
                             </Text>
-                            {accountsAt ? (
+                            {accountsAtView ? (
                               <Text
                                 size="xs"
                                 c="dimmed"
                                 style={{ fontFamily: "Inter" }}
                               >
-                                {formatProfitAuditDateTime(accountsAt)}
+                                {formatProfitAuditDateTime(accountsAtView)}
                               </Text>
                             ) : null}
                           </Stack>
@@ -2388,16 +2655,16 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       <Stack gap={4}>
                         <Tooltip
                           label="Job profit status is hold. Sent for Approval"
-                          disabled={!profitOnHold}
+                          disabled={!pricingHoldTooltip}
                           withArrow
                           position="top"
                         >
                           <Box style={{ width: "fit-content" }}>
                             <Checkbox
                               label="Pricing Verify"
-                              checked={salespersonVerifiedChecked}
+                              checked={salespersonVerifiedCheckedView}
                               disabled={
-                                salespersonVerifiedChecked ||
+                                salespersonVerifiedCheckedView ||
                                 !canSalespersonVerifyNow
                               }
                               styles={{
@@ -2409,12 +2676,25 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                                 },
                               }}
                               onChange={() => {
-                                if (
-                                  !canSalespersonVerifyNow ||
-                                  !profitShipmentId
-                                ) {
+                                if (!canSalespersonVerifyNow) return;
+                                if (masterHasManyShipments) {
+                                  const targets = [...masterSalesTargets];
+                                  runJobProfitSalespersonVerify({
+                                    shipmentIds: targets,
+                                    onSuccess: (response) => {
+                                      setProfitBrokerageRows((prev) =>
+                                        mergeMasterProfitPatch(
+                                          prev,
+                                          targets,
+                                          response,
+                                          "pricing",
+                                        ),
+                                      );
+                                    },
+                                  });
                                   return;
                                 }
+                                if (!profitShipmentId) return;
                                 runJobProfitSalespersonVerify({
                                   shipmentId: profitShipmentId,
                                   onSuccess: (response) => {
@@ -2442,7 +2722,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                             />
                           </Box>
                         </Tooltip>
-                        {salespersonVerifiedChecked && (
+                        {salespersonVerifiedCheckedView && (
                           <Stack gap={0}>
                             <Text
                               size="xs"
@@ -2450,18 +2730,18 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                               style={{ fontFamily: "Inter" }}
                             >
                               Verified by{" "}
-                              {profitVerifiedBy?.trim() ||
-                                profitConfirmedBy?.trim() ||
+                              {profitVerifiedByView?.trim() ||
+                                profitConfirmedByView?.trim() ||
                                 "—"}
                             </Text>
-                            {profitVerifiedAt || profitConfirmedAt ? (
+                            {profitVerifiedAtView || profitConfirmedAtView ? (
                               <Text
                                 size="xs"
                                 c="dimmed"
                                 style={{ fontFamily: "Inter" }}
                               >
                                 {formatProfitAuditDateTime(
-                                  profitVerifiedAt || profitConfirmedAt,
+                                  profitVerifiedAtView || profitConfirmedAtView,
                                 )}
                               </Text>
                             ) : null}
@@ -2473,15 +2753,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                       <Stack gap={4}>
                         <Tooltip
                           label="Job profit status is hold. Sent for Approval"
-                          disabled={!profitOnHold}
+                          disabled={!confirmHoldTooltip}
                           withArrow
                           position="top"
                         >
                           <Box style={{ width: "fit-content" }}>
                             <Checkbox
                               label="Confirm"
-                              checked={profitConfirmed}
-                              disabled={profitConfirmed || !canConfirmNow}
+                              checked={profitConfirmedView}
+                              disabled={profitConfirmedView || !canConfirmNow}
                               styles={{
                                 label: {
                                   fontFamily: "Inter",
@@ -2491,9 +2771,40 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                                 },
                               }}
                               onChange={() => {
-                                if (!canConfirmNow || !profitShipmentId) {
+                                if (!canConfirmNow) return;
+                                if (masterHasManyShipments) {
+                                  const targets = [...masterConfirmTargets];
+                                  runJobProfitHouseAction({
+                                    shipmentIds: targets,
+                                    action: "confirm",
+                                    askBrokerage: false,
+                                    onSuccess: (response) => {
+                                      const updatedIds = Array.isArray(
+                                        response?.data,
+                                      )
+                                        ? response.data
+                                            .map((row) =>
+                                              String(
+                                                row?.shipment_id ?? "",
+                                              ).trim(),
+                                            )
+                                            .filter(Boolean)
+                                        : targets;
+                                      setProfitBrokerageRows((prev) =>
+                                        mergeMasterProfitPatch(
+                                          prev,
+                                          updatedIds.length
+                                            ? updatedIds
+                                            : targets,
+                                          response,
+                                          "confirm",
+                                        ),
+                                      );
+                                    },
+                                  });
                                   return;
                                 }
+                                if (!profitShipmentId) return;
                                 runJobProfitHouseAction({
                                   shipmentId: profitShipmentId,
                                   action: "confirm",
@@ -2524,7 +2835,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                             />
                           </Box>
                         </Tooltip>
-                        {isSalespersonLogin && profitConfirmed
+                        {isSalespersonLogin && profitConfirmedView
                           ? confirmedByDetails
                           : null}
                       </Stack>

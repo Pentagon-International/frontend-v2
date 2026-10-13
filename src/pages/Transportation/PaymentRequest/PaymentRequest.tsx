@@ -1518,6 +1518,48 @@ function PaymentRequest() {
     [gstBreakup],
   );
 
+  // Edit/view already has an id in the URL. Create only has one after save.
+  const savedPaymentRequestId = useMemo(() => {
+    if (isEditOrViewMode && requestId) {
+      const idNum = Number(requestId);
+      if (Number.isFinite(idNum) && idNum > 0) return idNum;
+    }
+    if (saveResponse?.id != null && Number(saveResponse.id) > 0) {
+      return Number(saveResponse.id);
+    }
+    return null;
+  }, [isEditOrViewMode, requestId, saveResponse?.id]);
+
+  const showSavedTaxTab = showTaxTab && savedPaymentRequestId != null;
+
+  // Same as invoice: opening the Tax tab loads the saved GST breakup.
+  useEffect(() => {
+    if (chargesTabActive !== "tax" || !savedPaymentRequestId || !showTaxTab) {
+      return;
+    }
+    let cancelled = false;
+    setGstBreakupLoading(true);
+    postAPICall(
+      URL.invoiceCalculateGstBreakup,
+      { payment_request_id: savedPaymentRequestId },
+      API_HEADER,
+    )
+      .then((response) => {
+        if (!cancelled) {
+          setGstBreakup(parsePaymentRequestGstBreakupResponse(response));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGstBreakup(null);
+      })
+      .finally(() => {
+        if (!cancelled) setGstBreakupLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chargesTabActive, savedPaymentRequestId, showTaxTab]);
+
   useEffect(() => {
     // In create flow, if voucher type is empty, auto-fill from source screen.
     if (isEditOrViewMode) return;
@@ -2829,8 +2871,6 @@ function PaymentRequest() {
       request_no: d.request_no ?? "",
       status: d.status,
     });
-    setGstBreakup(null);
-    setGstBreakupLoading(false);
     const loadedActualNo = String(d.actual_inv_no ?? "").trim();
     const loadedActualDate = normalizeDate(d.actual_inv_date);
     setActualInvAlreadySet(Boolean(loadedActualNo && loadedActualDate));
@@ -3826,7 +3866,7 @@ function PaymentRequest() {
               onChange={(v) => setChargesTabActive(v ?? "charges")}
               defaultValue="charges"
             >
-              {saveResponse && showTaxTab && (
+              {showSavedTaxTab && (
                 <Tabs.List>
                   <Tabs.Tab value="charges">Charges</Tabs.Tab>
                   <Tabs.Tab value="tax">Tax</Tabs.Tab>
@@ -4940,7 +4980,7 @@ function PaymentRequest() {
                 </Box>
               </Tabs.Panel>
 
-              {saveResponse && showTaxTab && (
+              {showSavedTaxTab && (
                 <Tabs.Panel value="tax">
                   {gstBreakupLoading && (
                     <Stack align="center" py="xl">
@@ -4953,9 +4993,11 @@ function PaymentRequest() {
                   {!gstBreakupLoading &&
                     !gstBreakup &&
                     chargesTabActive === "tax" &&
-                    saveResponse?.id && (
+                    savedPaymentRequestId && (
                       <Text size="sm" c="dimmed" py="md">
-                        Click Calculate GST to load tax breakup.
+                        {formFieldsReadOnly
+                          ? "No tax breakup available."
+                          : "Click Calculate GST to load tax breakup."}
                       </Text>
                     )}
                   {!gstBreakupLoading && gstBreakup && (
@@ -5098,9 +5140,7 @@ function PaymentRequest() {
                       </ScrollArea>
                     </>
                   )}
-                  {chargesTabActive === "tax" &&
-                    saveResponse &&
-                    !saveResponse.id && (
+                  {chargesTabActive === "tax" && !savedPaymentRequestId && (
                       <Text size="sm" c="dimmed" py="md">
                         Click Calculate GST to save and load tax breakup.
                       </Text>

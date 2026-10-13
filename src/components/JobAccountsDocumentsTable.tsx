@@ -464,12 +464,24 @@ export function JobAccountsDocumentsTable({
               }
               styles={menuItemStyles}
               onClick={() => {
-                const invoiceDataWithoutDocuments = { ...row };
+                // Same payload as Supplier Invoice list "Create Supplier Invoice Reverse":
+                // drop attachments, and pass supplier-invoice `id` + `crj_number`.
+                // Job finance rows store those as supplier_invoice_id and document_no.
+                const invoiceDataWithoutDocuments: Record<string, unknown> = {
+                  ...row,
+                };
                 delete invoiceDataWithoutDocuments.documents;
                 delete invoiceDataWithoutDocuments.supporting_documents;
                 delete invoiceDataWithoutDocuments.reverse;
+                const crjNumber = String(
+                  row.crj_number ?? row.document_no ?? "",
+                ).trim();
                 navigate("/supplier-invoice/reversal/create", {
-                  state: withNavState(invoiceDataWithoutDocuments),
+                  state: withNavState({
+                    ...invoiceDataWithoutDocuments,
+                    id: docId,
+                    ...(crjNumber ? { crj_number: crjNumber } : {}),
+                  }),
                 });
               }}
             >

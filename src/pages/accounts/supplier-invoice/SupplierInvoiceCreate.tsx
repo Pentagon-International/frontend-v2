@@ -967,6 +967,8 @@ export default function SupplierInvoiceCreate({
   /** Loaded via `/supplier-invoice/view|edit/:id` (e.g. opened from Payment allocation modal). */
   const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
     useState<SupplierInvoiceListItem | null>(null);
+  /** Reversal create waits for the source CRJ GET before the form is shown. */
+  const [crjDetailsReady, setCrjDetailsReady] = useState(false);
   // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
   const invoiceFromState =
     invoiceFromRouteFetch ??
@@ -997,6 +999,7 @@ export default function SupplierInvoiceCreate({
     const idNum = resolveSourceId();
     if (!Number.isFinite(idNum) || idNum <= 0) {
       setInvoiceFromRouteFetch(null);
+      if (isReversalCreate) setCrjDetailsReady(true);
       return;
     }
 
@@ -1004,8 +1007,11 @@ export default function SupplierInvoiceCreate({
     const shouldFetch = isReversalCreate || isViewMode || isEditMode;
     if (!shouldFetch) {
       setInvoiceFromRouteFetch(null);
+      if (isReversalCreate) setCrjDetailsReady(true);
       return;
     }
+
+    if (isReversalCreate) setCrjDetailsReady(false);
 
     const detailUrl =
       isReversal && !isReversalCreate
@@ -1017,19 +1023,26 @@ export default function SupplierInvoiceCreate({
       try {
         const res = await apiCallProtected.get(detailUrl, API_HEADER);
         const record = resolveSupplierInvoiceApiRecord(res);
-        if (!cancelled && record) {
+        if (cancelled) return;
+        if (record) {
           setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
+        } else if (isReversalCreate || idFromRoute) {
+          setInvoiceFromRouteFetch(null);
+          if (isReversalCreate) setCrjDetailsReady(true);
+          ToastNotification({
+            type: "error",
+            message: "Unable to load supplier invoice details.",
+          });
         }
       } catch (e) {
         console.error("Failed to load supplier invoice by id", e);
-        if (!cancelled) {
-          if (idFromRoute) {
-            setInvoiceFromRouteFetch(null);
-            ToastNotification({
-              type: "error",
-              message: "Unable to load supplier invoice details.",
-            });
-          }
+        if (!cancelled && (idFromRoute || isReversalCreate)) {
+          setInvoiceFromRouteFetch(null);
+          if (isReversalCreate) setCrjDetailsReady(true);
+          ToastNotification({
+            type: "error",
+            message: "Unable to load supplier invoice details.",
+          });
         }
       }
     })();
@@ -2540,6 +2553,20 @@ export default function SupplierInvoiceCreate({
     // Force charges to apply (same as ReceiptCreate: setFieldValue after setValues so list array is always shown)
     form.setFieldValue("charges_data", mappedCharges);
     form.setFieldValue("supporting_documents", mappedSupportingDocuments);
+    const reversalSourceId = Number(
+      (location.state as { id?: number } | null | undefined)?.id,
+    );
+    const fetchedCrjId = Number(
+      (invoiceFromRouteFetch as { id?: number } | null | undefined)?.id,
+    );
+    if (
+      runForReversalCreate &&
+      invoiceFromRouteFetch &&
+      Number.isFinite(reversalSourceId) &&
+      fetchedCrjId === reversalSourceId
+    ) {
+      setCrjDetailsReady(true);
+    }
     const loadedInvNo = String(data.Inv_Crn_no ?? "").trim();
     const loadedInvDate =
       parseDateOnly((data.Inv_Crn_note as string) ?? undefined) ??
@@ -3878,6 +3905,14 @@ export default function SupplierInvoiceCreate({
   // Daybook and date: editable in reversal create/edit when !isReadOnly; read-only when posted or view
   const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
   const daybookDateDisabled = isReadOnly;
+  const reversalSourceId = Number(
+    (location.state as { id?: number } | null | undefined)?.id,
+  );
+  const showCrjLoader =
+    isReversalCreate &&
+    Number.isFinite(reversalSourceId) &&
+    reversalSourceId > 0 &&
+    !crjDetailsReady;
 
   const showAuditInfo =
     isViewMode ||
@@ -3936,7 +3971,7 @@ export default function SupplierInvoiceCreate({
   return (
     <Box p={"sm"} style={{ position: "relative" }}>
       {viewAllocationDocsUi}
-      {(isSubmitting || calcLoading) && (
+      {(isSubmitting || calcLoading || showCrjLoader) && (
         <Box
           style={{
             position: "fixed",
@@ -3951,7 +3986,11 @@ export default function SupplierInvoiceCreate({
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
-              {calcLoading ? calcLoadingText : "Saving supplier invoice..."}
+              {showCrjLoader
+                ? "Loading supplier invoice..."
+                : calcLoading
+                  ? calcLoadingText
+                  : "Saving supplier invoice..."}
             </Text>
           </Stack>
         </Box>

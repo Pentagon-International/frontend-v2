@@ -737,10 +737,27 @@ export default function JobProfitVerificationMaster({
 
       const ledgerJobId = stripJobIdServicePrefix(jobNo);
 
-      // Master ledger omits house identifiers (hbl_hawb_no / shipment_id).
+      // Master ledger omits the house bill so the full job loads.
+      // Shipment verification is still passed so the same checkboxes can run;
+      // when the ledger returns every house, those rows drive the checkboxes.
       persistListAndNavigate("/job-ledger", {
         jobId: ledgerJobId,
         job_id: ledgerJobId,
+        shipment_id: row.subjob_no?.trim() || undefined,
+        is_sales: row.is_sales,
+        status: row.status,
+        brokerage: row.brokerage ?? null,
+        brokerage_remark: row.brokerage_remark ?? null,
+        accounts_verified: row.accounts_verified ?? null,
+        accounts_by: row.accounts_by ?? null,
+        accounts_at: row.accounts_at ?? null,
+        salesperson_verified: row.salesperson_verified ?? null,
+        verified: row.verified ?? null,
+        verified_by: row.verified_by ?? null,
+        verified_at: row.verified_at ?? null,
+        confirmed_by: row.confirmed_by ?? null,
+        confirmed_at: row.confirmed_at ?? null,
+        fromJobProfitVerification: true,
         jobReturnTo: listReturnPath,
       });
     },

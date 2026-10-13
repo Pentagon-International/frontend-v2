@@ -348,45 +348,76 @@ export function canShowSalespersonVerify(params: {
   );
 }
 
+export function uniqueShipmentIds(
+  shipmentId?: string | null,
+  shipmentIds?: Array<string | null | undefined> | null,
+): string[] {
+  const raw =
+    shipmentIds && shipmentIds.length > 0 ? shipmentIds : [shipmentId];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const value of raw) {
+    const id = String(value ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+export function formatShipmentActionScope(shipmentIds: string[]): string {
+  if (shipmentIds.length === 1) return `shipment ${shipmentIds[0]}`;
+  return `${shipmentIds.length} shipments`;
+}
+
 export function buildAccountsVerifyPayload(
-  shipmentId: string,
+  shipmentId: string | string[],
 ): JobProfitHouseItemsPayload {
+  const shipmentIds = uniqueShipmentIds(
+    Array.isArray(shipmentId) ? undefined : shipmentId,
+    Array.isArray(shipmentId) ? shipmentId : undefined,
+  );
   return {
-    items: [
-      {
-        shipment_id: String(shipmentId ?? "").trim(),
-        accounts_verified: true,
-      },
-    ],
+    items: shipmentIds.map((id) => ({
+      shipment_id: id,
+      accounts_verified: true,
+    })),
   };
 }
 
 export function buildSalespersonVerifyPayload(
-  shipmentId: string,
+  shipmentId: string | string[],
 ): JobProfitHouseItemsPayload {
+  const shipmentIds = uniqueShipmentIds(
+    Array.isArray(shipmentId) ? undefined : shipmentId,
+    Array.isArray(shipmentId) ? shipmentId : undefined,
+  );
   return {
-    items: [
-      {
-        shipment_id: String(shipmentId ?? "").trim(),
-        verified: true,
-      },
-    ],
+    items: shipmentIds.map((id) => ({
+      shipment_id: id,
+      verified: true,
+    })),
   };
 }
 
 /** Confirm + PATCH accounts verification (items payload). */
 export function runJobProfitAccountsVerify(options: {
-  shipmentId: string;
+  shipmentId?: string;
+  shipmentIds?: string[];
   onSuccess?: (response?: JobProfitHousePatchResult) => void;
 }) {
-  const shipmentId = String(options.shipmentId ?? "").trim();
-  if (!shipmentId) {
+  const shipmentIds = uniqueShipmentIds(
+    options.shipmentId,
+    options.shipmentIds,
+  );
+  if (shipmentIds.length === 0) {
     ToastNotification({
       type: "error",
       message: "Shipment number not found.",
     });
     return;
   }
+  const scopeLabel = formatShipmentActionScope(shipmentIds);
 
   let loading = false;
   let error: string | null = null;
@@ -396,7 +427,7 @@ export function runJobProfitAccountsVerify(options: {
       update(
         <ConfirmActionModal
           title="Accounts Verify"
-          message={`Mark accounts verification complete for shipment ${shipmentId}?`}
+          message={`Mark accounts verification complete for ${scopeLabel}?`}
           confirmLabel="Accounts Verify"
           loading={loading}
           error={error}
@@ -412,7 +443,7 @@ export function runJobProfitAccountsVerify(options: {
             void (async () => {
               try {
                 const response = await patchJobProfitHouseItems(
-                  buildAccountsVerifyPayload(shipmentId),
+                  buildAccountsVerifyPayload(shipmentIds),
                 );
                 ToastNotification({
                   type: "success",
@@ -442,17 +473,22 @@ export function runJobProfitAccountsVerify(options: {
 
 /** Confirm + PATCH salesperson verification (items payload). */
 export function runJobProfitSalespersonVerify(options: {
-  shipmentId: string;
+  shipmentId?: string;
+  shipmentIds?: string[];
   onSuccess?: (response?: JobProfitHousePatchResult) => void;
 }) {
-  const shipmentId = String(options.shipmentId ?? "").trim();
-  if (!shipmentId) {
+  const shipmentIds = uniqueShipmentIds(
+    options.shipmentId,
+    options.shipmentIds,
+  );
+  if (shipmentIds.length === 0) {
     ToastNotification({
       type: "error",
       message: "Shipment number not found.",
     });
     return;
   }
+  const scopeLabel = formatShipmentActionScope(shipmentIds);
 
   let loading = false;
   let error: string | null = null;
@@ -462,7 +498,7 @@ export function runJobProfitSalespersonVerify(options: {
       update(
         <ConfirmActionModal
           title="Pricing Verify"
-          message={`Mark pricing verification complete for shipment ${shipmentId}?`}
+          message={`Mark pricing verification complete for ${scopeLabel}?`}
           confirmLabel="Pricing Verify"
           loading={loading}
           error={error}
@@ -478,7 +514,7 @@ export function runJobProfitSalespersonVerify(options: {
             void (async () => {
               try {
                 const response = await patchJobProfitHouseItems(
-                  buildSalespersonVerifyPayload(shipmentId),
+                  buildSalespersonVerifyPayload(shipmentIds),
                 );
                 ToastNotification({
                   type: "success",
@@ -1143,7 +1179,8 @@ function mountPortal(renderNode: (api: {
  * Confirm can optionally collect brokerage first (saved separately), then confirm.
  */
 export function runJobProfitHouseAction(options: {
-  shipmentId: string;
+  shipmentId?: string;
+  shipmentIds?: string[];
   action: JobProfitHouseAction;
   /** When confirming, show optional brokerage fields (list page). */
   askBrokerage?: boolean;
@@ -1151,7 +1188,11 @@ export function runJobProfitHouseAction(options: {
   initialBrokerageRemark?: string | null;
   onSuccess?: (response?: JobProfitHousePatchResult) => void;
 }) {
-  const shipmentId = String(options.shipmentId ?? "").trim();
+  const shipmentIds = uniqueShipmentIds(
+    options.shipmentId,
+    options.shipmentIds,
+  );
+  const shipmentId = shipmentIds[0] ?? "";
   if (!shipmentId) {
     ToastNotification({
       type: "error",
@@ -1159,6 +1200,7 @@ export function runJobProfitHouseAction(options: {
     });
     return;
   }
+  const scopeLabel = formatShipmentActionScope(shipmentIds);
 
   if (options.action === "verify") {
     let loading = false;
@@ -1221,13 +1263,14 @@ export function runJobProfitHouseAction(options: {
   if (!askBrokerage) {
     let loading = false;
     let error: string | null = null;
+    let pendingShipmentIds = [...shipmentIds];
 
     mountPortal(({ update, destroy }) => {
       const render = () => {
         update(
           <ConfirmActionModal
             title="Confirm profit"
-            message={`Confirm profit for shipment ${shipmentId}?`}
+            message={`Confirm profit for ${scopeLabel}?`}
             confirmLabel="Confirm"
             loading={loading}
             error={error}
@@ -1241,22 +1284,53 @@ export function runJobProfitHouseAction(options: {
               render();
 
               void (async () => {
+                const succeeded: JobProfitHouseAuditRecord[] = [];
+                let lastResponse: JobProfitHousePatchResult | undefined;
+                const batch = pendingShipmentIds;
                 try {
-                  const response = await patchJobProfitHouse({
-                    shipment_id: shipmentId,
-                    confirmed: true,
-                  });
+                  for (const id of batch) {
+                    lastResponse = await patchJobProfitHouse({
+                      shipment_id: id,
+                      confirmed: true,
+                    });
+                    const nested = pickProfitHouseRecord(lastResponse, id);
+                    succeeded.push({
+                      ...(nested ?? {}),
+                      shipment_id: nested?.shipment_id ?? id,
+                      status:
+                        typeof nested?.status === "string" &&
+                        nested.status.trim()
+                          ? nested.status
+                          : "confirmed",
+                    });
+                  }
+                  pendingShipmentIds = [];
                   ToastNotification({
                     type: "success",
                     message:
-                      response?.message ?? "Profit confirmed successfully",
+                      lastResponse?.message ?? "Profit confirmed successfully",
                   });
                   destroy();
-                  options.onSuccess?.(response);
+                  options.onSuccess?.(
+                    shipmentIds.length === 1
+                      ? lastResponse
+                      : { ...lastResponse, data: succeeded },
+                  );
                 } catch (err: unknown) {
                   loading = false;
+                  const succeededIds = new Set(
+                    succeeded.map((row) =>
+                      String(row.shipment_id ?? "").trim(),
+                    ),
+                  );
+                  pendingShipmentIds = pendingShipmentIds.filter(
+                    (id) => !succeededIds.has(id),
+                  );
                   error = resolveApiErrorMessage(err);
                   ToastNotification({ type: "error", message: error });
+                  if (succeeded.length > 0) {
+                    options.onSuccess?.({ data: succeeded });
+                  }
                   render();
                 }
               })();
