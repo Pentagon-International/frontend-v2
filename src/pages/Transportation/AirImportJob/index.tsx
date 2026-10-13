@@ -1039,7 +1039,7 @@ function AirImportJobMaster() {
                             value={appliedFilters.mawb_no}
                             displayValue={appliedFilters.mawb_no}
                             theme={theme}
-                            placeholder="Filter MAWB"
+                            placeholder="Filter MAWB No"
                             isEditing={editingHeaderId === "mawb_no"}
                             onStartEdit={() => openHeaderEditor("mawb_no")}
                             onStopEdit={() => collapseHeaderEditor("mawb_no")}

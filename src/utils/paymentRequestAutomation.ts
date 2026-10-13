@@ -430,7 +430,8 @@ export function buildPaymentRequestOverrideDraft(
   const sourceCharges = Array.isArray(extracted?.charges_data) ? extracted.charges_data : [];
   const headerCurrencyId = idString(extracted?.currency_id);
   const headerCurrencyCode = textValue(extracted?.currency_code);
-  const paidTo = textValue(extracted?.paid_to);
+  const accountId = idString(extracted?.account_id);
+  const paidTo = accountId ? textValue(extracted?.paid_to) : "";
 
   const mapServiceRow = (row: PaymentRequestChargeDraft | Record<string, unknown>): PaymentRequestChargeDraft => {
     const chargeId = idString(row.charge_id);
@@ -477,10 +478,12 @@ export function buildPaymentRequestOverrideDraft(
     date: toIsoDateString(extracted?.date),
     payment_type: normalizePaymentType(extracted?.payment_type),
     vouchar_type: normalizeVoucherType(voucherType || extracted?.vouchar_type),
-    paid_to_type: textValue(extracted?.paid_to_type).toLowerCase() || "supplier",
+    paid_to_type: accountId
+      ? textValue(extracted?.paid_to_type).toLowerCase() || "supplier"
+      : "",
     paid_to: paidTo,
-    account_id: idString(extracted?.account_id),
-    account_code: textValue(extracted?.account_code),
+    account_id: accountId,
+    account_code: accountId ? textValue(extracted?.account_code) : "",
     currency_id: headerCurrencyId,
     currency_code: headerCurrencyCode,
     currency_name: textValue(extracted?.currency_name),

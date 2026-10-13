@@ -102,7 +102,7 @@ const INLAND_IMPORT_JOB_COLUMN_LABELS: Record<
   sno: "S.No",
   quotation_id: "Quotation ID",
   job_id: "Job ID",
-  mawb: "MAWB No",
+  mawb: "WayBill No",
   agent: "Agent",
   route: "Route",
   job_date: "Job Date",
@@ -796,8 +796,8 @@ function InlandImportJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
                       format="capital"
-                      label="MAWB No"
-                      placeholder="Type MAWB No"
+                      label="WayBill No"
+                      placeholder="Type WayBill No"
                       size="xs"
                       styles={filterFieldStyles}
                       value={draftFilters.mawb_no}
@@ -1073,13 +1073,13 @@ function InlandImportJobMaster() {
                         </th>
                       )}
                       {visibleColumns.mawb && (
-                        <th style={mergeTh(140)}>
+                        <th style={mergeTh(220)}>
                           <ERPListColumnHeaderFilter
-                            label="MAWB No"
+                            label="WayBill No"
                             value={appliedFilters.mawb_no}
                             displayValue={appliedFilters.mawb_no}
                             theme={theme}
-                            placeholder="Filter MAWB"
+                            placeholder="Filter WayBill No"
                             isEditing={editingHeaderId === "mawb_no"}
                             onStartEdit={() => openHeaderEditor("mawb_no")}
                             onStopEdit={() => collapseHeaderEditor("mawb_no")}

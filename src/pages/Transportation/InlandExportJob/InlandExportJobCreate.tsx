@@ -397,8 +397,8 @@ const carrierDetailsSchema = yup.object({
   flight_number: yup.string().required("Truck Number is required"),
   mawb_number: yup
     .string()
-    .required("AWB Number is required")
-    .matches(/^[A-Za-z0-9]{11}$/, "AWB Number must be exactly 11 characters"),
+    .required("WayBill No is required")
+    .matches(/^[A-Za-z0-9]{11}$/, "WayBill No must be exactly 11 characters"),
   mawb_date: yup.date().nullable(),
 });
 
@@ -739,7 +739,7 @@ function InlandExportJobCreate() {
     navigate,
   ]);
 
-  // MAWB Details Form - Initialize with jobData if available, or from location.state for create mode
+  // WayBill Details Form - Initialize with jobData if available, or from location.state for create mode
   const mawbDetailsForm = useForm<MAWBDetailsForm>({
     initialValues: {
       service_code:
@@ -1073,7 +1073,7 @@ function InlandExportJobCreate() {
           carrierName: jobData.carrier_name,
         });
 
-        // Populate MAWB Details using setValues - ensure all fields are set
+        // Populate WayBill Details using setValues - ensure all fields are set
         const mawbInitialValues = {
           service_code: jobServiceFields.service_code,
           service_name: jobServiceFields.service_name,
@@ -1182,7 +1182,7 @@ function InlandExportJobCreate() {
         }
 
         console.log(
-          "✅ MAWB Details initialized - Form values after setValues:",
+          "✅ WayBill Details initialized - Form values after setValues:",
           {
             agent_code: mawbDetailsForm.values.agent_code,
             origin_code: mawbDetailsForm.values.origin_code,
@@ -2169,7 +2169,7 @@ function InlandExportJobCreate() {
           mawbDetailsKey !== lastRestoredMawbDetailsRef.current;
 
         if (shouldRestore && savedMawbDetails) {
-          // Restore MAWB Details - Always restore when coming back from HAWB
+          // Restore WayBill Details - Always restore when coming back from HAWB
           mawbDetailsForm.setValues({
             service_code: savedMawbDetails.service_code || "",
             service_name: savedMawbDetails.service_name || "",
@@ -2431,7 +2431,7 @@ function InlandExportJobCreate() {
       if (missingFields.length > 0) {
         ToastNotification({
           type: "error",
-          message: `Please fill all mandatory MAWB details.`,
+          message: `Please fill all mandatory WayBill details.`,
         });
         // Set active step to 0 to show the MAWB details form
         setActive(0);
@@ -2656,7 +2656,7 @@ function InlandExportJobCreate() {
     if (hawbDetails.length === 0) {
       ToastNotification({
         type: "error",
-        message: "At least one AWB detail is required before creating job",
+        message: "At least one TWB is required before creating the job",
       });
       return false;
     }
@@ -2668,7 +2668,7 @@ function InlandExportJobCreate() {
 
       // Step 1 validations
       if (!hawb.hawb_number?.trim()) {
-        missingFields.push("AWB Number");
+        missingFields.push("TWB No");
       }
       if (!hawb.origin_code?.trim()) {
         missingFields.push("Origin");
@@ -2713,7 +2713,7 @@ function InlandExportJobCreate() {
       if (missingFields.length > 0) {
         ToastNotification({
           type: "error",
-          message: `AWB ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
+          message: `TWB ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
         });
         return false;
       }
@@ -2742,7 +2742,7 @@ function InlandExportJobCreate() {
     if (mawbValidation.hasErrors || carrierValidation.hasErrors) {
       ToastNotification({
         type: "error",
-        message: "Please fill all required fields in MAWB & Carrier Details",
+        message: "Please fill all required fields in WayBill & Carrier Details",
       });
       setIsSubmitting(false);
       return;
@@ -3470,7 +3470,7 @@ function InlandExportJobCreate() {
               fontWeight: active === 0 ? 600 : 400,
             }}
           >
-            MAWB &amp; Carrier Details
+            WayBill &amp; Carrier Details
           </Tabs.Tab>
           <Tabs.Tab
             value="1"
@@ -3532,13 +3532,13 @@ function InlandExportJobCreate() {
           )}
         </Tabs.List>
 
-        {/* Tab 1: MAWB Details & Carrier Details */}
+        {/* Tab 1: WayBill Details & Carrier Details */}
         <Tabs.Panel value="0">
           <Box mt="md">
-            {/* MAWB Details Section */}
+            {/* WayBill Details Section */}
             <Group align="center" mb="md">
               <Text size="lg" fw={600} c="#105476">
-                MAWB Details
+                WayBill Details
               </Text>
             </Group>
             <Grid mb="sm">
@@ -3871,9 +3871,9 @@ function InlandExportJobCreate() {
               <Grid.Col span={2}>
                 <FormTextInput
                   format="capital"
-                  label="AWB Number"
+                  label="WayBill No"
                   required
-                  placeholder="Enter AWB number"
+                  placeholder="Enter WayBill No"
                   maxLength={11}
                   {...carrierDetailsForm.getInputProps("mawb_number")}
                 />
@@ -3881,7 +3881,7 @@ function InlandExportJobCreate() {
 
               <Grid.Col span={2}>
                 <SingleDateInput
-                  label="AWB Date"
+                  label="Waybill Date"
                   placeholder="YYYY-MM-DD"
                   {...(() => {
                     const inputProps =
@@ -4733,7 +4733,7 @@ function InlandExportJobCreate() {
               leftSection={<IconPlus size={16} />}
               onClick={() => navigateToHawbCreate()}
             >
-              Add AWB
+              Add TWB
             </Button>
           )}
           {active === 0 && !isReadOnly && (
@@ -5016,7 +5016,7 @@ function InlandExportJobCreate() {
       {hawbDetails.length > 0 && (
         <Box mb="xl">
           <Text size="lg" fw={600} c="#105476" mb="md" mt="md">
-            Air Waybill (AWB) ({hawbDetails.length})
+            TWB ({hawbDetails.length})
           </Text>
           <Stack gap="md">
             {hawbDetails.map((hawb, index) => (
@@ -5024,7 +5024,7 @@ function InlandExportJobCreate() {
                 <Group justify="space-between" align="flex-start" mb="md">
                   <Group>
                     <Badge color="#105476" size="lg">
-                      AWB {index + 1}
+                      TWB {index + 1}
                     </Badge>
                     <Badge
                       color={
@@ -5196,7 +5196,7 @@ function InlandExportJobCreate() {
                 <Grid>
                   <Grid.Col span={2}>
                     <Text size="sm" fw={500} c="dimmed">
-                      AWB Number
+                      TWB No
                     </Text>
                     <Text size="sm" mb="sm">
                       {hawb.hawb_number || "-"}

@@ -3820,8 +3820,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 <Grid.Col span={4}>
                   <FormTextInput
                     format="capital"
-                    label="HAWB Number"
-                    placeholder="Enter HAWB Number"
+                    label="HAWB No"
+                    placeholder="Enter HAWB No"
                     value={form.values.houseno}
                     onChange={(e) => {
                       form.setFieldValue("houseno", e.target.value);
@@ -3832,8 +3832,8 @@ const AirImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                 <Grid.Col span={4}>
                   <FormTextInput
                     format="capital"
-                    label="MAWB Number"
-                    placeholder="Enter MAWB Number"
+                    label="MAWB No"
+                    placeholder="Enter MAWB No"
                     value={form.values.master_no}
                     onChange={(e) => {
                       form.setFieldValue("master_no", e.target.value);

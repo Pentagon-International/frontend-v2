@@ -69,10 +69,8 @@ export function ERPListTableCard({
             display: fillBody ? "flex" : undefined,
             flexDirection: fillBody ? "column" : undefined,
             backgroundColor: theme.cardBg,
-            // Visible width for loaders inside a horizontally scrolling table.
-            containerType: "inline-size",
-            containerName: "erp-list-table-scroll",
           }}
+          data-erp-list-table-scroll=""
         >
           {children}
         </Box>

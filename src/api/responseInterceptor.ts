@@ -286,11 +286,13 @@ const responseInterceptor = () =>
         // Use standard error messages based on status code
         switch (status) {
           case 400: {
-            // Prefer backend message / DRF field errors over a generic Bad Request
+            // Prefer backend message / DRF field errors over a generic Bad Request.
+            // `details` keeps field validation for screens that toast it; `message` is unchanged.
             const errorMessage = resolveBadRequestMessage(data);
             console.log("🔍 400 Error - Final message:", errorMessage);
             return Promise.reject({
               message: errorMessage,
+              details: data?.data,
               ...(data?.override === true ? { override: true } : {}),
             });
           }

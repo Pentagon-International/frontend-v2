@@ -328,6 +328,9 @@ export function BookingMasterListTable<TRaw>({
       borderBottom: `1px solid ${border}`,
       whiteSpace: "nowrap" as const,
       userSelect: "none" as const,
+      position: "sticky" as const,
+      top: 0,
+      zIndex: 1,
       ...(typeof widthPx === "number" ? { minWidth: widthPx, width: widthPx } : {}),
     };
   };

@@ -311,7 +311,7 @@ export default function ServiceJobMaster() {
     "Service",
     "Customer",
     "Route",
-    "AWB",
+    "MAWB/MBL No",
     "Routed By",
     "ETD",
     "ETA",
@@ -583,8 +583,8 @@ export default function ServiceJobMaster() {
                   <Box style={erpListFilterFieldCellStyle}>
                     <FormTextInput
                       format="capital"
-                      label="AWB / BL Number"
-                      placeholder="Type AWB or BL number"
+                      label="MAWB/MBL No"
+                      placeholder="Type MAWB/MBL No"
                       size="xs"
                       styles={filterFieldStyles}
                       value={draftFilters.awb_number}

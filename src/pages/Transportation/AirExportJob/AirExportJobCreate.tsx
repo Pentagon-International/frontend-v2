@@ -441,7 +441,7 @@ const carrierDetailsSchema = yup.object({
   flight_number: yup.string().required("Flight Number is required"),
   mawb_number: yup
     .string()
-    .required("MAWB Number is required")
+    .required("MAWB No is required")
     .test(
       "no-special-chars",
       SPECIAL_CHARACTERS_NOT_ALLOWED_MESSAGE,
@@ -449,7 +449,7 @@ const carrierDetailsSchema = yup.object({
     )
     .matches(
       /^[A-Za-z0-9]{11}$/,
-      "MAWB Number must be exactly 11 characters (no symbols)",
+      "MAWB No must be exactly 11 characters (no symbols)",
     ),
   mawb_date: yup.date().nullable(),
 });
@@ -3089,7 +3089,7 @@ function AirExportJobCreate() {
 
       // Step 1 validations
       if (!hawb.hawb_no?.trim()) {
-        missingFields.push("HAWB Number");
+        missingFields.push("HAWB No");
       }
       if (!hawb.origin_code?.trim()) {
         missingFields.push("Origin");
@@ -4454,9 +4454,9 @@ function AirExportJobCreate() {
               <Grid.Col span={2}>
                 <FormTextInput
                   format="capital"
-                  label="MAWB Number"
+                  label="MAWB No"
                   required
-                  placeholder="Enter MAWB number"
+                  placeholder="Enter MAWB No"
                   maxLength={11}
                   value={carrierDetailsForm.values.mawb_number}
                   error={carrierDetailsForm.errors.mawb_number}
@@ -5398,7 +5398,7 @@ function AirExportJobCreate() {
                       Select
                     </Table.Th>
                     <Table.Th style={{ paddingRight: 16 }}>Booking ID</Table.Th>
-                    <Table.Th style={{ paddingRight: 16 }}>House</Table.Th>
+                    <Table.Th style={{ paddingRight: 16 }}>HAWB No</Table.Th>
                     <Table.Th style={{ paddingRight: 16 }}>Customer</Table.Th>
                     <Table.Th style={{ paddingRight: 16 }}>Origin</Table.Th>
                     <Table.Th>Destination</Table.Th>
@@ -6207,7 +6207,7 @@ function AirExportJobCreate() {
                 <Grid>
                   <Grid.Col span={2}>
                     <Text size="sm" fw={500} c="dimmed">
-                      HAWB Number
+                      HAWB No
                     </Text>
                     <Text size="sm" mb="sm">
                       {hawb.hawb_no || "-"}

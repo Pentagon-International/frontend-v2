@@ -789,11 +789,11 @@ function OceanImportToExportBooking() {
       ),
       houseno: (
         <ERPListColumnHeaderFilter
-          label="House No"
+          label="HBL No"
           value={filterForm.values.houseno ?? ""}
           displayValue={filterForm.values.houseno ?? ""}
           theme={theme}
-          placeholder="Filter House No"
+          placeholder="Filter HBL No"
           isEditing={editingHeaderId === "houseno"}
           onStartEdit={() => openHeaderEditor("houseno")}
           onStopEdit={() => collapseHeaderEditor("houseno")}
@@ -979,17 +979,18 @@ function OceanImportToExportBooking() {
       ),
       mawb: (
         <ERPListColumnHeaderFilter
-          label="MAWB"
+          label="MBL No"
           value={filterForm.values.mawb_no ?? ""}
           displayValue={filterForm.values.mawb_no ?? ""}
           theme={theme}
-          placeholder="Filter MAWB"
+          placeholder="Filter MBL No"
           isEditing={editingHeaderId === "mawb"}
           onStartEdit={() => openHeaderEditor("mawb")}
           onStopEdit={() => collapseHeaderEditor("mawb")}
           onChange={(next) => commitHeaderFilters({ mawb_no: next || null })}
         />
       ),
+      flight: "Vessel / Voyage",
       handler: (
         <ERPListColumnHeaderFilter
           label="Customer Service"
@@ -1852,8 +1853,8 @@ function OceanImportToExportBooking() {
                     <FormTextInput
                       format="capital"
                       size="xs"
-                      label="House No"
-                      placeholder="Enter House No"
+                      label="HBL No"
+                      placeholder="Enter HBL No"
                       styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                       value={filterForm.values.houseno ?? ""}
                       onChange={(e) =>
@@ -1883,8 +1884,8 @@ function OceanImportToExportBooking() {
                     <FormTextInput
                       format="capital"
                       size="xs"
-                      label="MAWB"
-                      placeholder="Enter MAWB"
+                      label="MBL No"
+                      placeholder="Enter MBL No"
                       styles={BOOKING_MASTER_FILTER_UNIFIED_STYLES}
                       value={filterForm.values.mawb_no ?? ""}
                       onChange={(e) =>
@@ -1928,6 +1929,7 @@ function OceanImportToExportBooking() {
                   isLoading={isDataLoading}
                   loadingMessage="Loading import-to-export bookings…"
                   headerRenderers={headerRenderers}
+                  headerWidths={{ flight: 180 }}
                 />
               ),
             }}

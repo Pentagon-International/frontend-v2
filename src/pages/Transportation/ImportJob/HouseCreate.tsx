@@ -2627,7 +2627,7 @@ function HouseCreate() {
     const errors: Record<string, string> = {};
 
     if (!form.values.hbl_number?.trim()) {
-      errors.hbl_number = "HBL Number is required";
+      errors.hbl_number = "HBL No is required";
     }
     if (!form.values.origin_code?.trim()) {
       errors.origin_code = "Origin is required";
@@ -4297,6 +4297,8 @@ function HouseCreate() {
                     return;
                   }
                   handleSave();
+                } else if (active === 5) {
+                  handleSave();
                 }
               }}
             >
@@ -4775,9 +4777,9 @@ function HouseCreate() {
               <Grid.Col span={4}>
                 <FormTextInput
                   format="capital"
-                  label="HBL Number"
+                  label="HBL No"
                   required
-                  placeholder="Enter HBL Number"
+                  placeholder="Enter HBL No"
                   {...form.getInputProps("hbl_number")}
                   error={form.errors.hbl_number}
                 />
