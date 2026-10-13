@@ -2179,8 +2179,8 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       });
     }
 
-    // In edit mode or create-from-quotation, ensure the quotation_id from initialData is in options
-    if ((isEditMode || isFromQuotationFlow) && initialData?.quotation_id) {
+    // Keep the mapped quotation selectable (edit, create-from-quotation, and duplicate)
+    if (initialData?.quotation_id) {
       const quotationIdValue = String(initialData.quotation_id);
       const exists = options.some((opt) => opt.value === quotationIdValue);
       if (!exists) {
@@ -2192,7 +2192,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
 
     return options;
-  }, [quotationsData, isEditMode, initialData, isFromQuotationFlow]);
+  }, [quotationsData, initialData]);
 
   // Quotation flow: when is_booked false set charges; when is_booked true fetch existing booking
   const lastBookedIdRef = useRef<number | null>(null);
