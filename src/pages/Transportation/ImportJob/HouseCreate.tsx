@@ -4059,8 +4059,17 @@ function HouseCreate() {
       };
 
       // cargo_details lives in UI state, not form.values (same source as house-card DO)
+      // DO No on the PDF is do_no / do_number / shipment_id. Those live on the
+      // house record, not in form.values, so the house-card path shows them and
+      // this path must pass them explicitly.
+      const houseRecord = editData as
+        | { shipment_id?: string; do_no?: string; do_number?: string }
+        | undefined;
       const doHousingData = {
         ...form.values,
+        shipment_id: houseRecord?.shipment_id || "",
+        do_no: houseRecord?.do_no || "",
+        do_number: houseRecord?.do_number || "",
         house_date: form.values.house_date,
         cargo_details: cargoDetails
           .filter(
