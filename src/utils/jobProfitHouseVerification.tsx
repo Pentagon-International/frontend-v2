@@ -755,6 +755,21 @@ export function hasExistingBrokerage(
   );
 }
 
+/** Numeric equality for brokerage drafts vs the last saved amount. */
+export function brokerageAmountsEqual(
+  left?: number | string | null,
+  right?: number | string | null,
+): boolean {
+  const normalize = (value?: number | string | null): number | null => {
+    if (value === null || value === undefined) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const amount = Number(raw);
+    return Number.isFinite(amount) ? amount : null;
+  };
+  return normalize(left) === normalize(right);
+}
+
 function hasBrokerageValues(options: {
   brokerage?: number | string | null;
   brokerageRemark?: string | null;

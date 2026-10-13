@@ -59,6 +59,7 @@ import {
   openSearchedDocumentInNewTab,
 } from "../../../utils/openAllocationSourceDocument";
 import {
+  brokerageAmountsEqual,
   canManageJobProfitBrokerage,
   canShowConfirmProfit,
   canShowSalespersonVerify,
@@ -202,9 +203,8 @@ function mergeMasterProfitPatch(
     const id = brokerageShipmentId(row);
     if (!wanted.has(id)) return row;
     const audit =
-      records.find(
-        (item) => String(item?.shipment_id ?? "").trim() === id,
-      ) ?? (records.length === 1 && wanted.size === 1 ? records[0] : undefined);
+      records.find((item) => String(item?.shipment_id ?? "").trim() === id) ??
+      (records.length === 1 && wanted.size === 1 ? records[0] : undefined);
     const statusFromAudit =
       typeof audit?.status === "string" && audit.status.trim()
         ? audit.status.trim()
@@ -269,9 +269,13 @@ function mergeMasterProfitPatch(
       ...row,
       status: statusFromAudit ?? "confirmed",
       verified_by:
-        audit?.verified_by != null ? String(audit.verified_by) : row.verified_by,
+        audit?.verified_by != null
+          ? String(audit.verified_by)
+          : row.verified_by,
       verified_at:
-        audit?.verified_at != null ? String(audit.verified_at) : row.verified_at,
+        audit?.verified_at != null
+          ? String(audit.verified_at)
+          : row.verified_at,
       confirmed_by:
         audit?.confirmed_by != null
           ? String(audit.confirmed_by)
@@ -549,9 +553,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const [brokerageRemark, setBrokerageRemark] = useState(
     String(navState?.brokerage_remark ?? ""),
   );
-  /** True only when brokerage is already persisted — not while the user is typing. */
-  const [brokerageAlreadySaved, setBrokerageAlreadySaved] = useState(() =>
-    hasExistingBrokerage(navState?.brokerage),
+  const [savedBrokerageAmount, setSavedBrokerageAmount] = useState<
+    string | number | null
+  >(
+    navState?.brokerage != null && Number.isFinite(Number(navState.brokerage))
+      ? Number(navState.brokerage)
+      : null,
+  );
+  const [savedBrokerageRemark, setSavedBrokerageRemark] = useState(
+    String(navState?.brokerage_remark ?? ""),
   );
   const [brokerageSaving, setBrokerageSaving] = useState(false);
   const [brokerageError, setBrokerageError] = useState<string | null>(null);
@@ -589,7 +599,7 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
   const canManageBrokerage = canManageJobProfitBrokerage(user);
   const masterShipmentRows = isMasterProfitLedger ? profitBrokerageRows : [];
   const masterHasManyShipments = masterShipmentRows.length > 1;
-  const showBrokerageForm =
+  const canEditBrokerage =
     fromProfitVerification &&
     Boolean(profitShipmentId) &&
     !masterHasManyShipments &&
@@ -598,8 +608,13 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       is_sales: profitIsSales,
       status: profitStatus,
       allowBrokerage: canManageBrokerage,
-    }) &&
-    !brokerageAlreadySaved;
+    });
+  const showBrokerageForm = canEditBrokerage;
+  const brokerageDraftDirty =
+    (!brokerageAmountsEqual(brokerageAmount, savedBrokerageAmount) ||
+      brokerageRemark.trim() !== savedBrokerageRemark.trim()) &&
+    hasExistingBrokerage(brokerageAmount) &&
+    Number.isFinite(Number(brokerageAmount));
 
   const accountsVerifiedChecked = isAccountsProfitVerified({
     accounts_verified: accountsVerified,
@@ -739,10 +754,10 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     ? (latestConfirmAudit?.confirmed_at ?? null)
     : profitConfirmedAt;
   const brokerageDisplay =
-    brokerageAmount != null &&
-    String(brokerageAmount).trim() !== "" &&
-    Number.isFinite(Number(brokerageAmount))
-      ? formatMoneyAmountForUi(Number(brokerageAmount))
+    savedBrokerageAmount != null &&
+    String(savedBrokerageAmount).trim() !== "" &&
+    Number.isFinite(Number(savedBrokerageAmount))
+      ? formatMoneyAmountForUi(Number(savedBrokerageAmount))
       : "-";
   const isSalespersonLogin = profitIsSales === true;
 
@@ -776,6 +791,15 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       });
       return;
     }
+    if (
+      !hasExistingBrokerage(brokerageAmount) ||
+      !Number.isFinite(Number(brokerageAmount))
+    ) {
+      const message = "Brokerage amount is required";
+      setBrokerageError(message);
+      ToastNotification({ type: "error", message });
+      return;
+    }
     setBrokerageSaving(true);
     setBrokerageError(null);
     try {
@@ -786,17 +810,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       });
       const audit = pickProfitHouseAuditFields(response, profitShipmentId);
       const savedBrokerage = audit.brokerage ?? brokerageAmount;
-      if (hasExistingBrokerage(savedBrokerage)) {
-        setBrokerageAmount(
-          Number.isFinite(Number(savedBrokerage))
-            ? Number(savedBrokerage)
-            : savedBrokerage,
-        );
-        setBrokerageAlreadySaved(true);
-      }
-      if (audit.brokerage_remark != null) {
-        setBrokerageRemark(audit.brokerage_remark);
-      }
+      const nextAmount = hasExistingBrokerage(savedBrokerage)
+        ? Number.isFinite(Number(savedBrokerage))
+          ? Number(savedBrokerage)
+          : savedBrokerage
+        : brokerageAmount;
+      setBrokerageAmount(nextAmount);
+      setSavedBrokerageAmount(nextAmount);
+      const nextRemark =
+        audit.brokerage_remark != null
+          ? audit.brokerage_remark
+          : brokerageRemark;
+      setBrokerageRemark(nextRemark);
+      setSavedBrokerageRemark(nextRemark);
       // Brokerage save may return hold_remark for margin checks, but hold status
       // only applies after the salesperson confirms — keep Confirm enabled.
       if (audit.status && normalizeProfitStatus(audit.status) !== "hold") {
@@ -1391,18 +1417,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
         if (matchedBrokerage.status != null) {
           setProfitStatus(String(matchedBrokerage.status));
         }
-        if (
+        const loadedBrokerage =
           matchedBrokerage.brokerage != null &&
           Number.isFinite(Number(matchedBrokerage.brokerage))
-        ) {
-          setBrokerageAmount(Number(matchedBrokerage.brokerage));
-          setBrokerageAlreadySaved(
-            hasExistingBrokerage(matchedBrokerage.brokerage),
-          );
-        }
-        if (matchedBrokerage.brokerage_remark != null) {
-          setBrokerageRemark(String(matchedBrokerage.brokerage_remark));
-        }
+            ? Number(matchedBrokerage.brokerage)
+            : null;
+        setBrokerageAmount(loadedBrokerage);
+        setSavedBrokerageAmount(loadedBrokerage);
+        const loadedRemark =
+          matchedBrokerage.brokerage_remark != null
+            ? String(matchedBrokerage.brokerage_remark)
+            : "";
+        setBrokerageRemark(loadedRemark);
+        setSavedBrokerageRemark(loadedRemark);
         if (matchedBrokerage.accounts_verified === true) {
           setAccountsVerified(true);
         }
@@ -3212,38 +3239,64 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
                 decimalScale={2}
                 thousandSeparator=","
                 hideControls
+                disabled={brokerageSaving}
                 w={200}
                 styles={{
-                  label: { fontFamily: "Inter", fontSize: 13, fontWeight: 500 },
-                  input: { fontFamily: "Inter" },
-                }}
-              />
-              <Textarea
-                label="Brokerage Remark"
-                placeholder="Enter Remark"
-                value={brokerageRemark}
-                onChange={(e) => setBrokerageRemark(e.currentTarget.value)}
-                minRows={1}
-                autosize
-                style={{ flex: 1, minWidth: 220 }}
-                styles={{
-                  label: { fontFamily: "Inter", fontSize: 13, fontWeight: 500 },
-                  input: { fontFamily: "Inter" },
-                }}
-              />
-              <Button
-                color="#105476"
-                loading={brokerageSaving}
-                onClick={() => void handleSaveBrokerage()}
-                styles={{
-                  root: {
+                  label: {
                     fontFamily: "Inter",
-                    fontWeight: 600,
+                    fontSize: 13,
+                    fontWeight: 500,
                   },
+                  input: { fontFamily: "Inter" },
                 }}
+              />
+              <Group
+                align="flex-end"
+                gap="xs"
+                wrap="nowrap"
+                style={{ flex: 1, minWidth: 280 }}
               >
-                Save
-              </Button>
+                <Textarea
+                  label="Brokerage Remark"
+                  placeholder="Enter Remark"
+                  value={brokerageRemark}
+                  onChange={(e) => setBrokerageRemark(e.currentTarget.value)}
+                  minRows={1}
+                  autosize
+                  disabled={brokerageSaving}
+                  style={{ flex: 1, minWidth: 220 }}
+                  styles={{
+                    label: {
+                      fontFamily: "Inter",
+                      fontSize: 13,
+                      fontWeight: 500,
+                    },
+                    input: { fontFamily: "Inter" },
+                  }}
+                />
+                {brokerageDraftDirty ? (
+                  <Checkbox
+                    mb={8}
+                    label="Update"
+                    aria-label="Update brokerage"
+                    checked={false}
+                    disabled={brokerageSaving}
+                    onChange={(event) => {
+                      if (event.currentTarget.checked) {
+                        void handleSaveBrokerage();
+                      }
+                    }}
+                    styles={{
+                      label: {
+                        fontFamily: "Inter",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#105476",
+                      },
+                    }}
+                  />
+                ) : null}
+              </Group>
             </Group>
             {brokerageError ? (
               <Text size="sm" c="red" mt="xs" style={{ fontFamily: "Inter" }}>

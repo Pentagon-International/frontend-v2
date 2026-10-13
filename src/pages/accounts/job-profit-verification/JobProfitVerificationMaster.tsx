@@ -84,15 +84,11 @@ import { getDefaultBranchCurrencyFromUser } from "../../../utils/exchangeRateRoe
 import {
   canManageJobProfitBrokerage,
   canShowSalespersonVerify,
-  canUpdateBrokerage,
   getProfitStatusLabel,
-  hasExistingBrokerage,
   isAccountsProfitVerified,
   isSalespersonProfitVerified,
-  pickProfitHouseAuditFields,
   pickProfitHouseRecord,
   PROFIT_STATUS_FILTER_OPTIONS,
-  runAddJobProfitBrokerage,
   runJobProfitAccountsVerify,
   runJobProfitHoldDecision,
   runJobProfitSalespersonVerify,
@@ -866,34 +862,6 @@ export default function JobProfitVerificationMaster({
               status: "accounts_verified",
             },
           );
-          refreshProfitList();
-        },
-      });
-    },
-    [mergeHouseProfitPatchIntoList, refreshProfitList],
-  );
-
-  const handleAddBrokerage = useCallback(
-    (row: JobProfitRow) => {
-      const shipmentId = row.subjob_no?.trim();
-      if (!shipmentId) {
-        ToastNotification({
-          type: "error",
-          message: "Shipment number not found.",
-        });
-        return;
-      }
-      runAddJobProfitBrokerage({
-        shipmentId,
-        initialBrokerage: row.brokerage,
-        initialBrokerageRemark: row.brokerage_remark,
-        onSuccess: (response) => {
-          const audit = pickProfitHouseAuditFields(response, shipmentId);
-          mergeHouseProfitPatchIntoList(shipmentId, {
-            brokerage: audit.brokerage,
-            brokerage_remark: audit.brokerage_remark,
-            ...(audit.status ? { status: audit.status } : {}),
-          });
           refreshProfitList();
         },
       });
@@ -1910,45 +1878,12 @@ export default function JobProfitVerificationMaster({
                           {showBrokerageColumn ? (
                             <>
                               <td style={listAmountTdStyle}>
-                                {(() => {
-                                  const canAddBrokerage =
-                                    !isApprovalMode &&
-                                    canUpdateBrokerage({
-                                      status: row.status,
-                                      allowBrokerage: true,
-                                    }) &&
-                                    !hasExistingBrokerage(row.brokerage);
-                                  return (
-                                    <Stack gap={4}>
-                                      <Text size="sm" fw={600} c={fg}>
-                                        {formatBrokerageAmount(
-                                          row.brokerage,
-                                          currency,
-                                        )}
-                                      </Text>
-                                      {canAddBrokerage ? (
-                                        <Button
-                                          size="compact-xs"
-                                          variant="subtle"
-                                          onClick={() =>
-                                            handleAddBrokerage(row)
-                                          }
-                                          styles={{
-                                            root: {
-                                              fontFamily: theme.fontSans,
-                                              fontWeight: 600,
-                                              color: primary,
-                                              paddingInline: 0,
-                                              height: "auto",
-                                            },
-                                          }}
-                                        >
-                                          Add Brokerage
-                                        </Button>
-                                      ) : null}
-                                    </Stack>
-                                  );
-                                })()}
+                                <Text size="sm" fw={600} c={fg}>
+                                  {formatBrokerageAmount(
+                                    row.brokerage,
+                                    currency,
+                                  )}
+                                </Text>
                               </td>
                               <td style={tdPad}>
                                 <Text

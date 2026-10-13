@@ -130,6 +130,7 @@ type PaymentRequestRecord = {
   job_id?: string | number | null;
   /** One or more shipment ids from the list API. */
   shipment_id?: string | string[] | null;
+  actual_inv_no?: string | null;
   not_over?: string;
   state_code?: string;
   state_id?: number;
@@ -219,6 +220,23 @@ function formatShipmentIdCell(shipmentId: unknown): string {
     return parts.length > 0 ? parts.join(", ") : "-";
   }
   return String(shipmentId);
+}
+
+/** Value for remaining-active-jobs when the PRQ row has a shipment id. */
+function shipmentIdForPendingShipmentsPayload(
+  shipmentId: unknown,
+): string | string[] | undefined {
+  if (shipmentId == null || shipmentId === "") return undefined;
+  if (Array.isArray(shipmentId)) {
+    const parts = shipmentId
+      .map((v) => String(v ?? "").trim())
+      .filter((v) => v !== "" && v !== "-");
+    if (parts.length === 0) return undefined;
+    return parts.length === 1 ? parts[0] : parts;
+  }
+  const text = String(shipmentId).trim();
+  if (!text || text === "-") return undefined;
+  return text;
 }
 
 function formatServiceColumnValue(
@@ -340,6 +358,7 @@ type PaymentRequestColumnVisibility = {
   paid_to: boolean;
   job_id: boolean;
   shipment_id: boolean;
+  actual_inv_no: boolean;
   status: boolean;
 };
 
@@ -354,6 +373,7 @@ const paymentRequestColumnDefault: PaymentRequestColumnVisibility = {
   paid_to: true,
   job_id: true,
   shipment_id: true,
+  actual_inv_no: true,
   status: true,
 };
 
@@ -371,6 +391,7 @@ const paymentRequestColumnLabels: Record<
   paid_to: "Paid To",
   job_id: "Job Id",
   shipment_id: "Shipment Id",
+  actual_inv_no: "Actual Invoice No",
   status: "Status",
 };
 
@@ -548,26 +569,28 @@ function PaymentRequestApproval({
 
   const openPendingShipmentsForRow = useCallback(
     async (row: PaymentRequestRecord) => {
-      const subledgerCode = String(row.subledger_code ?? "").trim();
       const jobId = formatJobIdCell(row.job_id);
-      if (!subledgerCode || !jobId || jobId === "-") {
+      if (!jobId || jobId === "-") {
         ToastNotification({
           type: "error",
-          message: "Subledger code and Job Id are required for pending shipments.",
+          message: "Job Id is required for pending shipments.",
         });
         return;
       }
-      setPendingShipmentsContext(
-        [row.request_no, row.paid_to].filter(Boolean).join(" · "),
-      );
+      setPendingShipmentsContext(String(row.request_no ?? "").trim());
       setPendingShipments([]);
       setPendingShipmentsMessage("");
       openPendingShipments();
       setPendingShipmentsLoading(true);
       try {
+        const payload: Record<string, unknown> = { job_id: jobId };
+        const shipmentId = shipmentIdForPendingShipmentsPayload(
+          row.shipment_id,
+        );
+        if (shipmentId) payload.shipment_id = shipmentId;
         const raw = (await apiCallProtected.post(
           URL.paymentRequestRemainingActiveJobs,
-          { subledger_code: subledgerCode, job_id: jobId },
+          payload,
         )) as unknown;
         const failureMessage = getApiFailureMessage(
           raw,
@@ -575,7 +598,6 @@ function PaymentRequestApproval({
         );
         if (failureMessage) {
           setPendingShipmentsMessage(failureMessage);
-          ToastNotification({ type: "error", message: failureMessage });
           return;
         }
         const body = unwrapApiStatusBody(raw) as {
@@ -601,20 +623,12 @@ function PaymentRequestApproval({
             : "Pending shipments loaded.",
         );
         setPendingShipmentsMessage(backendMessage);
-        ToastNotification({
-          type: mapped.length === 0 ? "warning" : "success",
-          message: backendMessage,
-        });
       } catch (error: unknown) {
         const errorMessage = getServerErrorMessage(
           error,
           "Failed to load pending shipments.",
         );
         setPendingShipmentsMessage(errorMessage);
-        ToastNotification({
-          type: "error",
-          message: errorMessage,
-        });
       } finally {
         setPendingShipmentsLoading(false);
       }
@@ -1370,6 +1384,29 @@ function PaymentRequestApproval({
         },
       },
       {
+        accessorKey: "actual_inv_no",
+        header: "Actual Invoice No",
+        size: 160,
+        grow: false,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ row }) => {
+          const invoiceNo = displayCellValue(row.original.actual_inv_no);
+          if (invoiceNo === "-") return invoiceNo;
+          return (
+            <Tooltip label={invoiceNo} withArrow withinPortal>
+              <Text
+                size="sm"
+                truncate
+                style={{ fontFamily: erpTheme.fontSans, maxWidth: "100%" }}
+              >
+                {invoiceNo}
+              </Text>
+            </Tooltip>
+          );
+        },
+      },
+      {
         accessorKey: "status",
         header: "Status",
         size: 96,
@@ -1820,26 +1857,33 @@ function PaymentRequestApproval({
             {pendingShipmentsMessage || "No pending shipments found."}
           </Text>
         ) : (
-          <Table striped highlightOnHover withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Job Id</Table.Th>
-                <Table.Th>Shipment No</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {pendingShipments.map((row) => (
-                <Table.Tr key={row.job_id}>
-                  <Table.Td>{row.job_id || "-"}</Table.Td>
-                  <Table.Td>
-                    {row.shipment_no.length > 0
-                      ? row.shipment_no.join(", ")
-                      : "-"}
-                  </Table.Td>
+          <Stack gap="sm">
+            {pendingShipmentsMessage ? (
+              <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+                {pendingShipmentsMessage}
+              </Text>
+            ) : null}
+            <Table striped highlightOnHover withTableBorder>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Job Id</Table.Th>
+                  <Table.Th>Shipment No</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {pendingShipments.map((row) => (
+                  <Table.Tr key={row.job_id}>
+                    <Table.Td>{row.job_id || "-"}</Table.Td>
+                    <Table.Td>
+                      {row.shipment_no.length > 0
+                        ? row.shipment_no.join(", ")
+                        : "-"}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Stack>
         )}
         <Group justify="flex-end" mt="md">
           <Button variant="default" onClick={closePendingShipments}>
