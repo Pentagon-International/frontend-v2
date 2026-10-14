@@ -1029,7 +1029,7 @@ export const generateBillOfLadingPDF = (
     if (isIndiaContent) {
       doc.setFont("helvetica", "bold");
       doc.text(
-        "MTO NO : MTO/DGS/3208/SEP/2026",
+        "MTO NO : MTO/DGS/20006302/SEP/2029",
         midLineX + boxPadding,
         rightY,
       );
