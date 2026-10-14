@@ -335,8 +335,20 @@ function getMatchingAllocationsForParty(
 function computeSyncedOverseasReceiptDetailRow(
   row: DetailRow,
   adjustments: AdjustmentRow[],
+  details?: DetailRow[],
+  index?: number,
 ): DetailRow {
   if (isDetailTdsRow(row)) return row;
+  if (
+    details &&
+    index != null &&
+    !isPrimaryPartyRowForAllocations(details, index)
+  ) {
+    return {
+      ...row,
+      local_amount: partyLineLocalFromAmount(row.amount, row.roe),
+    };
+  }
   const matching = getMatchingAllocationsForParty(row, adjustments);
   if (matching.length === 0) return row;
   const amount = clampAmount(sumReceiptAllocationNetCurr(matching));
@@ -357,29 +369,31 @@ function computeOverseasReceiptDetailsSyncedFromAllocations(
   details: DetailRow[],
   adjustments: AdjustmentRow[],
 ): DetailRow[] {
-  return details.map((row) =>
-    computeSyncedOverseasReceiptDetailRow(row, adjustments),
+  return details.map((row, index) =>
+    computeSyncedOverseasReceiptDetailRow(row, adjustments, details, index),
   );
 }
 
 function computeOverseasReceiptHeaderAmountsFromDetails(
   details: DetailRow[],
   isReversal: boolean,
-  headerRoe: number | null,
 ): { amount: number | null; local_amount: number | null } {
-  const netAmount = (details ?? []).reduce((s, d) => {
-    const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-    return s + partyHeaderNetSign(d.dr_cr, isReversal) * amt;
-  }, 0);
-  const amount = clampAmount(netAmount);
-  const local =
-    amount != null &&
-    headerRoe != null &&
-    Number.isFinite(headerRoe) &&
-    headerRoe !== 0
-      ? clampLocalAmount(amount * headerRoe)
-      : null;
-  return { amount, local_amount: local };
+  let netAmount = 0;
+  let netLocal = 0;
+  for (const d of details ?? []) {
+    const sign = partyHeaderNetSign(d.dr_cr, isReversal);
+    netAmount +=
+      sign * (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0);
+    netLocal +=
+      sign *
+      (d.local_amount != null && Number.isFinite(d.local_amount)
+        ? d.local_amount
+        : 0);
+  }
+  return {
+    amount: clampAmount(netAmount),
+    local_amount: clampLocalAmount(netLocal),
+  };
 }
 
 function sumReceiptAllocationNetCurr(adjustments: AdjustmentRow[]): number {
@@ -398,6 +412,44 @@ function isDetailTdsRow(row: {
 }): boolean {
   if (row.is_tds_calculated_record) return true;
   return /^TDS\s*@/i.test(String(row.narration ?? "").trim());
+}
+
+function partyAllocationKey(row: {
+  customer_code?: string;
+  customer_display?: string;
+}): string {
+  const code = String(row.customer_code ?? "").trim().toUpperCase();
+  if (code) return `c:${code}`;
+  const name = String(row.customer_display ?? "").trim().toUpperCase();
+  if (name) return `n:${name}`;
+  return "";
+}
+
+/** First non-TDS line for a party keeps allocation amounts. Later lines use their own amount × ROE. */
+function isPrimaryPartyRowForAllocations(
+  details: DetailRow[],
+  index: number,
+): boolean {
+  const row = details[index];
+  if (!row || isDetailTdsRow(row)) return false;
+  const key = partyAllocationKey(row);
+  if (!key) return false;
+  for (let i = 0; i < index; i += 1) {
+    const earlier = details[i];
+    if (!earlier || isDetailTdsRow(earlier)) continue;
+    if (partyAllocationKey(earlier) === key) return false;
+  }
+  return true;
+}
+
+function partyLineLocalFromAmount(
+  amount: number | null,
+  roe: number | null,
+): number | null {
+  if (amount == null || !Number.isFinite(amount)) return null;
+  const roeVal =
+    roe != null && Number.isFinite(roe) && roe !== 0 ? roe : 1;
+  return clampLocalAmount(amount * roeVal);
 }
 
 const fetchOutstandingAllocations = async (payload: {
@@ -1075,11 +1127,7 @@ export default function OverseasReceiptCreate({
       : computeOverseasReceiptDetailsSyncedFromAllocations(details, adjustments);
     const headerAmounts = _isReversal
       ? { amount: amountVal, local_amount: localAmountVal }
-      : computeOverseasReceiptHeaderAmountsFromDetails(
-          detailsForForm,
-          false,
-          roeVal,
-        );
+      : computeOverseasReceiptHeaderAmountsFromDetails(detailsForForm, false);
 
     setLoadedDetails(detailsForForm);
     form.setValues({
@@ -1221,27 +1269,19 @@ export default function OverseasReceiptCreate({
     if (_isReversal) return;
 
     const details = form.values.details ?? [];
-    const netAmount = details.reduce((s, d) => {
-      const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-      return s + partyHeaderNetSign(d.dr_cr, _isReversal) * amt;
-    }, 0);
-    const headerAmount = clampAmount(netAmount);
-    const roeVal = form.values.roe;
-    const headerLocal =
-      headerAmount != null &&
-      roeVal != null &&
-      Number.isFinite(roeVal) &&
-      roeVal !== 0
-        ? clampLocalAmount(headerAmount * roeVal)
-        : null;
+    if (details.length === 0) return;
+    const headerAmounts = computeOverseasReceiptHeaderAmountsFromDetails(
+      details,
+      false,
+    );
 
-    if (form.values.amount !== headerAmount) {
-      form.setFieldValue("amount", headerAmount);
+    if (form.values.amount !== headerAmounts.amount) {
+      form.setFieldValue("amount", headerAmounts.amount);
     }
-    if (form.values.local_amount !== headerLocal) {
-      form.setFieldValue("local_amount", headerLocal);
+    if (form.values.local_amount !== headerAmounts.local_amount) {
+      form.setFieldValue("local_amount", headerAmounts.local_amount);
     }
-  }, [partyNetSnapshot, form.values.roe, _isReversal]);
+  }, [partyNetSnapshot, _isReversal]);
 
   // Header: keep local_amount aligned with amount only when no party rows exist
   useEffect(() => {
@@ -1275,6 +1315,7 @@ export default function OverseasReceiptCreate({
     let headerCurrency: string | null = null;
     form.values.details.forEach((row, idx) => {
       if (isDetailTdsRow(row)) return;
+      if (!isPrimaryPartyRowForAllocations(form.values.details, idx)) return;
       const partyCode = (row.customer_code ?? "").toString().trim();
       const partyDisplay = (row.customer_display ?? "").toString().trim();
       const matchingAllocations = adjustments.filter(
@@ -1338,12 +1379,15 @@ export default function OverseasReceiptCreate({
     // Reversal keeps the reversed party amounts; do not derive them from allocations.
     if (_isReversal) return;
     form.values.details.forEach((row, idx) => {
-      const amt = row.amount;
-      const roeVal = row.roe != null && Number.isFinite(row.roe) ? row.roe : 1;
-      const local =
-        amt != null && Number.isFinite(amt)
-          ? clampLocalAmount(amt * roeVal)
-          : null;
+      if (isDetailTdsRow(row)) return;
+      if (
+        isPrimaryPartyRowForAllocations(form.values.details, idx) &&
+        getMatchingAllocationsForParty(row, form.values.adjustments ?? [])
+          .length > 0
+      ) {
+        return;
+      }
+      const local = partyLineLocalFromAmount(row.amount, row.roe);
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
@@ -3264,18 +3308,15 @@ export default function OverseasReceiptCreate({
                                 form.clearFieldError,
                                 `details.${idx}.roe`,
                               );
-                              const amt = form.values.details[idx]?.amount;
-                              if (
-                                amt != null &&
-                                Number.isFinite(amt) &&
-                                newRoe != null &&
-                                Number.isFinite(newRoe)
-                              ) {
-                                form.setFieldValue(
-                                  `details.${idx}.local_amount`,
-                                  clampLocalAmount(amt * newRoe),
-                                );
-                              }
+                              const detailRow = form.values.details[idx];
+                              if (detailRow && isDetailTdsRow(detailRow)) return;
+                              form.setFieldValue(
+                                `details.${idx}.local_amount`,
+                                partyLineLocalFromAmount(
+                                  detailRow?.amount ?? null,
+                                  newRoe,
+                                ),
+                              );
                             }}
                             decimalScale={ROE_DECIMAL_PLACES}
                             max={ROE_MAX_VALUE}
@@ -3300,6 +3341,7 @@ export default function OverseasReceiptCreate({
                             value={form.values.details[idx].amount ?? undefined}
                             onChange={(v) => {
                               userOverrodePartyAmountsRef.current = true;
+                              const detailRow = form.values.details[idx];
                               const newAmount =
                                 clampAmount(
                                   typeof v === "string" ? parseFloat(v) : v,
@@ -3308,18 +3350,14 @@ export default function OverseasReceiptCreate({
                                 `details.${idx}.amount`,
                                 newAmount,
                               );
-                              const roeVal = form.values.details[idx]?.roe ?? 1;
-                              if (
-                                newAmount != null &&
-                                Number.isFinite(newAmount) &&
-                                roeVal != null &&
-                                Number.isFinite(roeVal)
-                              ) {
-                                form.setFieldValue(
-                                  `details.${idx}.local_amount`,
-                                  clampLocalAmount(newAmount * roeVal),
-                                );
-                              }
+                              if (detailRow && isDetailTdsRow(detailRow)) return;
+                              form.setFieldValue(
+                                `details.${idx}.local_amount`,
+                                partyLineLocalFromAmount(
+                                  newAmount,
+                                  detailRow?.roe ?? null,
+                                ),
+                              );
                             }}
                             decimalScale={currencyAmountDecimalScale}
                             max={AMOUNT_MAX}

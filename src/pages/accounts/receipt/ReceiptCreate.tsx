@@ -316,6 +316,44 @@ function isDetailTdsRow(row: DetailRow): boolean {
   return /^TDS\s*@/i.test(String(row.narration ?? "").trim());
 }
 
+function partyAllocationKey(row: {
+  customer_code?: string;
+  customer_display?: string;
+}): string {
+  const code = String(row.customer_code ?? "").trim().toUpperCase();
+  if (code) return `c:${code}`;
+  const name = String(row.customer_display ?? "").trim().toUpperCase();
+  if (name) return `n:${name}`;
+  return "";
+}
+
+/** First non-TDS line for a party keeps allocation amounts. Later lines use their own amount × ROE. */
+function isPrimaryPartyRowForAllocations(
+  details: DetailRow[],
+  index: number,
+): boolean {
+  const row = details[index];
+  if (!row || isDetailTdsRow(row)) return false;
+  const key = partyAllocationKey(row);
+  if (!key) return false;
+  for (let i = 0; i < index; i += 1) {
+    const earlier = details[i];
+    if (!earlier || isDetailTdsRow(earlier)) continue;
+    if (partyAllocationKey(earlier) === key) return false;
+  }
+  return true;
+}
+
+function partyLineLocalFromAmount(
+  amount: number | null,
+  roe: number | null,
+): number | null {
+  if (amount == null || !Number.isFinite(amount)) return null;
+  const roeVal =
+    roe != null && Number.isFinite(roe) && roe !== 0 ? roe : 1;
+  return clampLocalAmount(amount * roeVal);
+}
+
 const fetchOutstandingAllocations = async (payload: {
   account_code: string;
   subledger_code: string;
@@ -679,9 +717,21 @@ function getMatchingAllocationsForParty(
 function computeSyncedDetailRow(
   row: DetailRow,
   adjustments: AdjustmentRow[],
+  details?: DetailRow[],
+  index?: number,
 ): DetailRow {
   // TDS / system party lines keep their saved amounts.
   if (isDetailTdsRow(row)) return row;
+  if (
+    details &&
+    index != null &&
+    !isPrimaryPartyRowForAllocations(details, index)
+  ) {
+    return {
+      ...row,
+      local_amount: partyLineLocalFromAmount(row.amount, row.roe),
+    };
+  }
   const matching = getMatchingAllocationsForParty(row, adjustments);
   if (matching.length === 0) return row;
   // Party local from allocations: Dr − Cr when Dr_Cr (or type) is present.
@@ -704,7 +754,9 @@ function computeDetailsSyncedFromAllocations(
   details: DetailRow[],
   adjustments: AdjustmentRow[],
 ): DetailRow[] {
-  return details.map((row) => computeSyncedDetailRow(row, adjustments));
+  return details.map((row, index) =>
+    computeSyncedDetailRow(row, adjustments, details, index),
+  );
 }
 
 function sumDetailLocalAmounts(details: DetailRow[]): number {
@@ -1340,7 +1392,7 @@ export default function ReceiptCreate({
       amountForLocal = headerAmount;
     }
 
-    if (partyLocalChanged) {
+    if (details.length > 0 && (partyLocalChanged || partyAmountsChanged)) {
       const netLocal = details.reduce((s, d) => {
         const local =
           d.local_amount != null && Number.isFinite(d.local_amount)
@@ -1352,7 +1404,10 @@ export default function ReceiptCreate({
       if (form.values.local_amount !== headerLocal) {
         form.setFieldValue("local_amount", headerLocal);
       }
-    } else if (headerAmountRoeChanged || partyAmountsChanged) {
+    } else if (
+      details.length === 0 &&
+      (headerAmountRoeChanged || partyAmountsChanged)
+    ) {
       const roeVal = form.values.roe;
       const local =
         amountForLocal != null &&
@@ -1413,6 +1468,8 @@ export default function ReceiptCreate({
     if (_isReversal) return;
     const adjustments = adjustmentsToUse ?? form.values.adjustments ?? [];
     form.values.details.forEach((row, idx) => {
+      if (isDetailTdsRow(row)) return;
+      if (!isPrimaryPartyRowForAllocations(form.values.details, idx)) return;
       const matchingAllocations = getMatchingAllocations(row, adjustments);
       if (matchingAllocations.length > 0) {
         applyAdjLocalToPartyDetail(idx, row, matchingAllocations);
@@ -1462,14 +1519,18 @@ export default function ReceiptCreate({
     // Reversal keeps the reversed party amounts; do not derive them from allocations.
     if (_isReversal) return;
     form.values.details.forEach((row, idx) => {
+      if (isDetailTdsRow(row)) return;
       const roeVal =
         row.roe != null && Number.isFinite(row.roe) && row.roe !== 0
           ? row.roe
           : 1;
-      const matchingAllocations = getMatchingAllocations(
-        row,
-        form.values.adjustments ?? [],
+      const isPrimary = isPrimaryPartyRowForAllocations(
+        form.values.details,
+        idx,
       );
+      const matchingAllocations = isPrimary
+        ? getMatchingAllocations(row, form.values.adjustments ?? [])
+        : [];
       if (matchingAllocations.length > 0) {
         const local = row.local_amount;
         const derivedAmount =
@@ -1485,11 +1546,7 @@ export default function ReceiptCreate({
         }
         return;
       }
-      const amt = row.amount;
-      const local =
-        amt != null && Number.isFinite(amt)
-          ? clampLocalAmount(amt * roeVal)
-          : null;
+      const local = partyLineLocalFromAmount(row.amount, row.roe);
       if (form.values.details[idx].local_amount !== local) {
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
@@ -3502,13 +3559,20 @@ export default function ReceiptCreate({
                                 form.clearFieldError,
                                 `details.${idx}.roe`,
                               );
-                              const matchingAllocations = getMatchingAllocations(
-                                form.values.details[idx],
-                                form.values.adjustments ?? [],
+                              const detailRow = form.values.details[idx];
+                              if (detailRow && isDetailTdsRow(detailRow)) return;
+                              const isPrimary = isPrimaryPartyRowForAllocations(
+                                form.values.details,
+                                idx,
                               );
+                              const matchingAllocations = isPrimary
+                                ? getMatchingAllocations(
+                                    detailRow,
+                                    form.values.adjustments ?? [],
+                                  )
+                                : [];
                               if (matchingAllocations.length > 0) {
-                                const local =
-                                  form.values.details[idx]?.local_amount;
+                                const local = detailRow?.local_amount;
                                 if (
                                   local != null &&
                                   Number.isFinite(local) &&
@@ -3523,18 +3587,13 @@ export default function ReceiptCreate({
                                   );
                                 }
                               } else {
-                                const amt = form.values.details[idx]?.amount;
-                                if (
-                                  amt != null &&
-                                  Number.isFinite(amt) &&
-                                  newRoe != null &&
-                                  Number.isFinite(newRoe)
-                                ) {
-                                  form.setFieldValue(
-                                    `details.${idx}.local_amount`,
-                                    clampLocalAmount(amt * newRoe),
-                                  );
-                                }
+                                form.setFieldValue(
+                                  `details.${idx}.local_amount`,
+                                  partyLineLocalFromAmount(
+                                    detailRow?.amount ?? null,
+                                    newRoe,
+                                  ),
+                                );
                               }
                             }}
                             decimalScale={ROE_DECIMAL_PLACES}
@@ -3559,12 +3618,26 @@ export default function ReceiptCreate({
                             hideControls
                             value={form.values.details[idx].amount ?? undefined}
                             onChange={(v) => {
-                              const matchingAllocations = getMatchingAllocations(
-                                form.values.details[idx],
-                                form.values.adjustments ?? [],
-                              );
+                              const detailRow = form.values.details[idx];
                               const newAmount =
                                 clampAmount(parseMoneyInputValue(v)) ?? null;
+                              if (detailRow && isDetailTdsRow(detailRow)) {
+                                form.setFieldValue(
+                                  `details.${idx}.amount`,
+                                  newAmount,
+                                );
+                                return;
+                              }
+                              const isPrimary = isPrimaryPartyRowForAllocations(
+                                form.values.details,
+                                idx,
+                              );
+                              const matchingAllocations = isPrimary
+                                ? getMatchingAllocations(
+                                    detailRow,
+                                    form.values.adjustments ?? [],
+                                  )
+                                : [];
                               if (matchingAllocations.length > 0) {
                                 syncPartyDetailsFromAllocations();
                                 return;
@@ -3573,18 +3646,13 @@ export default function ReceiptCreate({
                                 `details.${idx}.amount`,
                                 newAmount,
                               );
-                              const roeVal = form.values.details[idx]?.roe ?? 1;
-                              if (
-                                newAmount != null &&
-                                Number.isFinite(newAmount) &&
-                                roeVal != null &&
-                                Number.isFinite(roeVal)
-                              ) {
-                                form.setFieldValue(
-                                  `details.${idx}.local_amount`,
-                                  clampLocalAmount(newAmount * roeVal),
-                                );
-                              }
+                              form.setFieldValue(
+                                `details.${idx}.local_amount`,
+                                partyLineLocalFromAmount(
+                                  newAmount,
+                                  detailRow?.roe ?? null,
+                                ),
+                              );
                             }}
                             decimalScale={currencyAmountDecimalScale}
                             max={AMOUNT_MAX}
