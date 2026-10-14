@@ -44,7 +44,10 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import { isIndianUserCountry } from "../../../utils/userNumberFormat";
 import {
   getApiFailureMessage,
@@ -478,7 +481,11 @@ export default function SupplierInvoiceCreate({
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
-  const canPostDocuments = useCanPostDocuments();
+  const canPostDocuments = useCanPostDocuments(
+    isReversal
+      ? MAKER_CHECKER_DOCUMENT.supplierInvoiceReversal
+      : MAKER_CHECKER_DOCUMENT.supplierInvoice,
+  );
   const pathname = location.pathname;
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");

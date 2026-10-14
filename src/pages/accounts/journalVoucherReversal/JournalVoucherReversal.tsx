@@ -48,7 +48,10 @@ import { postAPICall } from "../../../service/postApiCall";
 import { apiCallProtected } from "../../../api/axios";
 import { API_HEADER } from "../../../store/storeKeys";
 import useAuthStore from "../../../store/authStore";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   formatRoeForAccountsPayload,
@@ -220,7 +223,9 @@ function JournalVoucherReversal() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
-  const canPostDocuments = useCanPostDocuments();
+  const canPostDocuments = useCanPostDocuments(
+    MAKER_CHECKER_DOCUMENT.journalVoucher,
+  );
 
   const isViewMode = location.pathname.includes("/view/");
   const isReadOnly = isViewMode;

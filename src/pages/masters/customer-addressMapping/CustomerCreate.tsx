@@ -57,6 +57,7 @@ import {
 } from "../../../service/customerPanApproval.service";
 import {
   EMPTY_SUPPORTING_DOCUMENT,
+  validateRequiredKycDocuments,
   validateSupportingDocumentSizes,
   type SupportingDocument,
 } from "../../../utils/customerVerificationFormData";
@@ -3070,6 +3071,14 @@ function CustomerCreate() {
   const createCustomer = async (
     values: CustomerSubmitValues,
   ): Promise<void> => {
+    if (isVerificationCreateRoute) {
+      const kycError = validateRequiredKycDocuments(supportingDocuments);
+      if (kycError) {
+        ToastNotification({ type: "error", message: kycError });
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
       const payload = {
@@ -4652,7 +4661,11 @@ function CustomerCreate() {
             </Group>
 
             <Group gap="sm">
-              {active === 1 && (isCreateMode || isEditMode || isViewMode) && (
+              {(active === 1 ||
+                (isVerificationCreateRoute &&
+                  isCreateMode &&
+                  active === maxStep)) &&
+                (isCreateMode || isEditMode || isViewMode) && (
                 <>
                   {!isViewMode &&
                     (isCreateMode || isEditMode) &&

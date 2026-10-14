@@ -44,6 +44,7 @@ import {
 } from "../../../service/customerPanApproval.service";
 import {
   EMPTY_SUPPORTING_DOCUMENT,
+  validateRequiredKycDocuments,
   validateSupportingDocumentSizes,
   type SupportingDocument,
 } from "../../../utils/customerVerificationFormData";
@@ -600,6 +601,12 @@ export default function CustomerPanMaster({
       return;
     }
 
+    const kycError = validateRequiredKycDocuments(supportingDocuments);
+    if (kycError) {
+      ToastNotification({ type: "error", message: kycError });
+      return;
+    }
+
     setIsCreating(true);
 
     try {
@@ -854,6 +861,7 @@ export default function CustomerPanMaster({
         documents={supportingDocuments}
         onChange={setSupportingDocuments}
         title="Attach Supporting Documents"
+        zIndex={400}
       />
 
       <Modal
@@ -1212,22 +1220,33 @@ export default function CustomerPanMaster({
           </ScrollArea.Autosize>
 
           <Divider />
-          <Group justify="flex-end" gap="sm">
+          <Group justify="space-between" gap="sm">
             <Button
               variant="outline"
               color="#105476"
-              onClick={closeDetailsModal}
+              leftSection={<IconPaperclip size={16} />}
+              onClick={openDocumentsModal}
               disabled={isCreating}
             >
-              Cancel
+              Attach Documents
             </Button>
-            <Button
-              color="#105476"
-              onClick={handleCreateCustomers}
-              loading={isCreating}
-            >
-              Submit for Approval
-            </Button>
+            <Group gap="sm">
+              <Button
+                variant="outline"
+                color="#105476"
+                onClick={closeDetailsModal}
+                disabled={isCreating}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="#105476"
+                onClick={handleCreateCustomers}
+                loading={isCreating}
+              >
+                Submit for Approval
+              </Button>
+            </Group>
           </Group>
         </Stack>
       </Modal>

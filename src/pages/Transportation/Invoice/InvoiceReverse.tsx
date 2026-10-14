@@ -44,7 +44,10 @@ import { putAPICall } from "../../../service/putApiCall";
 import useAuthStore from "../../../store/authStore";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources } from "../../../utils/editPageAuditInfo";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { getAPICall } from "../../../service/getApiCall";
 import FormTextInput from "../../../components/FormTextInput";
@@ -1466,7 +1469,9 @@ function InvoiceReverse() {
       ? String(defaultBranch.currency.currency_id)
       : "";
   const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
-  const canPostDocuments = useCanPostDocuments();
+  const canPostDocuments = useCanPostDocuments(
+    MAKER_CHECKER_DOCUMENT.invoiceReversalAndCreditNote,
+  );
   const { openViewAllocationDocs, viewAllocationDocsUi } =
     useViewAllocationDocs();
 

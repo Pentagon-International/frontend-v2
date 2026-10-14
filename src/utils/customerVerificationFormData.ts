@@ -80,12 +80,34 @@ export const MULTIPART_FORM_HEADERS = {
   },
 };
 
+export const KYC_DOCUMENTS_REQUIRED_MESSAGE = "KYC documents are required";
+
 export function hasValidSupportingDocuments(
   documents: SupportingDocument[],
 ): boolean {
   return documents.some(
     (doc) => doc.file != null && String(doc.name ?? "").trim().length > 0,
   );
+}
+
+/** True when at least one document is uploaded or already attached. */
+export function hasUploadedSupportingDocument(
+  documents: SupportingDocument[],
+): boolean {
+  return documents.some(
+    (doc) =>
+      doc.file != null ||
+      Boolean(String(doc.document_url ?? "").trim()) ||
+      (doc.document_id != null && Number.isFinite(Number(doc.document_id))),
+  );
+}
+
+export function validateRequiredKycDocuments(
+  documents: SupportingDocument[],
+): string | null {
+  return hasUploadedSupportingDocument(documents)
+    ? null
+    : KYC_DOCUMENTS_REQUIRED_MESSAGE;
 }
 
 export function validateSupportingDocumentSizes(

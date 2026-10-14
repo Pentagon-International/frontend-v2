@@ -71,6 +71,8 @@ interface ScreenPermissions {
   customer_approval_screen?: boolean;
   maker_checker?: boolean;
   checker?: boolean;
+  special_post?: boolean;
+  document_type?: string[];
   finance_dashboard?: boolean;
   job_profit_approval?: boolean;
   credit_override_approval?: boolean;

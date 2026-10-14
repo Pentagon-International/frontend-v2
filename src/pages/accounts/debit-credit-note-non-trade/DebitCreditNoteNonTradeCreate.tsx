@@ -49,7 +49,10 @@ import {
   jobCreateDropdownDisplayFormat,
 } from "../../../utils/jobCreateDropdown";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import {
   formatRoeAsString,
   parseRoeForPayload,
@@ -392,7 +395,6 @@ export function DebitCreditNoteCreateBase({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const canPostDocuments = useCanPostDocuments();
   const user = useAuthStore((s) => s.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -535,6 +537,18 @@ export function DebitCreditNoteCreateBase({
       supporting_documents: [] as SupportingDocument[],
     },
   });
+
+  const nonTradeDocumentType = String(form.values.documentType ?? "")
+    .trim()
+    .toUpperCase();
+  const canPostDocuments = useCanPostDocuments(
+    payloadType === "non_trade"
+      ? nonTradeDocumentType === MAKER_CHECKER_DOCUMENT.debitNonTrade ||
+        nonTradeDocumentType === MAKER_CHECKER_DOCUMENT.creditNonTrade
+        ? nonTradeDocumentType
+        : MAKER_CHECKER_DOCUMENT.debitCreditNonTrade
+      : undefined,
+  );
 
   // Cache resolved service_id for a shipment_no so we don't re-fetch repeatedly.
   const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});

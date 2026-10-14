@@ -31,7 +31,13 @@ export type MakerCheckerMappingRecord = {
     maker_name?: string;
   }>;
   checker_id?: number;
+  checker_ids?: number[];
   checker_name?: string;
+  checkers?: Array<{
+    id?: number;
+    user_name?: string;
+    checker_name?: string;
+  }>;
   document_types?: Array<{
     id?: number;
     document_type_id?: number;
@@ -43,7 +49,7 @@ export type MakerCheckerMappingRecord = {
   status?: string;
 };
 
-/** User master `id` is the value sent as maker_ids / checker_id in API payloads. */
+/** User master `id` is the value sent as maker_ids / checker_ids in API payloads. */
 export function formatUserMasterSelectOption(item: Record<string, unknown>): {
   value: string;
   label: string;
@@ -94,6 +100,60 @@ export function makerDisplayValuesFromRecord(
     };
   }
   return {};
+}
+
+export function checkerIdsFromRecord(
+  record?: MakerCheckerMappingRecord | null,
+): string[] {
+  if (record?.checker_ids?.length) {
+    return record.checker_ids.map((id) => String(id));
+  }
+  if (record?.checkers?.length) {
+    return record.checkers
+      .filter((checker) => checker.id != null)
+      .map((checker) => String(checker.id));
+  }
+  if (record?.checker_id != null) {
+    return [String(record.checker_id)];
+  }
+  return [];
+}
+
+export function checkerDisplayValuesFromRecord(
+  record?: MakerCheckerMappingRecord | null,
+): Record<string, string> {
+  if (record?.checkers?.length) {
+    return Object.fromEntries(
+      record.checkers
+        .filter((checker) => checker.id != null)
+        .map((checker) => [
+          String(checker.id),
+          String(checker.user_name ?? checker.checker_name ?? checker.id),
+        ]),
+    );
+  }
+  if (record?.checker_id != null) {
+    return {
+      [String(record.checker_id)]: String(
+        record.checker_name ?? record.checker_id,
+      ),
+    };
+  }
+  return {};
+}
+
+export function checkerNamesLabel(
+  record?: MakerCheckerMappingRecord | null,
+): string {
+  const fromList =
+    record?.checkers
+      ?.map((checker) =>
+        String(checker.user_name ?? checker.checker_name ?? "").trim(),
+      )
+      .filter(Boolean) ?? [];
+  if (fromList.length > 0) return fromList.join(", ");
+  const single = String(record?.checker_name ?? "").trim();
+  return single || "-";
 }
 
 export function documentTypeCodesLabel(

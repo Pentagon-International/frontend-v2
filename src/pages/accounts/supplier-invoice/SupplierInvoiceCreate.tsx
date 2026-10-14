@@ -53,7 +53,10 @@ import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import useAuthStore from "../../../store/authStore";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
@@ -941,7 +944,11 @@ export default function SupplierInvoiceCreate({
   const { id: supplierInvoiceIdFromRoute } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
   const dateFormat = useDateFormat();
-  const canPostDocuments = useCanPostDocuments();
+  const canPostDocuments = useCanPostDocuments(
+    isReversal
+      ? MAKER_CHECKER_DOCUMENT.supplierInvoiceReversal
+      : MAKER_CHECKER_DOCUMENT.supplierInvoice,
+  );
   const { openViewAllocationDocs, viewAllocationDocsUi } =
     useViewAllocationDocs();
   const pathname = location.pathname;

@@ -38,6 +38,7 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { Dropdown, SearchableSelect } from "../../../components";
 import {
   buildMakerCheckerFilterPayload,
+  checkerNamesLabel,
   documentTypeCodesLabel,
   fetchBranchMasterOptions,
   fetchDocumentTypeMasterIdOptions,
@@ -175,6 +176,11 @@ export default function MakerCheckerMapping() {
         accessorKey: "checker_name",
         header: "Checker",
         size: 200,
+        Cell: ({ row }) => (
+          <Text size="sm" style={{ fontFamily: "Inter" }}>
+            {checkerNamesLabel(row.original)}
+          </Text>
+        ),
       },
       {
         id: "document_types",

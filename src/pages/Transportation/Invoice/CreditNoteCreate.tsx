@@ -62,7 +62,10 @@ import {
   resolveCustomerMasterCode,
 } from "../../../utils/customerSelection";
 import type { HouseInvoiceBillToParty } from "../../../utils/houseInvoiceBillTo";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
 import FormNumberInput from "../../../components/FormNumberInput";
 import FormTextInput from "../../../components/FormTextInput";
@@ -1368,7 +1371,9 @@ function CreditNoteCreate() {
   };
   const { id: invoiceId } = useParams<{ id: string }>();
   const user = useAuthStore((state) => state.user);
-  const canPostDocuments = useCanPostDocuments();
+  const canPostDocuments = useCanPostDocuments(
+    MAKER_CHECKER_DOCUMENT.invoiceReversalAndCreditNote,
+  );
   const { openViewAllocationDocs, viewAllocationDocsUi } =
     useViewAllocationDocs();
   const isViewMode = location.pathname.includes("/view/");

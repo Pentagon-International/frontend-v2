@@ -17,11 +17,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
-import {
-  SearchableSelect,
-  ToastNotification,
-  Dropdown,
-} from "../../../components";
+import { ToastNotification, Dropdown } from "../../../components";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
 import SearchableMultiSelect from "../../../components/SearchableMultiSelect";
@@ -31,6 +27,8 @@ import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import {
+  checkerDisplayValuesFromRecord,
+  checkerIdsFromRecord,
   documentTypeIdsFromRecord,
   fetchBranchMasterOptions,
   fetchDocumentTypeMasterIdOptions,
@@ -42,7 +40,7 @@ import {
 
 type MakerCheckerMappingFormData = {
   maker_ids: string[];
-  checker_id: string;
+  checker_ids: string[];
   document_type_ids: string[];
   limit_amount: number | "";
   branch_code: string;
@@ -70,7 +68,10 @@ const schema = yup.object().shape({
     .array()
     .of(yup.string().required())
     .min(1, "At least one maker is required"),
-  checker_id: yup.string().required("Checker is required"),
+  checker_ids: yup
+    .array()
+    .of(yup.string().required())
+    .min(1, "At least one checker is required"),
   document_type_ids: yup
     .array()
     .of(yup.string().required())
@@ -177,9 +178,9 @@ export default function MakerCheckerMappingCreate() {
   const [makerDisplayValues, setMakerDisplayValues] = useState<
     Record<string, string>
   >({});
-  const [checkerDisplayName, setCheckerDisplayName] = useState<
-    string | undefined
-  >();
+  const [checkerDisplayValues, setCheckerDisplayValues] = useState<
+    Record<string, string>
+  >({});
 
   const { data: editRecord, isLoading: isLoadingEdit } = useQuery({
     queryKey: ["maker-checker-mapping", editId],
@@ -223,7 +224,7 @@ export default function MakerCheckerMappingCreate() {
   const form = useForm<MakerCheckerMappingFormData>({
     initialValues: {
       maker_ids: [],
-      checker_id: "",
+      checker_ids: [],
       document_type_ids: [],
       limit_amount: "",
       branch_code: "",
@@ -236,14 +237,13 @@ export default function MakerCheckerMappingCreate() {
 
     form.setValues({
       maker_ids: makerIdsFromRecord(editRecord),
-      checker_id:
-        editRecord.checker_id != null ? String(editRecord.checker_id) : "",
+      checker_ids: checkerIdsFromRecord(editRecord),
       document_type_ids: documentTypeIdsFromRecord(editRecord),
       limit_amount: parseLimitAmount(editRecord.limit_amount),
       branch_code: String(editRecord.branch_code ?? ""),
     });
     setMakerDisplayValues(makerDisplayValuesFromRecord(editRecord));
-    setCheckerDisplayName(editRecord.checker_name);
+    setCheckerDisplayValues(checkerDisplayValuesFromRecord(editRecord));
   }, [isEditMode, editRecord]);
 
   const handleSubmit = async (values: MakerCheckerMappingFormData) => {
@@ -252,7 +252,7 @@ export default function MakerCheckerMappingCreate() {
     const limitAmount = formatLimitAmount(values.limit_amount);
     const payload: Record<string, unknown> = {
       maker_ids: values.maker_ids.map((id) => Number(id)),
-      checker_id: Number(values.checker_id),
+      checker_ids: values.checker_ids.map((id) => Number(id)),
       document_type_ids: values.document_type_ids.map((id) => Number(id)),
       status: editRecord?.status ?? "ACTIVE",
     };
@@ -458,25 +458,34 @@ export default function MakerCheckerMappingCreate() {
                 </Grid.Col>
 
                 <Grid.Col span={6}>
-                  <SearchableSelect
+                  <SearchableMultiSelect
                     label="Checker"
                     placeholder="Type user name"
                     apiEndpoint={URL.user}
                     searchFields={["user_name", "employee_id", "id"]}
                     displayFormat={formatUserMasterSelectOption}
-                    value={form.values.checker_id || null}
-                    displayValue={checkerDisplayName}
-                    onChange={(value, selectedData) => {
-                      form.setFieldValue("checker_id", value ?? "");
-                      setCheckerDisplayName(selectedData?.label);
+                    value={form.values.checker_ids}
+                    displayValues={checkerDisplayValues}
+                    onChange={(values, selectedData) => {
+                      form.setFieldValue("checker_ids", values);
+                      setCheckerDisplayValues((prev) => {
+                        const next: Record<string, string> = {};
+                        for (const id of values) {
+                          const fromSelection = selectedData?.find(
+                            (item) => item.value === id,
+                          )?.label;
+                          next[id] = fromSelection ?? prev[id] ?? id;
+                        }
+                        return next;
+                      });
                     }}
                     minSearchLength={2}
                     withAsterisk
                     dropdownZIndex={100}
                     styles={commonInputStyles}
                     error={
-                      typeof form.errors.checker_id === "string"
-                        ? form.errors.checker_id
+                      typeof form.errors.checker_ids === "string"
+                        ? form.errors.checker_ids
                         : undefined
                     }
                   />

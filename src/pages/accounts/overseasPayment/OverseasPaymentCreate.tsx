@@ -62,7 +62,10 @@ import { apiCallProtected } from "../../../api/axios";
 import useAuthStore from "../../../store/authStore";
 import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
-import { useCanPostDocuments } from "../../../hooks/useCanPostDocuments";
+import {
+  MAKER_CHECKER_DOCUMENT,
+  useCanPostDocuments,
+} from "../../../hooks/useCanPostDocuments";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
 import {
   parseRoeForPayload,
@@ -773,7 +776,11 @@ export default function OverseasPaymentCreate({
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
 
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
-  const canPostDocuments = useCanPostDocuments();
+  const canPostDocuments = useCanPostDocuments(
+    _isReversal
+      ? MAKER_CHECKER_DOCUMENT.paymentReversal
+      : MAKER_CHECKER_DOCUMENT.payment,
+  );
   const [loadedDetails, setLoadedDetails] = useState<DetailRow[] | null>(null);
   const sourcePaymentNoRef = useRef<string>("");
   const [reversePaymentSaveResponse, setReversePaymentSaveResponse] = useState<{
