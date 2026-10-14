@@ -589,6 +589,16 @@ const NavigationRoutes = () => {
           <Route path="purchase-register" element={<PurchaseRegister />} />
           <Route path="sales-register" element={<SalesRegister />} />
           <Route path="gst-report" element={<GstReport />} />
+          <Route
+            path="gstr2-report"
+            element={
+              <GstReport
+                title="GSTR 2 Report"
+                reportType="gstr2_register"
+                filePrefix="gstr2-report"
+              />
+            }
+          />
           <Route path="irn-report" element={<IrnReport />} />
           <Route
             path="cost-fapiao-report"

@@ -16,6 +16,12 @@ type GstReportFormValues = {
   branch_code: string | null;
 };
 
+type GstReportProps = {
+  title?: string;
+  reportType?: string;
+  filePrefix?: string;
+};
+
 function downloadBlob(blob: Blob, fileName: string) {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -27,7 +33,11 @@ function downloadBlob(blob: Blob, fileName: string) {
   window.URL.revokeObjectURL(url);
 }
 
-export default function GstReport() {
+export default function GstReport({
+  title = "GST Register Report",
+  reportType = "sales_gst_register",
+  filePrefix = "gst-report",
+}: GstReportProps) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [printing, setPrinting] = useState(false);
@@ -97,7 +107,7 @@ export default function GstReport() {
     }
 
     const body = {
-      report_type: "sales_gst_register",
+      report_type: reportType,
       format: "csv",
       filters,
     };
@@ -137,7 +147,7 @@ export default function GstReport() {
       }
 
       const stamp = dayjs().format("YYYYMMDD-HHmmss");
-      downloadBlob(blob, `gst-report-${stamp}.csv`);
+      downloadBlob(blob, `${filePrefix}-${stamp}.csv`);
       ToastNotification({ type: "success", message: "Report downloaded" });
     } catch (e: unknown) {
       const err = e as {
@@ -165,7 +175,7 @@ export default function GstReport() {
     <Box>
       <Group justify="space-between" mb="md">
         <Title order={4} style={{ color: "#105476" }}>
-          GST Register Report
+          {title}
         </Title>
       </Group>
 
