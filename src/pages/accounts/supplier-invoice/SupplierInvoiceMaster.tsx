@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MantineReactTable,
   useMantineReactTable,
@@ -80,6 +80,7 @@ type SupplierInvoiceRow = Record<string, unknown> & {
   id?: number | string;
   sno?: number;
   crj_number?: string;
+  prq_reference_no?: string;
   Inv_Crn_no?: string;
   inv_crn_no?: string;
   agent_name?: string;
@@ -150,11 +151,13 @@ type SupplierInvoiceFilters = {
   date_from: Date | null;
   date_to: Date | null;
   status: string;
+  prq_reference_no: string;
 };
 
 type SupplierInvoiceColumnVisibility = {
   sno: boolean;
   invoice_no: boolean;
+  prq_reference_no: boolean;
   Inv_Crn_no: boolean;
   agent_name: boolean;
   job_id: boolean;
@@ -169,6 +172,7 @@ type SupplierInvoiceColumnVisibility = {
 const supplierInvoiceColumnDefault: SupplierInvoiceColumnVisibility = {
   sno: true,
   invoice_no: true,
+  prq_reference_no: true,
   Inv_Crn_no: true,
   agent_name: true,
   job_id: true,
@@ -183,6 +187,7 @@ const supplierInvoiceColumnDefault: SupplierInvoiceColumnVisibility = {
 const supplierInvoiceColumnLabels: Record<keyof SupplierInvoiceColumnVisibility, string> = {
   sno: "S.No",
   invoice_no: "CRJ No",
+  prq_reference_no: "PRQ No",
   Inv_Crn_no: "Supplier Doc no",
   agent_name: "Agent / Supplier",
   job_id: "Job Id",
@@ -198,6 +203,61 @@ function getSupplierDocNo(row: SupplierInvoiceRow): string {
   const value = row.Inv_Crn_no ?? row.inv_crn_no;
   const text = value == null ? "" : String(value).trim();
   return text;
+}
+
+/** Same loader block as the enquiry list, pinned to the visible table width. */
+function SupplierInvoiceListStatus({
+  loading,
+  cardBg,
+  primary,
+  fontSans,
+}: {
+  loading: boolean;
+  cardBg: string;
+  primary: string;
+  fontSans: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number>();
+
+  useEffect(() => {
+    const scroll = ref.current?.closest("[data-erp-list-table-scroll]");
+    if (!(scroll instanceof HTMLElement)) return;
+
+    const update = () => setWidth(scroll.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: "sticky",
+        left: 0,
+        width: width ?? "100%",
+        maxWidth: width ?? "100%",
+        boxSizing: "border-box",
+      }}
+    >
+      <Center py={80} style={{ backgroundColor: cardBg, width: "100%" }}>
+        {loading ? (
+          <Stack align="center" gap="md">
+            <Loader size="lg" color={primary} />
+            <Text c="dimmed" size="sm" style={{ fontFamily: fontSans }}>
+              Loading supplier invoice data…
+            </Text>
+          </Stack>
+        ) : (
+          <Text c="dimmed" size="sm" style={{ fontFamily: fontSans }}>
+            No supplier invoice data found
+          </Text>
+        )}
+      </Center>
+    </div>
+  );
 }
 
 function supplierInvoiceColumnId<T extends Record<string, unknown>>(
@@ -235,6 +295,7 @@ function SupplierInvoiceMaster() {
     date_from: defaultDateFrom,
     date_to: defaultDateTo,
     status: "",
+    prq_reference_no: "",
   };
 
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
@@ -787,6 +848,38 @@ function SupplierInvoiceMaster() {
         },
       },
       {
+        id: "prq_reference_no",
+        header: "PRQ No",
+        size: 160,
+        accessorFn: (row) => String(row.prq_reference_no ?? "").trim(),
+        Header: () => (
+          <ERPListColumnHeaderFilter
+            label="PRQ No"
+            value={appliedFilters.prq_reference_no}
+            displayValue={appliedFilters.prq_reference_no}
+            theme={erpTheme}
+            placeholder="Filter PRQ No"
+            isEditing={editingHeaderId === "prq_reference_no"}
+            onStartEdit={() => openHeaderEditor("prq_reference_no")}
+            onStopEdit={() => collapseHeaderEditor("prq_reference_no")}
+            onChange={(next) =>
+              commitHeaderFilters((prev) => ({
+                ...prev,
+                prq_reference_no: next,
+              }))
+            }
+          />
+        ),
+        Cell: ({ row }) => {
+          const prqNo = String(row.original.prq_reference_no ?? "").trim();
+          return (
+            <Text size="sm" style={{ fontFamily: erpTheme.fontSans }}>
+              {prqNo || "-"}
+            </Text>
+          );
+        },
+      },
+      {
         id: "actions",
         header: "Actions",
         size: 80,
@@ -958,30 +1051,24 @@ function SupplierInvoiceMaster() {
       pagination,
     },
     renderEmptyRowsFallback: () => (
-      <Center
-        py={80}
-        style={{ width: "100%", backgroundColor: cardBg }}
-        className="erp-header-filter-fade"
-      >
-        {isLoading ? (
-          <Stack align="center" gap="md">
-            <Loader size="lg" color={primary} />
-            <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-              Loading supplier invoice data…
-            </Text>
-          </Stack>
-        ) : (
-          <Text c="dimmed" size="sm" style={{ fontFamily: erpTheme.fontSans }}>
-            No supplier invoice data found
-          </Text>
-        )}
-      </Center>
+      <SupplierInvoiceListStatus
+        loading={isLoading}
+        cardBg={cardBg}
+        primary={primary}
+        fontSans={erpTheme.fontSans}
+      />
     ),
     mantineTableProps: {
       striped: false,
       highlightOnHover: true,
       withTableBorder: false,
       withColumnBorders: false,
+      style: {
+        // Fill the card when columns fit; grow past it when they do not so
+        // the card — not the table — shows the horizontal scrollbar.
+        width: "100%",
+        minWidth: "max-content",
+      },
     },
     mantinePaperProps: {
       shadow: "none",
@@ -989,11 +1076,10 @@ function SupplierInvoiceMaster() {
       radius: 0,
       withBorder: false,
       style: {
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
         backgroundColor: "transparent",
+        // Let the list card own scrolling, same as the ocean export job list.
+        // MRT's paper otherwise clips overflow and hides the card scrollbar.
+        overflow: "visible",
       },
     },
     mantineTableBodyCellProps: ({ column }) => {
@@ -1077,11 +1163,15 @@ function SupplierInvoiceMaster() {
     },
     mantineTableContainerProps: {
       style: {
-        height: "100%",
-        flexGrow: 1,
-        minHeight: 0,
+        // MRT's container scrolls on its own (max-height ~ viewport), which
+        // pins the horizontal bar under the rows. Ocean export job list
+        // scrolls the card body instead, so the bar sits on the bottom edge
+        // of the table card, just above pagination.
+        height: "auto",
+        maxHeight: "none",
+        maxWidth: "none",
+        overflow: "visible",
         position: "relative",
-        overflow: "auto",
       },
     },
   });
