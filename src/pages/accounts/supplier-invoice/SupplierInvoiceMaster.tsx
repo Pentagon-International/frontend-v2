@@ -858,7 +858,7 @@ function SupplierInvoiceMaster() {
             value={appliedFilters.prq_reference_no}
             displayValue={appliedFilters.prq_reference_no}
             theme={erpTheme}
-            placeholder="Filter PRQ No"
+            placeholder="PRQ No"
             isEditing={editingHeaderId === "prq_reference_no"}
             onStartEdit={() => openHeaderEditor("prq_reference_no")}
             onStopEdit={() => collapseHeaderEditor("prq_reference_no")}
