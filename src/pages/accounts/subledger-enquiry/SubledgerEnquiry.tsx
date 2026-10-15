@@ -72,7 +72,11 @@ import {
   openGlobalSearchItem,
   runGlobalSearchQuery,
 } from "../../../utils/globalSearchNavigation";
-import { formatMoneyAmountForUi } from "../../../utils/nonDecimalMoneyAmount";
+import { formatAmountForDisplay } from "../../../utils/amountDisplayFormat";
+import {
+  formatMoneyAmountForUi,
+  isVietnamBranchFromUser,
+} from "../../../utils/nonDecimalMoneyAmount";
 
 type CoaItem = {
   id?: number;
@@ -247,17 +251,47 @@ function subledgerCellAlign(
   return subledgerThTextAlign(key);
 }
 
-function formatAmount(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "";
+function receivedFractionDigits(value: number | string): number {
+  const raw = String(value).trim().replace(/,/g, "");
+  const match = raw.match(/^[+-]?(?:\d+)?\.(\d+)/);
+  return match ? match[1].length : 0;
+}
+
+function readReceivedAmount(value: unknown): number | string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (
+      trimmed !== "" &&
+      Number.isFinite(Number(trimmed.replace(/,/g, "")))
+    ) {
+      return trimmed;
+    }
   }
-  return formatMoneyAmountForUi(value);
+  return null;
+}
+
+function formatAmount(
+  value: number | string | null | undefined,
+  preserveReceivedDecimals = false,
+): string {
+  if (value === null || value === undefined) return "";
+  const raw = typeof value === "string" ? value.trim() : value;
+  if (raw === "") return "";
+  const n =
+    typeof raw === "number" ? raw : Number(String(raw).replace(/,/g, ""));
+  if (!Number.isFinite(n)) return "";
+  if (!preserveReceivedDecimals) return formatMoneyAmountForUi(n);
+  return formatAmountForDisplay(n, {
+    fractionDigits: receivedFractionDigits(raw),
+  });
 }
 
 function formatSubledgerCell(
   key: keyof SubledgerEntryRow,
   value: unknown,
   dateFormat: unknown,
+  preserveReceivedDecimals = false,
 ): string {
   if (value === null || value === undefined || value === "") return "";
   if (key === "sno") return String(value);
@@ -289,10 +323,8 @@ function formatSubledgerCell(
     key === "closing_balance" ||
     key === "outstanding_amount"
   ) {
-    if (typeof value === "number") return formatAmount(value);
-    if (typeof value === "string" && value.trim() !== "") {
-      const n = parseFloat(value);
-      if (!Number.isNaN(n)) return formatAmount(n);
+    if (typeof value === "number" || typeof value === "string") {
+      return formatAmount(value, preserveReceivedDecimals);
     }
   }
   return String(value);
@@ -452,8 +484,8 @@ export default function SubledgerEnquiry() {
   const [selectedAccount, setSelectedAccount] = useState<CoaItem | null>(null);
   const [rows, setRows] = useState<SubledgerEntryRow[]>([]);
   const [enquirySummary, setEnquirySummary] = useState<{
-    opening_balance: number | null;
-    closing_balance: number | null;
+    opening_balance: number | string | null;
+    closing_balance: number | string | null;
   } | null>(null);
   const [resultTotal, setResultTotal] = useState<number | null>(null);
   const [isFetchingRows, setIsFetchingRows] = useState(false);
@@ -479,6 +511,7 @@ export default function SubledgerEnquiry() {
 
   const dateFormat = useDateFormat();
   const { user } = useAuthStore();
+  const preserveReceivedAmountDecimals = isVietnamBranchFromUser(user);
 
   const { data: currencyData = [] } = useQuery({
     queryKey: ["currencyMaster", "subledger-enquiry"],
@@ -658,14 +691,8 @@ export default function SubledgerEnquiry() {
         typeof response?.total === "number" ? response.total : list.length,
       );
       setEnquirySummary({
-        opening_balance:
-          typeof response?.opening_balance === "number"
-            ? response.opening_balance
-            : null,
-        closing_balance:
-          typeof response?.closing_balance === "number"
-            ? response.closing_balance
-            : null,
+        opening_balance: readReceivedAmount(response?.opening_balance),
+        closing_balance: readReceivedAmount(response?.closing_balance),
       });
     },
     [],
@@ -932,8 +959,11 @@ export default function SubledgerEnquiry() {
 
   const openingBalanceLabelDisplay = useMemo(() => {
     if (enquirySummary?.opening_balance == null) return "—";
-    return formatAmount(enquirySummary.opening_balance);
-  }, [enquirySummary]);
+    return formatAmount(
+      enquirySummary.opening_balance,
+      preserveReceivedAmountDecimals,
+    );
+  }, [enquirySummary, preserveReceivedAmountDecimals]);
 
   const getDocumentNavigationOptions = useCallback(
     () => ({
@@ -1603,6 +1633,9 @@ export default function SubledgerEnquiry() {
                     pagination={pagination}
                     onPaginationChange={setPagination}
                     onDocumentNoClick={handleDocumentNumberClick}
+                    preserveReceivedAmountDecimals={
+                      preserveReceivedAmountDecimals
+                    }
                   />
                 )}
               </>
@@ -1632,6 +1665,7 @@ function SubledgerTable(props: {
       | ((prev: MRT_PaginationState) => MRT_PaginationState),
   ) => void;
   onDocumentNoClick: (documentNo: string) => void;
+  preserveReceivedAmountDecimals: boolean;
 }) {
   const {
     theme,
@@ -1646,6 +1680,7 @@ function SubledgerTable(props: {
     pagination,
     onPaginationChange,
     onDocumentNoClick,
+    preserveReceivedAmountDecimals,
   } = props;
 
   const allColumns = useMemo<MRT_ColumnDef<SubledgerEntryRow>[]>(
@@ -1698,14 +1733,26 @@ function SubledgerTable(props: {
             c.key === "note" ||
             c.key === "party_name"
           ) {
-            const text = formatSubledgerCell(c.key, value, dateFormat);
+            const text = formatSubledgerCell(
+              c.key,
+              value,
+              dateFormat,
+              preserveReceivedAmountDecimals,
+            );
             if (!text) return "—";
             return renderClampedTextWithTooltip(text, theme.fontSans);
           }
-          return formatSubledgerCell(c.key, value, dateFormat) || "—";
+          return (
+            formatSubledgerCell(
+              c.key,
+              value,
+              dateFormat,
+              preserveReceivedAmountDecimals,
+            ) || "—"
+          );
         },
       })),
-    [dateFormat, onDocumentNoClick, theme.fontSans],
+    [dateFormat, onDocumentNoClick, preserveReceivedAmountDecimals, theme.fontSans],
   );
 
   const visibleColumns = useMemo(
