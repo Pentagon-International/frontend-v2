@@ -1084,8 +1084,8 @@ export default function SupplierInvoiceCreate({
   const reversalIsAgentRef = useRef<boolean | null>(null);
   /** PRQ → CRJ create: send source payment-request id as `prq_id`. */
   const sourcePrqIdRef = useRef<number | null>(null);
-  /** OVERSEAS daybook / agent vendor: State is optional. Ref so validate sees latest. */
-  const isAgentVendorFlowRef = useRef(false);
+  /** India branch + LOCAL CRJ daybook: State is required. Ref so validate sees the latest day book. */
+  const requireIndianLocalCrjStateRef = useRef(false);
   /**
    * Once Inv/Crn No + Date exist on a posted invoice (from load or after one-time PATCH),
    * they cannot be inserted/changed again (fapiao-style one-shot fill).
@@ -1423,8 +1423,10 @@ export default function SupplierInvoiceCreate({
         return null;
       },
       currency_id: (v) => (!v ? "Currency is required" : null),
+      agent_code: (v) =>
+        !String(v ?? "").trim() ? "Vendor/Supplier is required" : null,
       state_id: (v) =>
-        isIndiaUser && !isAgentVendorFlowRef.current && !v
+        requireIndianLocalCrjStateRef.current && !String(v ?? "").trim()
           ? "State is required"
           : null,
       proforma_no: (v, values) => {
@@ -1700,6 +1702,11 @@ export default function SupplierInvoiceCreate({
       ?.label ?? "";
   const selectedDaybookLabelUpper = selectedDaybookLabel.toUpperCase();
   const isOverseasCrjDaybook = selectedDaybookLabelUpper.includes("OVERSEAS");
+  const isLocalCrjDaybook =
+    Boolean(String(form.values.day_book_id ?? "").trim()) &&
+    selectedDaybookLabelUpper.includes("LOCAL");
+  const isIndianLocalCrj = isIndiaUser && isLocalCrjDaybook;
+  requireIndianLocalCrjStateRef.current = isIndianLocalCrj;
   const vendorApiEndpoint = isOverseasCrjDaybook
     ? URL.agent
     : URL.supplierByType;
@@ -1714,14 +1721,11 @@ export default function SupplierInvoiceCreate({
     return false;
   };
 
-  const isAgentVendorFlow = isOverseasCrjDaybook || resolveIsAgentForPayload();
-  isAgentVendorFlowRef.current = isAgentVendorFlow;
-
   useEffect(() => {
-    if (!isIndiaUser || !isAgentVendorFlow) return;
+    if (isIndianLocalCrj) return;
     if (form.errors.state_id) form.clearFieldError("state_id");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAgentVendorFlow, isIndiaUser]);
+  }, [isIndianLocalCrj]);
 
   const isDaybookSelected = !!form.values.day_book_id;
 
@@ -2333,11 +2337,15 @@ export default function SupplierInvoiceCreate({
   ]);
 
   // Charges footer totals — same layout as invoice / payment request.
-  // Local Amount Total = Dr − Cr net of every charge local amount (including
-  // GST and TDS rows). India GST column totals use calculated rows when
-  // present, otherwise header CGST/SGST/IGST.
+  // INV local total is Dr − Cr (charge rows are Dr, so the total is positive).
+  // CRN inverts that to Cr − Dr (charge rows are Cr) so the same positive
+  // format is kept. Reversal flips the direction again.
+  // India GST column totals use calculated rows when present, otherwise
+  // header CGST/SGST/IGST.
   const chargesSectionTotals = useMemo(() => {
-    const netDirection = isReversal ? "crMinusDr" : "drMinusCr";
+    const isCrnType = form.values.type === "CRN";
+    const netDirection: "drMinusCr" | "crMinusDr" =
+      isReversal === isCrnType ? "drMinusCr" : "crMinusDr";
     const charges = form.values.charges_data ?? [];
     let local = 0;
     let igst = 0;
@@ -2375,7 +2383,10 @@ export default function SupplierInvoiceCreate({
       igst = parseNum(form.values.igst_amount) ?? 0;
       cgst = parseNum(form.values.cgst_amount) ?? 0;
       sgst = parseNum(form.values.sgst_amount) ?? 0;
-      if (netDirection === "crMinusDr") {
+      // INV reversal copies positive header GST; flip the sign so it follows
+      // the reversed charge direction. CRN already uses the inverted net, so
+      // its header GST stays positive like INV.
+      if (isReversal && !isCrnType) {
         igst = -igst;
         cgst = -cgst;
         sgst = -sgst;
@@ -2399,6 +2410,7 @@ export default function SupplierInvoiceCreate({
     form.values.igst_amount,
     form.values.cgst_amount,
     form.values.sgst_amount,
+    form.values.type,
     isIndiaUser,
     isReversal,
   ]);
@@ -4288,6 +4300,12 @@ export default function SupplierInvoiceCreate({
                 value={form.values.agent_code || null}
                 displayValue={agentDisplayName ?? undefined}
                 returnOriginalData
+                withAsterisk
+                error={
+                  form.errors.agent_code
+                    ? String(form.errors.agent_code)
+                    : undefined
+                }
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("agent_code", value ?? "");
                   setAgentDisplayName(selectedData?.label ?? null);
@@ -4341,7 +4359,7 @@ export default function SupplierInvoiceCreate({
                   value={form.values.state_id || null}
                   onChange={handlePartyStateChange}
                   searchable
-                  withAsterisk={!isAgentVendorFlow}
+                  withAsterisk={isIndianLocalCrj}
                   error={form.errors.state_id}
                   disabled={
                     isStateLoading ||

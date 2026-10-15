@@ -232,6 +232,24 @@ function isChargeTdsRow(charge: {
   });
 }
 
+/** A real service charge is required to create or update a PRQ. GST/TDS rows do not count. */
+function hasBillablePaymentRequestCharge(
+  charges: Array<{
+    is_tax_row?: boolean;
+    is_tds_row?: boolean;
+    is_tds_calcualted_record?: unknown;
+    is_tds_calculated_record?: unknown;
+    charge_id?: number | null;
+    account_code?: string;
+    charge_name?: string;
+  }> | null | undefined,
+): boolean {
+  return (charges ?? []).some(
+    (c) =>
+      c.charge_id != null && c.is_tax_row !== true && !isChargeTdsRow(c),
+  );
+}
+
 function normalizeChargeDrCr(value: unknown): "Dr" | "Cr" {
   const raw = String(value ?? "")
     .trim()
@@ -2099,6 +2117,13 @@ function PaymentRequest() {
   const handleCalculateGst = async () => {
     const validation = form.validate();
     if (validation.hasErrors) return;
+    if (!hasBillablePaymentRequestCharge(form.values.charges)) {
+      ToastNotification({
+        type: "error",
+        message: "Please enter at least one charge before calculating GST.",
+      });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const values = form.values;
@@ -2295,6 +2320,13 @@ function PaymentRequest() {
   const handleCalculateTds = async () => {
     const validation = form.validate();
     if (validation.hasErrors) return;
+    if (!hasBillablePaymentRequestCharge(form.values.charges)) {
+      ToastNotification({
+        type: "error",
+        message: "Please enter at least one charge before calculating TDS.",
+      });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const values = form.values;
@@ -2570,6 +2602,14 @@ function PaymentRequest() {
       ToastNotification({
         type: "error",
         message: "Please select Job Id for charge rows before saving.",
+      });
+      return;
+    }
+
+    if (!isRejectAction && !hasBillablePaymentRequestCharge(values.charges)) {
+      ToastNotification({
+        type: "error",
+        message: "Please enter at least one charge before saving.",
       });
       return;
     }
