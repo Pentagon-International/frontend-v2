@@ -48,7 +48,10 @@ import {
   MAKER_CHECKER_DOCUMENT,
   useCanPostDocuments,
 } from "../../../hooks/useCanPostDocuments";
-import { isIndianUserCountry } from "../../../utils/userNumberFormat";
+import {
+  getDefaultBranchCountryCode,
+  isIndianUserCountry,
+} from "../../../utils/userNumberFormat";
 import {
   getApiFailureMessage,
   getServerErrorMessage,
@@ -653,36 +656,81 @@ export default function SupplierInvoiceCreate({
       .toLowerCase()
       .includes("india");
 
+  const isChinaUser = useMemo(() => {
+    const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
+    if (branchCountryCode) {
+      const bc = branchCountryCode.toUpperCase();
+      if (bc === "CN" || bc.includes("CHINA")) return true;
+    }
+    const defaultBranch =
+      user?.branches?.find((b) => b.is_default) ?? user?.branches?.[0];
+    const branchCode = String(defaultBranch?.branch_code ?? "").toUpperCase();
+    const branchName = String(defaultBranch?.branch_name ?? "").toUpperCase();
+    if (branchCode === "CHN" || branchName.includes("CHINA")) return true;
+    const countryCode = (user?.country?.country_code ?? "").toUpperCase();
+    const countryName = (user?.country?.country_name ?? "").toUpperCase();
+    return countryCode === "CN" || countryName === "CHINA";
+  }, [
+    user?.branches,
+    user?.country?.country_code,
+    user?.country?.country_name,
+  ]);
+
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const currencyAmountDecimalScale = getAmountDecimalScale(false);
   const localAmountDecimalScale = getAmountDecimalScale(isVietnamBranch);
 
-  const cjvColSpans = useMemo(
-    () =>
-      isIndiaUser
-        ? {
-            dayBook: 1.25,
-            date: 1.25,
-            dueDate: 1.25,
-            vendor: 1.5,
-            state: 1.25,
-            tds: 1.25,
-            customerGst: 1,
-            note: 1.25,
-            narration: 1.25,
-          }
-        : {
-            dayBook: 1.5,
-            date: 1.5,
-            dueDate: 1.5,
-            vendor: 2,
-            note: 2.25,
-            narration: 2.25,
-          },
-    [isIndiaUser],
-  );
+  const cjvColSpans = useMemo(() => {
+    if (isIndiaUser) {
+      if (isChinaUser) {
+        return {
+          dayBook: 1.25,
+          date: 1.25,
+          dueDate: 1.25,
+          vendor: 2,
+          state: 1.25,
+          tds: 1.25,
+          customerGst: 0.75,
+          note: 1,
+          narration: 1,
+          fapiao: 1.25,
+        };
+      }
+      return {
+        dayBook: 1.25,
+        date: 1.25,
+        dueDate: 1.25,
+        vendor: 2.25,
+        state: 1.25,
+        tds: 1.25,
+        customerGst: 1,
+        note: 1.25,
+        narration: 1.25,
+      };
+    }
+    if (isChinaUser) {
+      return {
+        dayBook: 1.5,
+        date: 1.5,
+        dueDate: 1.5,
+        vendor: 2,
+        note: 1.5,
+        narration: 1.5,
+        fapiao: 1.5,
+      };
+    }
+    return {
+      dayBook: 1.5,
+      date: 1.5,
+      dueDate: 1.5,
+      vendor: 2.5,
+      note: 2.5,
+      narration: 2.5,
+    };
+  }, [isIndiaUser, isChinaUser]);
 
+  /** Spans must total 12 so Agent INV/CRN Detail stays on one row. */
   const agentColSpans = useMemo(
     () =>
       isIndiaUser
@@ -713,6 +761,7 @@ export default function SupplierInvoiceCreate({
             roe: 0.7,
             taxable: 0.9,
             nonTaxable: 0.9,
+            vat: 0.9,
             invCrnAmount: 1,
             approved: 1,
             difference: 1,
@@ -720,6 +769,7 @@ export default function SupplierInvoiceCreate({
     [isIndiaUser],
   );
 
+  /** Spans must total 12 so Charges header + rows stay on one line. */
   const chargeColSpans = useMemo(
     () =>
       isIndiaUser
@@ -729,28 +779,33 @@ export default function SupplierInvoiceCreate({
             crn: 0.8,
             account: 1,
             subledger: 1,
-            narration: 1.6,
+            narration: 1.5,
             currency: 0.75,
             roe: 0.65,
             amount: 0.8,
             localAmount: 0.8,
             sac: 0.75,
+            vatRate: 0,
+            vatAmount: 0,
             drCr: 0.75,
-            actions: 0.5,
+            actions: 0.7,
           }
         : {
-            shipment: 1.35,
-            charge: 1.35,
-            crn: 0.85,
-            account: 1.05,
-            subledger: 1.05,
-            narration: 1.75,
-            currency: 0.8,
-            roe: 0.7,
-            amount: 0.85,
-            localAmount: 0.85,
-            drCr: 0.8,
-            actions: 0.5,
+            shipment: 1.2,
+            charge: 1.2,
+            crn: 0.7,
+            account: 0.95,
+            subledger: 0.95,
+            narration: 1.3,
+            currency: 0.7,
+            roe: 0.6,
+            amount: 0.75,
+            localAmount: 0.75,
+            sac: 0,
+            vatRate: 0.7,
+            vatAmount: 0.8,
+            drCr: 0.7,
+            actions: 0.7,
           },
     [isIndiaUser],
   );
@@ -2587,6 +2642,7 @@ export default function SupplierInvoiceCreate({
           <Grid
             mb="md"
             columns={12}
+            gutter="xs"
             align="flex-end"
             pb={form.errors.roe ? 20 : 0}
           >
@@ -2799,6 +2855,26 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
+            {!isIndiaUser && (
+              <Grid.Col span={agentColSpans.vat}>
+                <NumberInput
+                  label="VAT Amount"
+                  placeholder="0"
+                  value={form.values.igst_amount ?? undefined}
+                  onChange={(v) =>
+                    form.setFieldValue(
+                      "igst_amount",
+                      typeof v === "number" ? clampLocalAmount(v) : null,
+                    )
+                  }
+                  min={0}
+                  decimalScale={localAmountDecimalScale}
+                  hideControls
+                  styles={effectiveInputStyles}
+                  disabled={isReadOnly || reversalFormDisabled}
+                />
+              </Grid.Col>
+            )}
             {isIndiaUser && (
               <Grid.Col span={agentColSpans.cgst}>
                 <NumberInput
@@ -3277,7 +3353,7 @@ export default function SupplierInvoiceCreate({
               <Box mb="sm" mt="sm">
                 <Grid
                   w="100%"
-                  gutter="sm"
+                  gutter="xs"
                   py="sm"
                   style={{
                     position: "sticky",
@@ -3374,8 +3450,8 @@ export default function SupplierInvoiceCreate({
                   <Grid
                     key={index}
                     w="100%"
-                    gutter="sm"
-                    mt={index !== 0 ? "sm" : 0}
+                    gutter="xs"
+                    mt={index !== 0 ? "xs" : 0}
                   >
                     <Grid.Col span={chargeColSpans.shipment}>
                       <SearchableSelect
@@ -3765,7 +3841,7 @@ export default function SupplierInvoiceCreate({
                         />
                       </Box>
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={chargeColSpans.amount}>
                       <NumberInput
                         placeholder="0"
                         value={row.amount ?? undefined}
@@ -3788,7 +3864,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={chargeColSpans.localAmount}>
                       <NumberInput
                         placeholder="0"
                         value={row.amount_in_local ?? undefined}
@@ -3848,7 +3924,7 @@ export default function SupplierInvoiceCreate({
                         }}
                       />
                     </Grid.Col>
-                    <Grid.Col span={0.5}>
+                    <Grid.Col span={chargeColSpans.actions}>
                       <Group gap="xs">
                         {!isReadOnly &&
                           !reversalFormDisabled &&

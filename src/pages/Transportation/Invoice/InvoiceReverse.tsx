@@ -75,10 +75,8 @@ import {
   getAmountDecimalScale,
 } from "../../../utils/nonDecimalMoneyAmount";
 import {
-  acceptForeignExchangeRate,
   fetchExchangeRateMaster,
-  ROE_REQUIRED_FIELD,
-  validateRoeForCurrency,
+  formatExchangeSellRate,
 } from "../../../utils/exchangeRateRoe";
 
 const fetchCurrencyMaster = async () => {
@@ -1464,10 +1462,6 @@ function InvoiceReverse() {
       }
     | undefined;
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
-  const defaultBranchCurrencyId =
-    defaultBranch?.currency?.currency_id != null
-      ? String(defaultBranch.currency.currency_id)
-      : "";
   const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
   const canPostDocuments = useCanPostDocuments(
     MAKER_CHECKER_DOCUMENT.invoiceReversalAndCreditNote,
@@ -1733,14 +1727,7 @@ function InvoiceReverse() {
       document_date: (value) => (!value ? "Document Date is required" : null),
       due_date: (value) => (!value ? "Due Date is required" : null),
       currency: (value) => (!value ? "Currency is required" : null),
-      roe: (value, values) =>
-        validateRoeForCurrency(
-          values.currency,
-          value,
-          defaultBranchCurrency,
-          true,
-          { branchCurrencyId: defaultBranchCurrencyId },
-        ),
+      // Reverse keeps source invoice ROE as-is — no ROE validation.
     },
   });
 
@@ -1943,7 +1930,7 @@ function InvoiceReverse() {
       if (isBaseCurrency(currencyUpper)) return 1;
 
       const cached = roeCacheRef.current.get(currencyUpper);
-      if (cached !== undefined && cached !== 1) return cached;
+      if (cached !== undefined) return cached;
       if (!activeBranchCountryCode) return null;
 
       const pending = pendingRoeFetchesRef.current.get(currencyUpper);
@@ -1951,7 +1938,8 @@ function InvoiceReverse() {
 
       const fetchPromise = (async (): Promise<number | null> => {
         try {
-          const rate = acceptForeignExchangeRate(
+          // Reverse must not reject ROE=1; use master rate as returned.
+          const rate = formatExchangeSellRate(
             await fetchExchangeRateMaster(
               activeBranchCountryCode,
               currencyUpper,
@@ -2954,7 +2942,8 @@ function InvoiceReverse() {
       });
       return;
     }
-    // Validate charges: charge, currency, roe, amount, amount_in_local
+    // Validate charges: charge, currency, amount, amount_in_local.
+    // ROE is not validated — reverse keeps source invoice ROE/amounts as-is.
     // SAC is optional — reverse keeps source invoice tax_code as-is (may be empty).
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
@@ -2962,14 +2951,6 @@ function InvoiceReverse() {
       if (charge.charge_id == null)
         err.charge_id = "Charge is required";
       if (!charge.currency) err.currency = "Currency is required";
-      const roeError = validateRoeForCurrency(
-        charge.currency,
-        charge.roe,
-        defaultBranchCurrency,
-        true,
-        { branchCurrencyId: defaultBranchCurrencyId },
-      );
-      if (roeError) err.roe = roeError;
       if (charge.amount === null || charge.amount === undefined)
         err.amount = "Currency Amount is required";
       if (
@@ -2985,16 +2966,11 @@ function InvoiceReverse() {
     });
     if (invalidCharges) {
       setChargeErrors(chargeErrs);
-      const onlyRoeErrors = Object.values(chargeErrs).every(
-        (err) => Object.keys(err).every((key) => key === "roe"),
-      );
-      if (!onlyRoeErrors) {
-        ToastNotification({
-          message:
-            "Please fill all required fields in charges section (Charge, Currency, ROE, Currency Amount, Local Amount).",
-          type: "error",
-        });
-      }
+      ToastNotification({
+        message:
+          "Please fill all required fields in charges section (Charge, Currency, Currency Amount, Local Amount).",
+        type: "error",
+      });
       return;
     }
     setChargeErrors({});
@@ -3769,38 +3745,16 @@ function InvoiceReverse() {
                   const billingUpper = newCurrency.trim().toUpperCase();
                   billingCurrencyRef.current = newCurrency;
                   form.setFieldValue("currency", newCurrency);
+                  form.clearFieldError("roe");
                   if (!newCurrency) {
                     form.setFieldValue("roe", null);
-                    form.setFieldError("roe", ROE_REQUIRED_FIELD);
                     return;
                   }
                   if (isBaseCurrency(newCurrency)) {
                     form.setFieldValue("roe", 1);
-                    form.clearFieldError("roe");
-                    setChargeErrors((prev) => {
-                      const next = { ...prev };
-                      let changed = false;
-                      form.values.charges.forEach((charge, index) => {
-                        if (
-                          String(charge.currency ?? "")
-                            .trim()
-                            .toUpperCase() !== billingUpper
-                        ) {
-                          return;
-                        }
-                        if (!next[index]?.roe) return;
-                        const row = { ...next[index] };
-                        delete row.roe;
-                        if (Object.keys(row).length === 0) delete next[index];
-                        else next[index] = row;
-                        changed = true;
-                      });
-                      return changed ? next : prev;
-                    });
                     return;
                   }
-                  form.setFieldValue("roe", null);
-                  form.clearFieldError("roe");
+                  // Keep loaded invoice amounts; only refresh header ROE for display.
                   void ensureRoeForCurrency(newCurrency).then((roe) => {
                     if (
                       billingCurrencyRef.current?.trim().toUpperCase() !==
@@ -3808,13 +3762,7 @@ function InvoiceReverse() {
                     ) {
                       return;
                     }
-                    const usable = acceptForeignExchangeRate(roe);
-                    form.setFieldValue("roe", usable);
-                    if (usable == null) {
-                      form.setFieldError("roe", ROE_REQUIRED_FIELD);
-                    } else {
-                      form.clearFieldError("roe");
-                    }
+                    form.setFieldValue("roe", roe);
                   });
                 }}
                 searchable
@@ -3842,22 +3790,10 @@ function InvoiceReverse() {
                         ? null
                         : parseFloat(String(value)) || null;
                   form.setFieldValue("roe", numValue);
-                  const headerRoeError = validateRoeForCurrency(
-                    form.values.currency,
-                    numValue,
-                    defaultBranchCurrency,
-                    true,
-                    { branchCurrencyId: defaultBranchCurrencyId },
-                  );
-                  if (headerRoeError) {
-                    form.setFieldError("roe", headerRoeError);
-                  } else {
-                    form.clearFieldError("roe");
-                  }
+                  form.clearFieldError("roe");
                 }}
                 // disabled={isReadOnly}
                 readOnly={isReadOnly}
-                withAsterisk
                 min={0}
                 decimalScale={4}
                 hideControls
@@ -4307,6 +4243,18 @@ function InvoiceReverse() {
                               }
                               setChargeErrors(newErrors);
                             }
+                            // Clear any leftover ROE field errors (validation removed on reverse).
+                            setChargeErrors((prev) => {
+                              if (!prev[index]?.roe) return prev;
+                              const next = { ...prev };
+                              if (next[index]) {
+                                delete next[index].roe;
+                                if (Object.keys(next[index]).length === 0) {
+                                  delete next[index];
+                                }
+                              }
+                              return next;
+                            });
                             if (!code) {
                               form.setFieldValue(`charges.${index}.roe`, null);
                               return;
@@ -4316,20 +4264,9 @@ function InvoiceReverse() {
                               requestedCurrency;
                             if (isBaseCurrency(code)) {
                               form.setFieldValue(`charges.${index}.roe`, 1);
-                              setChargeErrors((prev) => {
-                                if (!prev[index]?.roe) return prev;
-                                const next = { ...prev };
-                                if (next[index]) {
-                                  delete next[index].roe;
-                                  if (Object.keys(next[index]).length === 0) {
-                                    delete next[index];
-                                  }
-                                }
-                                return next;
-                              });
                               return;
                             }
-                            form.setFieldValue(`charges.${index}.roe`, null);
+                            // Do not wipe invoice ROE while fetching; set when rate returns.
                             void ensureRoeForCurrency(code).then((roe) => {
                               if (
                                 chargeCurrencyRequestRef.current[index] !==
@@ -4337,26 +4274,12 @@ function InvoiceReverse() {
                               ) {
                                 return;
                               }
-                              const usable = acceptForeignExchangeRate(roe);
-                              form.setFieldValue(
-                                `charges.${index}.roe`,
-                                usable,
-                              );
-                              setChargeErrors((prev) => {
-                                const next = { ...prev };
-                                if (usable == null) {
-                                  next[index] = {
-                                    ...(next[index] ?? {}),
-                                    roe: ROE_REQUIRED_FIELD,
-                                  };
-                                } else if (next[index]?.roe) {
-                                  delete next[index].roe;
-                                  if (Object.keys(next[index]).length === 0) {
-                                    delete next[index];
-                                  }
-                                }
-                                return next;
-                              });
+                              if (roe != null) {
+                                form.setFieldValue(
+                                  `charges.${index}.roe`,
+                                  roe,
+                                );
+                              }
                             });
                           }}
                           searchable
@@ -4371,7 +4294,7 @@ function InvoiceReverse() {
                           placeholder="ROE"
                           value={charge.roe ?? undefined}
                           onChange={(v) => {
-                            enableChargeAmountAutoCalcRef.current = true;
+                            // Reverse never recalculates amounts from ROE edits.
                             const numValue =
                               typeof v === "number"
                                 ? v
@@ -4380,38 +4303,16 @@ function InvoiceReverse() {
                                   : parseFloat(String(v)) || null;
                             if (isBaseCurrency(charge.currency)) {
                               form.setFieldValue(`charges.${index}.roe`, 1);
-                              setChargeErrors((prev) => {
-                                if (!prev[index]?.roe) return prev;
-                                const next = { ...prev };
-                                if (next[index]) {
-                                  delete next[index].roe;
-                                  if (Object.keys(next[index]).length === 0) {
-                                    delete next[index];
-                                  }
-                                }
-                                return next;
-                              });
-                              return;
+                            } else {
+                              form.setFieldValue(
+                                `charges.${index}.roe`,
+                                numValue,
+                              );
                             }
-                            form.setFieldValue(
-                              `charges.${index}.roe`,
-                              numValue,
-                            );
-                            const roeError = validateRoeForCurrency(
-                              charge.currency,
-                              numValue,
-                              defaultBranchCurrency,
-                              true,
-                              { branchCurrencyId: defaultBranchCurrencyId },
-                            );
                             setChargeErrors((prev) => {
+                              if (!prev[index]?.roe) return prev;
                               const next = { ...prev };
-                              if (roeError) {
-                                next[index] = {
-                                  ...(next[index] ?? {}),
-                                  roe: roeError,
-                                };
-                              } else if (next[index]?.roe) {
+                              if (next[index]) {
                                 delete next[index].roe;
                                 if (Object.keys(next[index]).length === 0) {
                                   delete next[index];
@@ -4421,7 +4322,6 @@ function InvoiceReverse() {
                             });
                           }}
                           hideControls
-                          withAsterisk
                           //disabled={isReadOnly}
                           readOnly={isReadOnly}
                           error={chargeErrors[index]?.roe}
@@ -4431,7 +4331,7 @@ function InvoiceReverse() {
                         <FormNumberInput
                           value={charge.no_of_unit ?? undefined}
                           onChange={(v) => {
-                            enableChargeAmountAutoCalcRef.current = true;
+                            // Keep invoice amounts as-is — do not enable auto-calc on reverse.
                             form.setFieldValue(
                               `charges.${index}.no_of_unit`,
                               typeof v === "number"
@@ -4452,7 +4352,7 @@ function InvoiceReverse() {
                         <FormNumberInput
                           value={charge.amount_per_unit ?? undefined}
                           onChange={(v) => {
-                            enableChargeAmountAutoCalcRef.current = true;
+                            // Keep invoice amounts as-is — do not enable auto-calc on reverse.
                             form.setFieldValue(
                               `charges.${index}.amount_per_unit`,
                               clampAmount(
@@ -4476,7 +4376,7 @@ function InvoiceReverse() {
                           placeholder="Currency Amount"
                           value={charge.amount ?? undefined}
                           onChange={(v) => {
-                            enableChargeAmountAutoCalcRef.current = true;
+                            // Keep local/header amounts as loaded — do not enable auto-calc on reverse.
                             form.setFieldValue(
                               `charges.${index}.amount`,
                               clampAmount(

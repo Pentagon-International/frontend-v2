@@ -73,7 +73,7 @@ export default function ReportsPage() {
           path: "/reports/sales-register",
         },
         {
-          label: "GST Register Report",
+          label: "GSTR 1 Report",
           icon: <IconReceiptTax size={28} color="#105476" />,
           path: "/reports/gst-report",
         },
@@ -83,7 +83,7 @@ export default function ReportsPage() {
           path: "/reports/gstr2-report",
         },
         {
-          label: "GST RCM",
+          label: "GSTR RCM",
           icon: <IconReceiptTax size={28} color="#105476" />,
           path: "/reports/gst-rcm-report",
         },

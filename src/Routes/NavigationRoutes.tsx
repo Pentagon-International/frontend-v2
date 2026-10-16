@@ -590,7 +590,16 @@ const NavigationRoutes = () => {
           />
           <Route path="purchase-register" element={<PurchaseRegister />} />
           <Route path="sales-register" element={<SalesRegister />} />
-          <Route path="gst-report" element={<GstReport />} />
+          <Route
+            path="gst-report"
+            element={
+              <GstReport
+                title="GSTR 1 Report"
+                reportType="sales_gst_register"
+                filePrefix="gst-report"
+              />
+            }
+          />
           <Route
             path="gstr2-report"
             element={
@@ -605,7 +614,7 @@ const NavigationRoutes = () => {
             path="gst-rcm-report"
             element={
               <GstReport
-                title="GST RCM"
+                title="GSTR RCM"
                 reportType="rcm_report"
                 filePrefix="gst-rcm-report"
               />

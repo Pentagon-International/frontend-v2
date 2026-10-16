@@ -34,7 +34,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 export default function GstReport({
-  title = "GST Register Report",
+  title = "GSTR 1 Report",
   reportType = "sales_gst_register",
   filePrefix = "gst-report",
 }: GstReportProps) {
