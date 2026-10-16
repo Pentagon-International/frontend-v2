@@ -87,6 +87,7 @@ import {
   formatMoneyAmountForUi,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
+import { resolveHouseHblHawbNo } from "../../../utils/buildHouseJobLedgerNavigationState";
 
 interface JobLedgerData {
   id: number;
@@ -509,8 +510,19 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
     (navState?.segmentCode as string | null) ??
     null;
 
-  const inferredHblHawbFinal: string | null =
-    (navState?.hbl_hawb_no as string | null) ?? null;
+  const inferredHblHawbFinal: string | null = (() => {
+    const fromNav = String(navState?.hbl_hawb_no ?? "").trim();
+    if (fromNav) return fromNav;
+    const houseFromNav =
+      (Array.isArray(navState?.housingDetails)
+        ? navState.housingDetails[0]
+        : null) ??
+      (Array.isArray(navState?.hawbDetails) ? navState.hawbDetails[0] : null);
+    const fromHouse = resolveHouseHblHawbNo(
+      houseFromNav as Record<string, unknown> | null | undefined,
+    );
+    return fromHouse || null;
+  })();
 
   const jobReturnTo =
     (navState?.jobReturnTo as string | undefined)?.trim() ?? "";

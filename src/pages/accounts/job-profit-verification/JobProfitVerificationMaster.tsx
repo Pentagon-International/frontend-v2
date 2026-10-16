@@ -31,6 +31,7 @@ import {
   IconCircleX,
   IconDotsVertical,
   IconFilter,
+  IconRefresh,
   IconSearch,
   IconStack2,
   IconX,
@@ -938,6 +939,7 @@ export default function JobProfitVerificationMaster({
     data: listResult,
     isLoading,
     isFetching,
+    refetch: refetchProfitList,
   } = useQuery({
     queryKey: [
       listQueryKey,
@@ -1131,6 +1133,20 @@ export default function JobProfitVerificationMaster({
                   }
                   classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
                 />
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(theme)}
+                  leftSection={<IconRefresh size={14} />}
+                  onClick={() => {
+                    void refetchProfitList();
+                  }}
+                  loading={isFetching}
+                  disabled={isRestoring || isFetching}
+                  aria-label="Refresh list"
+                >
+                  Refresh
+                </Button>
                 <Button
                   variant="default"
                   size="xs"

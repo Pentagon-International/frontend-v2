@@ -1,6 +1,9 @@
 type HousingDetail = Record<string, unknown> & {
   hbl_number?: string;
   hawb_number?: string;
+  /** Air Import / Air Export house forms use hawb_no */
+  hawb_no?: string;
+  hbl_no?: string;
 };
 
 type HouseJobLedgerLocationState = {
@@ -19,7 +22,11 @@ export function resolveHouseHblHawbNo(
 ): string {
   if (!houseDetail) return "";
   return String(
-    houseDetail.hbl_number ?? houseDetail.hawb_number ?? "",
+    houseDetail.hbl_number ??
+      houseDetail.hawb_number ??
+      houseDetail.hawb_no ??
+      houseDetail.hbl_no ??
+      "",
   ).trim();
 }
 
