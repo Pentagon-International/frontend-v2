@@ -1951,6 +1951,8 @@ function CustomerCreate() {
     location.pathname === "/master/create-customer" ||
     isVendorVerificationRoute ||
     isAgentVerificationRoute;
+  /** KYC attach + required validation — India creation only (not overseas). */
+  const requiresKycDocuments = isVerificationCreateRoute && isIndiaUser;
   const allowIndiaManualCreate = isIndiaManualCreateAllowed(
     location.state,
     location.search,
@@ -3071,7 +3073,7 @@ function CustomerCreate() {
   const createCustomer = async (
     values: CustomerSubmitValues,
   ): Promise<void> => {
-    if (isVerificationCreateRoute) {
+    if (requiresKycDocuments) {
       const kycError = validateRequiredKycDocuments(supportingDocuments);
       if (kycError) {
         ToastNotification({ type: "error", message: kycError });
@@ -4687,16 +4689,21 @@ function CustomerCreate() {
                             : "Edit Customer Relationships"}
                       </Button>
                     )}
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    size="sm"
-                    leftSection={<IconPaperclip size={16} />}
-                    onClick={openDocumentsModal}
-                    disabled={isSubmitting}
-                  >
-                    {isViewMode ? "View Documents" : "Attach Documents"}
-                  </Button>
+                  {/* KYC documents: India creation only; not part of overseas create. */}
+                  {(requiresKycDocuments ||
+                    (!isVerificationCreateRoute &&
+                      (isCreateMode || isEditMode || isViewMode))) && (
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      size="sm"
+                      leftSection={<IconPaperclip size={16} />}
+                      onClick={openDocumentsModal}
+                      disabled={isSubmitting}
+                    >
+                      {isViewMode ? "View Documents" : "Attach Documents"}
+                    </Button>
+                  )}
                 </>
               )}
 
