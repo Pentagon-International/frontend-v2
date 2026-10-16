@@ -182,6 +182,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/payment-request-approval")) {
       setActiveNav("Desk");
       setActiveSubNav("Payment Request Approval");
+    } else if (path.startsWith("/supplier-invoice-rcm/reversal")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Supplier Invoice RCM Reversal");
     } else if (path.startsWith("/supplier-invoice-rcm")) {
       setActiveNav("Desk");
       setActiveSubNav("Supplier Invoice RCM");

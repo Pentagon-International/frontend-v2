@@ -215,6 +215,8 @@ import SupplierInvoiceReversal from "../pages/accounts/supplier-invoice/Supplier
 import SupplierInvoiceReversalMaster from "../pages/accounts/supplier-invoice/SupplierInvoiceReversalMaster";
 import SupplierInvoiceRCMMaster from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMMaster";
 import SupplierInvoiceRCMCreate from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMCreate";
+import SupplierInvoiceRCMReversalMaster from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMReversalMaster";
+import SupplierInvoiceRCMReversal from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMReversal";
 import JournalVoucher from "../pages/accounts/journalVoucher/JournalVoucher";
 import JournalVoucherMaster from "../pages/accounts/journalVoucher/JournalVoucherMaster";
 import JournalVoucherReversal from "../pages/accounts/journalVoucherReversal/JournalVoucherReversal";
@@ -599,6 +601,16 @@ const NavigationRoutes = () => {
               />
             }
           />
+          <Route
+            path="gst-rcm-report"
+            element={
+              <GstReport
+                title="GST RCM"
+                reportType="rcm_report"
+                filePrefix="gst-rcm-report"
+              />
+            }
+          />
           <Route path="irn-report" element={<IrnReport />} />
           <Route
             path="cost-fapiao-report"
@@ -763,8 +775,20 @@ const NavigationRoutes = () => {
           element={<SupplierInvoiceReversal />}
         />
         <Route
+          path="/supplier-invoice-rcm/reversal"
+          element={<SupplierInvoiceRCMReversalMaster />}
+        />
+        <Route
+          path="/supplier-invoice-rcm/reversal/view"
+          element={<SupplierInvoiceRCMReversal />}
+        />
+        <Route
+          path="/supplier-invoice-rcm/reversal/edit"
+          element={<SupplierInvoiceRCMReversal />}
+        />
+        <Route
           path="/supplier-invoice-rcm/reversal/create"
-          element={<SupplierInvoiceReversal />}
+          element={<SupplierInvoiceRCMReversal />}
         />
         <Route path="/journal-voucher" element={<JournalVoucherMaster />} />
         <Route path="/journal-voucher/create" element={<JournalVoucher />} />

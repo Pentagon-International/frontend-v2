@@ -13,11 +13,8 @@ export default function SupplierInvoiceReversal() {
   const location = useLocation();
   const pathname = location.pathname;
   const isReversalCreate = pathname.includes("/reversal/create");
-  const isRcmReversalCreate = pathname.includes("/supplier-invoice-rcm/reversal/create");
   const effectiveBackPath = isReversalCreate
-    ? isRcmReversalCreate
-      ? "/supplier-invoice-rcm"
-      : "/supplier-invoice"
+    ? "/supplier-invoice"
     : "/supplier-invoice/reversal";
 
   return (

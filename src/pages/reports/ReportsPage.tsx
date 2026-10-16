@@ -83,6 +83,11 @@ export default function ReportsPage() {
           path: "/reports/gstr2-report",
         },
         {
+          label: "GST RCM",
+          icon: <IconReceiptTax size={28} color="#105476" />,
+          path: "/reports/gst-rcm-report",
+        },
+        {
           label: "IRN",
           icon: <IconFileSpreadsheet size={28} color="#105476" />,
           path: "/reports/irn-report",

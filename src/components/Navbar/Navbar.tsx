@@ -1456,6 +1456,19 @@ const Navbar = ({
                     />
                     <SubNavLink
                       parent="Accounts"
+                      label="Supplier Invoice RCM Reversal"
+                      icon={IconFileInvoice}
+                      path="/supplier-invoice-rcm/reversal"
+                      collapsibles={{
+                        setIsSalesOpen,
+                        setIsTariffOpen,
+                        setIsCustomerServiceOpen,
+                        setIsAirOpen,
+                        setIsSeaExportOpen,
+                      }}
+                    />
+                    <SubNavLink
+                      parent="Accounts"
                       label="Debit/Credit Note Trade"
                       icon={IconReceiptTax}
                       path="/debit-credit-note-trade"

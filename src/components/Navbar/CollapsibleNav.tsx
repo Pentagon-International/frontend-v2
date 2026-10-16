@@ -91,6 +91,7 @@ export const CollapsibleNav = ({
         activeSubNav === "Credit Limit Override Approval" ||
         activeSubNav === "Supplier Invoice" ||
         activeSubNav === "Supplier Invoice RCM" ||
+        activeSubNav === "Supplier Invoice RCM Reversal" ||
         activeSubNav === "Supplier Invoice Reversal" ||
         activeSubNav === "Journal Voucher" ||
         activeSubNav === "JournalVoucherReversal" ||

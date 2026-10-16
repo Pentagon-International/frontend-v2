@@ -815,6 +815,32 @@ function parseIsAgentFromInvoiceRecord(record: unknown): boolean | undefined {
   return undefined;
 }
 
+/** Resolve vendor code from invoice/detail payloads (field names vary by API). */
+function resolveAgentCodeFromInvoiceRecord(
+  data: Record<string, unknown>,
+): string {
+  for (const key of [
+    "agent_code",
+    "customer_code",
+    "party_code",
+    "subledger_code",
+  ] as const) {
+    const value = String(data[key] ?? "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+/** Resolve vendor display label from invoice/detail payloads. */
+function resolveAgentDisplayNameFromInvoiceRecord(
+  data: Record<string, unknown>,
+): string | null {
+  const name = String(
+    data.creditor_agent ?? data.agent_name ?? data.customer_name ?? "",
+  ).trim();
+  return name || null;
+}
+
 function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => {
@@ -1086,6 +1112,11 @@ export default function SupplierInvoiceCreate({
   const sourcePrqIdRef = useRef<number | null>(null);
   /** India branch + LOCAL CRJ daybook: State is required. Ref so validate sees the latest day book. */
   const requireIndianLocalCrjStateRef = useRef(false);
+  /**
+   * Vendor label may be set from source invoice (agent_name) while agent_code is empty.
+   * Ref so validate accepts a displayed vendor on reverse/edit hydrate.
+   */
+  const agentDisplayNameRef = useRef<string | null>(null);
   /**
    * Once Inv/Crn No + Date exist on a posted invoice (from load or after one-time PATCH),
    * they cannot be inserted/changed again (fapiao-style one-shot fill).
@@ -1423,8 +1454,13 @@ export default function SupplierInvoiceCreate({
         return null;
       },
       currency_id: (v) => (!v ? "Currency is required" : null),
-      agent_code: (v) =>
-        !String(v ?? "").trim() ? "Vendor/Supplier is required" : null,
+      agent_code: (v, values) => {
+        const hasCode = !!String(v ?? "").trim();
+        const hasName =
+          !!String(agentDisplayNameRef.current ?? "").trim() ||
+          !!String(values.creditor_agent ?? "").trim();
+        return !hasCode && !hasName ? "Vendor/Supplier is required" : null;
+      },
       state_id: (v) =>
         requireIndianLocalCrjStateRef.current && !String(v ?? "").trim()
           ? "State is required"
@@ -1846,6 +1882,9 @@ export default function SupplierInvoiceCreate({
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
+  useEffect(() => {
+    agentDisplayNameRef.current = agentDisplayName;
+  }, [agentDisplayName]);
   const [vendorAddress, setVendorAddress] = useState("");
   const partyCreditDayRef = useRef<number | null>(null);
   /**
@@ -2502,9 +2541,10 @@ export default function SupplierInvoiceCreate({
         status: data.status != null ? String(data.status) : "UNPOSTED",
       });
     }
-    setAgentDisplayName(
-      (data.creditor_agent ?? data.agent_name ?? null) as string | null,
-    );
+    const resolvedAgentName = resolveAgentDisplayNameFromInvoiceRecord(data);
+    const resolvedAgentCode = resolveAgentCodeFromInvoiceRecord(data);
+    setAgentDisplayName(resolvedAgentName);
+    agentDisplayNameRef.current = resolvedAgentName;
     // Reversal create: do not copy source attachments — user uploads manually if needed
     const mappedSupportingDocuments = runForReversalCreate
       ? []
@@ -2521,8 +2561,9 @@ export default function SupplierInvoiceCreate({
       day_book_id: daybookId,
       date: dateValue,
       due_date: dueDateValue,
-      creditor_agent: (data.creditor_agent ?? "") as string,
-      agent_code: (data.agent_code ?? "") as string,
+      creditor_agent: (resolvedAgentName ??
+        (data.creditor_agent ?? "")) as string,
+      agent_code: resolvedAgentCode,
       state_id: data.state_id != null ? String(data.state_id) : "",
       tds_section_code: (data.tds_section_code ?? "") as string,
       note: (data.note ?? "") as string,
@@ -3132,8 +3173,9 @@ export default function SupplierInvoiceCreate({
         parseDateOnly(data.due_date as string) ??
         normalizeDate(data.due_date as string) ??
         form.values.due_date,
-      creditor_agent: (data.creditor_agent ?? "") as string,
-      agent_code: (data.agent_code ?? "") as string,
+      creditor_agent: (resolveAgentDisplayNameFromInvoiceRecord(data) ??
+        (data.creditor_agent ?? "")) as string,
+      agent_code: resolveAgentCodeFromInvoiceRecord(data),
       state_id: data.state_id != null ? String(data.state_id) : "",
       tds_section_code: (data.tds_section_code ?? "") as string,
       note: (data.note ?? "") as string,
@@ -3187,9 +3229,9 @@ export default function SupplierInvoiceCreate({
         ),
       );
     }
-    setAgentDisplayName(
-      (data.creditor_agent ?? data.agent_name ?? null) as string | null,
-    );
+    const resolvedAgentName = resolveAgentDisplayNameFromInvoiceRecord(data);
+    setAgentDisplayName(resolvedAgentName);
+    agentDisplayNameRef.current = resolvedAgentName;
   };
 
   const handleSubmit = async (
@@ -4190,7 +4232,9 @@ export default function SupplierInvoiceCreate({
                   // the fields are disabled; clearing them here blocks creation.
                   if (!isReversalCreate) {
                     form.setFieldValue("agent_code", "");
+                    form.setFieldValue("creditor_agent", "");
                     setAgentDisplayName(null);
+                    agentDisplayNameRef.current = null;
                     setVendorAddress("");
                     setPartyAddresses([]);
                     partyCreditDayRef.current = null;
@@ -4308,7 +4352,10 @@ export default function SupplierInvoiceCreate({
                 }
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("agent_code", value ?? "");
-                  setAgentDisplayName(selectedData?.label ?? null);
+                  const nextLabel = selectedData?.label ?? null;
+                  setAgentDisplayName(nextLabel);
+                  agentDisplayNameRef.current = nextLabel;
+                  form.setFieldValue("creditor_agent", nextLabel ?? "");
 
                   const isCleared =
                     value == null ||
@@ -4317,6 +4364,7 @@ export default function SupplierInvoiceCreate({
                     setVendorAddress("");
                     setPartyAddresses([]);
                     partyCreditDayRef.current = null;
+                    form.setFieldValue("creditor_agent", "");
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
                       form.setFieldValue("customer_gst_no", "");

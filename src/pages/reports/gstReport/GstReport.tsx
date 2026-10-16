@@ -100,11 +100,8 @@ export default function GstReport({
     const filters: Record<string, unknown> = {
       from_date: dayjs(form.values.from_date).format("YYYY-MM-DD"),
       to_date: dayjs(form.values.to_date).format("YYYY-MM-DD"),
+      branch_code: form.values.branch_code?.trim() || "",
     };
-
-    if (form.values.branch_code?.trim()) {
-      filters.branch_code = form.values.branch_code.trim();
-    }
 
     const body = {
       report_type: reportType,

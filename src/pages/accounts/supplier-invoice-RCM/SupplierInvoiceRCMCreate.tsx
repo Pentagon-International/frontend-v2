@@ -65,8 +65,9 @@ import {
 } from "../../../utils/paymentRequestChargePrefill";
 import {
   findJobCreateDropdownRow,
-  mapJobCreateDropdownOptions,
+  jobCreateDropdownDisplayFormat,
 } from "../../../utils/jobCreateDropdown";
+import { commonSearchAPI } from "../../../service/searchApi";
 import {
   bindMoneyWholeNumberMode,
   clampCurrencyMoneyAmountBound,
@@ -117,7 +118,7 @@ const fetchTdsSectionMaster = async () => {
 };
 
 const fetchDaybookByType = async (
-  documentType: "CRJ" | "CRJREV",
+  documentType: "CINV" | "CINVREV",
 ): Promise<unknown[]> => {
   try {
     const payload = { filters: { document_type: documentType } };
@@ -234,6 +235,8 @@ type SupplierInvoiceFormValues = {
   customer_gst_no: string;
   location_gst_no: string;
   type: "INV" | "CRN";
+  proforma_no: string;
+  proforma_date: Date | null;
   Inv_Crn_note: Date | null;
   Inv_Crn_no: string;
   roe: number | null;
@@ -375,6 +378,29 @@ type SupplierInvoiceListItem = Record<string, unknown> & {
   charges?: ApiCharge[];
 };
 
+/** Unwrap supplier-invoice GET/filter payload (object or single-item `data` array). */
+function resolveSupplierInvoiceApiRecord(
+  raw: unknown,
+): Record<string, unknown> | null {
+  const rawData = (raw as { data?: unknown })?.data ?? raw;
+  let record: unknown =
+    rawData &&
+    typeof rawData === "object" &&
+    "data" in (rawData as Record<string, unknown>) &&
+    (rawData as { data?: unknown }).data != null &&
+    typeof (rawData as { data?: unknown }).data === "object"
+      ? (rawData as { data?: unknown }).data
+      : rawData && typeof rawData === "object"
+        ? rawData
+        : null;
+  if (Array.isArray(record)) {
+    record = record.length > 0 ? record[0] : null;
+  }
+  return record && typeof record === "object" && !Array.isArray(record)
+    ? (record as Record<string, unknown>)
+    : null;
+}
+
 function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => ({
@@ -490,13 +516,75 @@ export default function SupplierInvoiceCreate({
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
   const isReversalCreate = isReversal && pathname.includes("/reversal/create");
-  // Load from list: state is invoice row (Supplier Invoice list) — same pattern as ReceiptCreate
-  const invoiceFromState = location.state as
-    SupplierInvoiceListItem | null | undefined;
+  const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
+    useState<SupplierInvoiceListItem | null>(null);
+  // Load from list: state is invoice row — detail GET overrides when available
+  const invoiceFromState =
+    invoiceFromRouteFetch ??
+    (location.state as SupplierInvoiceListItem | null | undefined);
 
   useEffect(() => {
     setAuditPatch(null);
   }, [location.key]);
+
+  useEffect(() => {
+    const idFromState = (location.state as { id?: number } | null | undefined)
+      ?.id;
+    const resolveSourceId = (): number => {
+      if (isReversalCreate) {
+        return idFromState != null ? Number(idFromState) : NaN;
+      }
+      if (!isViewMode && !isEditMode) return NaN;
+      return idFromState != null ? Number(idFromState) : NaN;
+    };
+
+    const idNum = resolveSourceId();
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+
+    const shouldFetch = isReversalCreate || isViewMode || isEditMode;
+    if (!shouldFetch) {
+      setInvoiceFromRouteFetch(null);
+      return;
+    }
+
+    const detailUrl =
+      isReversal && !isReversalCreate
+        ? `${URL.reverseSupplierInvoice}${idNum}/`
+        : `${URL.supplierInvoice}${idNum}/`;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiCallProtected.get(detailUrl, API_HEADER);
+        const record = resolveSupplierInvoiceApiRecord(res);
+        if (cancelled) return;
+        if (record) {
+          setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
+        }
+      } catch (e) {
+        console.error("Failed to load supplier invoice RCM by id", e);
+        if (!cancelled && isReversalCreate) {
+          ToastNotification({
+            type: "error",
+            message: "Unable to load supplier invoice details.",
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isViewMode,
+    isEditMode,
+    isReversalCreate,
+    isReversal,
+    location.key,
+    (location.state as { id?: number } | null | undefined)?.id,
+  ]);
 
   // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
   useEffect(() => {
@@ -599,31 +687,35 @@ export default function SupplierInvoiceCreate({
     () =>
       isIndiaUser
         ? {
-            type: 0.8,
-            invCrnNo: 0.95,
-            invCrnDate: 0.95,
-            currency: 0.9,
-            roe: 0.8,
-            taxable: 0.95,
-            nonTaxable: 0.95,
-            cgst: 0.95,
-            sgst: 0.95,
-            igst: 0.95,
-            invCrnAmount: 0.95,
-            approved: 0.95,
-            difference: 0.95,
+            type: 0.65,
+            proformaNo: 0.8,
+            proformaDate: 1,
+            invCrnNo: 0.8,
+            invCrnDate: 1,
+            currency: 0.75,
+            roe: 0.6,
+            taxable: 0.8,
+            nonTaxable: 0.8,
+            cgst: 0.8,
+            sgst: 0.8,
+            igst: 0.8,
+            invCrnAmount: 0.8,
+            approved: 0.8,
+            difference: 0.8,
           }
         : {
-            type: 0.85,
-            invCrnNo: 1.1,
-            invCrnDate: 1.25,
-            currency: 1,
-            roe: 0.9,
-            taxable: 1.1,
-            nonTaxable: 1.25,
-            invCrnAmount: 1.15,
-            approved: 1.15,
-            difference: 1.15,
+            type: 0.75,
+            proformaNo: 0.9,
+            proformaDate: 1.1,
+            invCrnNo: 0.9,
+            invCrnDate: 1.1,
+            currency: 0.85,
+            roe: 0.7,
+            taxable: 0.9,
+            nonTaxable: 0.9,
+            invCrnAmount: 1,
+            approved: 1,
+            difference: 1,
           },
     [isIndiaUser],
   );
@@ -687,6 +779,8 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: "",
       location_gst_no: "",
       type: "INV",
+      proforma_no: "",
+      proforma_date: null,
       Inv_Crn_note: null,
       Inv_Crn_no: "",
       roe: null,
@@ -728,9 +822,32 @@ export default function SupplierInvoiceCreate({
       due_date: (v) => (!v ? "Due date is required" : null),
       currency_id: (v) => (!v ? "Currency is required" : null),
       state_id: (v) => (isIndiaUser && !v ? "State is required" : null),
-      Inv_Crn_no: (v) =>
-        !String(v ?? "").trim() ? "Inv/Crn No is required" : null,
-      Inv_Crn_note: (v) => (!v ? "Inv/Crn Date is required" : null),
+      proforma_no: (v, values) => {
+        if (values.proforma_date != null && !String(v ?? "").trim()) {
+          return "Proforma No is required when Proforma Date is set";
+        }
+        return null;
+      },
+      proforma_date: (v, values) => {
+        if (String(values.proforma_no ?? "").trim() && v == null) {
+          return "Proforma Date is required when Proforma No is set";
+        }
+        return null;
+      },
+      Inv_Crn_no: (v, values) => {
+        const hasProforma =
+          Boolean(String(values.proforma_no ?? "").trim()) &&
+          values.proforma_date != null;
+        if (hasProforma) return null;
+        return !String(v ?? "").trim() ? "Inv/Crn No is required" : null;
+      },
+      Inv_Crn_note: (v, values) => {
+        const hasProforma =
+          Boolean(String(values.proforma_no ?? "").trim()) &&
+          values.proforma_date != null;
+        if (hasProforma) return null;
+        return !v ? "Inv/Crn Date is required" : null;
+      },
     },
   });
 
@@ -755,7 +872,7 @@ export default function SupplierInvoiceCreate({
       enabled: isIndiaUser,
     });
 
-  const daybookDocumentType = isReversal ? "CRJREV" : "CRJ";
+  const daybookDocumentType = isReversal ? "CINVREV" : "CINV";
   const { data: daybookData = [], isLoading: isDaybookLoading } = useQuery({
     queryKey: ["daybook", daybookDocumentType],
     queryFn: () => fetchDaybookByType(daybookDocumentType),
@@ -982,13 +1099,6 @@ export default function SupplierInvoiceCreate({
     shipment_id?: string;
     service_id?: number;
   }[];
-  const shipmentOptions = useMemo(() => {
-    if (!Array.isArray(jobList)) return [];
-    return mapJobCreateDropdownOptions(
-      jobList as Array<Record<string, unknown>>,
-    );
-  }, [jobList]);
-
   const getServiceIdByShipmentId = useCallback(
     (shipmentId: string | null | undefined): number | null => {
       if (!shipmentId || !Array.isArray(jobList)) return null;
@@ -1001,21 +1111,58 @@ export default function SupplierInvoiceCreate({
     [jobList],
   );
 
+  const shipmentServiceIdCacheRef = useRef<Record<string, number | null>>({});
+
+  const getServiceIdByShipmentIdAsync = useCallback(
+    async (shipmentId: string | null | undefined): Promise<number | null> => {
+      const shipmentNo = String(shipmentId ?? "").trim();
+      if (!shipmentNo) return null;
+
+      const direct = getServiceIdByShipmentId(shipmentNo);
+      if (direct != null) return direct;
+
+      if (shipmentNo in shipmentServiceIdCacheRef.current) {
+        return shipmentServiceIdCacheRef.current[shipmentNo] ?? null;
+      }
+
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.filterJobCreate,
+          query: shipmentNo,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Array<Record<string, unknown>>)
+          : [];
+        const match = findJobCreateDropdownRow(arr, shipmentNo);
+        const serviceIdRaw = match?.service_id ?? null;
+        const serviceId = serviceIdRaw != null ? Number(serviceIdRaw) : null;
+        shipmentServiceIdCacheRef.current[shipmentNo] =
+          serviceId != null && Number.isFinite(serviceId) ? serviceId : null;
+        return shipmentServiceIdCacheRef.current[shipmentNo];
+      } catch {
+        shipmentServiceIdCacheRef.current[shipmentNo] = null;
+        return null;
+      }
+    },
+    [getServiceIdByShipmentId],
+  );
+
   const fetchSacForChargeRow = useCallback(
     (index: number, chargeId: number | null, shipmentNo: string) => {
       if (!isIndiaUser || chargeId == null || !shipmentNo) return;
-      const serviceId = getServiceIdByShipmentId(shipmentNo);
-      if (serviceId == null) return;
-      fetchGetEffectiveSac([
-        { charge_id: chargeId, service_id: serviceId },
-      ]).then((data) => {
+      void (async () => {
+        const serviceId = await getServiceIdByShipmentIdAsync(shipmentNo);
+        if (serviceId == null) return;
+        const data = await fetchGetEffectiveSac([
+          { charge_id: chargeId, service_id: serviceId },
+        ]);
         const item = data.find((x) => x.charge_id === chargeId);
         if (item?.sac_code != null && item.sac_code !== "") {
           form.setFieldValue(`charges_data.${index}.tax_code`, item.sac_code);
         }
-      });
+      })();
     },
-    [getServiceIdByShipmentId, isIndiaUser],
+    [getServiceIdByShipmentIdAsync, form, isIndiaUser],
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
@@ -1281,17 +1428,26 @@ export default function SupplierInvoiceCreate({
         status: data.status != null ? String(data.status) : "UNPOSTED",
       });
     }
-    setAgentDisplayName(
-      (data.creditor_agent ?? data.agent_name ?? null) as string | null,
-    );
+    const resolvedAgentName = String(
+      data.creditor_agent ?? data.agent_name ?? data.customer_name ?? "",
+    ).trim() || null;
+    const resolvedAgentCode = String(
+      data.agent_code ??
+        data.customer_code ??
+        data.party_code ??
+        data.subledger_code ??
+        "",
+    ).trim();
+    setAgentDisplayName(resolvedAgentName);
     form.setValues({
       cbp_number: (data.cbp_number ?? "") as string,
       cost_center: (data.cost_center ?? "") as string,
       day_book_id: daybookId,
       date: dateValue,
       due_date: dueDateValue,
-      creditor_agent: (data.creditor_agent ?? "") as string,
-      agent_code: (data.agent_code ?? "") as string,
+      creditor_agent: (resolvedAgentName ??
+        (data.creditor_agent ?? "")) as string,
+      agent_code: resolvedAgentCode,
       state_id: data.state_id != null ? String(data.state_id) : "",
       tds_section_code: (data.tds_section_code ?? "") as string,
       note: (data.note ?? "") as string,
@@ -1300,6 +1456,10 @@ export default function SupplierInvoiceCreate({
       location_gst_no: (data.location_gst_no ?? "") as string,
       type: ((data.type as "INV" | "CRN" | undefined) ?? "INV") as
         "INV" | "CRN",
+      proforma_no: (data.proforma_no ?? "") as string,
+      proforma_date:
+        parseDDMMYYYY((data.proforma_date as string) ?? undefined) ??
+        normalizeDate((data.proforma_date as string) ?? null),
       Inv_Crn_note:
         parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
@@ -1345,6 +1505,7 @@ export default function SupplierInvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     invoiceFromState?.id,
+    invoiceFromRouteFetch,
     isViewMode,
     isEditMode,
     isReversalCreate,
@@ -1430,6 +1591,33 @@ export default function SupplierInvoiceCreate({
       normalizeDate(
         String(prData.actual_inv_date ?? prData.actual_invoice_date ?? ""),
       );
+    const proformaNo = String(
+      prData.proforma_inv_no ??
+        prData.proforma_invoice_no ??
+        prData.proforma_no ??
+        "",
+    ).trim();
+    const proformaDate =
+      parseDDMMYYYY(
+        String(
+          prData.proforma_inv_date ??
+            prData.proforma_invoice_date ??
+            prData.proforma_date ??
+            "",
+        ),
+      ) ??
+      normalizeDate(
+        String(
+          prData.proforma_inv_date ??
+            prData.proforma_invoice_date ??
+            prData.proforma_date ??
+            "",
+        ),
+      );
+    form.setFieldValue("proforma_no", proformaNo);
+    if (proformaDate) {
+      form.setFieldValue("proforma_date", proformaDate);
+    }
     form.setFieldValue("Inv_Crn_no", actualInvNo);
     if (actualInvDate) {
       form.setFieldValue("Inv_Crn_note", actualInvDate);
@@ -1502,7 +1690,8 @@ export default function SupplierInvoiceCreate({
       ...(saveResponse?.id != null ? { id: saveResponse.id } : {}),
       day_book_id: values.day_book_id ? Number(values.day_book_id) : null,
       date: values.date ? formatDDMMYYYY(new Date(values.date)) : "",
-      agent_name: agentDisplayName ?? "",
+      agent_name: agentDisplayName ?? values.creditor_agent ?? "",
+      agent_code: values.agent_code || "",
       state_id: values.state_id ? Number(values.state_id) : null,
       tds_section_code: values.tds_section_code || "",
       note: values.note || "",
@@ -1510,6 +1699,10 @@ export default function SupplierInvoiceCreate({
       customer_gst_no: values.customer_gst_no || "",
       location_gst_no: values.location_gst_no || "",
       type: values.type ?? "INV",
+      proforma_no: values.proforma_no || null,
+      proforma_date: values.proforma_date
+        ? formatDDMMYYYY(new Date(values.proforma_date))
+        : null,
       Inv_Crn_note: values.Inv_Crn_note
         ? formatDDMMYYYY(new Date(values.Inv_Crn_note))
         : "",
@@ -1533,6 +1726,7 @@ export default function SupplierInvoiceCreate({
         statusOverride ??
         (isCreate && isReversal ? "UNPOSTED" : (values.status ?? "UNPOSTED")),
       Dr_Cr: values.Dr_Cr,
+      is_rcm: true,
       charges_data: chargesPayload,
       ...buildSupplierInvoiceDocumentIdsPayload(values, isCreate),
     };
@@ -1633,14 +1827,26 @@ export default function SupplierInvoiceCreate({
       day_book_id: data.day_book_id != null ? String(data.day_book_id) : "",
       date: parseDDMMYYYY(data.date as string) ?? form.values.date,
       due_date: parseDDMMYYYY(data.due_date as string) ?? form.values.due_date,
-      creditor_agent: (data.creditor_agent ?? "") as string,
-      agent_code: (data.agent_code ?? "") as string,
+      creditor_agent: (String(
+        data.creditor_agent ?? data.agent_name ?? data.customer_name ?? "",
+      ).trim() || (data.creditor_agent ?? "")) as string,
+      agent_code: String(
+        data.agent_code ??
+          data.customer_code ??
+          data.party_code ??
+          data.subledger_code ??
+          "",
+      ).trim(),
       state_id: data.state_id != null ? String(data.state_id) : "",
       tds_section_code: (data.tds_section_code ?? "") as string,
       note: (data.note ?? "") as string,
       narration: (data.narration ?? "") as string,
       customer_gst_no: (data.customer_gst_no ?? "") as string,
       location_gst_no: (data.location_gst_no ?? "") as string,
+      proforma_no: (data.proforma_no ?? "") as string,
+      proforma_date:
+        parseDDMMYYYY((data.proforma_date as string) ?? undefined) ??
+        normalizeDate((data.proforma_date as string) ?? null),
       Inv_Crn_note:
         parseDDMMYYYY((data.Inv_Crn_note as string) ?? undefined) ??
         normalizeDate((data.Inv_Crn_note as string) ?? null),
@@ -1669,7 +1875,9 @@ export default function SupplierInvoiceCreate({
     });
     form.setFieldValue("charges_data", mappedCharges);
     setAgentDisplayName(
-      (data.creditor_agent ?? data.agent_name ?? null) as string | null,
+      String(
+        data.creditor_agent ?? data.agent_name ?? data.customer_name ?? "",
+      ).trim() || null,
     );
   };
 
@@ -1985,6 +2193,9 @@ export default function SupplierInvoiceCreate({
   // Daybook and date: editable in reversal create/edit when !isReadOnly; read-only when posted or view
   const daybookAndDateStyles = isReadOnly ? readOnlyFieldStyles : inputStyles;
   const daybookDateDisabled = isReadOnly;
+  const hasProformaSet =
+    Boolean(String(form.values.proforma_no ?? "").trim()) &&
+    form.values.proforma_date != null;
 
   const showAuditInfo =
     isViewMode ||
@@ -2251,13 +2462,16 @@ export default function SupplierInvoiceCreate({
                 returnOriginalData
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("agent_code", value ?? "");
-                  setAgentDisplayName(selectedData?.label ?? null);
+                  const nextLabel = selectedData?.label ?? null;
+                  setAgentDisplayName(nextLabel);
+                  form.setFieldValue("creditor_agent", nextLabel ?? "");
 
                   const isCleared =
                     value == null ||
                     (typeof value === "string" && value.trim() === "");
                   if (isCleared) {
                     setPartyAddresses([]);
+                    form.setFieldValue("creditor_agent", "");
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
                       form.setFieldValue("customer_gst_no", "");
@@ -2403,11 +2617,57 @@ export default function SupplierInvoiceCreate({
                 styles={effectiveInputStyles}
               />
             </Grid.Col>
+            <Grid.Col span={agentColSpans.proformaNo}>
+              <TextInput
+                label="Proforma No"
+                placeholder="Proforma No"
+                value={form.values.proforma_no}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  form.setFieldValue("proforma_no", next);
+                  if (String(next).trim() && form.values.proforma_date != null) {
+                    form.clearFieldError("Inv_Crn_no");
+                    form.clearFieldError("Inv_Crn_note");
+                    form.clearFieldError("proforma_no");
+                    form.clearFieldError("proforma_date");
+                  }
+                }}
+                error={form.errors.proforma_no}
+                styles={effectiveInputStyles}
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={agentColSpans.proformaDate}>
+              <SingleDateInput
+                label="Proforma Date"
+                placeholder="Select Proforma Date"
+                value={normalizeDate(form.values.proforma_date)}
+                onChange={(d) => {
+                  form.setFieldValue("proforma_date", d);
+                  if (d && String(form.values.proforma_no ?? "").trim()) {
+                    form.clearFieldError("Inv_Crn_no");
+                    form.clearFieldError("Inv_Crn_note");
+                    form.clearFieldError("proforma_no");
+                    form.clearFieldError("proforma_date");
+                  }
+                }}
+                error={
+                  form.errors.proforma_date
+                    ? String(form.errors.proforma_date)
+                    : undefined
+                }
+                disabled={
+                  isReadOnly || reversalFormDisabled || !isVendorSelected
+                }
+              />
+            </Grid.Col>
             <Grid.Col span={agentColSpans.invCrnNo}>
               <TextInput
                 label="Inv/Crn No"
                 placeholder="Inv/Crn No"
-                withAsterisk
+                withAsterisk={!hasProformaSet}
                 value={form.values.Inv_Crn_no}
                 onChange={(e) =>
                   form.setFieldValue("Inv_Crn_no", e.target.value)
@@ -2423,7 +2683,7 @@ export default function SupplierInvoiceCreate({
               <SingleDateInput
                 label="Inv/Crn Date"
                 placeholder="Select Inv/Crn Date"
-                withAsterisk
+                withAsterisk={!hasProformaSet}
                 value={normalizeDate(form.values.Inv_Crn_note)}
                 onChange={(d) => {
                   form.setFieldValue("Inv_Crn_note", d);
@@ -3118,10 +3378,15 @@ export default function SupplierInvoiceCreate({
                     mt={index !== 0 ? "sm" : 0}
                   >
                     <Grid.Col span={chargeColSpans.shipment}>
-                      <Dropdown
-                        placeholder="Shipment No"
-                        data={shipmentOptions}
+                      <SearchableSelect
+                        placeholder="Search by shipment no"
+                        apiEndpoint={URL.filterJobCreate}
                         value={row.shipment_no || null}
+                        displayValue={row.shipment_no || undefined}
+                        dropdownZIndex={1100}
+                        minSearchLength={1}
+                        searchFields={["shipment_id", "job_id", "type"]}
+                        displayFormat={jobCreateDropdownDisplayFormat}
                         disabled={
                           isReadOnly ||
                           reversalFormDisabled ||
@@ -3129,7 +3394,7 @@ export default function SupplierInvoiceCreate({
                           String(row.account_code ?? "").trim() !== ""
                         }
                         onChange={(v) => {
-                          const shipmentNo = v ?? "";
+                          const shipmentNo = String(v ?? "").trim();
                           form.setFieldValue(
                             `charges_data.${index}.shipment_no`,
                             shipmentNo,
@@ -3140,8 +3405,6 @@ export default function SupplierInvoiceCreate({
                             shipmentNo,
                           );
                         }}
-                        searchable
-                        clearable
                         styles={{
                           input: {
                             fontSize: "13px",

@@ -379,8 +379,8 @@ function SupplierInvoiceReversalMaster() {
 
         const payload =
           Object.keys(filtersPayload).length > 0
-            ? { filters: filtersPayload }
-            : { filters: {} };
+            ? { filters: { is_rcm: false, ...filtersPayload } }
+            : { filters: { is_rcm: false } };
 
         setIsInitialLoad(false);
 
