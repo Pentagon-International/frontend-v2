@@ -2118,6 +2118,26 @@ function CreditNoteCreate() {
     ],
   );
 
+  /** Foreign billing currency: charge rows in the same currency follow header ROE (read-only). */
+  const isChargeLockedToBillingRoe = useCallback(
+    (charge: { currency?: string; currency_id?: string }): boolean => {
+      if (isBillingBaseCurrency) return false;
+      const billingUpper = form.values.currency?.trim().toUpperCase() ?? "";
+      if (!billingUpper) return false;
+      const code = resolveChargeCurrencyCode(
+        charge,
+        (currencyData as {
+          id?: number;
+          code?: string;
+          currency_code?: string;
+        }[]) ?? [],
+      );
+      const chargeCode = (code || charge.currency || "").trim().toUpperCase();
+      return chargeCode !== "" && chargeCode === billingUpper;
+    },
+    [isBillingBaseCurrency, form.values.currency, currencyData],
+  );
+
   // Fetch state data
   const { data: stateData = [], isLoading: isStateLoading } = useQuery({
     queryKey: ["stateMaster"],
@@ -2362,9 +2382,14 @@ function CreditNoteCreate() {
     .map((c) => `${c.currency ?? ""}|${c.currency_id ?? ""}`)
     .join("|");
 
-  // When a charge currency is the branch base currency, ROE must always be 1
+  // When a charge currency is the branch base currency, ROE must always be 1.
+  // When billing is foreign, matching charge rows use the header ROE (read-only).
   useEffect(() => {
     if (!defaultBranchCurrency) return;
+    const billingUpper = form.values.currency?.trim().toUpperCase() ?? "";
+    const foreignHeaderRoe = !isBillingBaseCurrency
+      ? acceptForeignExchangeRate(form.values.roe)
+      : null;
     let changed = false;
     const updated = form.values.charges.map((charge) => {
       if (isChargeBaseCurrency(charge) && charge.roe !== 1) {
@@ -2380,6 +2405,17 @@ function CreditNoteCreate() {
         if (code) roeCacheRef.current.set(code, 1);
         return { ...charge, roe: 1 };
       }
+      if (
+        foreignHeaderRoe != null &&
+        isChargeLockedToBillingRoe(charge) &&
+        charge.roe !== foreignHeaderRoe
+      ) {
+        changed = true;
+        if (billingUpper) {
+          roeCacheRef.current.set(billingUpper, foreignHeaderRoe);
+        }
+        return { ...charge, roe: foreignHeaderRoe };
+      }
       return charge;
     });
     if (changed) form.setFieldValue("charges", updated);
@@ -2389,6 +2425,9 @@ function CreditNoteCreate() {
     defaultBranchCurrency,
     defaultBranchCurrencyId,
     currencyData,
+    form.values.currency,
+    form.values.roe,
+    isBillingBaseCurrency,
   ]);
 
   // When Bill To is cleared, clear address only. Do not clear state here: it runs before
@@ -5642,40 +5681,83 @@ function CreditNoteCreate() {
                 data={billingCurrencyOptions}
                 value={form.values.currency}
                 onChange={(value) => {
+                  if (isReadOnly) return;
                   const newCurrency = value || "";
-                  const headerRoe = isBaseCurrency(newCurrency)
-                    ? 1
-                    : acceptForeignExchangeRate(form.values.roe);
-                  const updatedCharges = form.values.charges.map((charge) => {
-                    const newHeader = calcChargeHeaderAmount(
-                      charge,
-                      newCurrency,
-                      headerRoe,
-                    );
-                    if (newHeader != null) {
-                      return { ...charge, header_amount: newHeader };
-                    }
-                    return charge;
-                  });
                   const billingUpper = newCurrency.trim().toUpperCase();
+                  const currencyRows =
+                    (currencyData as {
+                      id?: number;
+                      code?: string;
+                      currency_code?: string;
+                    }[]) ?? [];
+
+                  const recalcChargesForBilling = (
+                    headerRoe: number | null | undefined,
+                  ) => {
+                    const foreignHeaderRoe =
+                      acceptForeignExchangeRate(headerRoe);
+                    const roeForCalc = isBaseCurrency(newCurrency)
+                      ? 1
+                      : foreignHeaderRoe;
+
+                    return form.values.charges.map((charge) => {
+                      const chargeCode =
+                        resolveChargeCurrencyCode(charge, currencyRows) ||
+                        charge.currency ||
+                        "";
+                      const chargeMatchesBilling =
+                        chargeCode.trim().toUpperCase() === billingUpper;
+                      const nextRoe = chargeMatchesBilling
+                        ? isBaseCurrency(newCurrency)
+                          ? 1
+                          : foreignHeaderRoe
+                        : isChargeBaseCurrency(charge)
+                          ? 1
+                          : charge.roe;
+                      let amountInLocal = charge.amount_in_local;
+                      if (
+                        charge.amount != null &&
+                        charge.amount > 0 &&
+                        nextRoe != null &&
+                        nextRoe > 0
+                      ) {
+                        amountInLocal = clampLocalAmount(
+                          charge.amount * nextRoe,
+                        );
+                      }
+                      const next = {
+                        ...charge,
+                        currency: chargeCode || charge.currency,
+                        roe: nextRoe,
+                        amount_in_local: amountInLocal,
+                      };
+                      const newHeader = calcChargeHeaderAmount(
+                        {
+                          amount: next.amount,
+                          amount_in_local: next.amount_in_local,
+                          currency: chargeCode || next.currency,
+                        },
+                        newCurrency,
+                        roeForCalc,
+                      );
+                      if (newHeader != null) {
+                        return { ...next, header_amount: newHeader };
+                      }
+                      return next;
+                    });
+                  };
+
                   if (isBaseCurrency(newCurrency)) {
+                    roeCacheRef.current.set(billingUpper, 1);
+                    billingCurrencyRef.current = newCurrency;
+                    billingRoeRef.current = 1;
                     form.setValues({
                       ...form.values,
                       currency: newCurrency,
                       roe: 1,
-                      charges: updatedCharges,
+                      charges: recalcChargesForBilling(1),
                     });
                     form.clearFieldError("roe");
-                    roeCacheRef.current.set(billingUpper, 1);
-                    billingCurrencyRef.current = newCurrency;
-                    billingRoeRef.current = 1;
-                    form.values.charges.forEach((charge, idx) => {
-                      if (
-                        charge.currency?.trim().toUpperCase() === billingUpper
-                      ) {
-                        form.setFieldValue(`charges.${idx}.roe`, 1);
-                      }
-                    });
                     setChargeErrors((prev) => {
                       const next = { ...prev };
                       let changed = false;
@@ -5698,20 +5780,11 @@ function CreditNoteCreate() {
                     });
                     return;
                   }
+
                   billingCurrencyRef.current = newCurrency;
                   billingRoeRef.current = null;
-                  form.setValues({
-                    ...form.values,
-                    currency: newCurrency,
-                    roe: null,
-                    charges: updatedCharges.map((charge) =>
-                      String(charge.currency ?? "")
-                        .trim()
-                        .toUpperCase() === billingUpper
-                        ? { ...charge, roe: null }
-                        : charge,
-                    ),
-                  });
+                  form.setFieldValue("currency", newCurrency);
+                  form.setFieldValue("roe", null);
                   form.clearFieldError("roe");
                   void ensureRoeForCurrency(newCurrency).then((roe) => {
                     if (
@@ -5720,34 +5793,29 @@ function CreditNoteCreate() {
                     ) {
                       return;
                     }
-                    const usable = acceptForeignExchangeRate(roe);
-                    billingRoeRef.current = usable;
-                    form.setFieldValue("roe", usable);
-                    if (usable == null) {
+                    const roeForCalc = acceptForeignExchangeRate(roe);
+                    billingRoeRef.current = roeForCalc;
+                    form.setFieldValue("roe", roeForCalc);
+                    if (roeForCalc == null) {
                       form.setFieldError("roe", ROE_REQUIRED_FIELD);
                     } else {
                       form.clearFieldError("roe");
                     }
-                    form.values.charges.forEach((charge, idx) => {
-                      if (
-                        charge.currency?.trim().toUpperCase() !== billingUpper
-                      ) {
-                        return;
-                      }
-                      form.setFieldValue(`charges.${idx}.roe`, usable);
-                    });
-                    if (usable == null) {
+                    const nextCharges = recalcChargesForBilling(roeForCalc);
+                    form.setFieldValue("charges", nextCharges);
+                    if (roeForCalc == null) {
                       setChargeErrors((prev) => {
                         const next = { ...prev };
-                        form.values.charges.forEach((charge, idx) => {
+                        nextCharges.forEach((charge, index) => {
                           if (
-                            charge.currency?.trim().toUpperCase() !==
-                            billingUpper
+                            String(charge.currency ?? "")
+                              .trim()
+                              .toUpperCase() !== billingUpper
                           ) {
                             return;
                           }
-                          next[idx] = {
-                            ...(next[idx] ?? {}),
+                          next[index] = {
+                            ...(next[index] ?? {}),
                             roe: ROE_REQUIRED_FIELD,
                           };
                         });
@@ -5814,17 +5882,56 @@ function CreditNoteCreate() {
                   } else {
                     form.clearFieldError("roe");
                   }
-                  // Recalculate header_amount for all charges when header ROE changes
+                  // Sync matching foreign-currency charge ROE to header ROE; recalc local + billing amounts
+                  const currencyRows =
+                    (currencyData as {
+                      id?: number;
+                      code?: string;
+                      currency_code?: string;
+                    }[]) ?? [];
+                  const billingUpper =
+                    form.values.currency?.trim().toUpperCase() ?? "";
+                  const foreignHeaderRoe =
+                    acceptForeignExchangeRate(numValue);
                   const updatedCharges = form.values.charges.map((charge) => {
+                    const chargeCode =
+                      resolveChargeCurrencyCode(charge, currencyRows) ||
+                      charge.currency ||
+                      "";
+                    const chargeMatchesBilling =
+                      billingUpper !== "" &&
+                      chargeCode.trim().toUpperCase() === billingUpper;
+                    let nextRoe = charge.roe;
+                    if (isChargeBaseCurrency(charge)) {
+                      nextRoe = 1;
+                    } else if (chargeMatchesBilling) {
+                      nextRoe = foreignHeaderRoe;
+                    }
+                    let amountInLocal = charge.amount_in_local;
+                    if (
+                      charge.amount != null &&
+                      charge.amount > 0 &&
+                      nextRoe != null &&
+                      nextRoe > 0
+                    ) {
+                      amountInLocal = clampLocalAmount(
+                        charge.amount * nextRoe,
+                      );
+                    }
+                    const next = {
+                      ...charge,
+                      roe: nextRoe,
+                      amount_in_local: amountInLocal,
+                    };
                     const newHeader = calcChargeHeaderAmount(
-                      charge,
+                      next,
                       form.values.currency,
                       numValue,
                     );
                     if (newHeader != null) {
-                      return { ...charge, header_amount: newHeader };
+                      return { ...next, header_amount: newHeader };
                     }
-                    return charge;
+                    return next;
                   });
                   form.setFieldValue("charges", updatedCharges);
                 }}
@@ -6558,11 +6665,37 @@ function CreditNoteCreate() {
                         decimalScale={ROE_DECIMAL_PLACES}
                         withAsterisk
                         // disabled={isReadOnly}
-                        readOnly={isReadOnly || isChargeBaseCurrency(charge)}
+                        readOnly={
+                          isReadOnly ||
+                          isChargeBaseCurrency(charge) ||
+                          isChargeLockedToBillingRoe(charge)
+                        }
                         value={charge.roe || undefined}
                         onChange={(value) => {
                           if (isChargeBaseCurrency(charge)) {
                             form.setFieldValue(`charges.${index}.roe`, 1);
+                            setChargeErrors((prev) => {
+                              if (!prev[index]?.roe) return prev;
+                              const next = { ...prev };
+                              const row = { ...(next[index] ?? {}) };
+                              delete row.roe;
+                              if (Object.keys(row).length === 0) {
+                                delete next[index];
+                              } else {
+                                next[index] = row;
+                              }
+                              return next;
+                            });
+                            return;
+                          }
+                          if (isChargeLockedToBillingRoe(charge)) {
+                            const lockedRoe = acceptForeignExchangeRate(
+                              form.values.roe,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.roe`,
+                              lockedRoe,
+                            );
                             setChargeErrors((prev) => {
                               if (!prev[index]?.roe) return prev;
                               const next = { ...prev };
