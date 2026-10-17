@@ -101,6 +101,7 @@ interface JobLedgerData {
   date: string;
   partyName: string;
   billingCurrencyCode: string;
+  billingRoe: string;
   billingAmount: number;
   debit: number;
   credit: number;
@@ -305,6 +306,7 @@ type JobLedgerApiRow = {
   party_name?: string;
   currency_code?: string;
   billing_currency_code?: string;
+  billing_roe?: number | string | null;
   billing_amount?: number | null;
   debit_local_amount?: number | null;
   credit_local_amount?: number | null;
@@ -1497,6 +1499,12 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
               d?.currency_code ??
               ""
             ).toString(),
+            billingRoe: (() => {
+              const raw = d?.billing_roe;
+              if (raw == null || raw === "") return "";
+              const n = Number(raw);
+              return Number.isFinite(n) ? String(n) : String(raw);
+            })(),
             billingAmount: toNumber(d?.billing_amount),
             debit: toNumber(d?.debit_local_amount),
             credit: toNumber(d?.credit_local_amount),
@@ -2014,6 +2022,20 @@ const JobLedger: React.FC<JobLedgerProps> = () => {
       {
         accessorKey: "billingCurrencyCode",
         header: "Curr",
+        size: 72,
+        grow: false,
+        enableColumnFilter: false,
+        enableSorting: false,
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>();
+          return value || "-";
+        },
+        mantineTableBodyCellProps: { style: { padding: "4px 4px" } },
+        mantineTableHeadCellProps: { style: { padding: "6px 4px" } },
+      },
+      {
+        accessorKey: "billingRoe",
+        header: "ROE",
         size: 72,
         grow: false,
         enableColumnFilter: false,
