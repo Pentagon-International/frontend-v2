@@ -69,6 +69,7 @@ import {
 import {
   findJobCreateDropdownRow,
   jobCreateDropdownDisplayFormat,
+  mapJobCreateDropdownOptions,
 } from "../../../utils/jobCreateDropdown";
 import { commonSearchAPI } from "../../../service/searchApi";
 import {
@@ -84,6 +85,7 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import { getAmountNumberInputFormatProps } from "../../../utils/amountDisplayFormat";
 import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import {
   formatRoeForAccountsPayload,
   parseRoeForPayload,
@@ -519,8 +521,41 @@ export default function SupplierInvoiceCreate({
   const isViewMode = pathname.includes("/view");
   const isEditMode = pathname.includes("/edit");
   const isReversalCreate = isReversal && pathname.includes("/reversal/create");
+  const prefillFromJob = (
+    location.state as {
+      prefillSupplierInvoiceFromJob?: {
+        source?: string;
+        job_id?: string;
+        charges?: Array<{
+          shipment_no?: string;
+          charge_id?: number | null;
+          charge_name?: string;
+          currency_id?: string | number | null;
+          roe?: string | number | null;
+          amount?: string | number | null;
+          supplier_code?: string;
+          supplier_name?: string;
+        }>;
+      } | null;
+    } | null
+  )?.prefillSupplierInvoiceFromJob;
+  const financeReturnTo =
+    (location.state as { returnTo?: string } | null)?.returnTo?.trim() ?? "";
+  const supplierInvoiceResolvedBackPath =
+    isReversalCreate && !financeReturnTo
+      ? "/supplier-invoice-rcm"
+      : financeReturnTo || (prefillFromJob ? undefined : backPath);
+  const handleSupplierInvoiceBack = () => {
+    navigateFinanceReturn(
+      navigate,
+      location.state,
+      supplierInvoiceResolvedBackPath,
+    );
+  };
   const [invoiceFromRouteFetch, setInvoiceFromRouteFetch] =
     useState<SupplierInvoiceListItem | null>(null);
+  /** True while GET detail is in flight for view/edit/reversal-create. */
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   // Load from list: state is invoice row — detail GET overrides when available
   const invoiceFromState =
     invoiceFromRouteFetch ??
@@ -531,25 +566,43 @@ export default function SupplierInvoiceCreate({
   }, [location.key]);
 
   useEffect(() => {
-    const idFromState = (location.state as { id?: number } | null | undefined)
-      ?.id;
+    const state = (location.state ?? {}) as {
+      id?: number;
+      supplier_invoice_id?: number;
+      reverse_supplier_invoice_id?: number;
+    };
+    const coerceId = (v: unknown): number => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : NaN;
+    };
     const resolveSourceId = (): number => {
       if (isReversalCreate) {
-        return idFromState != null ? Number(idFromState) : NaN;
+        return (
+          coerceId(state.id) ||
+          coerceId(state.supplier_invoice_id)
+        );
       }
       if (!isViewMode && !isEditMode) return NaN;
-      return idFromState != null ? Number(idFromState) : NaN;
+      if (isReversal) {
+        return (
+          coerceId(state.id) ||
+          coerceId(state.reverse_supplier_invoice_id)
+        );
+      }
+      return coerceId(state.id) || coerceId(state.supplier_invoice_id);
     };
 
     const idNum = resolveSourceId();
     if (!Number.isFinite(idNum) || idNum <= 0) {
       setInvoiceFromRouteFetch(null);
+      setIsDetailLoading(false);
       return;
     }
 
     const shouldFetch = isReversalCreate || isViewMode || isEditMode;
     if (!shouldFetch) {
       setInvoiceFromRouteFetch(null);
+      setIsDetailLoading(false);
       return;
     }
 
@@ -559,6 +612,7 @@ export default function SupplierInvoiceCreate({
         : `${URL.supplierInvoice}${idNum}/`;
 
     let cancelled = false;
+    setIsDetailLoading(true);
     (async () => {
       try {
         const res = await apiCallProtected.get(detailUrl, API_HEADER);
@@ -566,15 +620,24 @@ export default function SupplierInvoiceCreate({
         if (cancelled) return;
         if (record) {
           setInvoiceFromRouteFetch(record as SupplierInvoiceListItem);
-        }
-      } catch (e) {
-        console.error("Failed to load supplier invoice RCM by id", e);
-        if (!cancelled && isReversalCreate) {
+        } else {
+          setInvoiceFromRouteFetch(null);
           ToastNotification({
             type: "error",
             message: "Unable to load supplier invoice details.",
           });
         }
+      } catch (e) {
+        console.error("Failed to load supplier invoice RCM by id", e);
+        if (!cancelled) {
+          setInvoiceFromRouteFetch(null);
+          ToastNotification({
+            type: "error",
+            message: "Unable to load supplier invoice details.",
+          });
+        }
+      } finally {
+        if (!cancelled) setIsDetailLoading(false);
       }
     })();
     return () => {
@@ -587,18 +650,11 @@ export default function SupplierInvoiceCreate({
     isReversal,
     location.key,
     (location.state as { id?: number } | null | undefined)?.id,
+    (location.state as { supplier_invoice_id?: number } | null | undefined)
+      ?.supplier_invoice_id,
+    (location.state as { reverse_supplier_invoice_id?: number } | null | undefined)
+      ?.reverse_supplier_invoice_id,
   ]);
-
-  // Reversal mode: header "Cr", charges "Dr" (opposite of Supplier Invoice: header "Dr", charges "Cr")
-  useEffect(() => {
-    if (isReversal) {
-      form.setFieldValue("Dr_Cr", "Cr");
-      form.values.charges_data.forEach((_, i) => {
-        form.setFieldValue(`charges_data.${i}.Dr_Cr`, "Dr");
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReversal]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [saveResponse, setSaveResponse] = useState<{
@@ -612,6 +668,11 @@ export default function SupplierInvoiceCreate({
     null,
   );
   const saveResponseRef = useRef<typeof saveResponse>(null);
+  /**
+   * Vendor label may be set from source invoice (agent_name) while agent_code is empty.
+   * Ref so validate accepts a displayed vendor on reverse/edit hydrate.
+   */
+  const agentDisplayNameRef = useRef<string | null>(null);
   useEffect(() => {
     saveResponseRef.current = saveResponse;
   }, [saveResponse]);
@@ -876,6 +937,13 @@ export default function SupplierInvoiceCreate({
       date: (v) => (!v ? "Date is required" : null),
       due_date: (v) => (!v ? "Due date is required" : null),
       currency_id: (v) => (!v ? "Currency is required" : null),
+      agent_code: (v, values) => {
+        const hasCode = !!String(v ?? "").trim();
+        const hasName =
+          !!String(agentDisplayNameRef.current ?? "").trim() ||
+          !!String(values.creditor_agent ?? "").trim();
+        return !hasCode && !hasName ? "Vendor/Supplier is required" : null;
+      },
       state_id: (v) => (isIndiaUser && !v ? "State is required" : null),
       proforma_no: (v, values) => {
         if (values.proforma_date != null && !String(v ?? "").trim()) {
@@ -1221,6 +1289,9 @@ export default function SupplierInvoiceCreate({
   );
 
   const [agentDisplayName, setAgentDisplayName] = useState<string | null>(null);
+  useEffect(() => {
+    agentDisplayNameRef.current = agentDisplayName;
+  }, [agentDisplayName]);
   const isVendorSelected =
     !!String(form.values.agent_code ?? "").trim() ||
     !!String(agentDisplayName ?? "").trim();
@@ -1298,6 +1369,169 @@ export default function SupplierInvoiceCreate({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyAddresses, stateOptions, isIndiaUser, isVendorSelected]);
+
+  const isAirImportJobPrefillFlow =
+    prefillFromJob?.source === "air-import-job" &&
+    String(prefillFromJob?.job_id ?? "").trim() !== "";
+  const isServiceJobPrefillFlow =
+    prefillFromJob?.source === "service-job" &&
+    String(prefillFromJob?.job_id ?? "").trim() !== "";
+  const isJobChargesPrefillFlow =
+    isAirImportJobPrefillFlow || isServiceJobPrefillFlow;
+  const prefillJobId = String(prefillFromJob?.job_id ?? "").trim();
+
+  const [prefillShipmentOptions, setPrefillShipmentOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+
+  // Fetch / set a common shipment options list once for this flow using job_id,
+  // so all Shipment No fields share the same options (job + house shipments).
+  useEffect(() => {
+    if (!isJobChargesPrefillFlow || !prefillJobId) {
+      setPrefillShipmentOptions([]);
+      return;
+    }
+
+    // Accounts → Service Job: shipment no is the job id itself.
+    if (isServiceJobPrefillFlow) {
+      setPrefillShipmentOptions([{ value: prefillJobId, label: prefillJobId }]);
+      return;
+    }
+
+    commonSearchAPI({ endpoint: URL.filterJobCreate, query: prefillJobId })
+      .then((rows) => {
+        const arr = Array.isArray(rows)
+          ? (rows as Array<Record<string, unknown>>)
+          : [];
+        const opts = mapJobCreateDropdownOptions(arr);
+        // Always include job_id so estimates rows remain selectable.
+        if (prefillJobId && !opts.some((o) => o.value === prefillJobId)) {
+          opts.unshift({ value: prefillJobId, label: prefillJobId });
+        }
+        // Ensure house shipment nos from prefill charges are available.
+        const fromCharges = Array.from(
+          new Set(
+            (prefillFromJob?.charges ?? [])
+              .map((c) => String(c.shipment_no ?? "").trim())
+              .filter(Boolean),
+          ),
+        );
+        for (const shipmentNo of fromCharges) {
+          if (!opts.some((o) => o.value === shipmentNo)) {
+            opts.push({ value: shipmentNo, label: shipmentNo });
+          }
+        }
+        setPrefillShipmentOptions(opts);
+      })
+      .catch(() => {
+        const fromCharges = Array.from(
+          new Set(
+            (prefillFromJob?.charges ?? [])
+              .map((c) => String(c.shipment_no ?? "").trim())
+              .filter(Boolean),
+          ),
+        );
+        const fallback = fromCharges.length
+          ? fromCharges.map((s) => ({ value: s, label: s }))
+          : prefillJobId
+            ? [{ value: prefillJobId, label: prefillJobId }]
+            : [];
+        setPrefillShipmentOptions(fallback);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isJobChargesPrefillFlow, isServiceJobPrefillFlow, prefillJobId]);
+
+  // Prefill charge rows from job/house → Create Supplier (RCM) when vendor is selected.
+  const applyPrefillChargesForSupplier = useCallback(
+    (
+      supplierCodeRaw: string | null | undefined,
+      supplierNameRaw?: string | null | undefined,
+    ) => {
+      if (!prefillFromJob) return;
+      if (isViewMode || isEditMode || isReversal) return;
+      const source = String(prefillFromJob.source ?? "");
+      if (source !== "air-import-job" && source !== "service-job") return;
+
+      const supplierCode = String(supplierCodeRaw ?? "").trim();
+      const supplierName = String(supplierNameRaw ?? "").trim();
+      if (!supplierCode && !supplierName) return;
+
+      const rows = Array.isArray(prefillFromJob.charges)
+        ? prefillFromJob.charges
+        : [];
+
+      const normalizeSupplierKey = (v: string) =>
+        v.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+      const codeKey = normalizeSupplierKey(supplierCode);
+      const nameKey = normalizeSupplierKey(supplierName);
+      const filtered = rows.filter((c) => {
+        const rowCode = normalizeSupplierKey(
+          String(c.supplier_code ?? "").trim(),
+        );
+        const rowName = normalizeSupplierKey(
+          String(c.supplier_name ?? "").trim(),
+        );
+        if (codeKey && rowCode && rowCode === codeKey) return true;
+        if (nameKey && rowName && rowName === nameKey) return true;
+        return false;
+      });
+
+      const mappedCharges: ChargeRow[] = filtered
+        .map((c) => {
+          const shipmentNo =
+            String(c.shipment_no ?? "").trim() ||
+            String(prefillFromJob.job_id ?? "").trim();
+          const chargeId = c.charge_id != null ? Number(c.charge_id) : null;
+          if (!shipmentNo || chargeId == null) return null;
+
+          const currencyIdNum =
+            c.currency_id != null && c.currency_id !== ""
+              ? Number(c.currency_id)
+              : null;
+          const roeNum =
+            c.roe != null && c.roe !== ""
+              ? parseFloat(String(c.roe)) || null
+              : null;
+          const amountNum =
+            c.amount != null && c.amount !== ""
+              ? parseFloat(String(c.amount)) || null
+              : null;
+
+          return {
+            account_code: "",
+            account_name: "",
+            subledger_code: "",
+            CRN: "Cost",
+            narration: "",
+            shipment_no: shipmentNo,
+            charge_id: chargeId,
+            charge_name: String(c.charge_name ?? ""),
+            currency_id: Number.isFinite(currencyIdNum as number)
+              ? (currencyIdNum as number)
+              : null,
+            roe: roeNum,
+            amount: amountNum,
+            amount_in_local: null,
+            tax_code: "",
+            Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
+          };
+        })
+        .filter(Boolean) as ChargeRow[];
+
+      if (mappedCharges.length > 0) {
+        form.setFieldValue("charges_data", mappedCharges);
+      }
+    },
+    [
+      prefillFromJob,
+      isViewMode,
+      isEditMode,
+      isReversal,
+      form,
+      getDrCrDefaultsByType,
+    ],
+  );
 
   useEffect(() => {
     const effectiveCurrency =
@@ -2303,7 +2537,7 @@ export default function SupplierInvoiceCreate({
 
   return (
     <Box p={"sm"} style={{ position: "relative" }}>
-      {(isSubmitting || calcLoading) && (
+      {(isSubmitting || calcLoading || isDetailLoading) && (
         <Box
           style={{
             position: "fixed",
@@ -2318,7 +2552,11 @@ export default function SupplierInvoiceCreate({
           <Stack align="center" gap="md">
             <Loader size="lg" color="#105476" />
             <Text size="sm" c="#105476" fw={500}>
-              {calcLoading ? calcLoadingText : "Saving supplier invoice..."}
+              {isDetailLoading
+                ? "Loading supplier invoice..."
+                : calcLoading
+                  ? calcLoadingText
+                  : "Saving supplier invoice..."}
             </Text>
           </Stack>
         </Box>
@@ -2331,21 +2569,24 @@ export default function SupplierInvoiceCreate({
             animateKey={(invoiceAuditSource as { id?: number })?.id}
           >
             <Text size="xl" fw={600} c="#105476">
-              {pathname.includes("/reversal/create") && saveResponse?.id == null
-                ? "Create Supplier Invoice Reverse"
-                : pathname.includes("/reversal/create") &&
-                    saveResponse?.id != null
-                  ? "Edit Supplier Invoice Reverse"
-                  : pathname.includes("/reversal/edit")
-                    ? "Edit Supplier Invoice Reverse"
-                    : pathname.includes("/reversal/view")
-                      ? "View Supplier Invoice Reverse"
-                      : (titleOverride ??
-                        (isEditMode
-                          ? "Edit Supplier Invoice/RCM"
-                          : isViewMode
-                            ? "View Supplier Invoice/RCM"
-                            : "Create Supplier Invoice/RCM"))}
+              {isReversal
+                ? (titleOverride ??
+                  (pathname.includes("/reversal/create") &&
+                  saveResponse?.id == null
+                    ? "Create Supplier Invoice Reverse"
+                    : pathname.includes("/reversal/edit") ||
+                        (pathname.includes("/reversal/create") &&
+                          saveResponse?.id != null)
+                      ? "Edit Supplier Invoice Reverse"
+                      : pathname.includes("/reversal/view")
+                        ? "View Supplier Invoice Reverse"
+                        : "Supplier Invoice Reverse"))
+                : (titleOverride ??
+                  (isEditMode
+                    ? "Edit Supplier Invoice/RCM"
+                    : isViewMode
+                      ? "View Supplier Invoice/RCM"
+                      : "Create Supplier Invoice/RCM"))}
             </Text>
           </EditPageHeadingRow>
           <Group gap="md" wrap="nowrap">
@@ -2395,7 +2636,7 @@ export default function SupplierInvoiceCreate({
               variant="outline"
               color="#105476"
               leftSection={<IconArrowLeft size={16} />}
-              onClick={() => navigate(backPath)}
+              onClick={() => handleSupplierInvoiceBack()}
             >
               Back
             </Button>
@@ -2455,7 +2696,9 @@ export default function SupplierInvoiceCreate({
                   // the fields are disabled; clearing them here blocks creation.
                   if (!isReversalCreate) {
                     form.setFieldValue("agent_code", "");
+                    form.setFieldValue("creditor_agent", "");
                     setAgentDisplayName(null);
+                    agentDisplayNameRef.current = null;
                     setPartyAddresses([]);
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
@@ -2515,10 +2758,17 @@ export default function SupplierInvoiceCreate({
                 value={form.values.agent_code || null}
                 displayValue={agentDisplayName ?? undefined}
                 returnOriginalData
+                withAsterisk
+                error={
+                  form.errors.agent_code
+                    ? String(form.errors.agent_code)
+                    : undefined
+                }
                 onChange={(value, selectedData, originalData) => {
                   form.setFieldValue("agent_code", value ?? "");
                   const nextLabel = selectedData?.label ?? null;
                   setAgentDisplayName(nextLabel);
+                  agentDisplayNameRef.current = nextLabel;
                   form.setFieldValue("creditor_agent", nextLabel ?? "");
 
                   const isCleared =
@@ -2538,6 +2788,7 @@ export default function SupplierInvoiceCreate({
                     } else {
                       void fetchVendorPartyAddresses(String(value ?? ""));
                     }
+                    applyPrefillChargesForSupplier(value, nextLabel);
                   }
                 }}
                 dropdownZIndex={1000}
@@ -3454,41 +3705,75 @@ export default function SupplierInvoiceCreate({
                     mt={index !== 0 ? "xs" : 0}
                   >
                     <Grid.Col span={chargeColSpans.shipment}>
-                      <SearchableSelect
-                        placeholder="Search by shipment no"
-                        apiEndpoint={URL.filterJobCreate}
-                        value={row.shipment_no || null}
-                        displayValue={row.shipment_no || undefined}
-                        dropdownZIndex={1100}
-                        minSearchLength={1}
-                        searchFields={["shipment_id", "job_id", "type"]}
-                        displayFormat={jobCreateDropdownDisplayFormat}
-                        disabled={
-                          isReadOnly ||
-                          reversalFormDisabled ||
-                          row.account_id != null ||
-                          String(row.account_code ?? "").trim() !== ""
-                        }
-                        onChange={(v) => {
-                          const shipmentNo = String(v ?? "").trim();
-                          form.setFieldValue(
-                            `charges_data.${index}.shipment_no`,
-                            shipmentNo,
-                          );
-                          fetchSacForChargeRow(
-                            index,
-                            row.charge_id,
-                            shipmentNo,
-                          );
-                        }}
-                        styles={{
-                          input: {
-                            fontSize: "13px",
-                            fontFamily: "Inter",
-                            height: "36px",
-                          },
-                        }}
-                      />
+                      {isJobChargesPrefillFlow ? (
+                        <Dropdown
+                          placeholder="Select shipment no"
+                          data={prefillShipmentOptions}
+                          value={row.shipment_no || null}
+                          onChange={(v) => {
+                            const shipmentNo = String(v ?? "").trim();
+                            form.setFieldValue(
+                              `charges_data.${index}.shipment_no`,
+                              shipmentNo,
+                            );
+                            fetchSacForChargeRow(
+                              index,
+                              row.charge_id,
+                              shipmentNo,
+                            );
+                          }}
+                          searchable
+                          disabled={
+                            isReadOnly ||
+                            reversalFormDisabled ||
+                            row.account_id != null ||
+                            String(row.account_code ?? "").trim() !== ""
+                          }
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      ) : (
+                        <SearchableSelect
+                          placeholder="Search by shipment no"
+                          apiEndpoint={URL.filterJobCreate}
+                          value={row.shipment_no || null}
+                          displayValue={row.shipment_no || undefined}
+                          dropdownZIndex={1100}
+                          minSearchLength={1}
+                          searchFields={["shipment_id", "job_id", "type"]}
+                          displayFormat={jobCreateDropdownDisplayFormat}
+                          disabled={
+                            isReadOnly ||
+                            reversalFormDisabled ||
+                            row.account_id != null ||
+                            String(row.account_code ?? "").trim() !== ""
+                          }
+                          onChange={(v) => {
+                            const shipmentNo = String(v ?? "").trim();
+                            form.setFieldValue(
+                              `charges_data.${index}.shipment_no`,
+                              shipmentNo,
+                            );
+                            fetchSacForChargeRow(
+                              index,
+                              row.charge_id,
+                              shipmentNo,
+                            );
+                          }}
+                          styles={{
+                            input: {
+                              fontSize: "13px",
+                              fontFamily: "Inter",
+                              height: "36px",
+                            },
+                          }}
+                        />
+                      )}
                     </Grid.Col>
                     <Grid.Col span={chargeColSpans.charge}>
                       <SearchableSelect

@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JobInvoiceDeleteConfirmModalProps } from "../components/JobInvoiceDeleteConfirmModal";
 import { ToastNotification } from "../components";
 import { API_HEADER } from "../store/storeKeys";
-import { deactivateInvoice } from "../utils/deactivateInvoice";
-import { deactivateReverseInvoice } from "../utils/deactivateReverseInvoice";
+import {
+  deactivateFinanceDocument,
+  getFinanceDocumentDeleteLabels,
+  type DeactivatableFinanceKind,
+} from "../utils/deactivateFinanceDocument";
 import {
   fetchJobFinanceDocuments,
   JOB_FINANCE_DOCUMENTS_PAGE_SIZE,
@@ -11,9 +14,7 @@ import {
   type JobFinanceDocumentsSearchFilters,
 } from "../utils/jobFinanceDocuments";
 
-type DeleteTarget =
-  | { kind: "invoice"; id: number }
-  | { kind: "reverse"; id: number };
+type DeleteTarget = { kind: DeactivatableFinanceKind; id: number };
 
 type UseJobAccountInvoicesOptions = {
   activeTab: number;
@@ -135,13 +136,21 @@ export function useJobAccountInvoices({
     loadInvoiceList();
   }, [enabled, activeTab, accountsTabIndex, filterKey, loadInvoiceList]);
 
+  const requestDeleteDocument = useCallback(
+    (kind: DeactivatableFinanceKind, documentId: number) => {
+      if (!Number.isFinite(documentId) || documentId <= 0) return;
+      setPendingDelete({ kind, id: documentId });
+    },
+    [],
+  );
+
   const requestDeleteInvoice = useCallback((invoiceId: number) => {
     setPendingDelete({ kind: "invoice", id: invoiceId });
   }, []);
 
   const requestDeleteReverseInvoice = useCallback(
     (reverseInvoiceId: number) => {
-      setPendingDelete({ kind: "reverse", id: reverseInvoiceId });
+      setPendingDelete({ kind: "reverse_invoice", id: reverseInvoiceId });
     },
     [],
   );
@@ -154,57 +163,46 @@ export function useJobAccountInvoices({
   const confirmDeleteInvoice = useCallback(async () => {
     if (!pendingDelete) return;
     const target = pendingDelete;
+    const labels = getFinanceDocumentDeleteLabels(target.kind);
     setInvoiceDeletingId(target.id);
     try {
-      if (target.kind === "reverse") {
-        await deactivateReverseInvoice(target.id, API_HEADER);
-      } else {
-        await deactivateInvoice(target.id, API_HEADER);
-      }
+      await deactivateFinanceDocument(target.kind, target.id, API_HEADER);
       ToastNotification({
         type: "success",
-        message:
-          target.kind === "reverse"
-            ? "Reverse invoice deleted successfully"
-            : "Invoice deleted successfully",
+        message: labels.success,
       });
       await loadInvoiceList();
       setPendingDelete(null);
     } catch {
       ToastNotification({
         type: "error",
-        message:
-          target.kind === "reverse"
-            ? "Failed to delete reverse invoice. Please try again."
-            : "Failed to delete invoice. Please try again.",
+        message: labels.failure,
       });
     } finally {
       setInvoiceDeletingId(null);
     }
   }, [pendingDelete, loadInvoiceList]);
 
-  const deleteConfirmProps: JobInvoiceDeleteConfirmModalProps = useMemo(
-    () => ({
+  const deleteConfirmProps: JobInvoiceDeleteConfirmModalProps = useMemo(() => {
+    const labels = pendingDelete
+      ? getFinanceDocumentDeleteLabels(pendingDelete.kind)
+      : null;
+    return {
       opened: pendingDelete != null,
       loading: invoiceDeletingId != null,
-      title:
-        pendingDelete?.kind === "reverse"
-          ? "Delete reverse invoice"
-          : "Delete invoice",
+      title: labels?.title ?? "Delete document",
       message:
-        pendingDelete?.kind === "reverse"
-          ? "Are you sure you want to delete this reverse invoice? This action cannot be undone."
-          : "Are you sure you want to delete this invoice? This action cannot be undone.",
+        labels?.message ??
+        "Are you sure you want to delete this document? This action cannot be undone.",
       onClose: cancelDeleteInvoice,
       onConfirm: confirmDeleteInvoice,
-    }),
-    [
-      pendingDelete,
-      invoiceDeletingId,
-      cancelDeleteInvoice,
-      confirmDeleteInvoice,
-    ],
-  );
+    };
+  }, [
+    pendingDelete,
+    invoiceDeletingId,
+    cancelDeleteInvoice,
+    confirmDeleteInvoice,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(invoiceListTotal / pageSize));
 
@@ -222,6 +220,7 @@ export function useJobAccountInvoices({
     expandedInvoiceRowId,
     setExpandedInvoiceRowId,
     loadInvoiceList,
+    requestDeleteDocument,
     requestDeleteInvoice,
     requestDeleteReverseInvoice,
     deleteConfirmProps,

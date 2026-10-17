@@ -526,6 +526,7 @@ function AirImportJobCreate() {
     setExpandedInvoiceRowId,
     requestDeleteInvoice,
     requestDeleteReverseInvoice,
+    requestDeleteDocument,
     deleteConfirmProps,
   } = useJobAccountInvoices({
     activeTab: active,
@@ -6314,6 +6315,140 @@ function AirImportJobCreate() {
                   >
                     Create Supplier Invoice
                   </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const toNumOrNull = (v: unknown): number | null => {
+                        if (v == null || v === "") return null;
+                        const n = Number(v);
+                        return Number.isFinite(n) ? n : null;
+                      };
+
+                      const estimates = Array.isArray(
+                        estimatesForm.values.estimates,
+                      )
+                        ? estimatesForm.values.estimates
+                        : [];
+                      const houseList = Array.isArray(hawbDetails)
+                        ? hawbDetails
+                        : [];
+
+                      // Supplier Invoice prefill is vendor-driven on the target page,
+                      // so we pass all charges and let vendor selection filter them.
+
+                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                      if (!jobId) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Job ID not found for Supplier Invoice prefill.",
+                        });
+                        return;
+                      }
+
+                      const estimateCharges = estimates
+                        .map((e) => {
+                          const er = e as unknown as Record<string, unknown>;
+                          return {
+                            shipment_no: jobId, // common shipment no for this flow
+                            charge_id: toNumOrNull(er.charge_id),
+                            charge_name: toStr(er.charge_name),
+                            currency_id: er.currency_id ?? null,
+                            roe: er.roe ?? null,
+                            amount:
+                              resolveSupplierInvoiceEstimateCostAmount(er),
+                            supplier_code: toStr(er.supplier_code),
+                            supplier_name: toStr(er.supplier_name),
+                          };
+                        })
+                        .filter(
+                          (c) =>
+                            toStr(
+                              (c as { shipment_no?: unknown }).shipment_no,
+                            ) &&
+                            (c as { charge_id?: unknown }).charge_id != null &&
+                            (c as { amount?: unknown }).amount != null &&
+                            (c as { amount?: unknown }).amount !== "",
+                        );
+
+                      const houseCharges = houseList
+                        .flatMap((h) => {
+                          const hr = h as unknown as Record<string, unknown>;
+                          const shipmentNo = toStr(
+                            (hr as { shipment_id?: unknown }).shipment_id,
+                          ); // house shipment_id
+                          const chargesArr = Array.isArray(hr.charges)
+                            ? (hr.charges as unknown[])
+                            : Array.isArray(
+                                  (hr as { mawb_charges?: unknown })
+                                    .mawb_charges,
+                                )
+                              ? (((hr as { mawb_charges?: unknown })
+                                  .mawb_charges as unknown[] | undefined) ?? [])
+                              : [];
+                          return chargesArr
+                            .map((c) => {
+                              const cr = c as unknown as Record<
+                                string,
+                                unknown
+                              >;
+                              return {
+                                shipment_no: shipmentNo,
+                                charge_id:
+                                  cr.charge_id != null
+                                    ? Number(cr.charge_id)
+                                    : null,
+                                charge_name: toStr(cr.charge_name),
+                                currency_id:
+                                  (cr as { currency_id?: unknown })
+                                    .currency_id ??
+                                  (cr as { currency?: unknown }).currency ??
+                                  null,
+                                roe: cr.roe ?? null,
+                                amount:
+                                  resolveSupplierInvoiceHouseCostAmount(cr),
+                                supplier_code: toStr(cr.supplier_code),
+                                supplier_name: toStr(cr.supplier_name),
+                              };
+                            })
+                            .filter(
+                              (x) =>
+                                toStr(
+                                  (x as { shipment_no?: unknown }).shipment_no,
+                                ) &&
+                                (x as { charge_id?: unknown }).charge_id !=
+                                  null &&
+                                (x as { amount?: unknown }).amount != null &&
+                                (x as { amount?: unknown }).amount !== "",
+                            );
+                        })
+                        .filter(Boolean);
+
+                      const charges = [...estimateCharges, ...houseCharges];
+                      if (charges.length === 0) {
+                        ToastNotification({
+                          type: "error",
+                          message:
+                            "Select a supplier/vendor to create supplier invoice",
+                        });
+                        return;
+                      }
+
+                      navigate("/supplier-invoice-rcm/create", {
+                        state: {
+                          prefillSupplierInvoiceFromJob: {
+                            source: "air-import-job",
+                            job_id: jobId,
+                            charges,
+                          },
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier (RCM)
+                  </Button>
                   <AutomateVendorInvoiceTrigger
                     variant="button"
                     shipmentNo={getMasterShipmentNo(jobData)}
@@ -6408,6 +6543,7 @@ function AirImportJobCreate() {
               setExpandedRowId={setExpandedInvoiceRowId}
               onRequestDeleteInvoice={requestDeleteInvoice}
               onRequestDeleteReverseInvoice={requestDeleteReverseInvoice}
+              onRequestDeleteDocument={requestDeleteDocument}
               deleteConfirmProps={deleteConfirmProps}
             />
           </Tabs.Panel>

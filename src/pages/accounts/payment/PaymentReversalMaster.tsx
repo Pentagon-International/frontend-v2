@@ -34,8 +34,11 @@ import {
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { UnpostedDocumentDeleteMenuRow } from "../../../components/UnpostedDocumentDeleteMenuRow";
+import { useUnpostedDocumentDelete } from "../../../hooks/useUnpostedDocumentDelete";
 
 type PaymentReversalRow = Record<string, unknown> & {
   id?: number | string;
@@ -68,6 +71,12 @@ export default function PaymentReversalMaster() {
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { deletingId, requestDelete, deleteConfirmProps } =
+    useUnpostedDocumentDelete({
+      onDeleted: () =>
+        queryClient.invalidateQueries({ queryKey: ["payment-reversal"] }),
+    });
   const [listCurrentPage, setListCurrentPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
   const [search] = useState("");
@@ -272,13 +281,26 @@ export default function PaymentReversalMaster() {
                     </UnstyledButton>
                   </Box>
                 )}
+                {isUnposted && row.original?.id != null && (
+                  <Box px={10} py={5}>
+                    <UnpostedDocumentDeleteMenuRow
+                      disabled={deletingId === Number(row.original.id)}
+                      onClick={() =>
+                        requestDelete(
+                          "reverse_payment",
+                          Number(row.original.id),
+                        )
+                      }
+                    />
+                  </Box>
+                )}
               </Menu.Dropdown>
             </Menu>
           );
         },
       },
     ],
-    [index, navigate],
+    [index, navigate, deletingId, requestDelete],
   );
 
   const table = useMantineReactTable({
@@ -495,6 +517,7 @@ export default function PaymentReversalMaster() {
           </Group>
         </>
       )}
+      <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
     </Card>
   );
 }

@@ -90,6 +90,10 @@ import {
 } from "../../../utils/houseChargesPayload";
 import { mapChargeToPaymentRequestPrefill } from "../../../utils/paymentRequestChargePrefill";
 import {
+  buildHouseSupplierInvoicePrefill,
+  supplierInvoiceCreatePath,
+} from "../../../utils/supplierInvoiceJobPrefill";
+import {
   ESTIMATE_SUPPLIER_ENDPOINT,
   estimateSupplierDisplayFormat,
   estimateSupplierPostBody,
@@ -537,6 +541,7 @@ function HouseCreate() {
     setExpandedInvoiceRowId,
     requestDeleteInvoice,
     requestDeleteReverseInvoice,
+    requestDeleteDocument,
     deleteConfirmProps,
   } = useJobAccountInvoices({
     activeTab: active,
@@ -4885,6 +4890,106 @@ function HouseCreate() {
                     variant="outline"
                     color="#105476"
                     onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const fullDetail = getCurrentHousingDetail();
+                      const houseShipmentNo = toStr(
+                        (fullDetail as { shipment_id?: unknown }).shipment_id ??
+                          (
+                            editData as { shipment_id?: unknown } | undefined
+                          )?.shipment_id,
+                      );
+                      const jobId = toStr(
+                        (
+                          location.state?.job as {
+                            job_id?: unknown;
+                            shipment_id?: unknown;
+                          } | null
+                        )?.job_id ??
+                          (
+                            location.state?.job as {
+                              shipment_id?: unknown;
+                            } | null
+                          )?.shipment_id ??
+                          location.state?.job?.id ??
+                          houseShipmentNo,
+                      );
+                      const built = buildHouseSupplierInvoicePrefill({
+                        houseCharges: Array.isArray(chargesForm.values.charges)
+                          ? chargesForm.values.charges
+                          : [],
+                        houseShipmentNo,
+                        jobId,
+                      });
+                      if (!built.ok) {
+                        ToastNotification({
+                          type: "error",
+                          message: built.message,
+                        });
+                        return;
+                      }
+                      navigate(supplierInvoiceCreatePath(false), {
+                        state: {
+                          prefillSupplierInvoiceFromJob: built.prefill,
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier Invoice
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const fullDetail = getCurrentHousingDetail();
+                      const houseShipmentNo = toStr(
+                        (fullDetail as { shipment_id?: unknown }).shipment_id ??
+                          (
+                            editData as { shipment_id?: unknown } | undefined
+                          )?.shipment_id,
+                      );
+                      const jobId = toStr(
+                        (
+                          location.state?.job as {
+                            job_id?: unknown;
+                            shipment_id?: unknown;
+                          } | null
+                        )?.job_id ??
+                          (
+                            location.state?.job as {
+                              shipment_id?: unknown;
+                            } | null
+                          )?.shipment_id ??
+                          location.state?.job?.id ??
+                          houseShipmentNo,
+                      );
+                      const built = buildHouseSupplierInvoicePrefill({
+                        houseCharges: Array.isArray(chargesForm.values.charges)
+                          ? chargesForm.values.charges
+                          : [],
+                        houseShipmentNo,
+                        jobId,
+                      });
+                      if (!built.ok) {
+                        ToastNotification({
+                          type: "error",
+                          message: built.message,
+                        });
+                        return;
+                      }
+                      navigate(supplierInvoiceCreatePath(true), {
+                        state: {
+                          prefillSupplierInvoiceFromJob: built.prefill,
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier (RCM)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
                       const charges = Array.isArray(fullDetail.charges)
                         ? fullDetail.charges
@@ -5765,6 +5870,7 @@ function HouseCreate() {
               setExpandedRowId={setExpandedInvoiceRowId}
               onRequestDeleteInvoice={requestDeleteInvoice}
               onRequestDeleteReverseInvoice={requestDeleteReverseInvoice}
+              onRequestDeleteDocument={requestDeleteDocument}
               deleteConfirmProps={deleteConfirmProps}
             />
           </Tabs.Panel>

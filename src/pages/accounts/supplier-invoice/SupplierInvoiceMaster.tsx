@@ -38,7 +38,7 @@ import {
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
@@ -62,6 +62,9 @@ import {
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { UnpostedDocumentDeleteMenuRow } from "../../../components/UnpostedDocumentDeleteMenuRow";
+import { useUnpostedDocumentDelete } from "../../../hooks/useUnpostedDocumentDelete";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import useAuthStore from "../../../store/authStore";
 import {
@@ -269,6 +272,12 @@ function supplierInvoiceColumnId<T extends Record<string, unknown>>(
 }
 
 function SupplierInvoiceMaster() {
+  const queryClient = useQueryClient();
+  const { deletingId, requestDelete, deleteConfirmProps } =
+    useUnpostedDocumentDelete({
+      onDeleted: () =>
+        queryClient.invalidateQueries({ queryKey: ["supplier-invoice"] }),
+    });
   const navigate = useNavigate();
   const location = useLocation();
   const defaultDateFrom = dayjs().startOf("month").toDate();
@@ -950,6 +959,20 @@ function SupplierInvoiceMaster() {
                     </UnstyledButton>
                   </Box>
                 )}
+                {isUnposted && row.original?.id != null && (
+                  <Box px={10} py={5}>
+                    <UnpostedDocumentDeleteMenuRow
+                      disabled={deletingId === Number(row.original.id)}
+                      fontFamily={erpTheme.fontSans}
+                      onClick={() =>
+                        requestDelete(
+                          "supplier_invoice",
+                          Number(row.original.id),
+                        )
+                      }
+                    />
+                  </Box>
+                )}
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
@@ -1009,6 +1032,8 @@ function SupplierInvoiceMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      deletingId,
+      requestDelete,
     ],
   );
 
@@ -1493,6 +1518,7 @@ function SupplierInvoiceMaster() {
             ),
           }}
         />
+        <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
       </Box>
     </MantineProvider>
   );

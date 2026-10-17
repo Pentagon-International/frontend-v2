@@ -74,12 +74,14 @@ import {
 } from "./financeDocumentNavigation";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { ToastNotification } from "../../../components";
-import { deactivateInvoice } from "../../../utils/deactivateInvoice";
-import { deactivateReverseInvoice } from "../../../utils/deactivateReverseInvoice";
+import {
+  deactivateFinanceDocument,
+  getFinanceDocumentDeleteLabels,
+  resolveDeactivatableFinanceKind,
+  type DeactivatableFinanceKind,
+} from "../../../utils/deactivateFinanceDocument";
 
-type UnpostedDeleteTarget =
-  | { kind: "invoice"; id: number }
-  | { kind: "reverse"; id: number };
+type UnpostedDeleteTarget = { kind: DeactivatableFinanceKind; id: number };
 
 const UNPOSTED_LIST_KEY = "UNPOSTED_DOCUMENTS_LIST";
 const CHECKER_LIST_KEY = "CHECKER_DOCUMENTS_LIST";
@@ -359,19 +361,13 @@ export default function UnpostedDocumentsList({
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
     const target = pendingDelete;
+    const labels = getFinanceDocumentDeleteLabels(target.kind);
     setDeletingId(target.id);
     try {
-      if (target.kind === "reverse") {
-        await deactivateReverseInvoice(target.id, API_HEADER);
-      } else {
-        await deactivateInvoice(target.id, API_HEADER);
-      }
+      await deactivateFinanceDocument(target.kind, target.id, API_HEADER);
       ToastNotification({
         type: "success",
-        message:
-          target.kind === "reverse"
-            ? "Reverse invoice deleted successfully"
-            : "Invoice deleted successfully",
+        message: labels.success,
       });
       setPendingDelete(null);
       await queryClient.invalidateQueries({
@@ -380,10 +376,7 @@ export default function UnpostedDocumentsList({
     } catch {
       ToastNotification({
         type: "error",
-        message:
-          target.kind === "reverse"
-            ? "Failed to delete reverse invoice. Please try again."
-            : "Failed to delete invoice. Please try again.",
+        message: labels.failure,
       });
     } finally {
       setDeletingId(null);
@@ -970,12 +963,8 @@ export default function UnpostedDocumentsList({
           }
           const status = String(r.status ?? "").toUpperCase();
           const canEdit = status === "" || status === "UNPOSTED";
-          const recordType = String(r.record_type ?? "")
-            .trim()
-            .toLowerCase();
-          const canDelete =
-            canEdit &&
-            (recordType === "invoice" || recordType === "reverse_invoice");
+          const deleteKind = resolveDeactivatableFinanceKind(r.record_type);
+          const canDelete = canEdit;
 
           const run = async (mode: "edit" | "view") => {
             setStoreFilters(listKey, appliedFilters);
@@ -1040,15 +1029,19 @@ export default function UnpostedDocumentsList({
                   <Box px={10} py={5}>
                     <UnstyledButton
                       disabled={deletingId === id}
-                      onClick={() =>
+                      onClick={() => {
+                        if (deleteKind == null) {
+                          ToastNotification({
+                            type: "error",
+                            message: "Unconfigured document",
+                          });
+                          return;
+                        }
                         setPendingDelete({
-                          kind:
-                            recordType === "reverse_invoice"
-                              ? "reverse"
-                              : "invoice",
+                          kind: deleteKind,
                           id: Number(id),
-                        })
-                      }
+                        });
+                      }}
                     >
                       <Group gap="sm">
                         <IconTrash size={16} color="#C92A2A" />
@@ -1577,14 +1570,14 @@ export default function UnpostedDocumentsList({
           opened={pendingDelete != null}
           loading={deletingId != null}
           title={
-            pendingDelete?.kind === "reverse"
-              ? "Delete reverse invoice"
-              : "Delete invoice"
+            pendingDelete
+              ? getFinanceDocumentDeleteLabels(pendingDelete.kind).title
+              : "Delete document"
           }
           message={
-            pendingDelete?.kind === "reverse"
-              ? "Are you sure you want to delete this reverse invoice? This action cannot be undone."
-              : "Are you sure you want to delete this invoice? This action cannot be undone."
+            pendingDelete
+              ? getFinanceDocumentDeleteLabels(pendingDelete.kind).message
+              : "Are you sure you want to delete this document? This action cannot be undone."
           }
           onClose={cancelDelete}
           onConfirm={() => void confirmDelete()}

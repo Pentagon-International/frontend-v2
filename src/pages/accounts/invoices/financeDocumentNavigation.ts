@@ -1,6 +1,7 @@
 import type { NavigateFunction } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
 import { ToastNotification } from "../../../components";
+import { isRcmSupplierInvoiceDocument } from "../../../utils/jobFinanceDocuments";
 
 export type FinanceDocumentListRow = {
   sno?: number;
@@ -197,9 +198,19 @@ export async function openFinanceDocument(
     case "reverse_voucher":
       navigate(`/journal-voucher-reversal/${seg}/${id}`, { state: { ...baseExtras } });
       return;
-    case "supplier_invoice":
+    case "supplier_invoice": {
+      const rcm = isRcmSupplierInvoiceDocument({
+        ...record,
+        daybook_name: row.daybook_name ?? record.daybook_name,
+        day_book_name: record.day_book_name ?? row.daybook_name,
+      });
+      if (rcm) {
+        withRowState(`/supplier-invoice-rcm/${seg}`);
+        return;
+      }
       navigate(`/supplier-invoice/${seg}/${id}`, { state: { ...baseExtras } });
       return;
+    }
     case "payment":
       withRowState(`/payment/${seg}`);
       return;
@@ -212,9 +223,19 @@ export async function openFinanceDocument(
     case "reverse_receipt":
       withRowState(`/receipt/reversal/${seg}`);
       return;
-    case "reverse_supplier_invoice":
-      withRowState(`/supplier-invoice/reversal/${seg}`);
+    case "reverse_supplier_invoice": {
+      const rcm = isRcmSupplierInvoiceDocument({
+        ...record,
+        daybook_name: row.daybook_name ?? record.daybook_name,
+        day_book_name: record.day_book_name ?? row.daybook_name,
+      });
+      withRowState(
+        rcm
+          ? `/supplier-invoice-rcm/reversal/${seg}`
+          : `/supplier-invoice/reversal/${seg}`,
+      );
       return;
+    }
     default:
       ToastNotification({
         type: "warning",

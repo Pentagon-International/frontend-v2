@@ -41,7 +41,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
@@ -66,6 +66,9 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { UnpostedDocumentDeleteMenuRow } from "../../../components/UnpostedDocumentDeleteMenuRow";
+import { useUnpostedDocumentDelete } from "../../../hooks/useUnpostedDocumentDelete";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -209,6 +212,14 @@ function JournalVoucherReversalMaster() {
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { deletingId, requestDelete, deleteConfirmProps } =
+    useUnpostedDocumentDelete({
+      onDeleted: () =>
+        queryClient.invalidateQueries({
+          queryKey: ["journalVoucherReversalMaster"],
+        }),
+    });
 
   const location = useLocation();
   const defaultDateFrom = dayjs().startOf("month").toDate();
@@ -770,6 +781,7 @@ function JournalVoucherReversalMaster() {
           const status = String(row.original.status ?? "").trim().toUpperCase();
           const isApproved = status === "APPROVED";
           const isPosted = status === "POSTED";
+          const isUnposted = status === "UNPOSTED";
           const canEdit = !isApproved && !isPosted;
           return (
             <Menu
@@ -805,6 +817,21 @@ function JournalVoucherReversalMaster() {
                         </Text>
                       </Group>
                     </UnstyledButton>
+                  </Box>
+                )}
+
+                {isUnposted && row.original?.id != null && (
+                  <Box px={10} py={5}>
+                    <UnpostedDocumentDeleteMenuRow
+                      disabled={deletingId === Number(row.original.id)}
+                      fontFamily={erpTheme.fontSans}
+                      onClick={() =>
+                        requestDelete(
+                          "reverse_voucher",
+                          Number(row.original.id),
+                        )
+                      }
+                    />
                   </Box>
                 )}
 
@@ -871,6 +898,8 @@ function JournalVoucherReversalMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      deletingId,
+      requestDelete,
     ],
   );
 
@@ -1309,6 +1338,7 @@ function JournalVoucherReversalMaster() {
           }}
         />
       </Box>
+      <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
     </MantineProvider>
   );
 }

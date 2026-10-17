@@ -41,7 +41,7 @@ import {
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
@@ -64,6 +64,9 @@ import {
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { UnpostedDocumentDeleteMenuRow } from "../../../components/UnpostedDocumentDeleteMenuRow";
+import { useUnpostedDocumentDelete } from "../../../hooks/useUnpostedDocumentDelete";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import FormTextInput from "../../../components/FormTextInput";
@@ -180,6 +183,14 @@ function supplierInvoiceReversalColumnId<T extends Record<string, unknown>>(
 }
 
 function SupplierInvoiceRCMReversalMaster() {
+  const queryClient = useQueryClient();
+  const { deletingId, requestDelete, deleteConfirmProps } =
+    useUnpostedDocumentDelete({
+      onDeleted: () =>
+        queryClient.invalidateQueries({
+          queryKey: ["supplier-invoice-rcm-reversal"],
+        }),
+    });
   const user = useAuthStore((s) => s.user);
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
@@ -836,6 +847,20 @@ function SupplierInvoiceRCMReversalMaster() {
                     </UnstyledButton>
                   </Box>
                 )}
+                {isUnposted && row.original?.id != null && (
+                  <Box px={10} py={5}>
+                    <UnpostedDocumentDeleteMenuRow
+                      disabled={deletingId === Number(row.original.id)}
+                      fontFamily={erpTheme.fontSans}
+                      onClick={() =>
+                        requestDelete(
+                          "reverse_supplier_invoice",
+                          Number(row.original.id),
+                        )
+                      }
+                    />
+                  </Box>
+                )}
               </Menu.Dropdown>
             </Menu>
           );
@@ -858,6 +883,8 @@ function SupplierInvoiceRCMReversalMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      deletingId,
+      requestDelete,
     ],
   );
 
@@ -1337,6 +1364,7 @@ function SupplierInvoiceRCMReversalMaster() {
             ),
           }}
         />
+        <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
       </Box>
     </MantineProvider>
   );

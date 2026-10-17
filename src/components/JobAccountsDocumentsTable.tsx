@@ -30,19 +30,34 @@ import {
   DEFAULT_ERP_LIST_THEME,
   ERPListColumnHeaderFilter,
 } from "./ERPListPage";
+import ToastNotification from "./ToastNotification";
 import { formatInvoiceDocumentNo } from "../utils/invoiceDocumentNumber";
 import {
   getInvoiceStatusBadgeColor,
   parseInvoiceStatus,
 } from "../utils/invoiceStatus";
 import {
+  resolveDeactivatableFinanceKind,
+  type DeactivatableFinanceKind,
+} from "../utils/deactivateFinanceDocument";
+import {
   getJobFinanceDocumentId,
   getJobFinanceReverseDocumentId,
+  isRcmSupplierInvoiceDocument,
   JOB_FINANCE_DOCUMENTS_PAGE_SIZE,
+  normalizeJobFinanceDocumentType,
   type JobFinanceDocument,
   type JobFinanceDocumentsSearchFilters,
   type JobFinanceReverseDocument,
 } from "../utils/jobFinanceDocuments";
+
+const UNCONFIGURED_DOCUMENT_TOAST = "Unconfigured document";
+
+function isRcmSupplierInvoice(
+  row: JobFinanceDocument | JobFinanceReverseDocument,
+): boolean {
+  return isRcmSupplierInvoiceDocument(row);
+}
 
 const menuItemStyles = {
   item: {
@@ -83,9 +98,7 @@ function formatLocalTotal(value: string | number | null | undefined): string {
 }
 
 function normalizeDocumentType(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
+  return normalizeJobFinanceDocumentType(value);
 }
 
 /** Credit notes cannot be reversed. Invoice reversal stays available for invoices. */
@@ -153,6 +166,11 @@ export type JobAccountsDocumentsTableProps = {
   ) => void;
   onRequestDeleteInvoice: (invoiceId: number) => void;
   onRequestDeleteReverseInvoice: (reverseInvoiceId: number) => void;
+  /** Prefer this for all unposted document deletes (inv/crn/rpt/pmt/jv + reverses). */
+  onRequestDeleteDocument?: (
+    kind: DeactivatableFinanceKind,
+    documentId: number,
+  ) => void;
   deleteConfirmProps: JobInvoiceDeleteConfirmModalProps;
   /** Extra location.state fields (e.g. service-job returnTo). */
   navigationStateExtras?: Record<string, unknown>;
@@ -182,6 +200,7 @@ export function JobAccountsDocumentsTable({
   setExpandedRowId,
   onRequestDeleteInvoice,
   onRequestDeleteReverseInvoice,
+  onRequestDeleteDocument,
   deleteConfirmProps,
   navigationStateExtras,
   title = "Accounts",
@@ -244,6 +263,50 @@ export function JobAccountsDocumentsTable({
     ...accountsReturnNav,
   });
 
+  const requestDelete = (kind: DeactivatableFinanceKind, documentId: number) => {
+    if (onRequestDeleteDocument) {
+      onRequestDeleteDocument(kind, documentId);
+      return;
+    }
+    if (kind === "invoice" || kind === "credit_note") {
+      onRequestDeleteInvoice(documentId);
+      return;
+    }
+    if (kind === "reverse_invoice") {
+      onRequestDeleteReverseInvoice(documentId);
+    }
+  };
+
+  const renderUnpostedDelete = (
+    row: JobFinanceDocument,
+    docId: number | null,
+  ) => {
+    if (isReadOnly) return null;
+    const { isUnposted } = parseInvoiceStatus(row.status);
+    if (!isUnposted) return null;
+    const kind =
+      resolveDeactivatableFinanceKind(row.document_type) ??
+      (isCreditNoteFinanceDocument(row) ? "credit_note" : null);
+    if (!kind || docId == null) {
+      return (
+        <JobInvoiceDeleteMenuItem
+          onDelete={() =>
+            ToastNotification({
+              type: "error",
+              message: UNCONFIGURED_DOCUMENT_TOAST,
+            })
+          }
+        />
+      );
+    }
+    return (
+      <JobInvoiceDeleteMenuItem
+        disabled={deletingId === docId}
+        onDelete={() => requestDelete(kind, docId)}
+      />
+    );
+  };
+
   const renderHeaderFilter = (
     key: AccountsHeaderFilterKey,
     label: string,
@@ -277,6 +340,11 @@ export function JobAccountsDocumentsTable({
       parent.document_type,
     );
     const { isUnposted } = parseInvoiceStatus(rev.status);
+    const rcm =
+      isRcmSupplierInvoice(parent) || isRcmSupplierInvoice(rev);
+    const basePath = rcm
+      ? "/supplier-invoice-rcm/reversal"
+      : "/supplier-invoice/reversal";
     return (
       <Menu shadow="md" width={200} position="bottom-end">
         <Menu.Target>
@@ -315,29 +383,45 @@ export function JobAccountsDocumentsTable({
             }
             styles={menuItemStyles}
             onClick={() =>
-              navigate("/supplier-invoice/reversal/view", {
-                state: withNavState({ ...parent, ...rev }),
+              navigate(`${basePath}/view`, {
+                state: withNavState({
+                  ...parent,
+                  ...rev,
+                  ...(reverseId != null ? { id: reverseId } : {}),
+                }),
               })
             }
           >
             View
           </Menu.Item>
           {isUnposted && !isReadOnly && reverseId != null ? (
-            <Menu.Item
-              leftSection={
-                <MenuIcon>
-                  <IconEdit size={16} color="#105476" />
-                </MenuIcon>
-              }
-              styles={menuItemStyles}
-              onClick={() =>
-                navigate("/supplier-invoice/reversal/edit", {
-                  state: withNavState({ ...parent, ...rev }),
-                })
-              }
-            >
-              Edit
-            </Menu.Item>
+            <>
+              <Menu.Item
+                leftSection={
+                  <MenuIcon>
+                    <IconEdit size={16} color="#105476" />
+                  </MenuIcon>
+                }
+                styles={menuItemStyles}
+                onClick={() =>
+                  navigate(`${basePath}/edit`, {
+                    state: withNavState({
+                      ...parent,
+                      ...rev,
+                      id: reverseId,
+                    }),
+                  })
+                }
+              >
+                Edit
+              </Menu.Item>
+              <JobInvoiceDeleteMenuItem
+                disabled={deletingId === reverseId}
+                onDelete={() =>
+                  requestDelete("reverse_supplier_invoice", reverseId)
+                }
+              />
+            </>
           ) : null}
         </Menu.Dropdown>
       </Menu>
@@ -349,7 +433,27 @@ export function JobAccountsDocumentsTable({
     const docId = getJobFinanceDocumentId(row);
     const { isPosted, isUnposted } = parseInvoiceStatus(row.status);
 
-    if (docType === "invoice" && docId != null) {
+    if (
+      (docType === "invoice" ||
+        docType === "credit_note" ||
+        docType === "crn" ||
+        docType === "cn") &&
+      docId != null
+    ) {
+      const isCreditNote =
+        docType === "credit_note" ||
+        docType === "crn" ||
+        docType === "cn" ||
+        isCreditNoteFinanceDocument(row);
+      const viewPath = isCreditNote
+        ? `${jobBasePath}/credit-note/view/${docId}`
+        : `${jobBasePath}/invoice/view/${docId}`;
+      const editPath = isCreditNote
+        ? `${jobBasePath}/credit-note/edit/${docId}`
+        : `${jobBasePath}/invoice/edit/${docId}`;
+      const deleteKind: DeactivatableFinanceKind = isCreditNote
+        ? "credit_note"
+        : "invoice";
       return (
         <>
           <Menu.Item
@@ -360,7 +464,7 @@ export function JobAccountsDocumentsTable({
             }
             styles={menuItemStyles}
             onClick={() =>
-              navigate(`${jobBasePath}/invoice/view/${docId}`, {
+              navigate(viewPath, {
                 state: withNavState({
                   invoiceData: row,
                   fromJobLevel: true,
@@ -380,7 +484,7 @@ export function JobAccountsDocumentsTable({
                 }
                 styles={menuItemStyles}
                 onClick={() =>
-                  navigate(`${jobBasePath}/invoice/edit/${docId}`, {
+                  navigate(editPath, {
                     state: withNavState({
                       invoiceData: row,
                       fromJobLevel: true,
@@ -392,11 +496,11 @@ export function JobAccountsDocumentsTable({
               </Menu.Item>
               <JobInvoiceDeleteMenuItem
                 disabled={deletingId === docId}
-                onDelete={() => onRequestDeleteInvoice(docId)}
+                onDelete={() => requestDelete(deleteKind, docId)}
               />
             </>
           ) : null}
-          {isPosted && !isReadOnly && !isCreditNoteFinanceDocument(row) ? (
+          {isPosted && !isReadOnly && !isCreditNote ? (
             <Menu.Item
               leftSection={
                 <MenuIcon>
@@ -421,6 +525,8 @@ export function JobAccountsDocumentsTable({
 
     if (docType === "supplier_invoice" && docId != null) {
       const canEdit = isUnposted || isPosted;
+      const rcm = isRcmSupplierInvoice(row);
+      const basePath = rcm ? "/supplier-invoice-rcm" : "/supplier-invoice";
       return (
         <>
           <Menu.Item
@@ -431,9 +537,12 @@ export function JobAccountsDocumentsTable({
             }
             styles={menuItemStyles}
             onClick={() =>
-              navigate(`/supplier-invoice/view/${docId}`, {
-                state: withNavState({ ...row }),
-              })
+              navigate(
+                rcm ? `${basePath}/view` : `${basePath}/view/${docId}`,
+                {
+                  state: withNavState({ ...row, id: docId }),
+                },
+              )
             }
           >
             View
@@ -447,14 +556,18 @@ export function JobAccountsDocumentsTable({
               }
               styles={menuItemStyles}
               onClick={() =>
-                navigate(`/supplier-invoice/edit/${docId}`, {
-                  state: withNavState({ ...row }),
-                })
+                navigate(
+                  rcm ? `${basePath}/edit` : `${basePath}/edit/${docId}`,
+                  {
+                    state: withNavState({ ...row, id: docId }),
+                  },
+                )
               }
             >
               Edit
             </Menu.Item>
           ) : null}
+          {renderUnpostedDelete(row, docId)}
           {isPosted && !isReadOnly ? (
             <Menu.Item
               leftSection={
@@ -476,7 +589,7 @@ export function JobAccountsDocumentsTable({
                 const crjNumber = String(
                   row.crj_number ?? row.document_no ?? "",
                 ).trim();
-                navigate("/supplier-invoice/reversal/create", {
+                navigate(`${basePath}/reversal/create`, {
                   state: withNavState({
                     ...invoiceDataWithoutDocuments,
                     id: docId,
@@ -485,7 +598,9 @@ export function JobAccountsDocumentsTable({
                 });
               }}
             >
-              Supplier Invoice Reversal
+              {rcm
+                ? "Supplier Invoice (RCM) Reversal"
+                : "Supplier Invoice Reversal"}
             </Menu.Item>
           ) : null}
         </>
@@ -531,18 +646,127 @@ export function JobAccountsDocumentsTable({
       );
     }
 
+    const financeNav: Record<
+      string,
+      { view: string; edit: string; stateAsRow?: boolean }
+    > = {
+      receipt: { view: "/receipt/view", edit: "/receipt/edit", stateAsRow: true },
+      overseas_receipt: {
+        view: "/overseas-receipt/view",
+        edit: "/overseas-receipt/edit",
+        stateAsRow: true,
+      },
+      reverse_receipt: {
+        view: "/receipt/reversal/view",
+        edit: "/receipt/reversal/edit",
+        stateAsRow: true,
+      },
+      payment: { view: "/payment/view", edit: "/payment/edit", stateAsRow: true },
+      overseas_payment: {
+        view: "/overseas-payment/view",
+        edit: "/overseas-payment/edit",
+        stateAsRow: true,
+      },
+      reverse_payment: {
+        view: "/payment/reversal/view",
+        edit: "/payment/reversal/edit",
+        stateAsRow: true,
+      },
+      journal_voucher: {
+        view: docId != null ? `/journal-voucher/view/${docId}` : "/journal-voucher",
+        edit: docId != null ? `/journal-voucher/edit/${docId}` : "/journal-voucher",
+      },
+      reverse_voucher: {
+        view:
+          docId != null
+            ? `/journal-voucher-reversal/view/${docId}`
+            : "/journal-voucher-reversal",
+        edit:
+          docId != null
+            ? `/journal-voucher-reversal/edit/${docId}`
+            : "/journal-voucher-reversal",
+      },
+      reverse_supplier_invoice: {
+        view: isRcmSupplierInvoice(row)
+          ? "/supplier-invoice-rcm/reversal/view"
+          : "/supplier-invoice/reversal/view",
+        edit: isRcmSupplierInvoice(row)
+          ? "/supplier-invoice-rcm/reversal/edit"
+          : "/supplier-invoice/reversal/edit",
+        stateAsRow: true,
+      },
+      reverse_invoice: {
+        view: `${jobBasePath}/invoice/reverse`,
+        edit: `${jobBasePath}/invoice/reverse`,
+        stateAsRow: true,
+      },
+    };
+
+    const nav = financeNav[docType];
+    if (nav && docId != null) {
+      const canEdit = isUnposted || isPosted;
+      return (
+        <>
+          <Menu.Item
+            leftSection={
+              <MenuIcon>
+                <IconEye size={16} color="#105476" />
+              </MenuIcon>
+            }
+            styles={menuItemStyles}
+            onClick={() =>
+              navigate(nav.view, {
+                state: withNavState(
+                  nav.stateAsRow
+                    ? { ...row, id: docId }
+                    : { rowData: row },
+                ),
+              })
+            }
+          >
+            View
+          </Menu.Item>
+          {canEdit && !isReadOnly ? (
+            <Menu.Item
+              leftSection={
+                <MenuIcon>
+                  <IconEdit size={16} color="#105476" />
+                </MenuIcon>
+              }
+              styles={menuItemStyles}
+              onClick={() =>
+                navigate(nav.edit, {
+                  state: withNavState(
+                    nav.stateAsRow
+                      ? { ...row, id: docId }
+                      : { rowData: row },
+                  ),
+                })
+              }
+            >
+              Edit
+            </Menu.Item>
+          ) : null}
+          {renderUnpostedDelete(row, docId)}
+        </>
+      );
+    }
+
     return (
-      <Menu.Item
-        leftSection={
-          <MenuIcon>
-            <IconEye size={16} color="#105476" />
-          </MenuIcon>
-        }
-        styles={menuItemStyles}
-        disabled
-      >
-        View
-      </Menu.Item>
+      <>
+        <Menu.Item
+          leftSection={
+            <MenuIcon>
+              <IconEye size={16} color="#105476" />
+            </MenuIcon>
+          }
+          styles={menuItemStyles}
+          disabled
+        >
+          View
+        </Menu.Item>
+        {renderUnpostedDelete(row, docId)}
+      </>
     );
   };
 

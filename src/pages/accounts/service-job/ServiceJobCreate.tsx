@@ -662,6 +662,7 @@ function ServiceJobChargesSection({
   onCreateInvoice,
   showCreateSupplierInvoice = false,
   onCreateSupplierInvoice,
+  onCreateSupplierInvoiceRcm,
   showCreatePrq = false,
   onCreatePrq,
 }: {
@@ -673,6 +674,7 @@ function ServiceJobChargesSection({
   onCreateInvoice?: () => void;
   showCreateSupplierInvoice?: boolean;
   onCreateSupplierInvoice?: () => void;
+  onCreateSupplierInvoiceRcm?: () => void;
   showCreatePrq?: boolean;
   onCreatePrq?: () => void;
 }) {
@@ -826,6 +828,16 @@ function ServiceJobChargesSection({
               onClick={onCreateSupplierInvoice}
             >
               Create Supplier Invoice
+            </Button>
+          )}
+          {showCreateSupplierInvoice && onCreateSupplierInvoiceRcm && (
+            <Button
+              variant="outline"
+              color="#105476"
+              size="sm"
+              onClick={onCreateSupplierInvoiceRcm}
+            >
+              Create Supplier (RCM)
             </Button>
           )}
           {showCreateInvoice && onCreateInvoice && (
@@ -1320,6 +1332,7 @@ function ServiceJobAccountsSection({
     setExpandedInvoiceRowId,
     requestDeleteInvoice,
     requestDeleteReverseInvoice,
+    requestDeleteDocument,
     deleteConfirmProps,
   } = useJobAccountInvoices({
     activeTab,
@@ -1346,6 +1359,7 @@ function ServiceJobAccountsSection({
       setExpandedRowId={setExpandedInvoiceRowId}
       onRequestDeleteInvoice={requestDeleteInvoice}
       onRequestDeleteReverseInvoice={requestDeleteReverseInvoice}
+      onRequestDeleteDocument={requestDeleteDocument}
       deleteConfirmProps={deleteConfirmProps}
       total={invoiceListTotal}
       pageIndex={pageIndex}
@@ -2185,60 +2199,66 @@ export default function ServiceJobCreate() {
     });
   }, [editPath, housingDetailForInvoice, jobData, navigate, transportMode]);
 
-  const handleCreateSupplierInvoice = useCallback(() => {
-    const toStr = (v: unknown) => String(v ?? "").trim();
-    const jobId = toStr(jobData?.job_id ?? jobData?.id);
-    if (!jobId) {
-      ToastNotification({
-        type: "error",
-        message: "Job ID not found for Supplier Invoice prefill.",
-      });
-      return;
-    }
+  const handleCreateSupplierInvoice = useCallback(
+    (rcm = false) => {
+      const toStr = (v: unknown) => String(v ?? "").trim();
+      const jobId = toStr(jobData?.job_id ?? jobData?.id);
+      if (!jobId) {
+        ToastNotification({
+          type: "error",
+          message: "Job ID not found for Supplier Invoice prefill.",
+        });
+        return;
+      }
 
-    const charges = (chargesForm.values.charges ?? [])
-      .map((e) => ({
-        shipment_no: jobId,
-        charge_id: e.charge_id ?? null,
-        charge_name: e.charge_name ?? "",
-        currency_id: e.currency_id || null,
-        roe: e.roe ?? null,
-        amount: resolveSupplierInvoiceHouseCostAmount({
-          total_cost: e.total_cost,
-          unit_cost: e.cost_per_unit,
-          no_of_unit: e.no_of_unit,
-        }),
-        supplier_code: toStr(e.supplier_code),
-        supplier_name: toStr(e.supplier_name),
-      }))
-      .filter(
-        (c) =>
-          toStr(c.shipment_no) &&
-          c.charge_id != null &&
-          c.amount != null &&
-          String(c.amount).trim() !== "" &&
-          (toStr(c.supplier_code) || toStr(c.supplier_name)),
-      );
+      const charges = (chargesForm.values.charges ?? [])
+        .map((e) => ({
+          shipment_no: jobId,
+          charge_id: e.charge_id ?? null,
+          charge_name: e.charge_name ?? "",
+          currency_id: e.currency_id || null,
+          roe: e.roe ?? null,
+          amount: resolveSupplierInvoiceHouseCostAmount({
+            total_cost: e.total_cost,
+            unit_cost: e.cost_per_unit,
+            no_of_unit: e.no_of_unit,
+          }),
+          supplier_code: toStr(e.supplier_code),
+          supplier_name: toStr(e.supplier_name),
+        }))
+        .filter(
+          (c) =>
+            toStr(c.shipment_no) &&
+            c.charge_id != null &&
+            c.amount != null &&
+            String(c.amount).trim() !== "" &&
+            (toStr(c.supplier_code) || toStr(c.supplier_name)),
+        );
 
-    if (charges.length === 0) {
-      ToastNotification({
-        type: "error",
-        message:
-          "Please select a supplier on the charge(s) to proceed with creating a Supplier Invoice.",
-      });
-      return;
-    }
+      if (charges.length === 0) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Please select a supplier on the charge(s) to proceed with creating a Supplier Invoice.",
+        });
+        return;
+      }
 
-    navigate("/supplier-invoice/create", {
-      state: {
-        prefillSupplierInvoiceFromJob: {
-          source: "service-job",
-          job_id: jobId,
-          charges,
+      navigate(
+        rcm ? "/supplier-invoice-rcm/create" : "/supplier-invoice/create",
+        {
+          state: {
+            prefillSupplierInvoiceFromJob: {
+              source: "service-job",
+              job_id: jobId,
+              charges,
+            },
+          },
         },
-      },
-    });
-  }, [chargesForm.values.charges, jobData, navigate]);
+      );
+    },
+    [chargesForm.values.charges, jobData, navigate],
+  );
 
   const handleCreatePrq = useCallback(() => {
     const charges = (chargesForm.values.charges ?? []).map((e) => ({
@@ -3074,7 +3094,8 @@ export default function ServiceJobCreate() {
             showCreateSupplierInvoice={
               isEditMode && jobData?.id != null && !isReadOnly
             }
-            onCreateSupplierInvoice={handleCreateSupplierInvoice}
+            onCreateSupplierInvoice={() => handleCreateSupplierInvoice(false)}
+            onCreateSupplierInvoiceRcm={() => handleCreateSupplierInvoice(true)}
             showCreatePrq={isEditMode && jobData?.id != null && !isReadOnly}
             onCreatePrq={handleCreatePrq}
           />

@@ -104,7 +104,10 @@ import {
   estimateSupplierDisplayFormat,
   estimateSupplierPostBody,
 } from "../../../utils/estimateSupplierSearch";
-import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
+import {
+  buildHouseSupplierInvoicePrefill,
+  supplierInvoiceCreatePath,
+} from "../../../utils/supplierInvoiceJobPrefill";
 import {
   calculateHouseChargeableWeight,
   formatHouseCargoWeightForPayload,
@@ -602,6 +605,7 @@ function HouseCreate() {
     setExpandedInvoiceRowId,
     requestDeleteInvoice,
     requestDeleteReverseInvoice,
+    requestDeleteDocument,
     deleteConfirmProps,
   } = useJobAccountInvoices({
     activeTab: active,
@@ -5326,95 +5330,93 @@ function HouseCreate() {
                             editData as { shipment_id?: unknown } | undefined
                           )?.shipment_id,
                       );
-                      if (!houseShipmentNo) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Shipment ID not found for Supplier Invoice prefill.",
-                        });
-                        return;
-                      }
-
-                      const houseCharges = Array.isArray(
-                        chargesForm.values.charges,
-                      )
-                        ? chargesForm.values.charges
-                        : [];
-
-                      const withChargeAndSupplier = houseCharges.filter(
-                        (c) =>
-                          c?.charge_id != null &&
-                          (toStr(c.supplier_code) || toStr(c.supplier_name)),
+                      const jobId = toStr(
+                        (
+                          location.state?.job as {
+                            job_id?: unknown;
+                            shipment_id?: unknown;
+                          } | null
+                        )?.job_id ??
+                          (
+                            location.state?.job as {
+                              shipment_id?: unknown;
+                            } | null
+                          )?.shipment_id ??
+                          location.state?.job?.id ??
+                          houseShipmentNo,
                       );
-
-                      if (withChargeAndSupplier.length === 0) {
+                      const built = buildHouseSupplierInvoicePrefill({
+                        houseCharges: Array.isArray(chargesForm.values.charges)
+                          ? chargesForm.values.charges
+                          : [],
+                        houseShipmentNo,
+                        jobId,
+                      });
+                      if (!built.ok) {
                         ToastNotification({
                           type: "error",
-                          message:
-                            "Select a supplier/vendor to create supplier invoice",
+                          message: built.message,
                         });
                         return;
                       }
-
-                      const charges = withChargeAndSupplier
-                        .map((c) => ({
-                          shipment_no: houseShipmentNo,
-                          charge_id:
-                            c.charge_id != null ? Number(c.charge_id) : null,
-                          charge_name: toStr(c.charge_name),
-                          currency_id:
-                            (c as { currency_id?: unknown }).currency_id ??
-                            (c as { currency?: unknown }).currency ??
-                            null,
-                          roe: (c as { roe?: unknown }).roe ?? null,
-                          amount: resolveSupplierInvoiceHouseCostAmount(
-                            c as Record<string, unknown>,
-                          ),
-                          supplier_code: toStr(c.supplier_code),
-                          supplier_name: toStr(c.supplier_name),
-                        }))
-                        .filter(
-                          (x) =>
-                            x.charge_id != null &&
-                            x.amount != null &&
-                            String(x.amount).trim() !== "",
-                        );
-
-                      if (charges.length === 0) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Fill cost values on the charge(s) to create supplier invoice",
-                        });
-                        return;
-                      }
-
-                      navigate("/supplier-invoice/create", {
+                      navigate(supplierInvoiceCreatePath(false), {
                         state: {
-                          prefillSupplierInvoiceFromJob: {
-                            source: "air-import-job",
-                            job_id: toStr(
-                              (
-                                location.state?.job as {
-                                  job_id?: unknown;
-                                  shipment_id?: unknown;
-                                } | null
-                              )?.job_id ??
-                                (
-                                  location.state?.job as {
-                                    shipment_id?: unknown;
-                                  } | null
-                                )?.shipment_id ??
-                                location.state?.job?.id ??
-                                houseShipmentNo,
-                            ),
-                            charges,
-                          },
+                          prefillSupplierInvoiceFromJob: built.prefill,
                         },
                       });
                     }}
                   >
                     Create Supplier Invoice
+                  </Button>
+                  <Button
+                    variant="outline"
+                    color="#105476"
+                    onClick={() => {
+                      const toStr = (v: unknown) => String(v ?? "").trim();
+                      const fullDetail = getCurrentHousingDetail();
+                      const houseShipmentNo = toStr(
+                        (fullDetail as { shipment_id?: unknown }).shipment_id ??
+                          (
+                            editData as { shipment_id?: unknown } | undefined
+                          )?.shipment_id,
+                      );
+                      const jobId = toStr(
+                        (
+                          location.state?.job as {
+                            job_id?: unknown;
+                            shipment_id?: unknown;
+                          } | null
+                        )?.job_id ??
+                          (
+                            location.state?.job as {
+                              shipment_id?: unknown;
+                            } | null
+                          )?.shipment_id ??
+                          location.state?.job?.id ??
+                          houseShipmentNo,
+                      );
+                      const built = buildHouseSupplierInvoicePrefill({
+                        houseCharges: Array.isArray(chargesForm.values.charges)
+                          ? chargesForm.values.charges
+                          : [],
+                        houseShipmentNo,
+                        jobId,
+                      });
+                      if (!built.ok) {
+                        ToastNotification({
+                          type: "error",
+                          message: built.message,
+                        });
+                        return;
+                      }
+                      navigate(supplierInvoiceCreatePath(true), {
+                        state: {
+                          prefillSupplierInvoiceFromJob: built.prefill,
+                        },
+                      });
+                    }}
+                  >
+                    Create Supplier (RCM)
                   </Button>
                   <Button
                     variant="outline"
@@ -6297,6 +6299,7 @@ function HouseCreate() {
               setExpandedRowId={setExpandedInvoiceRowId}
               onRequestDeleteInvoice={requestDeleteInvoice}
               onRequestDeleteReverseInvoice={requestDeleteReverseInvoice}
+              onRequestDeleteDocument={requestDeleteDocument}
               deleteConfirmProps={deleteConfirmProps}
             />
           </Tabs.Panel>

@@ -42,7 +42,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
 import { apiCallProtected } from "../../../api/axios";
@@ -69,6 +69,9 @@ import {
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { UnpostedDocumentDeleteMenuRow } from "../../../components/UnpostedDocumentDeleteMenuRow";
+import { useUnpostedDocumentDelete } from "../../../hooks/useUnpostedDocumentDelete";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -208,6 +211,12 @@ function JournalVoucherMaster() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const { deletingId, requestDelete, deleteConfirmProps } =
+    useUnpostedDocumentDelete({
+      onDeleted: () =>
+        queryClient.invalidateQueries({ queryKey: ["journalVoucherMaster"] }),
+    });
   const defaultDateFrom = dayjs().startOf("month").toDate();
   const defaultDateTo = dayjs().toDate();
   const dateFormat = useDateFormat();
@@ -809,6 +818,21 @@ function JournalVoucherMaster() {
                   </UnstyledButton>
                 </Box>
 
+                {isUnposted && row.original?.id != null && (
+                  <Box px={10} py={5}>
+                    <UnpostedDocumentDeleteMenuRow
+                      disabled={deletingId === Number(row.original.id)}
+                      fontFamily={erpTheme.fontSans}
+                      onClick={() =>
+                        requestDelete(
+                          "journal_voucher",
+                          Number(row.original.id),
+                        )
+                      }
+                    />
+                  </Box>
+                )}
+
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
@@ -852,6 +876,8 @@ function JournalVoucherMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      deletingId,
+      requestDelete,
     ],
   );
 
@@ -1279,6 +1305,7 @@ function JournalVoucherMaster() {
             ),
           }}
         />
+        <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
       </Box>
     </MantineProvider>
   );

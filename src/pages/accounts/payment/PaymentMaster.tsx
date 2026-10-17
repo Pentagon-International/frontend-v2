@@ -45,7 +45,7 @@ import {
 } from "@tabler/icons-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
@@ -70,6 +70,9 @@ import {
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components";
 import type { ErpListTheme } from "../../../components";
+import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
+import { UnpostedDocumentDeleteMenuRow } from "../../../components/UnpostedDocumentDeleteMenuRow";
+import { useUnpostedDocumentDelete } from "../../../hooks/useUnpostedDocumentDelete";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -225,6 +228,12 @@ export default function PaymentMaster() {
   bindMoneyWholeNumberMode(isVietnamBranch);
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const { deletingId, requestDelete, deleteConfirmProps } =
+    useUnpostedDocumentDelete({
+      onDeleted: () =>
+        queryClient.invalidateQueries({ queryKey: ["payment"] }),
+    });
   const defaultDateFrom = dayjs().startOf("month").toDate();
   const defaultDateTo = dayjs().toDate();
   const dateFormat = useDateFormat();
@@ -828,6 +837,17 @@ export default function PaymentMaster() {
                     </UnstyledButton>
                   </Box>
                 )}
+                {isUnposted && row.original?.id != null && (
+                  <Box px={10} py={5}>
+                    <UnpostedDocumentDeleteMenuRow
+                      disabled={deletingId === Number(row.original.id)}
+                      fontFamily={erpTheme.fontSans}
+                      onClick={() =>
+                        requestDelete("payment", Number(row.original.id))
+                      }
+                    />
+                  </Box>
+                )}
                 {isPosted && (
                   <Box px={10} py={5}>
                     <UnstyledButton
@@ -884,6 +904,8 @@ export default function PaymentMaster() {
       collapseHeaderEditor,
       commitHeaderFilters,
       filterFieldStyles,
+      deletingId,
+      requestDelete,
     ],
   );
 
@@ -1327,6 +1349,7 @@ export default function PaymentMaster() {
             ),
           }}
         />
+        <JobInvoiceDeleteConfirmModal {...deleteConfirmProps} />
       </Box>
     </MantineProvider>
   );
