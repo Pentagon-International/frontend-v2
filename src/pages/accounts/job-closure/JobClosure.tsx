@@ -24,6 +24,7 @@ import {
   IconCircleCheck,
   IconClock,
   IconArrowRight,
+  IconCalendar,
 } from "@tabler/icons-react";
 import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
@@ -84,8 +85,7 @@ type VisibleColumnsState = {
   service: boolean;
   agent: boolean;
   route: boolean;
-  etd: boolean;
-  eta: boolean;
+  job_date: boolean;
   status: boolean;
   profit_verified: boolean;
 };
@@ -98,8 +98,7 @@ const OCEAN_IMPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   service: "Service",
   agent: "Agent",
   route: "Route",
-  etd: "ETD",
-  eta: "ETA",
+  job_date: "Job Date",
   status: "Status",
   profit_verified: "Profit Verified",
 };
@@ -122,6 +121,7 @@ type ImportJobData = {
   destination_name: string;
   etd: string;
   eta: string;
+  job_date?: string | null;
   atd: string | null;
   ata: string | null;
   schedule_id: string | null;
@@ -218,8 +218,11 @@ type OceanImportJobFilters = {
   destination_code: string;
   destination_name: string;
   service: string;
-  etd: string;
-  eta: string;
+  /** Exact job_date (column header filter only). */
+  job_date: string;
+  /** Range job_date (filter panel); open-ended from/to. Mutually exclusive with job_date. */
+  job_date_from: string;
+  job_date_to: string;
   status: string;
 };
 
@@ -247,8 +250,9 @@ function JobClosure() {
     destination_code: "",
     destination_name: "",
     service: "",
-    etd: "",
-    eta: "",
+    job_date: "",
+    job_date_from: dayjs().startOf("month").format("YYYY-MM-DD"),
+    job_date_to: dayjs().format("YYYY-MM-DD"),
     status: "",
   };
   const [draftFilters, setDraftFilters] =
@@ -279,6 +283,23 @@ function JobClosure() {
     },
     [dateFormat],
   );
+  const appliedJobDateFilterLabel = useMemo(() => {
+    const exact = appliedFilters.job_date?.trim();
+    if (exact) return formatFilterDateLabel(exact);
+    const from = appliedFilters.job_date_from?.trim();
+    const to = appliedFilters.job_date_to?.trim();
+    if (!from && !to) return "";
+    if (from && to) {
+      return `${formatFilterDateLabel(from)} → ${formatFilterDateLabel(to)}`;
+    }
+    if (from) return `From ${formatFilterDateLabel(from)}`;
+    return `To ${formatFilterDateLabel(to)}`;
+  }, [
+    appliedFilters.job_date,
+    appliedFilters.job_date_from,
+    appliedFilters.job_date_to,
+    formatFilterDateLabel,
+  ]);
   const [isClosing, setIsClosing] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
@@ -288,8 +309,7 @@ function JobClosure() {
     service: true,
     agent: true,
     route: true,
-    etd: true,
-    eta: true,
+    job_date: true,
     status: true,
     profit_verified: true,
   });
@@ -304,7 +324,11 @@ function JobClosure() {
   const commitHeaderFilters = useCallback(
     (partial: Partial<OceanImportJobFilters>) => {
       setDraftFilters((prev) => {
-        const next = { ...prev, ...partial };
+        let next = { ...prev, ...partial };
+        // Exact column job_date clears panel range (mutually exclusive).
+        if ("job_date" in partial) {
+          next = { ...next, job_date_from: "", job_date_to: "" };
+        }
         setAppliedFilters(next);
         setStoreFilters(LIST_KEY, next);
         return next;
@@ -368,9 +392,17 @@ function JobClosure() {
   };
 
   const applyFilters = () => {
-    setAppliedFilters(draftFilters);
+    const from = draftFilters.job_date_from?.trim();
+    const to = draftFilters.job_date_to?.trim();
+    // Range from filter panel clears exact job_date (mutually exclusive).
+    const next =
+      from || to
+        ? { ...draftFilters, job_date: "" }
+        : draftFilters;
+    setDraftFilters(next);
+    setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreFilters(LIST_KEY, next);
     setStoreSearch(LIST_KEY, search);
     setShowFilters(false);
   };
@@ -385,7 +417,7 @@ function JobClosure() {
   const buildFiltersPayload = (
     filters: OceanImportJobFilters,
     searchValue: string
-  ): Record<string, string | string[]> => {
+  ): Record<string, string | string[] | { from?: string; to?: string }> => {
     const cleaned: Record<string, string> = {};
 
     const entries: [keyof OceanImportJobFilters, string][] = [
@@ -393,8 +425,6 @@ function JobClosure() {
       ["mbl_number", filters.mbl_number],
       ["origin_code", filters.origin_code],
       ["destination_code", filters.destination_code],
-      ["etd", filters.etd],
-      ["eta", filters.eta],
     ];
 
     entries.forEach(([key, value]) => {
@@ -414,7 +444,24 @@ function JobClosure() {
 
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
-    return { status: "ACTIVE", type: "All", ...cleaned };
+    const base: Record<
+      string,
+      string | string[] | { from?: string; to?: string }
+    > = { status: "ACTIVE", type: "All", ...cleaned };
+
+    const exactJobDate = filters.job_date?.trim();
+    const jobDateFrom = filters.job_date_from?.trim();
+    const jobDateTo = filters.job_date_to?.trim();
+    if (exactJobDate) {
+      base.job_date = exactJobDate;
+    } else if (jobDateFrom || jobDateTo) {
+      const range: { from?: string; to?: string } = {};
+      if (jobDateFrom) range.from = jobDateFrom;
+      if (jobDateTo) range.to = jobDateTo;
+      base.job_date = range;
+    }
+
+    return base;
   };
 
   const {
@@ -606,6 +653,17 @@ function JobClosure() {
                 />
               </>
             ),
+            secondary: appliedJobDateFilterLabel ? (
+              <Group gap={8} wrap="nowrap" align="center">
+                <IconCalendar size={16} color={muted} style={{ flexShrink: 0 }} />
+                <Text size="xs" c={muted} component="span">
+                  Job Date
+                </Text>
+                <Text fw={600} size="xs" c={fg} component="span">
+                  {appliedJobDateFilterLabel}
+                </Text>
+              </Group>
+            ) : undefined,
             actions: (
               <>
                 <TextInput
@@ -814,14 +872,20 @@ function JobClosure() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="ETD"
-                      placeholder="YYYY-MM-DD"
+                      label="Job Date From"
                       size="xs"
-                      value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
+                      value={
+                        draftFilters.job_date_from
+                          ? dayjs(draftFilters.job_date_from).toDate()
+                          : null
+                      }
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          job_date_from: date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "",
+                          job_date: "",
                         }))
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
@@ -832,14 +896,20 @@ function JobClosure() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="ETA"
-                      placeholder="YYYY-MM-DD"
+                      label="Job Date To"
                       size="xs"
-                      value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
+                      value={
+                        draftFilters.job_date_to
+                          ? dayjs(draftFilters.job_date_to).toDate()
+                          : null
+                      }
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          job_date_to: date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "",
+                          job_date: "",
                         }))
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
@@ -1051,55 +1121,30 @@ function JobClosure() {
                           />
                         </th>
                       )}
-                      {visibleColumns.etd && (
+                      {visibleColumns.job_date && (
                         <th style={mergeTh(130, 130)}>
                           <ERPListColumnHeaderFilter
-                            label="ETD"
-                            value={appliedFilters.etd}
-                            displayValue={formatFilterDateLabel(appliedFilters.etd)}
+                            label="Job Date"
+                            value={appliedFilters.job_date}
+                            displayValue={formatFilterDateLabel(appliedFilters.job_date)}
                             theme={theme}
-                            isEditing={editingHeaderId === "etd"}
-                            onStartEdit={() => openHeaderEditor("etd")}
-                            onStopEdit={() => collapseHeaderEditor("etd")}
+                            isEditing={editingHeaderId === "job_date"}
+                            onStartEdit={() => openHeaderEditor("job_date")}
+                            onStopEdit={() => collapseHeaderEditor("job_date")}
                             onChange={() => {}}
                             renderEditor={({ autoFocus, onClose }) => (
                               <SingleDateInput
-                                placeholder="YYYY-MM-DD"
                                 size="xs"
-                                value={appliedFilters.etd ? dayjs(appliedFilters.etd).toDate() : null}
+                                value={
+                                  appliedFilters.job_date
+                                    ? dayjs(appliedFilters.job_date).toDate()
+                                    : null
+                                }
                                 onChange={(date) => {
                                   commitHeaderFilters({
-                                    etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
-                                  });
-                                  if (date) onClose();
-                                }}
-                                classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
-                                styles={filterFieldStyles}
-                                {...(autoFocus ? { autoFocus: true } : {})}
-                              />
-                            )}
-                          />
-                        </th>
-                      )}
-                      {visibleColumns.eta && (
-                        <th style={mergeTh(130, 130)}>
-                          <ERPListColumnHeaderFilter
-                            label="ETA"
-                            value={appliedFilters.eta}
-                            displayValue={formatFilterDateLabel(appliedFilters.eta)}
-                            theme={theme}
-                            isEditing={editingHeaderId === "eta"}
-                            onStartEdit={() => openHeaderEditor("eta")}
-                            onStopEdit={() => collapseHeaderEditor("eta")}
-                            onChange={() => {}}
-                            renderEditor={({ autoFocus, onClose }) => (
-                              <SingleDateInput
-                                placeholder="YYYY-MM-DD"
-                                size="xs"
-                                value={appliedFilters.eta ? dayjs(appliedFilters.eta).toDate() : null}
-                                onChange={(date) => {
-                                  commitHeaderFilters({
-                                    eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                                    job_date: date
+                                      ? dayjs(date).format("YYYY-MM-DD")
+                                      : "",
                                   });
                                   if (date) onClose();
                                 }}
@@ -1283,11 +1328,8 @@ function JobClosure() {
                                 </td>
                               );
                             })()}
-                            {visibleColumns.etd && (
-                              <td style={tdDate}>{fmtDate(row.etd)}</td>
-                            )}
-                            {visibleColumns.eta && (
-                              <td style={tdDate}>{fmtDate(row.eta)}</td>
+                            {visibleColumns.job_date && (
+                              <td style={tdDate}>{fmtDate(row.job_date)}</td>
                             )}
                             {visibleColumns.status && (
                               <td style={tdPad}>
