@@ -40,6 +40,7 @@ function normalizeDocumentTypes(
  *
  * - maker_checker absent/false: anyone can post
  * - checker or special_post: can post (checker and admin)
+ * - maker with empty/missing document_type: can post (nothing restricted)
  * - maker: cannot post when this page's document type is in their document_type list
  * - maker on a page that does not pass a document type: cannot post
  */
@@ -54,15 +55,19 @@ export function canPostDocuments(
     return true;
   }
 
+  const restricted = normalizeDocumentTypes(screenPermissions.document_type);
+  // Maker with no restricted document types may post any document.
+  if (restricted.length === 0) {
+    return true;
+  }
+
   const pageTypes = normalizeDocumentTypes(documentType);
   if (pageTypes.length === 0) {
     return false;
   }
 
-  const restricted = new Set(
-    normalizeDocumentTypes(screenPermissions.document_type),
-  );
-  return !pageTypes.some((code) => restricted.has(code));
+  const restrictedSet = new Set(restricted);
+  return !pageTypes.some((code) => restrictedSet.has(code));
 }
 
 /** Checker nav/page is visible only when checker=true. */

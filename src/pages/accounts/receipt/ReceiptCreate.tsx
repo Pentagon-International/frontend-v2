@@ -251,9 +251,7 @@ type InvoiceCombinedItem = {
   [key: string]: unknown;
 };
 
-function normalizeAllocationDrCr(
-  value: unknown,
-): "Cr" | "Dr" | null {
+function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   const v = String(value ?? "")
     .trim()
     .toUpperCase();
@@ -323,9 +321,13 @@ function partyAllocationKey(row: {
   customer_code?: string;
   customer_display?: string;
 }): string {
-  const code = String(row.customer_code ?? "").trim().toUpperCase();
+  const code = String(row.customer_code ?? "")
+    .trim()
+    .toUpperCase();
   if (code) return `c:${code}`;
-  const name = String(row.customer_display ?? "").trim().toUpperCase();
+  const name = String(row.customer_display ?? "")
+    .trim()
+    .toUpperCase();
   if (name) return `n:${name}`;
   return "";
 }
@@ -352,8 +354,7 @@ function partyLineLocalFromAmount(
   roe: number | null,
 ): number | null {
   if (amount == null || !Number.isFinite(amount)) return null;
-  const roeVal =
-    roe != null && Number.isFinite(roe) && roe !== 0 ? roe : 1;
+  const roeVal = roe != null && Number.isFinite(roe) && roe !== 0 ? roe : 1;
   return clampLocalAmount(amount * roeVal);
 }
 
@@ -682,10 +683,7 @@ function invertPartyDrCrForReversalCreate(p: {
 }
 
 /** Receipt header nets Cr − Dr; reversal nets Dr − Cr so the header amount matches the source. */
-function partyHeaderNetSign(
-  drCr: "Cr" | "Dr",
-  isReversal: boolean,
-): 1 | -1 {
+function partyHeaderNetSign(drCr: "Cr" | "Dr", isReversal: boolean): 1 | -1 {
   const isDr = drCr === "Dr";
   if (isReversal) return isDr ? 1 : -1;
   return isDr ? -1 : 1;
@@ -1486,7 +1484,11 @@ export default function ReceiptCreate({
         options?.detailIndex === idx &&
         (options.allocationsForDetail?.length ?? 0) > 0
       ) {
-        applyAdjLocalToPartyDetail(idx, row, options.allocationsForDetail ?? []);
+        applyAdjLocalToPartyDetail(
+          idx,
+          row,
+          options.allocationsForDetail ?? [],
+        );
       }
     });
   };
@@ -1558,7 +1560,12 @@ export default function ReceiptCreate({
         form.setFieldValue(`details.${idx}.local_amount`, local);
       }
     });
-  }, [detailsSnapshotForLocal, localCurrency, _isReversal, receiptFromState?.status]);
+  }, [
+    detailsSnapshotForLocal,
+    localCurrency,
+    _isReversal,
+    receiptFromState?.status,
+  ]);
 
   const showChequeSection = form.values.type !== "CASH";
 
@@ -2280,34 +2287,34 @@ export default function ReceiptCreate({
     };
 
     if (!_isReversal) {
-    const detailsChanged = syncedDetails.some((d, i) => {
-      const prev = values.details?.[i];
-      return (
-        prev?.local_amount !== d.local_amount || prev?.amount !== d.amount
-      );
-    });
-    const adjustmentsChanged = adjustments.some((a, i) => {
-      const prev = values.adjustments?.[i];
-      return (
-        prev?.adj_curr_amount !== a.adj_curr_amount ||
-        prev?.adj_local_amount !== a.adj_local_amount
-      );
-    });
-    if (
-      detailsChanged ||
-      adjustmentsChanged ||
-      values.amount !== valuesForSave.amount ||
-      values.local_amount !== valuesForSave.local_amount
-    ) {
-      form.setFieldValue("adjustments", adjustments);
-      form.setFieldValue("details", syncedDetails);
-      if (valuesForSave.amount !== values.amount) {
-        form.setFieldValue("amount", valuesForSave.amount);
+      const detailsChanged = syncedDetails.some((d, i) => {
+        const prev = values.details?.[i];
+        return (
+          prev?.local_amount !== d.local_amount || prev?.amount !== d.amount
+        );
+      });
+      const adjustmentsChanged = adjustments.some((a, i) => {
+        const prev = values.adjustments?.[i];
+        return (
+          prev?.adj_curr_amount !== a.adj_curr_amount ||
+          prev?.adj_local_amount !== a.adj_local_amount
+        );
+      });
+      if (
+        detailsChanged ||
+        adjustmentsChanged ||
+        values.amount !== valuesForSave.amount ||
+        values.local_amount !== valuesForSave.local_amount
+      ) {
+        form.setFieldValue("adjustments", adjustments);
+        form.setFieldValue("details", syncedDetails);
+        if (valuesForSave.amount !== values.amount) {
+          form.setFieldValue("amount", valuesForSave.amount);
+        }
+        if (valuesForSave.local_amount !== values.local_amount) {
+          form.setFieldValue("local_amount", valuesForSave.local_amount);
+        }
       }
-      if (valuesForSave.local_amount !== values.local_amount) {
-        form.setFieldValue("local_amount", valuesForSave.local_amount);
-      }
-    }
     }
 
     if (!_isReversal && hasAdjustments) {
@@ -2588,11 +2595,7 @@ export default function ReceiptCreate({
               : (prev?.invoice_id ?? null),
           location: (a.location ?? prev?.location ?? "").toString(),
           type: typeVal,
-          account_code: (
-            a.account_code ??
-            prev?.account_code ??
-            ""
-          ).toString(),
+          account_code: (a.account_code ?? prev?.account_code ?? "").toString(),
           subledger: (a.subledger_code ?? prev?.subledger ?? "").toString(),
           subledger_display: (
             a.subledger_name ??
@@ -3210,8 +3213,7 @@ export default function ReceiptCreate({
                 onChange={(v) =>
                   form.setFieldValue(
                     "amount",
-                    clampAmount(parseMoneyInputValue(v)) ??
-                      null,
+                    clampAmount(parseMoneyInputValue(v)) ?? null,
                   )
                 }
                 min={0}
@@ -3567,7 +3569,17 @@ export default function ReceiptCreate({
                                 `details.${idx}.roe`,
                               );
                               const detailRow = form.values.details[idx];
-                              if (detailRow && isDetailTdsRow(detailRow)) return;
+                              // TDS: keep API amount initially; on ROE edit recalc local only.
+                              if (detailRow && isDetailTdsRow(detailRow)) {
+                                form.setFieldValue(
+                                  `details.${idx}.local_amount`,
+                                  partyLineLocalFromAmount(
+                                    detailRow.amount ?? null,
+                                    newRoe,
+                                  ),
+                                );
+                                return;
+                              }
                               const isPrimary = isPrimaryPartyRowForAllocations(
                                 form.values.details,
                                 idx,
@@ -3628,10 +3640,18 @@ export default function ReceiptCreate({
                               const detailRow = form.values.details[idx];
                               const newAmount =
                                 clampAmount(parseMoneyInputValue(v)) ?? null;
+                              // TDS: keep API values on load; when amount changes, local = amount × ROE.
                               if (detailRow && isDetailTdsRow(detailRow)) {
                                 form.setFieldValue(
                                   `details.${idx}.amount`,
                                   newAmount,
+                                );
+                                form.setFieldValue(
+                                  `details.${idx}.local_amount`,
+                                  partyLineLocalFromAmount(
+                                    newAmount,
+                                    detailRow.roe ?? null,
+                                  ),
                                 );
                                 return;
                               }
@@ -3681,7 +3701,7 @@ export default function ReceiptCreate({
                               form.values.details[idx].local_amount ?? undefined
                             }
                             decimalScale={localAmountDecimalScale}
-                {...getAmountNumberInputFormatProps()}
+                            {...getAmountNumberInputFormatProps()}
                             max={AMOUNT_MAX}
                             styles={adjustmentFieldStyles}
                           />
@@ -3877,8 +3897,9 @@ export default function ReceiptCreate({
                           }
                           onClick={() => {
                             const documentNo =
-                              form.values.adjustments[idx].document_no?.trim() ??
-                              "";
+                              form.values.adjustments[
+                                idx
+                              ].document_no?.trim() ?? "";
                             if (documentNo) void onDocumentNoClick(documentNo);
                           }}
                           styles={
@@ -3965,7 +3986,7 @@ export default function ReceiptCreate({
                             undefined
                           }
                           decimalScale={localAmountDecimalScale}
-                {...getAmountNumberInputFormatProps()}
+                          {...getAmountNumberInputFormatProps()}
                           max={AMOUNT_MAX}
                           styles={adjustmentFieldStyles}
                         />

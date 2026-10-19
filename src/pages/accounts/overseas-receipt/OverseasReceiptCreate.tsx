@@ -246,9 +246,7 @@ type InvoiceCombinedItem = {
   [key: string]: unknown;
 };
 
-function normalizeAllocationDrCr(
-  value: unknown,
-): "Cr" | "Dr" | null {
+function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   const v = String(value ?? "")
     .trim()
     .toUpperCase();
@@ -421,9 +419,13 @@ function partyAllocationKey(row: {
   customer_code?: string;
   customer_display?: string;
 }): string {
-  const code = String(row.customer_code ?? "").trim().toUpperCase();
+  const code = String(row.customer_code ?? "")
+    .trim()
+    .toUpperCase();
   if (code) return `c:${code}`;
-  const name = String(row.customer_display ?? "").trim().toUpperCase();
+  const name = String(row.customer_display ?? "")
+    .trim()
+    .toUpperCase();
   if (name) return `n:${name}`;
   return "";
 }
@@ -450,8 +452,7 @@ function partyLineLocalFromAmount(
   roe: number | null,
 ): number | null {
   if (amount == null || !Number.isFinite(amount)) return null;
-  const roeVal =
-    roe != null && Number.isFinite(roe) && roe !== 0 ? roe : 1;
+  const roeVal = roe != null && Number.isFinite(roe) && roe !== 0 ? roe : 1;
   return clampLocalAmount(amount * roeVal);
 }
 
@@ -1131,7 +1132,10 @@ export default function OverseasReceiptCreate({
     // TDS rows keep saved amounts. Reversal keeps the reversed receipt values.
     const detailsForForm = _isReversal
       ? details
-      : computeOverseasReceiptDetailsSyncedFromAllocations(details, adjustments);
+      : computeOverseasReceiptDetailsSyncedFromAllocations(
+          details,
+          adjustments,
+        );
     const headerAmounts = _isReversal
       ? { amount: amountVal, local_amount: localAmountVal }
       : computeOverseasReceiptHeaderAmountsFromDetails(detailsForForm, false);
@@ -2792,40 +2796,45 @@ export default function OverseasReceiptCreate({
               )}
             {(isViewRoute || (saveResponse?.id && isOpenReceipt)) &&
               !_isReversal && (
-              <Menu withinPortal position="bottom-end" shadow="sm" radius="md">
-                <Menu.Target>
-                  <ActionIcon variant="light" color="#105476" size="lg">
-                    <IconDotsVertical size={16} />
-                  </ActionIcon>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  {isViewRoute && (
-                    <Menu.Item
-                      leftSection={<IconDownload size={16} />}
-                      onClick={openDocumentsModal}
-                    >
-                      Document
-                    </Menu.Item>
-                  )}
-                  {isOpenReceipt && (
-                    <Menu.Item
-                      leftSection={<IconListDetails size={16} />}
-                      onClick={() =>
-                        void openViewAllocationDocs(
-                          String(
-                            saveResponse?.receipt_no ||
-                              saveResponse?.document_no ||
-                              "",
-                          ),
-                        )
-                      }
-                    >
-                      View Allocation Docs
-                    </Menu.Item>
-                  )}
-                </Menu.Dropdown>
-              </Menu>
-            )}
+                <Menu
+                  withinPortal
+                  position="bottom-end"
+                  shadow="sm"
+                  radius="md"
+                >
+                  <Menu.Target>
+                    <ActionIcon variant="light" color="#105476" size="lg">
+                      <IconDotsVertical size={16} />
+                    </ActionIcon>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    {isViewRoute && (
+                      <Menu.Item
+                        leftSection={<IconDownload size={16} />}
+                        onClick={openDocumentsModal}
+                      >
+                        Document
+                      </Menu.Item>
+                    )}
+                    {isOpenReceipt && (
+                      <Menu.Item
+                        leftSection={<IconListDetails size={16} />}
+                        onClick={() =>
+                          void openViewAllocationDocs(
+                            String(
+                              saveResponse?.receipt_no ||
+                                saveResponse?.document_no ||
+                                "",
+                            ),
+                          )
+                        }
+                      >
+                        View Allocation Docs
+                      </Menu.Item>
+                    )}
+                  </Menu.Dropdown>
+                </Menu>
+              )}
             <Button
               variant="outline"
               color="#105476"
@@ -3316,7 +3325,7 @@ export default function OverseasReceiptCreate({
                                 `details.${idx}.roe`,
                               );
                               const detailRow = form.values.details[idx];
-                              if (detailRow && isDetailTdsRow(detailRow)) return;
+                              // TDS and party: local = amount × ROE (API values kept until user edits).
                               form.setFieldValue(
                                 `details.${idx}.local_amount`,
                                 partyLineLocalFromAmount(
@@ -3357,7 +3366,7 @@ export default function OverseasReceiptCreate({
                                 `details.${idx}.amount`,
                                 newAmount,
                               );
-                              if (detailRow && isDetailTdsRow(detailRow)) return;
+                              // TDS: keep API values on load; when amount changes, local = amount × ROE.
                               form.setFieldValue(
                                 `details.${idx}.local_amount`,
                                 partyLineLocalFromAmount(
