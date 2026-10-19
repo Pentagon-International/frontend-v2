@@ -36,7 +36,15 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import type { FC } from "react";
-import { useMemo, useCallback, useState, useEffect, useRef } from "react";
+import {
+  useMemo,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { URL } from "../../../api/serverUrls";
@@ -84,6 +92,11 @@ import {
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { navigateFinanceReturn } from "../../accounts/invoices/financeDocumentNavigation";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
+import { useAccountsDocumentCurrencyRoe } from "../../../hooks/useAccountsDocumentCurrencyRoe";
+import {
+  ROE_DECIMAL_PLACES,
+  type CurrencyMasterItem,
+} from "../../../utils/exchangeRateRoe";
 import {
   appendEditPageAuditPatch,
   mergeEditPageAuditSources,
@@ -94,6 +107,7 @@ import {
   findPartyAddressByGst,
   findPrimaryPartyAddress,
   getPartyGstFromPrimaryAddress,
+  getPrqChargeRowCompletenessErrors,
   isPrqTdsChargeRow,
   type PartyAddressLike,
   chargeMatchesSelectedParty,
@@ -110,15 +124,42 @@ function formatReferenceDisplayValue(value: unknown): string {
   return text !== "" ? text : "-";
 }
 
+/**
+ * Location GSTN is always the active branch GST.
+ * Vendor GSTN is the party GST (`customer_gst_no`).
+ * Recovers swapped API values when vendor holds the branch GST and location holds the party GST.
+ */
+function resolvePaymentRequestGstnFields(
+  customerGstNo: string | null | undefined,
+  locationGstNo: string | null | undefined,
+  branchLocationGstNo: string,
+): { customer_gst_no: string; location_gst_no: string } {
+  const vendor = String(customerGstNo ?? "").trim();
+  const location = String(locationGstNo ?? "").trim();
+  const branch = String(branchLocationGstNo ?? "").trim();
+
+  if (branch && vendor && vendor === branch && location && location !== branch) {
+    return { customer_gst_no: location, location_gst_no: branch };
+  }
+  if (!vendor && location && branch && location !== branch) {
+    return { customer_gst_no: location, location_gst_no: branch };
+  }
+
+  return {
+    customer_gst_no: vendor,
+    location_gst_no: branch || location,
+  };
+}
+
 function resolvePaymentRequestGstPayloadValues(
   values: { customer_gst_no?: string; location_gst_no?: string },
   branchLocationGstNo: string,
 ) {
-  return {
-    customer_gst_no: String(values.customer_gst_no ?? "").trim(),
-    location_gst_no:
-      String(values.location_gst_no ?? "").trim() || branchLocationGstNo,
-  };
+  return resolvePaymentRequestGstnFields(
+    values.customer_gst_no,
+    values.location_gst_no,
+    branchLocationGstNo,
+  );
 }
 
 function clampAmount(value: number | null | undefined): number | null {
@@ -248,6 +289,146 @@ function hasBillablePaymentRequestCharge(
     (c) =>
       c.charge_id != null && c.is_tax_row !== true && !isChargeTdsRow(c),
   );
+}
+
+/** Amount = qty × amt/unit; local = amount × ROE. TDS rows keep amount and only recalc local. */
+function recalculatePrqChargeRowAmounts(charge: {
+  no_of_unit?: number | null;
+  amount_per_unit?: number | null;
+  roe?: number | null;
+  amount?: number | null;
+  amount_in_local?: number | null;
+  is_tds_row?: boolean;
+  charge_id?: number | null;
+  account_code?: string;
+  charge_name?: string;
+  is_tds_calcualted_record?: unknown;
+  is_tds_calculated_record?: unknown;
+  currency?: string;
+  currency_id?: string;
+}): { amount: number | null; amount_in_local: number | null } {
+  if (isChargeTdsRow(charge)) {
+    const amount = charge.amount ?? null;
+    const roe = charge.roe;
+    const amount_in_local =
+      amount != null && roe != null && roe > 0
+        ? clampAmount(amount * roe)
+        : null;
+    return { amount, amount_in_local };
+  }
+
+  const { amount: calcAmount } = recalculatePrqChargeAmounts(charge);
+  // Prefer qty × amt/unit. Keep API/prefill amount only when drivers are incomplete
+  // (edit load). Never keep stale local without a valid ROE — integration often
+  // copies currency amount into local when ROE was never applied.
+  const amount = calcAmount ?? charge.amount ?? null;
+  const roe =
+    charge.roe != null && Number.isFinite(Number(charge.roe))
+      ? Number(charge.roe)
+      : null;
+  const amount_in_local =
+    amount != null && roe != null && roe > 0
+      ? clampAmount(amount * roe)
+      : null;
+  return { amount, amount_in_local };
+}
+
+function collectBillableChargeCompletenessErrors(
+  charges: ChargeItem[] | null | undefined,
+): Record<number, Record<string, string>> {
+  const next: Record<number, Record<string, string>> = {};
+  (charges ?? []).forEach((charge, index) => {
+    if (charge.charge_id == null) return;
+    if (charge.is_tax_row === true || isChargeTdsRow(charge)) return;
+    const rowErrors = getPrqChargeRowCompletenessErrors(charge);
+    if (Object.keys(rowErrors).length > 0) {
+      next[index] = rowErrors;
+    }
+  });
+  return next;
+}
+
+/** Required order: currency → ROE → Amt/Unit. */
+function collectBillableChargeCurrencyErrors(
+  charges: ChargeItem[] | null | undefined,
+  resolveCode: (charge: ChargeItem) => string,
+): { errors: Record<number, Record<string, string>>; toast: string | null } {
+  const errors: Record<number, Record<string, string>> = {};
+  let toast: string | null = null;
+  (charges ?? []).forEach((charge, index) => {
+    if (charge.charge_id == null) return;
+    if (charge.is_tax_row === true || isChargeTdsRow(charge)) return;
+    const currencyCode = resolveCode(charge);
+    const hasCurrency = Boolean(
+      currencyCode || String(charge.currency_id ?? "").trim(),
+    );
+    if (hasCurrency) return;
+    errors[index] = {
+      ...(errors[index] ?? {}),
+      currency: "Currency is required",
+    };
+    if (!toast) toast = "Currency is required";
+  });
+  return { errors, toast };
+}
+
+/**
+ * Invoice-style charge ROE (after currency is set):
+ * required; local must be 1; foreign cannot be 1.
+ */
+function collectBillableChargeRoeErrors(
+  charges: ChargeItem[] | null | undefined,
+  resolveCode: (charge: ChargeItem) => string,
+  validateToast: (
+    currencyCode: string | null | undefined,
+    roe: number | null | undefined,
+    currencyId?: string | null,
+  ) => string | null,
+  validateField: (
+    currencyCode: string | null | undefined,
+    roe: number | null | undefined,
+    currencyId?: string | null,
+  ) => string | null,
+): { errors: Record<number, Record<string, string>>; toast: string | null } {
+  const errors: Record<number, Record<string, string>> = {};
+  let toast: string | null = null;
+  (charges ?? []).forEach((charge, index) => {
+    if (charge.charge_id == null) return;
+    if (charge.is_tax_row === true || isChargeTdsRow(charge)) return;
+    const currencyCode = resolveCode(charge);
+    const hasCurrency = Boolean(
+      currencyCode || String(charge.currency_id ?? "").trim(),
+    );
+    if (!hasCurrency) return;
+    const toastError = validateToast(
+      currencyCode,
+      charge.roe,
+      charge.currency_id,
+    );
+    if (!toastError) return;
+    errors[index] = {
+      ...(errors[index] ?? {}),
+      roe: validateField(currencyCode, charge.roe, charge.currency_id) ?? toastError,
+    };
+    if (!toast) toast = toastError;
+  });
+  return { errors, toast };
+}
+
+function applyChargeFieldErrors(
+  setChargeErrors: Dispatch<
+    SetStateAction<Record<number, Record<string, string>>>
+  >,
+  fieldErrors: Record<number, Record<string, string>>,
+) {
+  setChargeErrors((prev) => {
+    const next = { ...prev };
+    Object.entries(fieldErrors).forEach(([idx, errs]) => {
+      const i = Number(idx);
+      next[i] = { ...(next[i] ?? {}), ...errs };
+    });
+    return next;
+  });
 }
 
 function normalizeChargeDrCr(value: unknown): "Dr" | "Cr" {
@@ -1129,27 +1310,26 @@ function PaymentRequest() {
 
   const defaultBranch = getDefaultUserBranch(user?.branches);
   const defaultBranchCurrency = defaultBranch?.currency?.currency_code ?? "";
-  const defaultBranchCurrencyId =
+  const defaultBranchCurrencyIdFromBranch =
     defaultBranch?.currency?.currency_id != null
       ? String(defaultBranch.currency.currency_id)
       : "";
   const branchLocationGstNo = getBranchGstNo(defaultBranch);
 
-  const getRoeValue = useCallback(
-    (currency: string): number => {
-      const userCountryCode = user?.country?.country_code;
-      const currencyUpper = currency?.toUpperCase();
-      if (userCountryCode === "IN") {
-        if (currencyUpper === "INR") return 1;
-        if (currencyUpper === "USD") return 88.75;
-      } else if (userCountryCode === "AE") {
-        if (currencyUpper === "AED") return 1;
-        if (currencyUpper === "USD") return 3.67;
-      }
-      return 1;
-    },
-    [user?.country?.country_code],
-  );
+  const {
+    defaultBranchCurrencyId: hookBranchCurrencyId,
+    isLocalCurrency,
+    syncRoeForCurrencyChange,
+    onRoeValueChange,
+    validateRoeField,
+    validateRoeToast,
+    isChargeBaseCurrencyFor,
+    resolveCurrencyCode,
+    resolveRoeForCurrency,
+  } = useAccountsDocumentCurrencyRoe();
+
+  const defaultBranchCurrencyId =
+    hookBranchCurrencyId || defaultBranchCurrencyIdFromBranch;
 
   // ─── Queries ───────────────────────────────────────────────────────────────
 
@@ -1417,16 +1597,32 @@ function PaymentRequest() {
     [partyAddresses],
   );
 
-  const resolvedLocationGstNo =
-    form.values.location_gst_no?.trim() || branchLocationGstNo;
+  const resolvedGstn = resolvePaymentRequestGstnFields(
+    form.values.customer_gst_no,
+    form.values.location_gst_no,
+    branchLocationGstNo,
+  );
+  const resolvedLocationGstNo = resolvedGstn.location_gst_no;
+  const resolvedVendorGstNo = resolvedGstn.customer_gst_no;
 
   useEffect(() => {
     if (!branchLocationGstNo) return;
-    if (!form.values.location_gst_no?.trim()) {
-      form.setFieldValue("location_gst_no", branchLocationGstNo);
+    const next = resolvePaymentRequestGstnFields(
+      form.values.customer_gst_no,
+      form.values.location_gst_no,
+      branchLocationGstNo,
+    );
+    if (form.values.location_gst_no !== next.location_gst_no) {
+      form.setFieldValue("location_gst_no", next.location_gst_no);
+    }
+    if (
+      form.values.customer_gst_no !== next.customer_gst_no &&
+      next.customer_gst_no
+    ) {
+      form.setFieldValue("customer_gst_no", next.customer_gst_no);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchLocationGstNo]);
+  }, [branchLocationGstNo, form.values.customer_gst_no, form.values.location_gst_no]);
 
   const applyPartyAddressState = useCallback(
     (address: PartyAddressLike | undefined) => {
@@ -1602,14 +1798,8 @@ function PaymentRequest() {
       );
       const mapped = mapChargesFromState({ chargesFromEstimates: filtered });
       const charges = (mapped?.charges ?? []).map((charge) => {
-        const { amount: calcAmount, amount_in_local: calcLocal } =
-          recalculatePrqChargeAmounts(charge);
-        const amount = charge.amount ?? calcAmount;
-        const amount_in_local =
-          charge.amount_in_local ??
-          (amount != null && charge.roe != null && charge.roe > 0
-            ? clampAmount(amount * charge.roe)
-            : calcLocal);
+        const { amount, amount_in_local } =
+          recalculatePrqChargeRowAmounts(charge);
         return { ...charge, amount, amount_in_local };
       });
       form.setFieldValue(
@@ -1841,38 +2031,118 @@ function PaymentRequest() {
     applyPartyAddressState,
   ]);
 
-  // ─── Derive PRQ amount/local amount from prefilled qty × cost/unit × ROE ──
+  // ─── Derive PRQ amount/local amount from qty × cost/unit × ROE ──
+  const chargesAmountCalcKey = form.values.charges
+    .map(
+      (c) =>
+        `${c.no_of_unit}|${c.amount_per_unit}|${c.roe}|${c.amount}|${c.is_tds_row ? 1 : 0}|${c.currency}|${c.currency_id}`,
+    )
+    .join(",");
+  /** Currency-only key so clearing ROE does not re-trigger master fetch (invoice-style clearable ROE). */
+  const chargeCurrencyRoeKey = form.values.charges
+    .map((c) => `${c.currency}|${c.currency_id}`)
+    .join(",");
+  const chargeRoeFetchedForCurrencyRef = useRef<Record<number, string>>({});
+
   useEffect(() => {
-    if (deferChargesUntilParty) return;
-    if (isEditOrViewMode || !prefillFromState?.charges?.length) return;
+    if (formFieldsReadOnly) return;
 
     let changed = false;
+    const currencyRows = (currencyData as CurrencyMasterItem[]) ?? [];
     const nextCharges = form.values.charges.map((charge) => {
-      const { amount: calcAmount, amount_in_local: calcLocal } =
-        recalculatePrqChargeAmounts(charge);
-      const amount = charge.amount ?? calcAmount;
-      const amount_in_local =
-        charge.amount_in_local ??
-        (amount != null && charge.roe != null && charge.roe > 0
-          ? clampAmount(amount * charge.roe)
-          : calcLocal);
-
+      let next = charge;
       if (
-        amount === charge.amount &&
-        amount_in_local === charge.amount_in_local
+        (charge.currency || charge.currency_id) &&
+        isChargeBaseCurrencyFor(charge, currencyRows) &&
+        charge.roe !== 1
       ) {
-        return charge;
+        next = { ...charge, roe: 1 };
+        changed = true;
       }
-
-      changed = true;
-      return { ...charge, amount, amount_in_local };
+      const { amount, amount_in_local } = recalculatePrqChargeRowAmounts(next);
+      if (amount !== next.amount || amount_in_local !== next.amount_in_local) {
+        changed = true;
+        return { ...next, amount, amount_in_local };
+      }
+      return next;
     });
 
     if (changed) {
       form.setFieldValue("charges", nextCharges);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [chargesAmountCalcKey, formFieldsReadOnly, currencyData]);
+
+  // Fetch ROE from exchange-rate master when charge currency is set/changed only.
+  // Do not re-fetch when the user clears ROE to type a new value.
+  useEffect(() => {
+    if (formFieldsReadOnly) return;
+
+    const currencyRows = (currencyData as CurrencyMasterItem[]) ?? [];
+    form.values.charges.forEach((charge, index) => {
+      if (isChargeTdsRow(charge) || charge.is_tax_row === true) return;
+      const code = String(charge.currency ?? "").trim();
+      const currencyKey = `${code}|${String(charge.currency_id ?? "").trim()}`;
+      if (!code && !String(charge.currency_id ?? "").trim()) {
+        delete chargeRoeFetchedForCurrencyRef.current[index];
+        return;
+      }
+      if (isChargeBaseCurrencyFor(charge, currencyRows)) {
+        chargeRoeFetchedForCurrencyRef.current[index] = currencyKey;
+        return;
+      }
+      if (!code) return;
+      if (chargeRoeFetchedForCurrencyRef.current[index] === currencyKey) {
+        return;
+      }
+      chargeRoeFetchedForCurrencyRef.current[index] = currencyKey;
+
+      const hasValidForeignRoe =
+        charge.roe != null &&
+        Number.isFinite(charge.roe) &&
+        charge.roe > 0 &&
+        charge.roe !== 1;
+      if (hasValidForeignRoe) return;
+
+      syncRoeForCurrencyChange(
+        code,
+        (roe) => {
+          const current = form.values.charges[index];
+          if (!current) return;
+          // Ignore stale responses if currency changed after request.
+          if (String(current.currency ?? "").trim() !== code) return;
+          const { amount, amount_in_local } = recalculatePrqChargeRowAmounts({
+            ...current,
+            roe,
+          });
+          form.setFieldValue(`charges.${index}.roe`, roe);
+          form.setFieldValue(`charges.${index}.amount`, amount);
+          form.setFieldValue(
+            `charges.${index}.amount_in_local`,
+            amount_in_local,
+          );
+          if (roe == null) {
+            setChargeErrors((prev) => ({
+              ...prev,
+              [index]: {
+                ...(prev[index] ?? {}),
+                roe: "ROE is required",
+              },
+            }));
+          }
+        },
+        charge.currency_id,
+        (_roe, fieldError) => {
+          if (!fieldError) return;
+          setChargeErrors((prev) => ({
+            ...prev,
+            [index]: { ...(prev[index] ?? {}), roe: fieldError },
+          }));
+        },
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeCurrencyRoeKey, formFieldsReadOnly, currencyData]);
 
   // ─── Batch-fetch SAC codes for charges prefilled from location.state ─────
   useEffect(() => {
@@ -2124,6 +2394,45 @@ function PaymentRequest() {
       });
       return;
     }
+    {
+      const currencyRows = (currencyData as CurrencyMasterItem[]) ?? [];
+      const resolveCode = (charge: ChargeItem) =>
+        resolveCurrencyCode(charge, currencyRows);
+
+      const { errors: currencyErrors, toast: currencyToast } =
+        collectBillableChargeCurrencyErrors(form.values.charges, resolveCode);
+      if (currencyToast) {
+        applyChargeFieldErrors(setChargeErrors, currencyErrors);
+        ToastNotification({ type: "error", message: currencyToast });
+        return;
+      }
+
+      const { errors: roeErrors, toast: roeToast } =
+        collectBillableChargeRoeErrors(
+          form.values.charges,
+          resolveCode,
+          validateRoeToast,
+          validateRoeField,
+        );
+      if (roeToast) {
+        applyChargeFieldErrors(setChargeErrors, roeErrors);
+        ToastNotification({ type: "error", message: roeToast });
+        return;
+      }
+
+      const incompleteErrors = collectBillableChargeCompletenessErrors(
+        form.values.charges,
+      );
+      if (Object.keys(incompleteErrors).length > 0) {
+        applyChargeFieldErrors(setChargeErrors, incompleteErrors);
+        ToastNotification({
+          type: "error",
+          message:
+            "Please enter No of Unit and Amt/Unit for all charge rows before calculating GST.",
+        });
+        return;
+      }
+    }
     setIsSubmitting(true);
     try {
       const values = form.values;
@@ -2326,6 +2635,44 @@ function PaymentRequest() {
         message: "Please enter at least one charge before calculating TDS.",
       });
       return;
+    }
+    {
+      const currencyRows = (currencyData as CurrencyMasterItem[]) ?? [];
+      const resolveCode = (charge: ChargeItem) =>
+        resolveCurrencyCode(charge, currencyRows);
+
+      const { errors: currencyErrors, toast: currencyToast } =
+        collectBillableChargeCurrencyErrors(form.values.charges, resolveCode);
+      if (currencyToast) {
+        applyChargeFieldErrors(setChargeErrors, currencyErrors);
+        ToastNotification({ type: "error", message: currencyToast });
+        return;
+      }
+
+      const { errors: roeErrors, toast: roeToast } =
+        collectBillableChargeRoeErrors(
+          form.values.charges,
+          resolveCode,
+          validateRoeToast,
+          validateRoeField,
+        );
+      if (roeToast) {
+        applyChargeFieldErrors(setChargeErrors, roeErrors);
+        ToastNotification({ type: "error", message: roeToast });
+        return;
+      }
+
+      const incompleteTdsChargeErrors =
+        collectBillableChargeCompletenessErrors(form.values.charges);
+      if (Object.keys(incompleteTdsChargeErrors).length > 0) {
+        applyChargeFieldErrors(setChargeErrors, incompleteTdsChargeErrors);
+        ToastNotification({
+          type: "error",
+          message:
+            "Please enter No of Unit and Amt/Unit for all charge rows before calculating TDS.",
+        });
+        return;
+      }
     }
     setIsSubmitting(true);
     try {
@@ -2606,6 +2953,47 @@ function PaymentRequest() {
       return;
     }
 
+    // Required order: currency → ROE → Amt/Unit (No of Unit)
+    if (!isRejectAction) {
+      const currencyRows = (currencyData as CurrencyMasterItem[]) ?? [];
+      const resolveCode = (charge: ChargeItem) =>
+        resolveCurrencyCode(charge, currencyRows);
+
+      const { errors: currencyErrors, toast: currencyToast } =
+        collectBillableChargeCurrencyErrors(values.charges, resolveCode);
+      if (currencyToast) {
+        applyChargeFieldErrors(setChargeErrors, currencyErrors);
+        ToastNotification({ type: "error", message: currencyToast });
+        return;
+      }
+
+      const { errors: nextRoeErrors, toast: chargeRoeToast } =
+        collectBillableChargeRoeErrors(
+          values.charges,
+          resolveCode,
+          validateRoeToast,
+          validateRoeField,
+        );
+      if (chargeRoeToast) {
+        applyChargeFieldErrors(setChargeErrors, nextRoeErrors);
+        ToastNotification({ type: "error", message: chargeRoeToast });
+        return;
+      }
+
+      const incompleteErrors = collectBillableChargeCompletenessErrors(
+        values.charges,
+      );
+      if (Object.keys(incompleteErrors).length > 0) {
+        applyChargeFieldErrors(setChargeErrors, incompleteErrors);
+        ToastNotification({
+          type: "error",
+          message:
+            "Please enter No of Unit and Amt/Unit for all charge rows before saving.",
+        });
+        return;
+      }
+    }
+
     if (!isRejectAction && !hasBillablePaymentRequestCharge(values.charges)) {
       ToastNotification({
         type: "error",
@@ -2854,10 +3242,13 @@ function PaymentRequest() {
               prepared_by_1: form.values.prepared_by_1,
               prepared_by_2: form.values.prepared_by_2,
               note: d.note ?? "",
-              customer_gst_no: d.customer_gst_no ?? "",
+              ...resolvePaymentRequestGstnFields(
+                d.customer_gst_no,
+                d.location_gst_no,
+                branchLocationGstNo,
+              ),
               rejected_note: d.rejected_note ?? "",
               on_hold_note: d.on_hold_note ?? "",
-              location_gst_no: d.location_gst_no?.trim() || branchLocationGstNo,
               charges:
                 d.charges && d.charges.length > 0
                   ? d.charges.map(mapApiChargeToChargeItem)
@@ -2956,10 +3347,13 @@ function PaymentRequest() {
       prepared_by_1: "",
       prepared_by_2: "",
       note: d.note ?? "",
-      customer_gst_no: d.customer_gst_no ?? "",
+      ...resolvePaymentRequestGstnFields(
+        d.customer_gst_no,
+        d.location_gst_no,
+        branchLocationGstNo,
+      ),
       rejected_note: d.rejected_note ?? "",
       on_hold_note: d.on_hold_note ?? "",
-      location_gst_no: d.location_gst_no?.trim() || branchLocationGstNo,
       charges:
         d.charges && d.charges.length > 0
           ? d.charges.map(mapApiChargeToChargeItem)
@@ -3821,11 +4215,15 @@ function PaymentRequest() {
                       value: option.value,
                       label: option.value,
                     }))}
-                    value={form.values.customer_gst_no || null}
+                    value={resolvedVendorGstNo || null}
                     onChange={(gst) => {
                       if (!gst) return;
                       form.setFieldValue("customer_gst_no", gst);
                       form.clearFieldError("customer_gst_no");
+                      form.setFieldValue(
+                        "location_gst_no",
+                        branchLocationGstNo,
+                      );
                       applyPartyAddressState(
                         findPartyAddressByGst(partyAddresses, gst),
                       );
@@ -3841,7 +4239,7 @@ function PaymentRequest() {
                   />
                 ) : (
                   <Text size="sm" style={{ fontFamily: "Inter" }}>
-                    {formatReferenceDisplayValue(form.values.customer_gst_no)}
+                    {formatReferenceDisplayValue(resolvedVendorGstNo)}
                   </Text>
                 )}
                 {partyGstOptions.length <= 1 && form.errors.customer_gst_no ? (
@@ -4539,10 +4937,12 @@ function PaymentRequest() {
                         <Dropdown
                           placeholder="Curr."
                           searchable
+                          clearable
                           data={currencyOptions}
                           dropdownZIndex={chargesDropdownZIndex}
                           value={charge.currency_id || charge.currency || null}
                           readOnly={formFieldsReadOnly}
+                          error={chargeErrors[index]?.currency}
                           onChange={(value) => {
                             const v = value ?? "";
                             form.setFieldValue(
@@ -4557,28 +4957,107 @@ function PaymentRequest() {
                               `charges.${index}.currency`,
                               code,
                             );
-                            const newRoe = code ? getRoeValue(code) : null;
-                            if (newRoe !== null) {
+                            // Currency changed — allow master ROE fetch for the new code
+                            delete chargeRoeFetchedForCurrencyRef.current[index];
+                            setChargeErrors((prev) => {
+                              if (
+                                !prev[index]?.roe &&
+                                !prev[index]?.currency
+                              ) {
+                                return prev;
+                              }
+                              const next = { ...prev };
+                              const row = { ...(next[index] ?? {}) };
+                              delete row.roe;
+                              delete row.currency;
+                              if (Object.keys(row).length === 0) {
+                                delete next[index];
+                              } else {
+                                next[index] = row;
+                              }
+                              return next;
+                            });
+                            if (!code) {
+                              form.setFieldValue(`charges.${index}.roe`, null);
+                              const { amount, amount_in_local } =
+                                recalculatePrqChargeRowAmounts({
+                                  ...form.values.charges[index],
+                                  currency: "",
+                                  currency_id: "",
+                                  roe: null,
+                                });
                               form.setFieldValue(
-                                `charges.${index}.roe`,
-                                newRoe,
+                                `charges.${index}.amount`,
+                                amount,
                               );
+                              form.setFieldValue(
+                                `charges.${index}.amount_in_local`,
+                                amount_in_local,
+                              );
+                              return;
                             }
-                            const currentCharge = form.values.charges[index];
-                            const amt = currentCharge.amount;
-                            if (
-                              amt != null &&
-                              amt > 0 &&
-                              newRoe != null &&
-                              newRoe > 0
-                            ) {
-                              const local = clampAmount(amt * newRoe);
-                              if (local != null)
+                            syncRoeForCurrencyChange(
+                              code,
+                              (roe) => {
+                                const currentCharge =
+                                  form.values.charges[index];
+                                const { amount, amount_in_local } =
+                                  recalculatePrqChargeRowAmounts({
+                                    ...currentCharge,
+                                    currency: code,
+                                    currency_id: v,
+                                    roe,
+                                  });
+                                form.setFieldValue(
+                                  `charges.${index}.roe`,
+                                  roe,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.amount`,
+                                  amount,
+                                );
                                 form.setFieldValue(
                                   `charges.${index}.amount_in_local`,
-                                  local,
+                                  amount_in_local,
                                 );
-                            }
+                                chargeRoeFetchedForCurrencyRef.current[index] =
+                                  `${code}|${v}`;
+                                if (roe == null) {
+                                  setChargeErrors((prev) => ({
+                                    ...prev,
+                                    [index]: {
+                                      ...(prev[index] ?? {}),
+                                      roe: "ROE is required",
+                                    },
+                                  }));
+                                }
+                              },
+                              v,
+                              (_roe, fieldError) => {
+                                if (fieldError) {
+                                  setChargeErrors((prev) => ({
+                                    ...prev,
+                                    [index]: {
+                                      ...(prev[index] ?? {}),
+                                      roe: fieldError,
+                                    },
+                                  }));
+                                } else {
+                                  setChargeErrors((prev) => {
+                                    if (!prev[index]?.roe) return prev;
+                                    const next = { ...prev };
+                                    const row = { ...(next[index] ?? {}) };
+                                    delete row.roe;
+                                    if (Object.keys(row).length === 0) {
+                                      delete next[index];
+                                    } else {
+                                      next[index] = row;
+                                    }
+                                    return next;
+                                  });
+                                }
+                              },
+                            );
                           }}
                           styles={{
                             input: {
@@ -4590,31 +5069,114 @@ function PaymentRequest() {
                         />
                       </Grid.Col>
 
-                      {/* ROE */}
+                      {/* ROE — clearable so user can re-type full value (invoice-style) */}
                       <Grid.Col span={0.6}>
                         <NumberInput
                           placeholder="ROE"
                           min={0}
                           hideControls
-                          readOnly={formFieldsReadOnly}
-                          value={charge.roe || undefined}
+                          decimalScale={ROE_DECIMAL_PLACES}
+                          readOnly={
+                            formFieldsReadOnly ||
+                            isLocalCurrency(
+                              charge.currency,
+                              charge.currency_id,
+                            )
+                          }
+                          value={charge.roe ?? undefined}
+                          error={chargeErrors[index]?.roe}
                           onChange={(value) => {
-                            const roe = value as number | null;
-                            form.setFieldValue(`charges.${index}.roe`, roe);
                             const currentCharge = form.values.charges[index];
-                            const amt = currentCharge.amount;
                             if (
-                              amt != null &&
-                              amt > 0 &&
-                              roe != null &&
-                              roe > 0
+                              isLocalCurrency(
+                                currentCharge.currency,
+                                currentCharge.currency_id,
+                              )
                             ) {
-                              const local = clampAmount(amt * roe);
+                              const { amount, amount_in_local } =
+                                recalculatePrqChargeRowAmounts({
+                                  ...currentCharge,
+                                  roe: 1,
+                                });
+                              form.setFieldValue(`charges.${index}.roe`, 1);
+                              form.setFieldValue(
+                                `charges.${index}.amount`,
+                                amount,
+                              );
                               form.setFieldValue(
                                 `charges.${index}.amount_in_local`,
-                                local,
+                                amount_in_local,
                               );
+                              setChargeErrors((prev) => {
+                                if (!prev[index]?.roe) return prev;
+                                const next = { ...prev };
+                                const row = { ...(next[index] ?? {}) };
+                                delete row.roe;
+                                if (Object.keys(row).length === 0) {
+                                  delete next[index];
+                                } else {
+                                  next[index] = row;
+                                }
+                                return next;
+                              });
+                              return;
                             }
+                            const rawRoe =
+                              typeof value === "number"
+                                ? value
+                                : value === "" || value == null
+                                  ? null
+                                  : Number(value);
+                            onRoeValueChange(
+                              currentCharge.currency,
+                              Number.isFinite(rawRoe as number)
+                                ? (rawRoe as number)
+                                : null,
+                              (roe) => {
+                                const { amount, amount_in_local } =
+                                  recalculatePrqChargeRowAmounts({
+                                    ...currentCharge,
+                                    roe,
+                                  });
+                                form.setFieldValue(
+                                  `charges.${index}.roe`,
+                                  roe,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.amount`,
+                                  amount,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.amount_in_local`,
+                                  amount_in_local,
+                                );
+                              },
+                              (_field, message) => {
+                                setChargeErrors((prev) => ({
+                                  ...prev,
+                                  [index]: {
+                                    ...(prev[index] ?? {}),
+                                    roe: message,
+                                  },
+                                }));
+                              },
+                              () => {
+                                setChargeErrors((prev) => {
+                                  if (!prev[index]?.roe) return prev;
+                                  const next = { ...prev };
+                                  const row = { ...(next[index] ?? {}) };
+                                  delete row.roe;
+                                  if (Object.keys(row).length === 0) {
+                                    delete next[index];
+                                  } else {
+                                    next[index] = row;
+                                  }
+                                  return next;
+                                });
+                              },
+                              "roe",
+                              currentCharge.currency_id,
+                            );
                           }}
                           styles={{
                             input: {
@@ -4662,33 +5224,40 @@ function PaymentRequest() {
                           hideControls
                           readOnly={formFieldsReadOnly}
                           value={charge.no_of_unit ?? undefined}
+                          error={chargeErrors[index]?.no_of_unit}
                           onChange={(value) => {
                             const noOfUnit = value as number | null;
+                            const currentCharge = form.values.charges[index];
+                            const { amount, amount_in_local } =
+                              recalculatePrqChargeRowAmounts({
+                                ...currentCharge,
+                                no_of_unit: noOfUnit,
+                              });
                             form.setFieldValue(
                               `charges.${index}.no_of_unit`,
                               noOfUnit,
                             );
-                            const currentCharge = form.values.charges[index];
-                            if (
-                              noOfUnit != null &&
-                              noOfUnit > 0 &&
-                              currentCharge.amount_per_unit != null &&
-                              currentCharge.amount_per_unit > 0
-                            ) {
-                              const amt = clampAmount(
-                                noOfUnit * currentCharge.amount_per_unit,
-                              );
-                              form.setFieldValue(
-                                `charges.${index}.amount`,
-                                amt,
-                              );
-                              const roe = currentCharge.roe;
-                              if (amt != null && roe != null && roe > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount_in_local`,
-                                  clampAmount(amt * roe),
-                                );
-                              }
+                            form.setFieldValue(
+                              `charges.${index}.amount`,
+                              amount,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.amount_in_local`,
+                              amount_in_local,
+                            );
+                            if (chargeErrors[index]?.no_of_unit) {
+                              setChargeErrors((prev) => {
+                                if (!prev[index]?.no_of_unit) return prev;
+                                const next = { ...prev };
+                                const row = { ...(next[index] ?? {}) };
+                                delete row.no_of_unit;
+                                if (Object.keys(row).length === 0) {
+                                  delete next[index];
+                                } else {
+                                  next[index] = row;
+                                }
+                                return next;
+                              });
                             }
                           }}
                           styles={{
@@ -4701,7 +5270,7 @@ function PaymentRequest() {
                         />
                       </Grid.Col>
 
-                      {/* Amount per Unit */}
+                      {/* Amount per Unit — editable driver for amount */}
                       <Grid.Col span={0.8}>
                         <NumberInput
                           placeholder="Amt/Unit"
@@ -4710,33 +5279,40 @@ function PaymentRequest() {
                           decimalScale={amountDecimalScale}
                           readOnly={formFieldsReadOnly}
                           value={charge.amount_per_unit ?? undefined}
+                          error={chargeErrors[index]?.amount_per_unit}
                           onChange={(value) => {
                             const amtPerUnit = value as number | null;
+                            const currentCharge = form.values.charges[index];
+                            const { amount, amount_in_local } =
+                              recalculatePrqChargeRowAmounts({
+                                ...currentCharge,
+                                amount_per_unit: amtPerUnit,
+                              });
                             form.setFieldValue(
                               `charges.${index}.amount_per_unit`,
                               amtPerUnit,
                             );
-                            const currentCharge = form.values.charges[index];
-                            if (
-                              amtPerUnit != null &&
-                              amtPerUnit > 0 &&
-                              currentCharge.no_of_unit != null &&
-                              currentCharge.no_of_unit > 0
-                            ) {
-                              const amt = clampAmount(
-                                currentCharge.no_of_unit * amtPerUnit,
-                              );
-                              form.setFieldValue(
-                                `charges.${index}.amount`,
-                                amt,
-                              );
-                              const roe = currentCharge.roe;
-                              if (amt != null && roe != null && roe > 0) {
-                                form.setFieldValue(
-                                  `charges.${index}.amount_in_local`,
-                                  clampAmount(amt * roe),
-                                );
-                              }
+                            form.setFieldValue(
+                              `charges.${index}.amount`,
+                              amount,
+                            );
+                            form.setFieldValue(
+                              `charges.${index}.amount_in_local`,
+                              amount_in_local,
+                            );
+                            if (chargeErrors[index]?.amount_per_unit) {
+                              setChargeErrors((prev) => {
+                                if (!prev[index]?.amount_per_unit) return prev;
+                                const next = { ...prev };
+                                const row = { ...(next[index] ?? {}) };
+                                delete row.amount_per_unit;
+                                if (Object.keys(row).length === 0) {
+                                  delete next[index];
+                                } else {
+                                  next[index] = row;
+                                }
+                                return next;
+                              });
                             }
                           }}
                           styles={{
@@ -4749,37 +5325,27 @@ function PaymentRequest() {
                         />
                       </Grid.Col>
 
-                      {/* Amount */}
+                      {/* Amount — calculated (qty × amt/unit), readonly */}
                       <Grid.Col span={0.85}>
                         <NumberInput
                           placeholder="Amount"
                           min={0}
                           hideControls
                           decimalScale={amountDecimalScale}
-                          readOnly={formFieldsReadOnly}
+                          readOnly
                           value={charge.amount ?? undefined}
-                          onChange={(value) => {
-                            const amt = value as number | null;
-                            form.setFieldValue(`charges.${index}.amount`, amt);
-                            const roe = form.values.charges[index].roe;
-                            if (amt != null && roe != null && roe > 0) {
-                              form.setFieldValue(
-                                `charges.${index}.amount_in_local`,
-                                clampAmount(amt * roe),
-                              );
-                            }
-                          }}
                           styles={{
                             input: {
                               fontSize: "13px",
                               fontFamily: "Inter",
                               height: "36px",
+                              backgroundColor: "var(--mantine-color-gray-0)",
                             },
                           }}
                         />
                       </Grid.Col>
 
-                      {/* Local Amount */}
+                      {/* Local Amount — calculated (amount × ROE), readonly */}
                       <Grid.Col span={0.85}>
                         <NumberInput
                           placeholder="Local Amt"
@@ -4916,9 +5482,6 @@ function PaymentRequest() {
                                 onClick={() => {
                                   const newChargeCurrency =
                                     defaultBranchCurrency || "";
-                                  const roe = newChargeCurrency
-                                    ? getRoeValue(newChargeCurrency)
-                                    : null;
                                   const newChargeCurrencyId =
                                     defaultBranchCurrencyId ||
                                     (currencyOptions.find(
@@ -4935,13 +5498,30 @@ function PaymentRequest() {
                                       )?.job_no ?? "",
                                     ).trim() ||
                                     prefillJobId;
+                                  const newIndex = form.values.charges.length;
+                                  const initialRoe = isLocalCurrency(
+                                    newChargeCurrency,
+                                    newChargeCurrencyId,
+                                  )
+                                    ? 1
+                                    : null;
                                   form.insertListItem("charges", {
                                     ...emptyCharge(),
                                     job_no: defaultJobNo,
                                     currency: newChargeCurrency,
                                     currency_id: newChargeCurrencyId,
-                                    roe,
+                                    roe: initialRoe,
                                   });
+                                  if (newChargeCurrency) {
+                                    void resolveRoeForCurrency(
+                                      newChargeCurrency,
+                                    ).then((roe) => {
+                                      form.setFieldValue(
+                                        `charges.${newIndex}.roe`,
+                                        roe,
+                                      );
+                                    });
+                                  }
                                 }}
                               >
                                 <IconPlus size={14} />

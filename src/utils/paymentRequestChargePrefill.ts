@@ -99,6 +99,46 @@ export function recalculatePrqChargeAmounts(charge: {
   return { amount, amount_in_local };
 }
 
+/**
+ * Billable PRQ charge drivers (qty + amt/unit).
+ * ROE rules (required / local must be 1 / foreign cannot be 1) are validated
+ * separately — same as invoice charges via validateRoeForCurrency.
+ */
+export function getPrqChargeRowCompletenessErrors(charge: {
+  no_of_unit?: number | null;
+  amount_per_unit?: number | null;
+}): {
+  no_of_unit?: string;
+  amount_per_unit?: string;
+} {
+  const errors: {
+    no_of_unit?: string;
+    amount_per_unit?: string;
+  } = {};
+  const qty = toNumOrNull(charge.no_of_unit);
+  const amtPerUnit = toNumOrNull(charge.amount_per_unit);
+
+  if (qty == null || qty <= 0) {
+    errors.no_of_unit = "No of Unit is required";
+  }
+  if (amtPerUnit == null || amtPerUnit <= 0) {
+    errors.amount_per_unit = "Amt/Unit is required";
+  }
+  return errors;
+}
+
+export function isPrqChargeRowComplete(charge: {
+  no_of_unit?: number | null;
+  amount_per_unit?: number | null;
+  roe?: number | null;
+}): boolean {
+  if (Object.keys(getPrqChargeRowCompletenessErrors(charge)).length > 0) {
+    return false;
+  }
+  const roe = toNumOrNull(charge.roe);
+  return roe != null && roe > 0;
+}
+
 export function findPrimaryPartyAddress(
   addresses: PartyAddressLike[] | undefined | null,
 ): PartyAddressLike | undefined {
@@ -493,21 +533,25 @@ export function mapChargeToPaymentRequestPrefill(
   };
 
   // Estimates "Total" often includes ROE; PRQ Amount is currency cost (qty × cost/unit).
+  // Prefer qty × cost/unit so Amount is never a ROE-inclusive total.
   const totalCost =
-    source === "estimate"
-      ? noOfUnit != null && amountPerUnit != null
-        ? clampPrqAmount(noOfUnit * amountPerUnit)
-        : null
-      : resolvePrqTotalCost(charge);
+    noOfUnit != null && amountPerUnit != null && noOfUnit > 0 && amountPerUnit > 0
+      ? clampPrqAmount(noOfUnit * amountPerUnit)
+      : source === "estimate"
+        ? null
+        : resolvePrqTotalCost(charge);
+
+  // Local Amt only when ROE is known — never copy cost_local/amount as a stand-in
+  // (integration often ships local = currency amount when ROE was never applied).
+  const amount_in_local =
+    totalCost != null && roe != null && roe > 0
+      ? clampPrqAmount(totalCost * roe)
+      : null;
 
   return {
     ...base,
     amount: totalCost,
-    amount_in_local:
-      toNumOrNull(charge.cost_local_amount ?? charge.local_amount) ??
-      (totalCost != null && roe != null
-        ? clampPrqAmount(totalCost * roe)
-        : null),
+    amount_in_local,
     supplier_code: String(charge.supplier_code ?? "").trim(),
     supplier_name: String(charge.supplier_name ?? "").trim(),
   };
