@@ -100,36 +100,29 @@ export function recalculatePrqChargeAmounts(charge: {
 }
 
 /**
- * Billable PRQ charge drivers (qty + amt/unit).
- * ROE rules (required / local must be 1 / foreign cannot be 1) are validated
- * separately — same as invoice charges via validateRoeForCurrency.
+ * Billable PRQ charge completeness: Local Amount only.
+ * Do not validate no_of_unit / amount_per_unit — those are input drivers for
+ * calculated Amount / Local Amount (and GST rows often have neither).
+ * ROE rules are validated separately via validateRoeForCurrency.
  */
 export function getPrqChargeRowCompletenessErrors(charge: {
-  no_of_unit?: number | null;
-  amount_per_unit?: number | null;
+  amount_in_local?: number | null;
+  local_amount?: number | null;
 }): {
-  no_of_unit?: string;
-  amount_per_unit?: string;
+  amount_in_local?: string;
 } {
-  const errors: {
-    no_of_unit?: string;
-    amount_per_unit?: string;
-  } = {};
-  const qty = toNumOrNull(charge.no_of_unit);
-  const amtPerUnit = toNumOrNull(charge.amount_per_unit);
-
-  if (qty == null || qty <= 0) {
-    errors.no_of_unit = "No of Unit is required";
+  const localAmount = toNumOrNull(
+    charge.amount_in_local ?? charge.local_amount,
+  );
+  if (localAmount == null || localAmount <= 0) {
+    return { amount_in_local: "Local Amount is required" };
   }
-  if (amtPerUnit == null || amtPerUnit <= 0) {
-    errors.amount_per_unit = "Amt/Unit is required";
-  }
-  return errors;
+  return {};
 }
 
 export function isPrqChargeRowComplete(charge: {
-  no_of_unit?: number | null;
-  amount_per_unit?: number | null;
+  amount_in_local?: number | null;
+  local_amount?: number | null;
   roe?: number | null;
 }): boolean {
   if (Object.keys(getPrqChargeRowCompletenessErrors(charge)).length > 0) {
