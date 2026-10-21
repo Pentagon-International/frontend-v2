@@ -1870,9 +1870,9 @@ function CreditNoteCreate() {
     billingRoeRef.current = form.values.roe;
   }, [form.values.currency, form.values.roe]);
 
-  // All invoice flows: Bill To + address → check-sez-status for credit_day (due date).
-  // SEZ tax exemption (hasSez): same as before — India/Vietnam customer invoices only.
-  // India sends document_date for SEZ validity; Vietnam omits it; agent/other overseas ignore sez.
+  // SEZ: India (needs document_date) / Vietnam (no document_date); non-agent only.
+  // Credit: all countries/branches when Bill To + address present (same API).
+  // Applies due date only when pendingApplyDueDateFromCreditRef.
   // Credit resolves via CRM using service_id (job/shipment) + active branch_id when available.
   useEffect(() => {
     const customerCode = String(form.values.bill_to ?? "").trim();
@@ -1885,6 +1885,12 @@ function CreditNoteCreate() {
       setHasSez(false);
       partyCreditDayRef.current = null;
       return;
+    }
+
+    const shouldApplySez =
+      !isAgentInvoice && (isIndiaUser || isVietnamUser);
+    if (!shouldApplySez) {
+      setHasSez(false);
     }
 
     const applyCreditDueDateIfPending = (creditDay: number | null) => {
@@ -1941,22 +1947,22 @@ function CreditNoteCreate() {
         }
       }
 
-      const documentDate = isIndiaUser
-        ? formatDateYYYYMMDD(form.values.document_date)
-        : "";
+      // India SEZ is date-gated; omit document_date when missing so credit still resolves.
+      const indiaDocumentDate =
+        shouldApplySez && isIndiaUser
+          ? formatDateYYYYMMDD(form.values.document_date)
+          : "";
 
       const result = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
-        ...(documentDate ? { document_date: documentDate } : {}),
+        ...(indiaDocumentDate ? { document_date: indiaDocumentDate } : {}),
         service_id: serviceIdForCredit,
         branch_id: activeBranchId,
       });
       if (cancelled) return;
-      // India customer: need document_date for SEZ validity; Vietnam customer: apply sez as-is
-      if (shouldApplySezTax && isIndiaUser) {
-        setHasSez(documentDate ? result.sez : false);
-      } else if (shouldApplySezTax && isVietnamUser) {
+
+      if (shouldApplySez && !(isIndiaUser && !indiaDocumentDate)) {
         setHasSez(result.sez);
       } else {
         setHasSez(false);

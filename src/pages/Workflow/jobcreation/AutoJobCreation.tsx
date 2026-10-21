@@ -9,6 +9,9 @@ import {
 } from "react";
 import axios from "axios";
 import { postAPICall } from "../../../service/postApiCall";
+import { URL } from "../../../api/serverUrls";
+import { API_HEADER } from "../../../store/storeKeys";
+import { mergeImportAutomationHousingFromBooking } from "../../../utils/bookingCreateJob";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import { FilePreviewModal } from "./automationFilePreview";
 import { IconPencil, IconPencilFilled } from "@tabler/icons-react";
@@ -110,6 +113,10 @@ interface CargoSummary {
 
 interface HousingDetail {
   hbl_number?: string;
+  /** CustomerServiceShipment PK — mapped booking (select value) */
+  booking_id?: number | null;
+  /** Display label for booking select (shipment_code / Booking ID) */
+  booking_shipment_code?: string;
   trade?: string;
   routed?: string;
   cargo_mode?: string;
@@ -226,11 +233,70 @@ interface PayloadData {
   container_details?: ContainerDetail[];
   special_clauses?: string;
   housing_details?: HousingDetail[];
+  /** Linked booking PKs aligned for job-create (optional; also set per-house booking_id) */
+  booking_ids?: Array<number | null>;
 }
 
 interface FilesResponse {
   files: FileRecord[];
 }
+
+interface BookingOption {
+  id: number;
+  shipment_code: string;
+  houseno?: string;
+}
+
+const fetchImportBookingRows = async (filters: Record<string, unknown>) => {
+  const response = (await postAPICall(
+    URL.customerServiceShipmentFilter,
+    {
+      filters: {
+        service_type: "IMPORT",
+        status: ["BOOKED", "RECEIVED"],
+        ...filters,
+      },
+    },
+    API_HEADER,
+  )) as { success?: boolean; data?: unknown[] };
+  if (!response?.success || !Array.isArray(response.data)) return [];
+  return response.data.filter(
+    (row): row is Record<string, unknown> =>
+      !!row && typeof row === "object" && Number.isFinite(Number((row as Record<string, unknown>).id)),
+  );
+};
+
+const filterImportBookings = async (filters: Record<string, unknown>) => {
+  const rows = await fetchImportBookingRows(filters);
+  return rows.map((r) => ({
+    id: Number(r.id),
+    shipment_code: String(r.shipment_code ?? ""),
+    houseno: String(r.houseno ?? ""),
+  })) as BookingOption[];
+};
+
+/** Exact houseno match — returns full booking row or null */
+const matchFullBookingByHbl = async (
+  hblNo: string,
+): Promise<Record<string, unknown> | null> => {
+  const trimmed = hblNo.trim();
+  if (!trimmed) return null;
+  const rows = await fetchImportBookingRows({ houseno: trimmed });
+  const exact = rows.filter(
+    (r) =>
+      String(r.houseno ?? "").trim().toLowerCase() === trimmed.toLowerCase(),
+  );
+  const pool = exact.length ? exact : rows;
+  return pool.length === 1 ? pool[0] : null;
+};
+
+const fetchFullImportBookingById = async (
+  bookingId: number,
+): Promise<Record<string, unknown> | null> => {
+  const rows = await fetchImportBookingRows({ id: bookingId });
+  const hit = rows.find((r) => Number(r.id) === bookingId);
+  return hit ?? null;
+};
 
 interface UploadResult {
   txn_id?: string;
@@ -692,9 +758,7 @@ const statusBadgeLabel = (status?: string) => {
   if (!raw) return "—";
   const meta = STATUS_BADGE_META[statusKey(raw)];
   if (meta) return meta.label;
-  return raw
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return raw.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 const Badge: FC<{ status: FileStatus }> = ({ status }) => {
@@ -1261,6 +1325,12 @@ const PayloadFormBody: FC<{
     field: keyof HousingDetail,
     val: string,
   ) => void;
+  onHousingBookingChange?: (
+    idx: number,
+    bookingId: number | null,
+    shipmentCode: string,
+  ) => void;
+  showToast?: (msg: string, type?: ToastState["type"]) => void;
   onFixCode?: () => void;
   onFixHousingCode?: (idx: number) => void;
   carriers?: CarrierOption[];
@@ -1277,6 +1347,8 @@ const PayloadFormBody: FC<{
   editHousingPorts,
   onFieldChange,
   onHousingFieldChange,
+  onHousingBookingChange,
+  showToast,
   onFixCode,
   onFixHousingCode,
   onFixCarrier,
@@ -1629,38 +1701,40 @@ const PayloadFormBody: FC<{
           title={`Container Details (${p.container_details.length})`}
         >
           <div className="ctable-wrap">
-          <table className="ctable">
-            <thead>
-              <tr>
-                <th>Container No.</th>
-                <th>Type</th>
-                <th>Seal No.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {p.container_details.map((c, i) => (
-                <tr key={i}>
-                  <td>{c.container_no ?? "—"}</td>
-                  <td style={{ overflow: "visible" }}>
-                    {onContainerDetailChange ? (
-                      <ContainerTypeSearch
-                        value={c.container_type_input ?? c.container_type ?? ""}
-                        containerTypes={containerTypes}
-                        onChange={(code) => onContainerDetailChange(i, code)}
-                        onFix={onFixContainerType}
-                      />
-                    ) : (
-                      <ContainerTypeView
-                        code={c.container_type_input ?? c.container_type}
-                        onFix={onFixContainerType}
-                      />
-                    )}
-                  </td>
-                  <td>{c.actual_seal_no ?? c.seal_no ?? "—"}</td>
+            <table className="ctable">
+              <thead>
+                <tr>
+                  <th>Container No.</th>
+                  <th>Type</th>
+                  <th>Seal No.</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {p.container_details.map((c, i) => (
+                  <tr key={i}>
+                    <td>{c.container_no ?? "—"}</td>
+                    <td style={{ overflow: "visible" }}>
+                      {onContainerDetailChange ? (
+                        <ContainerTypeSearch
+                          value={
+                            c.container_type_input ?? c.container_type ?? ""
+                          }
+                          containerTypes={containerTypes}
+                          onChange={(code) => onContainerDetailChange(i, code)}
+                          onFix={onFixContainerType}
+                        />
+                      ) : (
+                        <ContainerTypeView
+                          code={c.container_type_input ?? c.container_type}
+                          onFix={onFixContainerType}
+                        />
+                      )}
+                    </td>
+                    <td>{c.actual_seal_no ?? c.seal_no ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Sec>
       )}
@@ -1693,6 +1767,26 @@ const PayloadFormBody: FC<{
               <div className="hcard-body">
                 <div className="fgrid c4" style={{ marginBottom: 12 }}>
                   {HF(idx, "HBL Number", hd.hbl_number, "hbl_number", "mono")}
+                  {onHousingBookingChange ? (
+                    <div className="ff" style={{ overflow: "visible" }}>
+                      <BookingSearch
+                        label="Booking ID"
+                        bookingId={hd.booking_id ?? null}
+                        shipmentCode={hd.booking_shipment_code ?? ""}
+                        hblNumber={hd.hbl_number ?? ""}
+                        onSelect={(id, code) =>
+                          onHousingBookingChange(idx, id, code)
+                        }
+                        showToast={showToast}
+                      />
+                    </div>
+                  ) : (
+                    <FF
+                      label="Booking ID"
+                      val={hd.booking_shipment_code}
+                      cls="mono"
+                    />
+                  )}
                   {HF(idx, "Trade", hd.trade, "trade")}
                   {HF(idx, "Routed", hd.routed, "routed")}
                   {HF(idx, "Freight Terms", hd.freight_terms, "freight_terms")}
@@ -1992,34 +2086,34 @@ const PayloadFormBody: FC<{
                       title={`Cargo / Container Details (${hd.cargo_details.length})`}
                     >
                       <div className="ctable-wrap">
-                      <table className="ctable">
-                        <thead>
-                          <tr>
-                            <th>Container No.</th>
-                            <th>Pkgs</th>
-                            <th>Gross Wt (KG)</th>
-                            <th>Volume (CBM)</th>
-                            <th>Charg. Wt</th>
-                            <th>HAZ</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {hd.cargo_details.map((c, ci) => (
-                            <tr key={ci}>
-                              <td>
-                                {c.container_no ?? c.container_number ?? "—"}
-                              </td>
-                              <td>{c.no_of_packages ?? c.packages ?? "—"}</td>
-                              <td>
-                                {c.gross_weight_kgs ?? c.gross_weight ?? "—"}
-                              </td>
-                              <td>{c.volume_cbm ?? c.volume ?? "—"}</td>
-                              <td>{c.chargeable_weight ?? "—"}</td>
-                              <td>{c.haz ? "⚠️" : "No"}</td>
+                        <table className="ctable">
+                          <thead>
+                            <tr>
+                              <th>Container No.</th>
+                              <th>Pkgs</th>
+                              <th>Gross Wt (KG)</th>
+                              <th>Volume (CBM)</th>
+                              <th>Charg. Wt</th>
+                              <th>HAZ</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {hd.cargo_details.map((c, ci) => (
+                              <tr key={ci}>
+                                <td>
+                                  {c.container_no ?? c.container_number ?? "—"}
+                                </td>
+                                <td>{c.no_of_packages ?? c.packages ?? "—"}</td>
+                                <td>
+                                  {c.gross_weight_kgs ?? c.gross_weight ?? "—"}
+                                </td>
+                                <td>{c.volume_cbm ?? c.volume ?? "—"}</td>
+                                <td>{c.chargeable_weight ?? "—"}</td>
+                                <td>{c.haz ? "⚠️" : "No"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </SubSec>
                   )}
@@ -2235,6 +2329,147 @@ const PayloadModal: FC<PayloadModalProps> = ({
     [],
   );
 
+  // Snapshot of extracted houses (for restore on clear / merge base)
+  const extractHousingRef = useRef<HousingDetail[] | null>(null);
+  useEffect(() => {
+    if (loading || extractHousingRef.current) return;
+    const housing = Array.isArray(editData.housing_details)
+      ? (editData.housing_details as HousingDetail[])
+      : [];
+    if (!housing.length) return;
+    extractHousingRef.current = housing.map((h) => ({ ...h }));
+  }, [loading, editData.housing_details]);
+
+  const applyBookingMergeToHouse = useCallback(
+    (
+      baseHouse: HousingDetail,
+      booking: Record<string, unknown>,
+    ): HousingDetail =>
+      mergeImportAutomationHousingFromBooking(
+        baseHouse as Record<string, unknown>,
+        booking,
+      ) as HousingDetail,
+    [],
+  );
+
+  const onHousingBookingChange = useCallback(
+    (idx: number, bookingId: number | null, shipmentCode: string) => {
+      setIsDirty(true);
+      // Clear booking → restore extract house (extract charges alone)
+      if (bookingId == null) {
+        setEditData((prev) => {
+          const housing = Array.isArray(prev.housing_details)
+            ? [...(prev.housing_details as HousingDetail[])]
+            : [];
+          const snap = extractHousingRef.current?.[idx];
+          housing[idx] = snap
+            ? { ...snap, booking_id: null, booking_shipment_code: "" }
+            : {
+                ...housing[idx],
+                booking_id: null,
+                booking_shipment_code: "",
+              };
+          return {
+            ...prev,
+            housing_details: housing,
+            booking_ids: housing.map((h) => h.booking_id ?? null),
+          };
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          const full = await fetchFullImportBookingById(bookingId);
+          if (!full) {
+            showToast("Failed to load booking details", "error");
+            setEditData((prev) => {
+              const housing = Array.isArray(prev.housing_details)
+                ? [...(prev.housing_details as HousingDetail[])]
+                : [];
+              housing[idx] = {
+                ...housing[idx],
+                booking_id: bookingId,
+                booking_shipment_code: shipmentCode,
+              };
+              return {
+                ...prev,
+                housing_details: housing,
+                booking_ids: housing.map((h) => h.booking_id ?? null),
+              };
+            });
+            return;
+          }
+          setEditData((prev) => {
+            const housing = Array.isArray(prev.housing_details)
+              ? [...(prev.housing_details as HousingDetail[])]
+              : [];
+            const base =
+              extractHousingRef.current?.[idx] ?? housing[idx] ?? {};
+            housing[idx] = applyBookingMergeToHouse(base, full);
+            return {
+              ...prev,
+              housing_details: housing,
+              booking_ids: housing.map((h) => h.booking_id ?? null),
+            };
+          });
+        } catch {
+          showToast("Failed to merge booking details", "error");
+        }
+      })();
+    },
+    [applyBookingMergeToHouse, showToast],
+  );
+
+  // Auto-match + merge full booking into HBL house (local only — PATCH on Save)
+  const autoMatchDone = useRef(false);
+  useEffect(() => {
+    if (autoMatchDone.current || loading) return;
+    const housing = Array.isArray(editData.housing_details)
+      ? (editData.housing_details as HousingDetail[])
+      : [];
+    if (!housing.length) return;
+    autoMatchDone.current = true;
+    if (!extractHousingRef.current) {
+      extractHousingRef.current = housing.map((h) => ({ ...h }));
+    }
+
+    let cancelled = false;
+    (async () => {
+      let changed = false;
+      const nextHousing = [...housing];
+      for (let i = 0; i < nextHousing.length; i++) {
+        const hd = nextHousing[i];
+        if (hd.booking_id != null) continue;
+        const hbl = (hd.hbl_number || "").trim();
+        if (!hbl) continue;
+        try {
+          const full = await matchFullBookingByHbl(hbl);
+          if (full) {
+            const base = extractHousingRef.current?.[i] ?? hd;
+            nextHousing[i] = applyBookingMergeToHouse(base, full);
+            changed = true;
+          }
+        } catch {
+          // optional auto-match — ignore
+        }
+      }
+      if (cancelled || !changed) return;
+      setEditData((prev) => ({
+        ...prev,
+        housing_details: nextHousing,
+        booking_ids: nextHousing.map((h) => h.booking_id ?? null),
+      }));
+      setIsDirty(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // intentionally once when modal data is ready
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, editData.housing_details?.length]);
+
   const onContainerDetailChange = useCallback((idx: number, code: string) => {
     setIsDirty(true);
     setEditData((prev) => {
@@ -2296,17 +2531,45 @@ const PayloadModal: FC<PayloadModalProps> = ({
     }));
   })();
 
-  // ── FIX 4: Save payload to API ──
+  // ── Save payload (only place that PATCHes booking mapping) ──
   const savePayload = async () => {
     setSaving(true);
     try {
-      await hblApi.patch(`/files/${txn_id}/payload`, editData, {
+      // Re-merge linked bookings so charges stay exclusive (booking XOR extract)
+      const housing = Array.isArray(editData.housing_details)
+        ? [...(editData.housing_details as HousingDetail[])]
+        : [];
+      for (let i = 0; i < housing.length; i++) {
+        const bid = housing[i]?.booking_id;
+        if (bid == null) continue;
+        try {
+          const full = await fetchFullImportBookingById(Number(bid));
+          if (!full) continue;
+          const base =
+            extractHousingRef.current?.[i] ??
+            housing[i] ??
+            ({} as HousingDetail);
+          housing[i] = applyBookingMergeToHouse(base, full);
+        } catch {
+          // keep existing house on fetch failure
+        }
+      }
+      const payload: PayloadData = {
+        ...editData,
+        housing_details: housing,
+        booking_ids: housing.map((h) => h.booking_id ?? null),
+      };
+      setEditData(payload);
+
+      // Trailing slash required — Django APPEND_SLASH cannot redirect PATCH
+      await hblApi.patch(`/files/${txn_id}/payload/`, payload, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("accessToken") || ""}`,
         },
       });
       showToast("✅ Payload saved successfully", "success");
       setIsDirty(false);
+      onRefreshList?.();
       onClose();
     } catch {
       showToast("❌ Save failed — check server connection", "error");
@@ -2444,6 +2707,8 @@ const PayloadModal: FC<PayloadModalProps> = ({
                 editHousingPorts={editHousingPortsArr}
                 onFieldChange={onFieldChange}
                 onHousingFieldChange={onHousingFieldChange}
+                onHousingBookingChange={onHousingBookingChange}
+                showToast={showToast}
                 onFixCode={() =>
                   rec &&
                   setFixTarget({ record: { ...rec, api_payload: editData } })
@@ -2470,6 +2735,13 @@ const PayloadModal: FC<PayloadModalProps> = ({
         <div className="modal-foot">
           <button className="btn btn-ghost" onClick={onClose}>
             Close
+          </button>
+          <button
+            className="btn btn-primary"
+            disabled={saving || !isDirty}
+            onClick={savePayload}
+          >
+            {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
@@ -2501,6 +2773,214 @@ const PayloadModal: FC<PayloadModalProps> = ({
           showToast={showToast}
         />
       )}
+    </div>
+  );
+};
+
+// ─── Booking Search (same field style as HBL Number / EF) ─────────────────────
+
+const BookingSearch: FC<{
+  label: string;
+  bookingId: number | null;
+  shipmentCode: string;
+  hblNumber?: string;
+  onSelect: (bookingId: number | null, shipmentCode: string) => void;
+  showToast?: (msg: string, type?: ToastState["type"]) => void;
+}> = ({
+  label,
+  bookingId,
+  shipmentCode,
+  hblNumber = "",
+  onSelect,
+  showToast,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [inputText, setInputText] = useState(shipmentCode || "");
+  const [options, setOptions] = useState<BookingOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [dropPos, setDropPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  }>({ top: 0, left: 0, width: 0 });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setInputText(shipmentCode || "");
+  }, [shipmentCode, bookingId]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const computePos = () => {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  };
+
+  const runSearch = useCallback(async (q: string) => {
+    const query = q.trim();
+    if (query.length < 2) {
+      setOptions([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const rows = await filterImportBookings({ shipment_code: query });
+      setOptions(rows.slice(0, 40));
+    } catch {
+      setOptions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const clearSelection = () => {
+    setInputText("");
+    setOptions([]);
+    onSelect(null, "");
+  };
+
+  const handlePick = (opt: BookingOption) => {
+    const extracted = (hblNumber || "").trim().toLowerCase();
+    const bookingHbl = (opt.houseno || "").trim().toLowerCase();
+    if (extracted && extracted !== bookingHbl) {
+      showToast?.(
+        "Selected booking HBL does not match extracted HBL number",
+        "error",
+      );
+      clearSelection();
+      setOpen(false);
+      return;
+    }
+    setInputText(opt.shipment_code);
+    onSelect(opt.id, opt.shipment_code);
+    setOpen(false);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setInputText(v);
+    if (bookingId != null) onSelect(null, "");
+    computePos();
+    setOpen(true);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => runSearch(v), 300);
+  };
+
+  return (
+    <div ref={wrapRef}>
+      <label>{label}</label>
+      <input
+        ref={inputRef}
+        placeholder="Search booking ID…"
+        value={inputText}
+        autoComplete="off"
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = "var(--accent)";
+          computePos();
+          setOpen(true);
+          if (inputText.trim().length >= 2) runSearch(inputText);
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = "var(--border2)";
+        }}
+        onChange={handleChange}
+        style={{
+          width: "100%",
+          background: "var(--surface)",
+          border: "1px solid var(--border2)",
+          borderRadius: 5,
+          padding: "5px 9px",
+          fontFamily: "var(--mono)",
+          fontSize: ".8rem",
+          color: "var(--text)",
+          outline: "none",
+          transition: "border-color .15s",
+        }}
+      />
+      {open &&
+        (loading || options.length > 0 || inputText.trim().length >= 2) && (
+          <div
+            style={{
+              position: "fixed",
+              top: dropPos.top,
+              left: dropPos.left,
+              width: Math.max(dropPos.width, 220),
+              zIndex: 9999,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              boxShadow: "0 8px 24px rgba(0,0,0,.12)",
+              maxHeight: 220,
+              overflowY: "auto",
+            }}
+          >
+            {loading ? (
+              <div
+                style={{
+                  padding: 10,
+                  fontSize: ".75rem",
+                  color: "var(--muted)",
+                }}
+              >
+                Searching…
+              </div>
+            ) : options.length === 0 ? (
+              <div
+                style={{
+                  padding: 10,
+                  fontSize: ".75rem",
+                  color: "var(--muted)",
+                }}
+              >
+                No bookings found
+              </div>
+            ) : (
+              options.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handlePick(opt)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    border: "none",
+                    background:
+                      opt.id === bookingId
+                        ? "rgba(37,99,235,.08)"
+                        : "transparent",
+                    padding: "8px 10px",
+                    cursor: "pointer",
+                    fontFamily: "var(--mono)",
+                    fontSize: ".75rem",
+                    color: "var(--text)",
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>
+                    {opt.shipment_code || "—"}
+                  </div>
+                  {opt.houseno ? (
+                    <div style={{ color: "var(--muted)", fontSize: ".65rem" }}>
+                      HBL: {opt.houseno}
+                    </div>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        )}
     </div>
   );
 };
@@ -4099,7 +4579,10 @@ const HBLDocumentManager: FC = () => {
                     {f.txn_id}
                   </td>
                   <td className="td-file">
-                    <div className="td-filename" title={f.filename || undefined}>
+                    <div
+                      className="td-filename"
+                      title={f.filename || undefined}
+                    >
                       {/\.(jpg|jpeg|png|gif|webp|bmp|tiff?|svg)$/i.test(
                         f.filename,
                       )
@@ -4109,9 +4592,7 @@ const HBLDocumentManager: FC = () => {
                     </div>
                     <div
                       className="td-file-meta"
-                      title={
-                        f.size_kb != null ? `${f.size_kb} KB` : undefined
-                      }
+                      title={f.size_kb != null ? `${f.size_kb} KB` : undefined}
                     >
                       {f.size_kb} KB
                     </div>
@@ -4126,17 +4607,11 @@ const HBLDocumentManager: FC = () => {
                     {f.created_by ?? "—"}
                   </td>
                   <td className="td-pdf">
-                    <span
-                      className="pdf-tag"
-                      title={f.pdf_type || undefined}
-                    >
+                    <span className="pdf-tag" title={f.pdf_type || undefined}>
                       {f.pdf_type ?? "—"}
                     </span>
                   </td>
-                  <td
-                    className="td-date"
-                    title={f.uploaded_at || undefined}
-                  >
+                  <td className="td-date" title={f.uploaded_at || undefined}>
                     {f.uploaded_at ? f.uploaded_at.slice(0, 16) : "—"}
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
@@ -4164,21 +4639,34 @@ const HBLDocumentManager: FC = () => {
                                 alignItems: "center",
                                 gap: 2,
                               }
-                            : { display: "flex",
-                                alignItems: "center",
-                                gap: 2,}
+                            : { display: "flex", alignItems: "center", gap: 2 }
                         }
-                        
                       >
                         <IconPencilFilled size={14} />
-                        <span style={{ marginLeft: "2px", marginTop: "2px", fontSize: "12px" }}>EDIT</span>
+                        <span
+                          style={{
+                            marginLeft: "2px",
+                            marginTop: "2px",
+                            fontSize: "12px",
+                          }}
+                        >
+                          EDIT
+                        </span>
                       </button>
                       {hasViewableFiles(f) && (
                         <button
                           className="act-btn dl"
                           onClick={() => setModal({ type: "files", record: f })}
                         >
-                          <span style={{ marginLeft: "2px", marginTop: "2px", fontSize: "12px" }}>↓ PDF</span>
+                          <span
+                            style={{
+                              marginLeft: "2px",
+                              marginTop: "2px",
+                              fontSize: "12px",
+                            }}
+                          >
+                            ↓ PDF
+                          </span>
                         </button>
                       )}
                     </div>
