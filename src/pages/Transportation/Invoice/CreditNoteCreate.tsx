@@ -1869,16 +1869,11 @@ function CreditNoteCreate() {
     billingRoeRef.current = form.values.roe;
   }, [form.values.currency, form.values.roe]);
 
-  // India: Bill To + address + document date → check SEZ.
-  // Vietnam: Bill To + address only (no document_date).
-  // Stores credit_day; applies due date only when pendingApplyDueDateFromCreditRef.
+  // SEZ: India (needs document_date) / Vietnam (no document_date); non-agent only.
+  // Credit: all countries/branches when Bill To + address present (same API).
+  // Applies due date only when pendingApplyDueDateFromCreditRef.
   // Credit resolves via CRM using service_id (job/shipment) + active branch_id when available.
   useEffect(() => {
-    if (isAgentInvoice || (!isIndiaUser && !isVietnamUser)) {
-      setHasSez(false);
-      return;
-    }
-
     const customerCode = String(form.values.bill_to ?? "").trim();
     const addressRaw = String(form.values.address ?? "").trim();
     const addressLabel =
@@ -1889,6 +1884,12 @@ function CreditNoteCreate() {
       setHasSez(false);
       partyCreditDayRef.current = null;
       return;
+    }
+
+    const shouldApplySez =
+      !isAgentInvoice && (isIndiaUser || isVietnamUser);
+    if (!shouldApplySez) {
+      setHasSez(false);
     }
 
     const applyCreditDueDateIfPending = (creditDay: number | null) => {
@@ -1941,33 +1942,26 @@ function CreditNoteCreate() {
         }
       }
 
-      if (isIndiaUser) {
-        const documentDate = formatDateYYYYMMDD(form.values.document_date);
-        if (!documentDate) {
-          if (!cancelled) setHasSez(false);
-          return;
-        }
-        const result = await fetchCheckSezStatus({
-          customer_code: customerCode,
-          address: addressLabel,
-          document_date: documentDate,
-          service_id: serviceIdForCredit,
-          branch_id: activeBranchId,
-        });
-        if (cancelled) return;
-        setHasSez(result.sez);
-        applyCreditDueDateIfPending(result.credit_day);
-        return;
-      }
+      // India SEZ is date-gated; omit document_date when missing so credit still resolves.
+      const indiaDocumentDate =
+        shouldApplySez && isIndiaUser
+          ? formatDateYYYYMMDD(form.values.document_date)
+          : "";
 
       const result = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
+        ...(indiaDocumentDate ? { document_date: indiaDocumentDate } : {}),
         service_id: serviceIdForCredit,
         branch_id: activeBranchId,
       });
       if (cancelled) return;
-      setHasSez(result.sez);
+
+      if (shouldApplySez && !(isIndiaUser && !indiaDocumentDate)) {
+        setHasSez(result.sez);
+      } else {
+        setHasSez(false);
+      }
       applyCreditDueDateIfPending(result.credit_day);
     })();
 

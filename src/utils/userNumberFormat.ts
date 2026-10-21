@@ -71,9 +71,10 @@ export function getDefaultUserBranch(
   branches?: BranchCurrencyContext[] | null,
 ): BranchCurrencyContext | undefined {
   if (!branches?.length) return undefined;
+  // Prefer is_default (active branch on switch); main_default is home-only fallback.
   return (
-    branches.find((b) => b.main_default === true) ??
     branches.find((b) => b.is_default === true) ??
+    branches.find((b) => b.main_default === true) ??
     branches[0]
   );
 }
