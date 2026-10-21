@@ -553,9 +553,10 @@ const EMPTY_SEZ_STATUS: SezStatusResult = {
   sez_valid_date: null,
 };
 
-/** India/Vietnam customer invoice: check if Bill To + address is SEZ.
- * India requires document_date; Vietnam omits it.
- * Also returns party credit_day / credit_amount for due-date auto-fill.
+/** check-sez-status for Bill To + address.
+ * Returns party credit_day / credit_amount for due-date auto-fill (all invoice flows).
+ * `sez` is applied for India/Vietnam customer invoices only (tax not applicable).
+ * India may pass document_date for SEZ validity; Vietnam and other flows omit it.
  */
 const fetchCheckSezStatus = async (payload: {
   customer_code: string;
@@ -1869,16 +1870,11 @@ function CreditNoteCreate() {
     billingRoeRef.current = form.values.roe;
   }, [form.values.currency, form.values.roe]);
 
-  // India: Bill To + address + document date → check SEZ.
-  // Vietnam: Bill To + address only (no document_date).
-  // Stores credit_day; applies due date only when pendingApplyDueDateFromCreditRef.
+  // All invoice flows: Bill To + address → check-sez-status for credit_day (due date).
+  // SEZ tax exemption (hasSez): same as before — India/Vietnam customer invoices only.
+  // India sends document_date for SEZ validity; Vietnam omits it; agent/other overseas ignore sez.
   // Credit resolves via CRM using service_id (job/shipment) + active branch_id when available.
   useEffect(() => {
-    if (isAgentInvoice || (!isIndiaUser && !isVietnamUser)) {
-      setHasSez(false);
-      return;
-    }
-
     const customerCode = String(form.values.bill_to ?? "").trim();
     const addressRaw = String(form.values.address ?? "").trim();
     const addressLabel =
@@ -1917,6 +1913,10 @@ function CreditNoteCreate() {
       return id != null && Number.isFinite(Number(id)) ? Number(id) : null;
     })();
 
+    // Same SEZ tax rules as before: India/Vietnam customer only (not agent).
+    const shouldApplySezTax =
+      (isIndiaUser || isVietnamUser) && !isAgentInvoice;
+
     let cancelled = false;
     void (async () => {
       let serviceIdForCredit = parseNumericServiceId(
@@ -1941,33 +1941,26 @@ function CreditNoteCreate() {
         }
       }
 
-      if (isIndiaUser) {
-        const documentDate = formatDateYYYYMMDD(form.values.document_date);
-        if (!documentDate) {
-          if (!cancelled) setHasSez(false);
-          return;
-        }
-        const result = await fetchCheckSezStatus({
-          customer_code: customerCode,
-          address: addressLabel,
-          document_date: documentDate,
-          service_id: serviceIdForCredit,
-          branch_id: activeBranchId,
-        });
-        if (cancelled) return;
-        setHasSez(result.sez);
-        applyCreditDueDateIfPending(result.credit_day);
-        return;
-      }
+      const documentDate = isIndiaUser
+        ? formatDateYYYYMMDD(form.values.document_date)
+        : "";
 
       const result = await fetchCheckSezStatus({
         customer_code: customerCode,
         address: addressLabel,
+        ...(documentDate ? { document_date: documentDate } : {}),
         service_id: serviceIdForCredit,
         branch_id: activeBranchId,
       });
       if (cancelled) return;
-      setHasSez(result.sez);
+      // India customer: need document_date for SEZ validity; Vietnam customer: apply sez as-is
+      if (shouldApplySezTax && isIndiaUser) {
+        setHasSez(documentDate ? result.sez : false);
+      } else if (shouldApplySezTax && isVietnamUser) {
+        setHasSez(result.sez);
+      } else {
+        setHasSez(false);
+      }
       applyCreditDueDateIfPending(result.credit_day);
     })();
 
