@@ -1163,6 +1163,46 @@ function buildOceanHousing(
   return housing;
 }
 
+function isEmptyMergeValue(v: unknown): boolean {
+  if (v == null) return true;
+  if (typeof v === "string" && !v.trim()) return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
+/**
+ * Import Job Automation: merge booking into extracted HBL house.
+ * - Booking non-empty fields win; extract fills remaining empties.
+ * - Charges are exclusive: booking rate_details → mbl_charges when linked,
+ *   otherwise keep extract mbl_charges only (never mix).
+ * - Always keep extracted hbl_number.
+ */
+export function mergeImportAutomationHousingFromBooking(
+  extractHouse: Record<string, unknown>,
+  booking: Record<string, unknown>,
+): Record<string, unknown> {
+  syncBookingJobMoneyMode();
+  const fromBooking = buildOceanHousing(booking, "Import", "ocean-import");
+  const merged: Record<string, unknown> = { ...extractHouse };
+
+  for (const [key, value] of Object.entries(fromBooking)) {
+    if (key === "hbl_number" || key === "mbl_charges") continue;
+    if (isEmptyMergeValue(value)) continue;
+    merged[key] = value;
+  }
+
+  // Charges exclusive when booking is linked: booking rate_details only (never mix with extract)
+  merged.mbl_charges = hasBookingRateDetails(booking)
+    ? mapHouseChargesFromBooking(booking, false)
+    : [];
+
+  const bookingId = booking.id != null ? Number(booking.id) : null;
+  merged.booking_id = Number.isFinite(bookingId as number) ? bookingId : null;
+  merged.booking_shipment_code = String(booking.shipment_code ?? "");
+
+  return merged;
+}
+
 export function buildJobCreatePayloadFromBooking(
   booking: Record<string, unknown>,
   mode: BookingCreateJobMode,
