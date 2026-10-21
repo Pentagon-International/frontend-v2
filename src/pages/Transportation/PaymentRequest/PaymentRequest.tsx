@@ -125,9 +125,12 @@ function formatReferenceDisplayValue(value: unknown): string {
 }
 
 /**
- * Location GSTN is always the active branch GST.
  * Vendor GSTN is the party GST (`customer_gst_no`).
- * Recovers swapped API values when vendor holds the branch GST and location holds the party GST.
+ * Location GSTN prefers the document/saved value so approval at another branch
+ * does not overwrite the creating location's GSTN; falls back to the active
+ * branch GST only when location is empty (create / missing data).
+ * Recovers swapped API values when vendor holds the branch GST and location
+ * holds the party GST (same-branch create/edit only).
  */
 function resolvePaymentRequestGstnFields(
   customerGstNo: string | null | undefined,
@@ -138,16 +141,18 @@ function resolvePaymentRequestGstnFields(
   const location = String(locationGstNo ?? "").trim();
   const branch = String(branchLocationGstNo ?? "").trim();
 
+  // Same-branch swap recovery only: vendor field incorrectly holds the current
+  // branch GST while location holds the party GST. Do not treat a non-empty
+  // document location as vendor GST when vendor is empty — that would overwrite
+  // a creating-branch location GSTN during cross-branch approval.
   if (branch && vendor && vendor === branch && location && location !== branch) {
-    return { customer_gst_no: location, location_gst_no: branch };
-  }
-  if (!vendor && location && branch && location !== branch) {
     return { customer_gst_no: location, location_gst_no: branch };
   }
 
   return {
     customer_gst_no: vendor,
-    location_gst_no: branch || location,
+    // Prefer saved document location; only default to current branch when empty.
+    location_gst_no: location || branch,
   };
 }
 
@@ -3886,7 +3891,11 @@ function PaymentRequest() {
                   form.setFieldValue("account_id", "");
                   form.setFieldValue("account_code", "");
                   form.setFieldValue("customer_gst_no", "");
-                  if (branchLocationGstNo) {
+                  // Keep saved location GSTN on existing PRQs (e.g. approval at another branch).
+                  if (
+                    !String(form.values.location_gst_no ?? "").trim() &&
+                    branchLocationGstNo
+                  ) {
                     form.setFieldValue("location_gst_no", branchLocationGstNo);
                   }
                   form.setFieldValue("paid_to", "");
@@ -3978,7 +3987,13 @@ function PaymentRequest() {
                     getPartyGstFromPrimaryAddress(addresses),
                   );
                   form.clearFieldError("customer_gst_no");
-                  form.setFieldValue("location_gst_no", branchLocationGstNo);
+                  // Do not replace a saved location GSTN with the approver's branch.
+                  if (
+                    !String(form.values.location_gst_no ?? "").trim() &&
+                    branchLocationGstNo
+                  ) {
+                    form.setFieldValue("location_gst_no", branchLocationGstNo);
+                  }
                   form.setFieldValue(
                     "tds_section_code",
                     resolvePartyTdsSectionCode(
@@ -4220,10 +4235,16 @@ function PaymentRequest() {
                       if (!gst) return;
                       form.setFieldValue("customer_gst_no", gst);
                       form.clearFieldError("customer_gst_no");
-                      form.setFieldValue(
-                        "location_gst_no",
-                        branchLocationGstNo,
-                      );
+                      // Preserve document location GSTN when already set.
+                      if (
+                        !String(form.values.location_gst_no ?? "").trim() &&
+                        branchLocationGstNo
+                      ) {
+                        form.setFieldValue(
+                          "location_gst_no",
+                          branchLocationGstNo,
+                        );
+                      }
                       applyPartyAddressState(
                         findPartyAddressByGst(partyAddresses, gst),
                       );

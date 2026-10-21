@@ -1,4 +1,5 @@
 import useAuthStore from "../store/authStore";
+import { isAccountsUser } from "../pages/masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import { isVietnamBranchFromUser } from "../utils/nonDecimalMoneyAmount";
 import {
   isIndianOutstandingBranch,
@@ -12,17 +13,6 @@ const VIETNAM_ACCOUNTS_TEAM_NAMES = [
   "dhaval",
   "dipali",
   "linal",
-] as const;
-
-/** India Accounts team — Mumbai, Delhi, Pune, Bangalore, Chennai, and other Indian branches. */
-const INDIA_ACCOUNTS_TEAM_NAMES = [
-  "dipali",
-  "akash",
-  "ganesh",
-  "yogita",
-  "linal",
-  "aakansha",
-  "praful",
 ] as const;
 
 function normalizeIdentity(value: string | null | undefined): string {
@@ -111,11 +101,11 @@ export function isVietnamAccountsAllowedUser(
   return isAccountsTeamMember(user, VIETNAM_ACCOUNTS_TEAM_NAMES);
 }
 
-/** India branch: Accounts sub-nav is limited to the Accounts team. */
+/** India branch: Accounts sub-nav is limited to Accounts role users. */
 export function isIndiaAccountsAllowedUser(
   user: ReturnType<typeof useAuthStore.getState>["user"],
 ): boolean {
-  return isAccountsTeamMember(user, INDIA_ACCOUNTS_TEAM_NAMES);
+  return isAccountsUser(user);
 }
 
 /** Admin / staff users bypass country Accounts-team restrictions. */
@@ -129,7 +119,9 @@ function isAdminUser(
  * Accounts module sub-nav access.
  * Admin (is_staff) users always see all Accounts modules.
  * Vietnam / India restrictions apply only while the active branch is that country;
- * users not on those Accounts teams still get full access on other branches.
+ * users not allowed there still get full access on other branches.
+ * India: role Accounts (`role_code` A / role name Accounts).
+ * Vietnam: named Accounts team list.
  * Job-page navigation remains available for everyone.
  */
 export function canAccessAccountsSubNav(
@@ -143,7 +135,7 @@ export function canAccessAccountsSubNav(
 
   // Restrict only when the current (active) branch is India.
   if (isIndiaBranchFromUser(user)) {
-    return isAccountsTeamMember(user, INDIA_ACCOUNTS_TEAM_NAMES);
+    return isAccountsUser(user);
   }
 
   return true;
