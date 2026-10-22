@@ -1,13 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Box,
-  Button,
-  Flex,
-  Grid,
-  Group,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Box, Button, Flex, Grid, Group, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconCheck } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -24,19 +16,11 @@ import { URL } from "../../../api/serverUrls";
 type TdsSectionFormData = {
   tds_section_code: string;
   tds_section_name: string;
-  tds_section_rate: string;
 };
 
 const schema = yup.object().shape({
   tds_section_code: yup.string().required("TDS section code is required"),
   tds_section_name: yup.string().required("TDS section name is required"),
-  tds_section_rate: yup
-    .string()
-    .required("Rate is required")
-    .matches(
-      /^\d+(\.\d{1,2})?$/,
-      "Enter a valid rate (e.g. 30 or 30.00)",
-    ),
 });
 
 export default function TdsSectionCreate() {
@@ -61,7 +45,6 @@ export default function TdsSectionCreate() {
     initialValues: {
       tds_section_code: "",
       tds_section_name: "",
-      tds_section_rate: "",
     },
     validate: yupResolver(schema),
   });
@@ -71,11 +54,6 @@ export default function TdsSectionCreate() {
       form.setValues({
         tds_section_code: editData.tds_section_code ?? "",
         tds_section_name: editData.tds_section_name ?? "",
-        tds_section_rate:
-          editData.tds_section_rate !== undefined &&
-          editData.tds_section_rate !== null
-            ? String(editData.tds_section_rate)
-            : "",
       });
     }
   }, [isEditMode, editData]);
@@ -256,29 +234,6 @@ export default function TdsSectionCreate() {
                     }}
                   />
                 </Grid.Col>
-
-                {/* <Grid.Col span={6}>
-                  <TextInput
-                    label="Rate(%)"
-                    placeholder="Enter rate"
-                    withAsterisk
-                    {...form.getInputProps("tds_section_rate")}
-                    styles={{
-                      input: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                      },
-                      label: {
-                        fontSize: "13px",
-                        fontWeight: 500,
-                        color: "#424242",
-                        marginBottom: "4px",
-                        fontFamily: "Inter",
-                        fontStyle: "medium",
-                      },
-                    }}
-                  />
-                </Grid.Col> */}
               </Grid>
             </Box>
 
