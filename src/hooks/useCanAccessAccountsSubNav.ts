@@ -13,6 +13,7 @@ const VIETNAM_ACCOUNTS_TEAM_NAMES = [
   "dhaval",
   "dipali",
   "linal",
+  "guruprasad",
 ] as const;
 
 function normalizeIdentity(value: string | null | undefined): string {
