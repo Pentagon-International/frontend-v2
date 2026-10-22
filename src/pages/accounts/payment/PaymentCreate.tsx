@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Card,
+  Center,
   Checkbox,
   Grid,
   Group,
@@ -781,6 +782,8 @@ export default function PaymentCreate({
     document_no?: string;
     status?: string;
   } | null>(null);
+  const [paymentPreviewOpen, setPaymentPreviewOpen] = useState(false);
+  const [paymentPdfBlob, setPaymentPdfBlob] = useState<string | null>(null);
   const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -2459,6 +2462,62 @@ export default function PaymentCreate({
     }
   };
 
+  const handlePaymentPreview = async () => {
+    const paymentId = saveResponse?.id;
+    if (!paymentId) {
+      ToastNotification({
+        type: "error",
+        message: "Save the payment first before previewing.",
+      });
+      return;
+    }
+    setPaymentPreviewOpen(true);
+    setPaymentPdfBlob(null);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.payment}${paymentId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("Empty PDF response");
+      }
+      setPaymentPdfBlob(window.URL.createObjectURL(blob));
+    } catch (err) {
+      console.error("Payment PDF preview error:", err);
+      ToastNotification({
+        type: "error",
+        message: "Failed to load payment PDF preview.",
+      });
+      setPaymentPreviewOpen(false);
+    }
+  };
+
+  const handleClosePaymentPreview = () => {
+    setPaymentPreviewOpen(false);
+    if (paymentPdfBlob) {
+      window.URL.revokeObjectURL(paymentPdfBlob);
+    }
+    setPaymentPdfBlob(null);
+  };
+
+  const handleDownloadPaymentPdf = () => {
+    if (!paymentPdfBlob) return;
+    const link = document.createElement("a");
+    link.href = paymentPdfBlob;
+    link.download = `Payment-${saveResponse?.payment_no || saveResponse?.document_no || saveResponse?.id || "draft"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const statusUpper = String(saveResponse?.status ?? "").toUpperCase();
   const reversalStatusUpper = String(
     reversePaymentSaveResponse?.status ?? "",
@@ -2702,6 +2761,14 @@ export default function PaymentCreate({
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
+                  {saveResponse?.id && !_isReversal && (
+                    <Menu.Item
+                      leftSection={<IconDownload size={16} />}
+                      onClick={handlePaymentPreview}
+                    >
+                      Download Payment
+                    </Menu.Item>
+                  )}
                   <Menu.Item
                     leftSection={<IconListDetails size={16} />}
                     onClick={() =>
@@ -4226,6 +4293,72 @@ export default function PaymentCreate({
           </Group>
         </Box>
       </Stack>
+
+      <Modal
+        opened={paymentPreviewOpen}
+        onClose={handleClosePaymentPreview}
+        title={`Payment - ${saveResponse?.payment_no || saveResponse?.document_no || saveResponse?.id || ""}`}
+        centered
+        size="95%"
+        overlayProps={{
+          backgroundOpacity: 0.55,
+          blur: 3,
+        }}
+        styles={{
+          content: {
+            minHeight: "90vh",
+            maxWidth: "1200px",
+          },
+          body: {
+            padding: 0,
+            height: "100%",
+          },
+        }}
+      >
+        <Stack h="82vh">
+          {paymentPdfBlob ? (
+            <>
+              <iframe
+                src={paymentPdfBlob}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+                title="Payment PDF Preview"
+              />
+              <Group
+                justify="flex-end"
+                p="md"
+                style={{ borderTop: "1px solid #e9ecef" }}
+              >
+                <Button
+                  variant="outline"
+                  onClick={handleClosePaymentPreview}
+                  leftSection={<IconX size={16} />}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleDownloadPaymentPdf}
+                  leftSection={<IconDownload size={16} />}
+                  color="#105476"
+                >
+                  Download PDF
+                </Button>
+              </Group>
+            </>
+          ) : (
+            <Center h="100%">
+              <Stack align="center">
+                <Loader size="lg" color="#105476" />
+                <Text c="dimmed">Loading payment PDF preview...</Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Modal>
     </Box>
   );
 }
