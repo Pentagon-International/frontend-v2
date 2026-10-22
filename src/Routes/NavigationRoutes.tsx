@@ -274,6 +274,7 @@ import IrnReport from "../pages/reports/irnReport/IrnReport";
 import FapiaoReport from "../pages/reports/fapiaoReport/FapiaoReport";
 import DocumentWiseOutstanding from "../pages/reports/documentWiseOutstanding/DocumentWiseOutstanding";
 import UnadjustedCreditReport from "../pages/reports/unadjustedCreditReport/UnadjustedCreditReport";
+import MsmeReport from "../pages/reports/msmeReport/MsmeReport";
 import CallEntryDashboardPage from "../pages/dashboard/DashboardMaster/CallEntryDashboard";
 import CustomerOutstandingVsOverdueDashboard from "../pages/dashboard/DashboardMaster/CustomerOutstandingVsOverdueDashboard";
 import BudgetVsActualDashboard from "../pages/dashboard/DashboardMaster/BudgetVsActualDashboard";
@@ -637,6 +638,7 @@ const NavigationRoutes = () => {
             path="unadjusted-credit-report"
             element={<UnadjustedCreditReport />}
           />
+          <Route path="msme-report" element={<MsmeReport />} />
         </Route>
         <Route path="/help" element={<DemoPage />} />
         <Route path="/collapse" element={<DemoPage />} />

@@ -1951,7 +1951,7 @@ function CustomerCreate() {
     location.pathname === "/master/create-customer" ||
     isVendorVerificationRoute ||
     isAgentVerificationRoute;
-  /** KYC attach + required validation — India creation only (not overseas). */
+  /** KYC required validation — India creation only. Attach is allowed for all regions. */
   const requiresKycDocuments = isVerificationCreateRoute && isIndiaUser;
   const allowIndiaManualCreate = isIndiaManualCreateAllowed(
     location.state,
@@ -4689,10 +4689,9 @@ function CustomerCreate() {
                             : "Edit Customer Relationships"}
                       </Button>
                     )}
-                  {/* KYC documents: India creation only; not part of overseas create. */}
-                  {(requiresKycDocuments ||
-                    (!isVerificationCreateRoute &&
-                      (isCreateMode || isEditMode || isViewMode))) && (
+                  {/* Supporting docs: available for all regions on create/edit/view
+                      (including overseas approval create). KYC required check is India-only. */}
+                  {(isCreateMode || isEditMode || isViewMode) && (
                     <Button
                       variant="outline"
                       color="#105476"

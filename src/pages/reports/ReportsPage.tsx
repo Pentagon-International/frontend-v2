@@ -102,6 +102,11 @@ export default function ReportsPage() {
           icon: <IconReceipt size={28} color="#105476" />,
           path: "/reports/unadjusted-credit-report",
         },
+        {
+          label: "MSME",
+          icon: <IconFileSpreadsheet size={28} color="#105476" />,
+          path: "/reports/msme-report",
+        },
         ...(showFapiaoReports
           ? [
               {
