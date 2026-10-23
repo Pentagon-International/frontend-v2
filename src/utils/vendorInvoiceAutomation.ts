@@ -367,6 +367,8 @@ export interface VendorInvoiceStartPayload {
   agent_id: number;
   agent_name: string;
   Dr_Cr: string;
+  /** Overseas CRJ daybook — same as Supplier Invoice is_agent */
+  is_agent: boolean;
   charges_data: VendorInvoiceStartCharge[];
 }
 
@@ -588,11 +590,12 @@ export function buildVendorInvoiceStartPayload(
   if (!headerDrCr) throw new Error("Dr/Cr is required.");
   if (!draft.charges_data.length) throw new Error("At least one charge line is required.");
 
+  const overseas = isOverseasCrjDaybook(draft.day_book_name);
   return {
     record_ids: [recordId],
     shipment_no: shipment,
     day_book_id: positiveId(draft.day_book_id, "Day book"),
-    state_id: isOverseasCrjDaybook(draft.day_book_name)
+    state_id: overseas
       ? hasPositiveId(draft.state_id)
         ? positiveId(draft.state_id, "State")
         : null
@@ -606,6 +609,7 @@ export function buildVendorInvoiceStartPayload(
     agent_id: positiveId(draft.agent_id, "Vendor/Supplier"),
     agent_name: textValue(draft.agent_name),
     Dr_Cr: headerDrCr,
+    is_agent: overseas,
     charges_data: draft.charges_data.map((row, index) => {
       const line = index + 1;
       const lineShipment = textValue(row.shipment_no) || shipment;

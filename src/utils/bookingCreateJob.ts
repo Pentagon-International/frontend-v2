@@ -339,6 +339,128 @@ function mapOceanRoutings(booking: Record<string, unknown>, transportType: strin
   });
 }
 
+/** Prefer first non-empty cargo scalar (booking/extract alias-safe). */
+function firstCargoScalar(...vals: unknown[]): string | number | null {
+  for (const v of vals) {
+    if (v == null) continue;
+    if (typeof v === "string" && !v.trim()) continue;
+    if (typeof v === "number" && Number.isNaN(v)) continue;
+    return v as string | number;
+  }
+  return null;
+}
+
+/**
+ * Normalize house cargo row for Form View + job create:
+ * job uses gross_weight/volume; extract often uses gross_weight_kgs/volume_cbm.
+ */
+function normalizeHouseCargoRow(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const gw = firstCargoScalar(
+    row.gross_weight,
+    row.gross_weight_kgs,
+  );
+  const vol = firstCargoScalar(row.volume, row.volume_cbm);
+  const pkgs = firstCargoScalar(
+    row.no_of_packages,
+    row.packages,
+    row.no_of_containers,
+  );
+  const containerNo = firstCargoScalar(
+    row.container_no,
+    row.container_number,
+  );
+  const pkgType =
+    pickPackageTypeCodeFromCargo(row) ||
+    String(row.package_type ?? row.package_type_code ?? "").trim() ||
+    "";
+  return {
+    ...row,
+    container_no: containerNo != null ? String(containerNo) : null,
+    no_of_packages:
+      pkgs != null
+        ? typeof pkgs === "number"
+          ? pkgs
+          : toNumberOrNull(pkgs) ?? pkgs
+        : null,
+    package_type: pkgType,
+    package_type_code: pkgType || null,
+    gross_weight: gw ?? "",
+    volume: vol ?? "",
+    // Aliases for Form View / extract payloads
+    gross_weight_kgs: firstCargoScalar(row.gross_weight_kgs, gw) ?? "",
+    volume_cbm: firstCargoScalar(row.volume_cbm, vol) ?? "",
+    chargeable_weight: firstCargoScalar(row.chargeable_weight) ?? "",
+    haz: Boolean(row.haz),
+    ...(row.un_no != null && String(row.un_no).trim()
+      ? { un_no: row.un_no }
+      : {}),
+    ...(row.class_name != null && String(row.class_name).trim()
+      ? { class_name: row.class_name }
+      : {}),
+    ...(row.pkg_group != null && String(row.pkg_group).trim()
+      ? { pkg_group: row.pkg_group }
+      : {}),
+  };
+}
+
+/**
+ * Booking cargo wins per non-empty field; extract fills gaps (by container_no, else index).
+ * Unused extract rows are kept so PDF-only lines are not dropped.
+ */
+function mergeAutomationCargoDetails(
+  extractCargo: unknown,
+  bookingCargo: unknown,
+): Record<string, unknown>[] {
+  const extract = (
+    Array.isArray(extractCargo) ? extractCargo : []
+  ).map((r) =>
+    normalizeHouseCargoRow(
+      r && typeof r === "object" ? (r as Record<string, unknown>) : {},
+    ),
+  );
+  const booking = (
+    Array.isArray(bookingCargo) ? bookingCargo : []
+  ).map((r) =>
+    normalizeHouseCargoRow(
+      r && typeof r === "object" ? (r as Record<string, unknown>) : {},
+    ),
+  );
+  if (!booking.length) return extract;
+  if (!extract.length) return booking;
+
+  const used = new Set<number>();
+  const result = booking.map((bRow, i) => {
+    let eIdx = -1;
+    const bCont = String(bRow.container_no ?? "")
+      .trim()
+      .toLowerCase();
+    if (bCont) {
+      eIdx = extract.findIndex((e, idx) => {
+        if (used.has(idx)) return false;
+        return (
+          String(e.container_no ?? "")
+            .trim()
+            .toLowerCase() === bCont
+        );
+      });
+    }
+    if (eIdx < 0 && i < extract.length && !used.has(i)) eIdx = i;
+    if (eIdx >= 0) used.add(eIdx);
+    const eRow = eIdx >= 0 ? extract[eIdx] : {};
+    const merged: Record<string, unknown> = { ...eRow };
+    for (const [k, v] of Object.entries(bRow)) {
+      if (!isEmptyMergeValue(v)) merged[k] = v;
+    }
+    return normalizeHouseCargoRow(merged);
+  });
+  extract.forEach((e, idx) => {
+    if (!used.has(idx)) result.push(e);
+  });
+  return result;
+}
+
 function mapCargoDetails(
   booking: Record<string, unknown>,
   transport: "air" | "ocean" = "ocean",
@@ -360,6 +482,17 @@ function mapCargoDetails(
     ? { haz: true, un_no, class_name, pkg_group }
     : { haz: false };
 
+  const bookingGw = firstCargoScalar(
+    booking.gross_weight,
+    booking.gross_weight_kgs,
+  );
+  const bookingVol = firstCargoScalar(
+    booking.volume,
+    booking.volume_cbm,
+    transport === "air" ? booking.volume_weight : null,
+  );
+  const bookingCw = firstCargoScalar(booking.chargeable_weight);
+
   // Ocean FCL: expand nested `containers[]` into house cargo rows (one per container_no).
   if (isFclOcean) {
     const expanded: Array<Record<string, unknown>> = [];
@@ -370,88 +503,140 @@ function mapCargoDetails(
         for (const nestedRow of nested) {
           const container = nestedRow as Record<string, unknown>;
           const containerNo = String(container.container_no ?? "").trim();
-          expanded.push({
-            container_no: containerNo || null,
-            no_of_packages: toNumberOrNull(container.no_of_packages),
-            package_type: pickPackageTypeCodeFromCargo(container) ||
-              pickPackageTypeCodeFromCargo(row),
-            package_type_code:
-              pickPackageTypeCodeFromCargo(container) ||
-              pickPackageTypeCodeFromCargo(row) ||
-              null,
-            gross_weight:
-              container.gross_weight ?? row.gross_weight ?? "",
-            volume: container.volume ?? row.volume ?? "",
-            chargeable_weight:
-              container.chargeable_weight ??
-              row.chargeable_weight ??
-              "",
-            ...hazFields,
-          });
+          const pkgType =
+            pickPackageTypeCodeFromCargo(container) ||
+            pickPackageTypeCodeFromCargo(row);
+          expanded.push(
+            normalizeHouseCargoRow({
+              container_no: containerNo || null,
+              no_of_packages: toNumberOrNull(
+                firstCargoScalar(
+                  container.no_of_packages,
+                  row.no_of_packages,
+                  booking.no_of_packages,
+                ),
+              ),
+              package_type: pkgType,
+              package_type_code: pkgType || null,
+              gross_weight: firstCargoScalar(
+                container.gross_weight,
+                container.gross_weight_kgs,
+                row.gross_weight,
+                row.gross_weight_kgs,
+                bookingGw,
+              ),
+              volume: firstCargoScalar(
+                container.volume,
+                container.volume_cbm,
+                row.volume,
+                row.volume_cbm,
+                bookingVol,
+              ),
+              chargeable_weight: firstCargoScalar(
+                container.chargeable_weight,
+                row.chargeable_weight,
+                bookingCw,
+              ),
+              ...hazFields,
+            }),
+          );
         }
         continue;
       }
-      expanded.push({
-        container_no: String(row.container_no ?? "").trim() || null,
-        no_of_packages: toNumberOrNull(row.no_of_packages),
-        package_type: pickPackageTypeCodeFromCargo(row),
-        package_type_code: pickPackageTypeCodeFromCargo(row) || null,
-        gross_weight: row.gross_weight || "",
-        volume: row.volume ?? "",
-        chargeable_weight: row.chargeable_weight || "",
-        ...hazFields,
-      });
+      const pkgType = pickPackageTypeCodeFromCargo(row);
+      expanded.push(
+        normalizeHouseCargoRow({
+          container_no: String(row.container_no ?? "").trim() || null,
+          no_of_packages: toNumberOrNull(
+            firstCargoScalar(
+              row.no_of_packages,
+              row.no_of_containers,
+              booking.no_of_packages,
+            ),
+          ),
+          package_type: pkgType,
+          package_type_code: pkgType || null,
+          gross_weight: firstCargoScalar(
+            row.gross_weight,
+            row.gross_weight_kgs,
+            bookingGw,
+          ),
+          volume: firstCargoScalar(row.volume, row.volume_cbm, bookingVol),
+          chargeable_weight: firstCargoScalar(
+            row.chargeable_weight,
+            bookingCw,
+          ),
+          ...hazFields,
+        }),
+      );
     }
     if (expanded.length > 0) return expanded;
     // FCL with no cargo rows: still emit haz so container remap keeps booking haz
     return [
-      {
+      normalizeHouseCargoRow({
         container_no: null,
         no_of_packages: toNumberOrNull(booking.no_of_packages),
         package_type: "",
         package_type_code: null,
-        gross_weight: booking.gross_weight || "",
-        volume: booking.volume ?? "",
-        chargeable_weight: booking.chargeable_weight || "",
+        gross_weight: bookingGw ?? "",
+        volume: bookingVol ?? "",
+        chargeable_weight: bookingCw ?? "",
         ...hazFields,
-      },
+      }),
     ];
   }
 
   if (cargo.length === 0) {
     return [
-      {
+      normalizeHouseCargoRow({
         no_of_packages: toNumberOrNull(booking.no_of_packages),
         package_type: "",
         package_type_code: null,
-        gross_weight: booking.gross_weight || "",
-        volume:
-          transport === "air"
-            ? booking.volume_weight ?? booking.volume ?? ""
-            : booking.volume ?? "",
-        chargeable_weight: booking.chargeable_weight || "",
+        gross_weight: bookingGw ?? "",
+        volume: bookingVol ?? "",
+        chargeable_weight: bookingCw ?? "",
         ...hazFields,
-      },
+      }),
     ];
   }
 
   return cargo.map((c) => {
     const row = c as Record<string, unknown>;
     const noOfPackages =
-      toNumberOrNull(row.no_of_packages) ?? toNumberOrNull(row.no_of_containers);
+      toNumberOrNull(
+        firstCargoScalar(
+          row.no_of_packages,
+          row.no_of_containers,
+          booking.no_of_packages,
+        ),
+      );
+    const pkgType = pickPackageTypeCodeFromCargo(row);
 
-    return {
+    return normalizeHouseCargoRow({
+      container_no: firstCargoScalar(
+        row.container_no,
+        row.container_number,
+      ),
       no_of_packages: noOfPackages,
-      package_type: pickPackageTypeCodeFromCargo(row),
-      package_type_code: pickPackageTypeCodeFromCargo(row) || null,
-      gross_weight: row.gross_weight || "",
-      volume:
-        transport === "air"
-          ? row.volume_weight ?? row.volume ?? ""
-          : row.volume ?? "",
-      chargeable_weight: row.chargeable_weight || "",
+      package_type: pkgType,
+      package_type_code: pkgType || null,
+      gross_weight: firstCargoScalar(
+        row.gross_weight,
+        row.gross_weight_kgs,
+        bookingGw,
+      ),
+      volume: firstCargoScalar(
+        transport === "air" ? row.volume_weight : null,
+        row.volume,
+        row.volume_cbm,
+        bookingVol,
+      ),
+      chargeable_weight: firstCargoScalar(
+        row.chargeable_weight,
+        bookingCw,
+      ),
       ...hazFields,
-    };
+    });
   });
 }
 
@@ -633,13 +818,17 @@ function mapHouseChargesFromBooking(
 
     return {
       charge_id: row.charge_id || "",
+      // Display-only for Form View; create serializers use charge_id FK
+      charge_name: row.charge_name || row.charge_code || "",
+      charge_code: row.charge_code || "",
       supplier_code: "",
       pp_cc: row.pp_cc || "",
-      unit_id: row.unit_id || row.unit || "",
+      // Prefer numeric FKs only — code strings fail MblChargesSerializer
+      unit_id: row.unit_id || "",
       no_of_unit: noOfUnit,
       amount,
       amount_per_unit: amountPerUnit,
-      currency_id: row.currency_id || row.currency_country_code || "",
+      currency_id: row.currency_id || "",
       roe,
       sell_local_amount: sellLocalAmount,
       total_cost: totalCost,
@@ -1173,8 +1362,8 @@ function isEmptyMergeValue(v: unknown): boolean {
 /**
  * Import Job Automation: merge booking into extracted HBL house.
  * - Booking non-empty fields win; extract fills remaining empties.
- * - Charges are exclusive: booking rate_details → mbl_charges when linked,
- *   otherwise keep extract mbl_charges only (never mix).
+ * - Charges are exclusive: booking rate_details → mbl_charges when linked
+ *   (full sell + cost), otherwise keep extract mbl_charges only (never mix).
  * - Always keep extracted hbl_number.
  */
 export function mergeImportAutomationHousingFromBooking(
@@ -1186,14 +1375,26 @@ export function mergeImportAutomationHousingFromBooking(
   const merged: Record<string, unknown> = { ...extractHouse };
 
   for (const [key, value] of Object.entries(fromBooking)) {
-    if (key === "hbl_number" || key === "mbl_charges") continue;
+    if (
+      key === "hbl_number" ||
+      key === "mbl_charges" ||
+      key === "cargo_details"
+    ) {
+      continue;
+    }
     if (isEmptyMergeValue(value)) continue;
     merged[key] = value;
   }
 
-  // Charges exclusive when booking is linked: booking rate_details only (never mix with extract)
+  // Cargo: booking non-empty fields win; extract fills gaps (LCL/FCL-aware map above)
+  merged.cargo_details = mergeAutomationCargoDetails(
+    extractHouse.cargo_details,
+    fromBooking.cargo_details,
+  );
+
+  // Charges exclusive when booking is linked: full sell + cost from rate_details
   merged.mbl_charges = hasBookingRateDetails(booking)
-    ? mapHouseChargesFromBooking(booking, false)
+    ? mapHouseChargesFromBooking(booking, true)
     : [];
 
   const bookingId = booking.id != null ? Number(booking.id) : null;

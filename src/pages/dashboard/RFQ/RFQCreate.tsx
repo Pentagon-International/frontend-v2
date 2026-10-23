@@ -2520,17 +2520,41 @@ function RFQCreate() {
 
     try {
       setIsCheckingSalesperson(true);
+      let resolvedServiceId: number | string | null = null;
+      const serviceCode = serviceDetail?.service_code;
+      if (service === "OTHERS" && serviceCode) {
+        const selectedOther = (otherServicesData || []).find(
+          (item: { value?: string; id?: number | null }) =>
+            item.value === serviceCode,
+        );
+        if (selectedOther?.id != null) {
+          resolvedServiceId = selectedOther.id;
+        }
+      }
+      const effectiveService =
+        resolveEffectiveServiceType(service, serviceCode, otherServicesData) ||
+        service;
+
       console.log("🔍 Checking salesperson data:", {
         customerCode,
         service,
+        effectiveService,
         trade,
+        service_id: resolvedServiceId,
         serviceIndex,
       });
-      const response = (await apiCallProtected.post(URL.accountsSalespersons, {
+      const salespersonPayload: Record<string, unknown> = {
         customer_code: customerCode,
-        service: service,
+        service: effectiveService,
         service_type: trade,
-      })) as {
+      };
+      if (resolvedServiceId != null) {
+        salespersonPayload.service_id = resolvedServiceId;
+      }
+      const response = (await apiCallProtected.post(
+        URL.accountsSalespersons,
+        salespersonPayload,
+      )) as {
         success?: boolean;
         message?: string;
         data?: SalespersonData[];
@@ -2858,6 +2882,7 @@ function RFQCreate() {
       return [];
 
     return rawOtherServicesData.map((item: any) => ({
+      id: item.id ?? null,
       value: item.service_code ? String(item.service_code) : "",
       label: item.service_name || "",
       transport_mode: item.transport_mode || "",

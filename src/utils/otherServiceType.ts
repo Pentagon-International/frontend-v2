@@ -1,6 +1,7 @@
 export type EffectiveServiceType = "AIR" | "FCL" | "LCL" | "INLAND";
 
 export type OtherServiceOption = {
+  id?: number | null;
   value: string;
   label?: string;
   transport_mode?: string;

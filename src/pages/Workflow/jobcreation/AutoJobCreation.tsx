@@ -11,7 +11,10 @@ import axios from "axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { mergeImportAutomationHousingFromBooking } from "../../../utils/bookingCreateJob";
+import {
+  extractCustomerServiceShipmentFilterRows,
+  mergeImportAutomationHousingFromBooking,
+} from "../../../utils/bookingCreateJob";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import { FilePreviewModal } from "./automationFilePreview";
 import { IconPencil, IconPencilFilled } from "@tabler/icons-react";
@@ -247,8 +250,15 @@ interface BookingOption {
   houseno?: string;
 }
 
+/** Normalize BL / house no for matching (case, spaces, dashes). */
+const normalizeBlKey = (value: unknown): string =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_/\\.]/g, "");
+
 const fetchImportBookingRows = async (filters: Record<string, unknown>) => {
-  const response = (await postAPICall(
+  const response = await postAPICall(
     URL.customerServiceShipmentFilter,
     {
       filters: {
@@ -258,11 +268,9 @@ const fetchImportBookingRows = async (filters: Record<string, unknown>) => {
       },
     },
     API_HEADER,
-  )) as { success?: boolean; data?: unknown[] };
-  if (!response?.success || !Array.isArray(response.data)) return [];
-  return response.data.filter(
-    (row): row is Record<string, unknown> =>
-      !!row && typeof row === "object" && Number.isFinite(Number((row as Record<string, unknown>).id)),
+  );
+  return extractCustomerServiceShipmentFilterRows(response).filter(
+    (row) => Number.isFinite(Number(row.id)),
   );
 };
 
@@ -275,19 +283,36 @@ const filterImportBookings = async (filters: Record<string, unknown>) => {
   })) as BookingOption[];
 };
 
-/** Exact houseno match — returns full booking row or null */
+/**
+ * Match IMPORT booking by HBL/houseno.
+ * Prefers normalized exact match; if several, BOOKED first then first row (like HouseCreate).
+ */
 const matchFullBookingByHbl = async (
   hblNo: string,
 ): Promise<Record<string, unknown> | null> => {
   const trimmed = hblNo.trim();
   if (!trimmed) return null;
+  const target = normalizeBlKey(trimmed);
+  if (!target) return null;
   const rows = await fetchImportBookingRows({ houseno: trimmed });
+  if (!rows.length) return null;
+
   const exact = rows.filter(
-    (r) =>
-      String(r.houseno ?? "").trim().toLowerCase() === trimmed.toLowerCase(),
+    (r) => normalizeBlKey(r.houseno) === target,
   );
-  const pool = exact.length ? exact : rows;
-  return pool.length === 1 ? pool[0] : null;
+  const pool =
+    exact.length > 0
+      ? exact
+      : rows.filter((r) => {
+          const key = normalizeBlKey(r.houseno);
+          return key.includes(target) || target.includes(key);
+        });
+  if (!pool.length) return null;
+
+  const booked = pool.find(
+    (r) => String(r.status ?? "").toUpperCase() === "BOOKED",
+  );
+  return booked ?? pool[0];
 };
 
 const fetchFullImportBookingById = async (
@@ -616,6 +641,19 @@ const STYLES = `
   .hbl-app .ff.s3 { grid-column: span 3; }
   .hbl-app .ff.s4 { grid-column: 1 / -1; }
   .hbl-app .ff label { font-size: .57rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); text-align: left; }
+  .hbl-app .ff.ff-need > label,
+  .hbl-app .ff.ff-need label { color: var(--red); }
+  .hbl-app .ff.ff-need > input,
+  .hbl-app .ff.ff-need .fval,
+  .hbl-app .ff.ff-need input { border-color: var(--red) !important; background: rgba(220,38,38,.05) !important; }
+  .hbl-app .ff-need-hint { font-size: .62rem; color: var(--red); font-weight: 600; margin-top: 2px; line-height: 1.3; }
+  .hbl-app .form-need-banner { margin: 0 0 14px; padding: 10px 12px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; font-size: .75rem; color: #991b1b; line-height: 1.45; }
+  .hbl-app .form-need-banner strong { font-weight: 700; }
+  .hbl-app .form-need-banner ul { margin: 6px 0 0; padding-left: 18px; }
+  .hbl-app .form-need-banner li { margin: 2px 0; }
+  .hbl-app .save-hint { font-size: .72rem; color: var(--muted); margin-right: auto; text-align: left; max-width: 52%; line-height: 1.35; }
+  .hbl-app .save-hint.warn { color: #92400e; }
+  .hbl-app .ctable td.td-need { background: rgba(220,38,38,.06); outline: 1px solid rgba(220,38,38,.45); }
   .hbl-app .fval { font-size: .78rem; color: var(--text); background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 5px 10px; min-height: 30px; word-break: break-word; line-height: 1.45; text-align: left; }
   .hbl-app .fval.mono { font-family: var(--mono); font-size: .7rem; color: var(--cyan); }
   .hbl-app .fval.empty { color: var(--muted); opacity: .4; font-style: italic; font-size: .75rem; }
@@ -631,6 +669,7 @@ const STYLES = `
   .hbl-app .sub-sec-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
   .hbl-app .ctable-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .hbl-app .ctable { width: 100%; min-width: 480px; border-collapse: collapse; margin-top: 6px; table-layout: auto; display: table; }
+  .hbl-app .hcard-body .ctable { min-width: 720px; }
   .hbl-app .ctable thead { display: table-header-group; }
   .hbl-app .ctable tbody { display: table-row-group; }
   .hbl-app .ctable tr { display: table-row; }
@@ -682,6 +721,121 @@ function fv(val: unknown): string | null {
   if (val == null || val === "") return null;
   if (Array.isArray(val)) return val.length ? val.join(", ") : null;
   return String(val);
+}
+
+/** Form / job-create field gaps the user must fix (missing or invalid masters). */
+type FormFieldIssue = {
+  fieldKey: string;
+  label: string;
+  reason: string;
+};
+
+function collectPayloadFormIssues(
+  p: PayloadData,
+  ports: PortOption[],
+  carriers: CarrierOption[],
+  containerTypes: ContainerTypeOption[],
+): FormFieldIssue[] {
+  const issues: FormFieldIssue[] = [];
+  const portOk = (code?: string) =>
+    !!code &&
+    ports.some((x) => x.alias_code === code || x.port_code === code);
+  const carrierOk = (code?: string) =>
+    !!code &&
+    carriers.some((x) => x.alias_code === code || x.carrier_code === code);
+  const containerOk = (code?: string) =>
+    !!code &&
+    containerTypes.some(
+      (x) => x.alias_code === code || x.container_code === code,
+    );
+
+  const origin = String(p.origin_code ?? "").trim();
+  const dest = String(p.destination_code ?? "").trim();
+  const carrier = String(p.carrier_code ?? "").trim();
+
+  if (!origin) {
+    issues.push({
+      fieldKey: "origin_code",
+      label: "Origin Code",
+      reason: "required",
+    });
+  } else if (!portOk(origin)) {
+    issues.push({
+      fieldKey: "origin_code",
+      label: "Origin Code",
+      reason: "not found in port master — use Fix Alias",
+    });
+  }
+
+  if (!dest) {
+    issues.push({
+      fieldKey: "destination_code",
+      label: "Destination Code",
+      reason: "required",
+    });
+  } else if (!portOk(dest)) {
+    issues.push({
+      fieldKey: "destination_code",
+      label: "Destination Code",
+      reason: "not found in port master — use Fix Alias",
+    });
+  }
+
+  if (!carrier) {
+    issues.push({
+      fieldKey: "carrier_code",
+      label: "Carrier Code",
+      reason: "required",
+    });
+  } else if (!carrierOk(carrier)) {
+    issues.push({
+      fieldKey: "carrier_code",
+      label: "Carrier Code",
+      reason: "not found in carrier master — use Fix Alias",
+    });
+  }
+
+  if (Array.isArray(p.container_details)) {
+    (p.container_details as ContainerDetail[]).forEach((c, i) => {
+      const code = String(c.container_type_input ?? c.container_type ?? "").trim();
+      if (!code) {
+        issues.push({
+          fieldKey: `container_${i}`,
+          label: `Container ${i + 1} Type`,
+          reason: "required",
+        });
+      } else if (!containerOk(code)) {
+        issues.push({
+          fieldKey: `container_${i}`,
+          label: `Container ${i + 1} Type`,
+          reason: "not found in container type master — use Fix Alias",
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(p.housing_details)) {
+    (p.housing_details as HousingDetail[]).forEach((hd, i) => {
+      const hOrigin = String(hd.origin_code ?? "").trim();
+      const hDest = String(hd.destination_code ?? "").trim();
+      if (hOrigin && !portOk(hOrigin)) {
+        issues.push({
+          fieldKey: `housing_${i}_origin`,
+          label: `HBL ${i + 1} Origin Code`,
+          reason: "not found in port master — use Fix Alias",
+        });
+      }
+      if (hDest && !portOk(hDest)) {
+        issues.push({
+          fieldKey: `housing_${i}_dest`,
+          label: `HBL ${i + 1} Destination Code`,
+          reason: "not found in port master — use Fix Alias",
+        });
+      }
+    });
+  }
+
+  return issues;
 }
 
 function buildPageRange(cur: number, total: number): (number | "...")[] {
@@ -1279,11 +1433,13 @@ const EF: FC<{
           border: "1px solid var(--border2)",
           borderRadius: 5,
           padding: "5px 9px",
+          minHeight: 30,
           fontFamily: cls === "mono" ? "var(--mono)" : "var(--sans)",
           fontSize: ".8rem",
           color: "var(--text)",
           outline: "none",
           transition: "border-color .15s",
+          boxSizing: "border-box",
         }}
         onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
         onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border2)")}
@@ -1338,6 +1494,7 @@ const PayloadFormBody: FC<{
   containerTypes?: ContainerTypeOption[];
   onContainerDetailChange?: (idx: number, code: string) => void;
   onFixContainerType?: () => void;
+  formIssues?: FormFieldIssue[];
 }> = ({
   p,
   ports = [],
@@ -1354,7 +1511,20 @@ const PayloadFormBody: FC<{
   onFixCarrier,
   onContainerDetailChange,
   onFixContainerType,
+  formIssues = [],
 }) => {
+  const needMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const issue of formIssues) m.set(issue.fieldKey, issue.reason);
+    return m;
+  }, [formIssues]);
+  const needHint = (key: string) => {
+    const reason = needMap.get(key);
+    if (!reason) return null;
+    return <div className="ff-need-hint">{reason}</div>;
+  };
+  const needClass = (key: string) => (needMap.has(key) ? " ff-need" : "");
+
   if (!p || !Object.keys(p).length)
     return (
       <div className="state-box">
@@ -1600,13 +1770,35 @@ const PayloadFormBody: FC<{
 
   return (
     <div className="form-body">
+      {formIssues.length > 0 && (
+        <div className="form-need-banner" role="status">
+          <strong>
+            {formIssues.length} field{formIssues.length === 1 ? "" : "s"} need
+            attention
+          </strong>{" "}
+          (highlighted below). Fix these before Start Jobs.
+          <ul>
+            {formIssues.slice(0, 8).map((issue) => (
+              <li key={issue.fieldKey}>
+                {issue.label}: {issue.reason}
+              </li>
+            ))}
+            {formIssues.length > 8 && (
+              <li>+{formIssues.length - 8} more…</li>
+            )}
+          </ul>
+        </div>
+      )}
       <Sec icon="📄" title="Document Header">
         <div className="fgrid c4">
           {F("MBL Number", p.mbl_number ?? p.bl_number, "mbl_number", "mono")}
-          <CarrierCodeView
-            label="Carrier Code"
-            code={p.carrier_code as string | undefined}
-          />
+          <div className={`ff${needClass("carrier_code")}`}>
+            <CarrierCodeView
+              label="Carrier Code"
+              code={p.carrier_code as string | undefined}
+            />
+            {needHint("carrier_code")}
+          </div>
           {F("Carrier Name", p.carrier_name, "carrier_name")}
           {F("Service", p.service, "service")}
           {F("Service Type", p.service_type, "service_type")}
@@ -1621,7 +1813,10 @@ const PayloadFormBody: FC<{
           {F("Place of Delivery", p.place_of_delivery, "place_of_delivery")}
           {editPorts ? (
             <>
-              <div className="ff" style={{ overflow: "visible" }}>
+              <div
+                className={`ff${needClass("origin_code")}`}
+                style={{ overflow: "visible" }}
+              >
                 <PortSearch
                   label="Origin Code"
                   value={editPorts.originCode}
@@ -1631,8 +1826,12 @@ const PayloadFormBody: FC<{
                   onSelect={editPorts.onOriginSelect}
                   onFix={onFixCode}
                 />
+                {needHint("origin_code")}
               </div>
-              <div className="ff" style={{ overflow: "visible" }}>
+              <div
+                className={`ff${needClass("destination_code")}`}
+                style={{ overflow: "visible" }}
+              >
                 <PortSearch
                   label="Destination Code"
                   value={editPorts.destCode}
@@ -1642,20 +1841,27 @@ const PayloadFormBody: FC<{
                   onSelect={editPorts.onDestSelect}
                   onFix={onFixCode}
                 />
+                {needHint("destination_code")}
               </div>
             </>
           ) : (
             <>
-              <PortCodeView
-                label="Origin Code"
-                code={p.origin_code as string | undefined}
-                onFix={onFixCode}
-              />
-              <PortCodeView
-                label="Destination Code"
-                code={p.destination_code as string | undefined}
-                onFix={onFixCode}
-              />
+              <div className={`ff${needClass("origin_code")}`}>
+                <PortCodeView
+                  label="Origin Code"
+                  code={p.origin_code as string | undefined}
+                  onFix={onFixCode}
+                />
+                {needHint("origin_code")}
+              </div>
+              <div className={`ff${needClass("destination_code")}`}>
+                <PortCodeView
+                  label="Destination Code"
+                  code={p.destination_code as string | undefined}
+                  onFix={onFixCode}
+                />
+                {needHint("destination_code")}
+              </div>
             </>
           )}
           {F("Freight Payable At", p.freight_payable_at, "freight_payable_at")}
@@ -1713,7 +1919,10 @@ const PayloadFormBody: FC<{
                 {p.container_details.map((c, i) => (
                   <tr key={i}>
                     <td>{c.container_no ?? "—"}</td>
-                    <td style={{ overflow: "visible" }}>
+                    <td
+                      className={needMap.has(`container_${i}`) ? "td-need" : undefined}
+                      style={{ overflow: "visible" }}
+                    >
                       {onContainerDetailChange ? (
                         <ContainerTypeSearch
                           value={
@@ -1729,6 +1938,7 @@ const PayloadFormBody: FC<{
                           onFix={onFixContainerType}
                         />
                       )}
+                      {needHint(`container_${i}`)}
                     </td>
                     <td>{c.actual_seal_no ?? c.seal_no ?? "—"}</td>
                   </tr>
@@ -1768,18 +1978,16 @@ const PayloadFormBody: FC<{
                 <div className="fgrid c4" style={{ marginBottom: 12 }}>
                   {HF(idx, "HBL Number", hd.hbl_number, "hbl_number", "mono")}
                   {onHousingBookingChange ? (
-                    <div className="ff" style={{ overflow: "visible" }}>
-                      <BookingSearch
-                        label="Booking ID"
-                        bookingId={hd.booking_id ?? null}
-                        shipmentCode={hd.booking_shipment_code ?? ""}
-                        hblNumber={hd.hbl_number ?? ""}
-                        onSelect={(id, code) =>
-                          onHousingBookingChange(idx, id, code)
-                        }
-                        showToast={showToast}
-                      />
-                    </div>
+                    <BookingSearch
+                      label="Booking ID"
+                      bookingId={hd.booking_id ?? null}
+                      shipmentCode={hd.booking_shipment_code ?? ""}
+                      hblNumber={hd.hbl_number ?? ""}
+                      onSelect={(id, code) =>
+                        onHousingBookingChange(idx, id, code)
+                      }
+                      showToast={showToast}
+                    />
                   ) : (
                     <FF
                       label="Booking ID"
@@ -1791,9 +1999,80 @@ const PayloadFormBody: FC<{
                   {HF(idx, "Routed", hd.routed, "routed")}
                   {HF(idx, "Freight Terms", hd.freight_terms, "freight_terms")}
                   {HF(idx, "Marks No", hd.marks_no, "marks_no")}
+                </div>
+                <SubSec
+                  icon="💵"
+                  title={`House Charges (${
+                    Array.isArray(hd.mbl_charges)
+                      ? (hd.mbl_charges as unknown[]).length
+                      : 0
+                  })${
+                    hd.booking_id != null
+                      ? " — from booking"
+                      : " — from extract"
+                  }`}
+                >
+                  {Array.isArray(hd.mbl_charges) &&
+                  (hd.mbl_charges as unknown[]).length > 0 ? (
+                    <div className="ctable-wrap">
+                      <table className="ctable">
+                        <thead>
+                          <tr>
+                            <th>Charge</th>
+                            <th>PP/CC</th>
+                            <th>Units</th>
+                            <th>Sell / Unit</th>
+                            <th>Sell Amt</th>
+                            <th>Sell Local</th>
+                            <th>Cost / Unit</th>
+                            <th>Cost Amt</th>
+                            <th>Cost Local</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(
+                            hd.mbl_charges as Array<Record<string, unknown>>
+                          ).map((ch, ci) => (
+                            <tr key={ci}>
+                              <td>
+                                {String(
+                                  ch.charge_name ?? ch.charge_id ?? "—",
+                                )}
+                              </td>
+                              <td>{String(ch.pp_cc ?? "—")}</td>
+                              <td>{String(ch.no_of_unit ?? "—")}</td>
+                              <td>{String(ch.amount_per_unit ?? "—")}</td>
+                              <td>{String(ch.amount ?? "—")}</td>
+                              <td>
+                                {String(ch.sell_local_amount ?? "—")}
+                              </td>
+                              <td>{String(ch.unit_cost ?? "—")}</td>
+                              <td>{String(ch.total_cost ?? "—")}</td>
+                              <td>
+                                {String(ch.cost_local_amount ?? "—")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="no-data">
+                      No house charges
+                      {hd.booking_id != null
+                        ? " on matched booking"
+                        : " in extracted payload"}
+                      .
+                    </div>
+                  )}
+                </SubSec>
+                <div className="fgrid c4" style={{ marginBottom: 12 }}>
                   {editHousingPorts?.[idx] ? (
                     <>
-                      <div className="ff" style={{ overflow: "visible" }}>
+                      <div
+                        className={`ff${needClass(`housing_${idx}_origin`)}`}
+                        style={{ overflow: "visible" }}
+                      >
                         <PortSearch
                           label="Origin Code"
                           value={editHousingPorts[idx].originCode}
@@ -1807,8 +2086,12 @@ const PayloadFormBody: FC<{
                               : undefined
                           }
                         />
+                        {needHint(`housing_${idx}_origin`)}
                       </div>
-                      <div className="ff" style={{ overflow: "visible" }}>
+                      <div
+                        className={`ff${needClass(`housing_${idx}_dest`)}`}
+                        style={{ overflow: "visible" }}
+                      >
                         <PortSearch
                           label="Destination Code"
                           value={editHousingPorts[idx].destCode}
@@ -1822,28 +2105,37 @@ const PayloadFormBody: FC<{
                               : undefined
                           }
                         />
+                        {needHint(`housing_${idx}_dest`)}
                       </div>
                     </>
                   ) : (
                     <>
-                      <PortCodeView
-                        label="Origin Code"
-                        code={hd.origin_code as string | undefined}
-                        onFix={
-                          onFixHousingCode
-                            ? () => onFixHousingCode(idx)
-                            : undefined
-                        }
-                      />
-                      <PortCodeView
-                        label="Destination Code"
-                        code={hd.destination_code as string | undefined}
-                        onFix={
-                          onFixHousingCode
-                            ? () => onFixHousingCode(idx)
-                            : undefined
-                        }
-                      />
+                      <div
+                        className={`ff${needClass(`housing_${idx}_origin`)}`}
+                      >
+                        <PortCodeView
+                          label="Origin Code"
+                          code={hd.origin_code as string | undefined}
+                          onFix={
+                            onFixHousingCode
+                              ? () => onFixHousingCode(idx)
+                              : undefined
+                          }
+                        />
+                        {needHint(`housing_${idx}_origin`)}
+                      </div>
+                      <div className={`ff${needClass(`housing_${idx}_dest`)}`}>
+                        <PortCodeView
+                          label="Destination Code"
+                          code={hd.destination_code as string | undefined}
+                          onFix={
+                            onFixHousingCode
+                              ? () => onFixHousingCode(idx)
+                              : undefined
+                          }
+                        />
+                        {needHint(`housing_${idx}_dest`)}
+                      </div>
                     </>
                   )}
                   {HF(idx, "Invoice No", hd.invoice_no, "invoice_no", "mono")}
@@ -2400,28 +2692,43 @@ const PayloadModal: FC<PayloadModalProps> = ({
             });
             return;
           }
+          const base =
+            extractHousingRef.current?.[idx] ??
+            (Array.isArray(editData.housing_details)
+              ? (editData.housing_details as HousingDetail[])[idx]
+              : undefined) ??
+            ({} as HousingDetail);
+          const merged = applyBookingMergeToHouse(base, full);
+          const chargeCount = Array.isArray(merged.mbl_charges)
+            ? (merged.mbl_charges as unknown[]).length
+            : 0;
           setEditData((prev) => {
             const housing = Array.isArray(prev.housing_details)
               ? [...(prev.housing_details as HousingDetail[])]
               : [];
-            const base =
-              extractHousingRef.current?.[idx] ?? housing[idx] ?? {};
-            housing[idx] = applyBookingMergeToHouse(base, full);
+            housing[idx] = merged;
             return {
               ...prev,
               housing_details: housing,
               booking_ids: housing.map((h) => h.booking_id ?? null),
             };
           });
+          showToast(
+            chargeCount > 0
+              ? `Booking mapped — ${chargeCount} charge(s) from booking will apply to this house`
+              : "Booking mapped — no booking charges found (house charges cleared)",
+            chargeCount > 0 ? "success" : "error",
+          );
         } catch {
           showToast("Failed to merge booking details", "error");
         }
       })();
     },
-    [applyBookingMergeToHouse, showToast],
+    [applyBookingMergeToHouse, editData.housing_details, showToast],
   );
 
-  // Auto-match + merge full booking into HBL house (local only — PATCH on Save)
+  // Auto-match + merge full booking into HBL house (local only — PATCH on Save).
+  // Mark done only after the attempt finishes so React Strict Mode remount can retry.
   const autoMatchDone = useRef(false);
   useEffect(() => {
     if (autoMatchDone.current || loading) return;
@@ -2429,9 +2736,17 @@ const PayloadModal: FC<PayloadModalProps> = ({
       ? (editData.housing_details as HousingDetail[])
       : [];
     if (!housing.length) return;
-    autoMatchDone.current = true;
     if (!extractHousingRef.current) {
       extractHousingRef.current = housing.map((h) => ({ ...h }));
+    }
+
+    // Payload already enriched at extract time — nothing to match
+    const needsMatch = housing.some(
+      (h) => h.booking_id == null && (h.hbl_number || "").trim(),
+    );
+    if (!needsMatch) {
+      autoMatchDone.current = true;
+      return;
     }
 
     let cancelled = false;
@@ -2454,13 +2769,31 @@ const PayloadModal: FC<PayloadModalProps> = ({
           // optional auto-match — ignore
         }
       }
-      if (cancelled || !changed) return;
-      setEditData((prev) => ({
-        ...prev,
-        housing_details: nextHousing,
-        booking_ids: nextHousing.map((h) => h.booking_id ?? null),
-      }));
-      setIsDirty(true);
+      if (cancelled) return;
+      autoMatchDone.current = true;
+      const mapped = nextHousing.filter((h) => h.booking_id != null).length;
+      const tried = housing.filter((h) => (h.hbl_number || "").trim()).length;
+      if (changed) {
+        setEditData((prev) => ({
+          ...prev,
+          housing_details: nextHousing,
+          booking_ids: nextHousing.map((h) => h.booking_id ?? null),
+        }));
+        setIsDirty(true);
+        const totalCharges = nextHousing.reduce((n, h) => {
+          const c = h.mbl_charges;
+          return n + (Array.isArray(c) ? c.length : 0);
+        }, 0);
+        showToast(
+          `Auto-matched ${mapped} booking(s) — ${totalCharges} charge(s) from booking`,
+          "success",
+        );
+      } else if (tried > 0) {
+        showToast(
+          "No matching booking found for extracted HBL number(s)",
+          "error",
+        );
+      }
     })();
 
     return () => {
@@ -2530,6 +2863,20 @@ const PayloadModal: FC<PayloadModalProps> = ({
       },
     }));
   })();
+
+  const formIssues = useMemo(
+    () =>
+      collectPayloadFormIssues(editData, ports, carriers, containerTypes),
+    [editData, ports, carriers, containerTypes],
+  );
+
+  const saveDisabledReason = saving
+    ? "Saving…"
+    : !isDirty
+      ? "No unsaved changes — edit any field to enable Save"
+      : formIssues.length > 0
+        ? `${formIssues.length} field(s) still need attention (highlighted). You can still Save draft changes.`
+        : "";
 
   // ── Save payload (only place that PATCHes booking mapping) ──
   const savePayload = async () => {
@@ -2611,10 +2958,9 @@ const PayloadModal: FC<PayloadModalProps> = ({
               {editData.document_type && (
                 <span className="pdf-tag">{editData.document_type}</span>
               )}
-              {/* Dirty indicator — shows when there are unsaved changes */}
-              {/* {isDirty && ( */}
-              {/* <span className="dirty-indicator">● Unsaved changes</span> */}
-              {/* )} */}
+              {isDirty && (
+                <span className="dirty-indicator">● Unsaved changes</span>
+              )}
             </div>
             <div style={{ fontSize: ".95rem", fontWeight: 700 }}>
               {rec?.filename ?? txn_id}
@@ -2676,6 +3022,7 @@ const PayloadModal: FC<PayloadModalProps> = ({
                 ports={ports}
                 carriers={carriers}
                 containerTypes={containerTypes}
+                formIssues={formIssues}
                 onContainerDetailChange={onContainerDetailChange}
                 onFixContainerType={() =>
                   rec && setContainerTypeFixTarget({ record: rec })
@@ -2733,12 +3080,20 @@ const PayloadModal: FC<PayloadModalProps> = ({
         </div>
 
         <div className="modal-foot">
+          {saveDisabledReason ? (
+            <span
+              className={`save-hint${formIssues.length && isDirty ? " warn" : ""}`}
+            >
+              {saveDisabledReason}
+            </span>
+          ) : null}
           <button className="btn btn-ghost" onClick={onClose}>
             Close
           </button>
           <button
             className="btn btn-primary"
             disabled={saving || !isDirty}
+            title={saveDisabledReason || "Save payload changes"}
             onClick={savePayload}
           >
             {saving ? "Saving…" : "Save"}
@@ -2851,9 +3206,9 @@ const BookingSearch: FC<{
   };
 
   const handlePick = (opt: BookingOption) => {
-    const extracted = (hblNumber || "").trim().toLowerCase();
-    const bookingHbl = (opt.houseno || "").trim().toLowerCase();
-    if (extracted && extracted !== bookingHbl) {
+    const extracted = normalizeBlKey(hblNumber);
+    const bookingHbl = normalizeBlKey(opt.houseno);
+    if (extracted && bookingHbl && extracted !== bookingHbl) {
       showToast?.(
         "Selected booking HBL does not match extracted HBL number",
         "error",
@@ -2878,7 +3233,7 @@ const BookingSearch: FC<{
   };
 
   return (
-    <div ref={wrapRef}>
+    <div ref={wrapRef} className="ff" style={{ overflow: "visible" }}>
       <label>{label}</label>
       <input
         ref={inputRef}
@@ -2901,11 +3256,13 @@ const BookingSearch: FC<{
           border: "1px solid var(--border2)",
           borderRadius: 5,
           padding: "5px 9px",
+          minHeight: 30,
           fontFamily: "var(--mono)",
           fontSize: ".8rem",
           color: "var(--text)",
           outline: "none",
           transition: "border-color .15s",
+          boxSizing: "border-box",
         }}
       />
       {open &&
@@ -2926,23 +3283,11 @@ const BookingSearch: FC<{
             }}
           >
             {loading ? (
-              <div
-                style={{
-                  padding: 10,
-                  fontSize: ".75rem",
-                  color: "var(--muted)",
-                }}
-              >
+              <div className="no-data" style={{ padding: 10 }}>
                 Searching…
               </div>
             ) : options.length === 0 ? (
-              <div
-                style={{
-                  padding: 10,
-                  fontSize: ".75rem",
-                  color: "var(--muted)",
-                }}
-              >
+              <div className="no-data" style={{ padding: 10 }}>
                 No bookings found
               </div>
             ) : (
@@ -3070,15 +3415,8 @@ const PortSearch: FC<{
     : false;
 
   return (
-    <div ref={wrapRef}>
-      <label
-        style={{
-          display: "block",
-          fontSize: ".78rem",
-          fontWeight: 600,
-          marginBottom: 5,
-        }}
-      >
+    <div ref={wrapRef} className="ff" style={{ overflow: "visible" }}>
+      <label>
         {label} <span style={{ color: "var(--red)" }}>*</span>
       </label>
       <input
@@ -3087,16 +3425,28 @@ const PortSearch: FC<{
         value={inputText}
         autoComplete="off"
         onChange={handleChange}
-        onFocus={handleFocus}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = "var(--accent)";
+          handleFocus();
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = matchesAlias
+            ? "var(--green)"
+            : "var(--border2)";
+        }}
         style={{
           width: "100%",
-          padding: "8px 12px",
-          borderRadius: 7,
-          border: `1px solid ${matchesAlias ? "var(--green)" : "var(--border2)"}`,
-          fontFamily: "var(--sans)",
-          fontSize: ".8rem",
-          outline: "none",
           background: "var(--surface)",
+          border: `1px solid ${matchesAlias ? "var(--green)" : "var(--border2)"}`,
+          borderRadius: 5,
+          padding: "5px 9px",
+          minHeight: 30,
+          fontFamily: "var(--mono)",
+          fontSize: ".8rem",
+          color: "var(--text)",
+          outline: "none",
+          transition: "border-color .15s",
+          boxSizing: "border-box",
         }}
       />
       {value && (
@@ -4383,6 +4733,29 @@ const HBLDocumentManager: FC = () => {
     return f ? hasCodeValidationError(f) : false;
   });
 
+  const selectedValidationHint = (() => {
+    if (!selectedHasValidationError) return "";
+    const labels: string[] = [];
+    for (const id of selected) {
+      const f = allFiles.find((x) => x.txn_id === id);
+      if (!f || !hasCodeValidationError(f)) continue;
+      const payload = f.api_payload ?? f.extracted_data;
+      if (!payload) continue;
+      for (const issue of collectPayloadFormIssues(
+        payload,
+        ports,
+        carriers,
+        containerTypes,
+      )) {
+        if (issue.reason === "required") continue; // Start Jobs only blocks invalid codes
+        if (!labels.includes(issue.label)) labels.push(issue.label);
+      }
+    }
+    return labels.length
+      ? `Fix invalid codes before creating jobs: ${labels.slice(0, 6).join(", ")}${labels.length > 6 ? "…" : ""}`
+      : "Fix invalid port/carrier/container type codes before creating jobs";
+  })();
+
   const statuses: Array<FileStatus | ""> = [
     "",
     "pending",
@@ -4454,7 +4827,7 @@ const HBLDocumentManager: FC = () => {
               disabled={jobLoading || selectedHasValidationError}
               title={
                 selectedHasValidationError
-                  ? "Fix invalid port/carrier/container type codes before creating jobs"
+                  ? selectedValidationHint
                   : undefined
               }
               style={
@@ -4757,9 +5130,7 @@ const HBLDocumentManager: FC = () => {
           onClick={() => startJobs(Array.from(selected))}
           disabled={jobLoading || selectedHasValidationError}
           title={
-            selectedHasValidationError
-              ? "Fix invalid port/carrier/container type codes before creating jobs"
-              : undefined
+            selectedHasValidationError ? selectedValidationHint : undefined
           }
           style={
             selectedHasValidationError
@@ -4769,7 +5140,9 @@ const HBLDocumentManager: FC = () => {
         >
           {jobLoading ? "Starting…" : "▶ Start Jobs"}
           {selectedHasValidationError && (
-            <span style={{ fontSize: ".65rem", marginLeft: 4 }}>⚠</span>
+            <span style={{ fontSize: ".65rem", marginLeft: 4 }} title={selectedValidationHint}>
+              ⚠
+            </span>
           )}
         </button>
         <button className="bar-btn danger" onClick={deleteSelected}>
