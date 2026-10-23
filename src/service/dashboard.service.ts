@@ -6,6 +6,18 @@ import dayjs from "dayjs";
 import { apiCallProtected } from "../api/axios";
 import ToastNotification from "../components/ToastNotification";
 import { usePipelineReportCurrencyStore } from "../store/pipelineReportCurrencyStore";
+import {
+  getDashboardDisplayCurrencyFields,
+  withDisplayCurrency,
+} from "../utils/dashboardDisplayCurrency";
+
+/** Shared toast/reset when USD conversion rate is missing (Pipeline + Dashboard). */
+export function noteMissingDashboardExchangeRate(
+  requested: string | undefined,
+  response: unknown,
+) {
+  noteMissingPipelineExchangeRate(requested, response);
+}
 
 let pipelineExchangeRateToastAt = 0;
 let lastPipelineDisplayCurrency: "LOCAL" | "USD" | null = null;
@@ -911,10 +923,12 @@ export const getFilteredOutstandingData = async (
   filters: DashboardFilters
 ): Promise<FilteredOutstandingResponse> => {
   try {
+    const payload = withDisplayCurrency({ ...(filters as Record<string, unknown>) });
     const response = await postAPICall(
       URL.dashboard.outstandingSummary,
-      filters
+      payload
     );
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("response filtered outstanding data :", response);
     return response as FilteredOutstandingResponse;
   } catch (error) {
@@ -945,6 +959,7 @@ export const getCustomerOutstandingVsOverdueData = async (
 
     const payload: Record<string, unknown> = {
       company: filters.company,
+      ...getDashboardDisplayCurrencyFields(),
     };
     if (!summaryCard) {
       if (typeof filters.salesperson === "boolean") {
@@ -976,6 +991,10 @@ export const getCustomerOutstandingVsOverdueData = async (
     }
 
     const response = await postAPICall(url, payload);
+    noteMissingPipelineExchangeRate(
+      payload.display_currency as string | undefined,
+      response,
+    );
     return response as CustomerOutstandingVsOverdueResponse;
   } catch (error) {
     console.error("Error fetching customer outstanding vs overdue data:", error);
@@ -2007,12 +2026,14 @@ export const getFilteredBudgetData = async (
     if (end_month) payload.end_month = end_month;
     // Add search parameter
     if (filters.search) payload.search = filters.search;
+    Object.assign(payload, getDashboardDisplayCurrencyFields());
 
     console.log("Budget filter payload:", payload);
     const response = await postAPICall(
       URL.dashboard.budgetVsActual || URL.dashboard.budgetSummary,
       payload
     );
+    noteMissingPipelineExchangeRate(payload.display_currency, response);
     console.log("Filtered budget response:", response);
     return response as BudgetResponse;
   } catch (error) {
@@ -2062,8 +2083,10 @@ export const getSalespersonMonthlyBudgetSummary = async (params: {
       salesperson: params.salesperson,
       start_month: params.start_month,
       end_month: params.end_month,
+      ...getDashboardDisplayCurrencyFields(),
     };
     const response = await postAPICall(URL.dashboard.budgetSummary, payload);
+    noteMissingDashboardExchangeRate(payload.display_currency, response);
     return response as SalespersonMonthlyBudgetResponse;
   } catch (error) {
     console.error("Error fetching salesperson monthly budget summary:", error);
@@ -2096,8 +2119,10 @@ export const getBranchMonthlyBudgetSummary = async (params: {
       group_by: params.group_by,
       metric: params.metric,
       drill_down: "monthly",
+      ...getDashboardDisplayCurrencyFields(),
     };
     const response = await postAPICall(URL.dashboard.branchBudgetVsActual, payload);
+    noteMissingDashboardExchangeRate(payload.display_currency, response);
     return response as SalespersonMonthlyBudgetResponse;
   } catch (error) {
     console.error("Error fetching branch monthly budget summary:", error);

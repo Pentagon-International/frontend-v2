@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { Alert, Box, Drawer, Flex, Loader, Text } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import type { BreakdownDimension, BreakdownRow } from "./accountsDashboardTypes";
@@ -70,6 +71,7 @@ export default function ProfitabilityTrillOne({
     (dimension === "salesperson" ? row?.name?.trim() || "" : "");
   const salespersonCustomerCode =
     row?.customerCode?.trim() || salespersonDrillCustomerCode.trim();
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
 
   useEffect(() => {
     if (!opened) {
@@ -221,6 +223,7 @@ export default function ProfitabilityTrillOne({
     fromDate,
     toDate,
     headerBranchCode,
+    displayCurrencyMode,
   ]);
 
   const jobs = drillData?.jobs ?? [];

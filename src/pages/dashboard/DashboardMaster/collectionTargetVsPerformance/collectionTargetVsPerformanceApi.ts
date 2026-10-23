@@ -1,5 +1,7 @@
 import { apiCallProtected } from "../../../../api/axios";
 import { URL } from "../../../../api/serverUrls";
+import { noteMissingDashboardExchangeRate } from "../../../../service/dashboard.service";
+import { getDashboardDisplayCurrencyFields } from "../../../../utils/dashboardDisplayCurrency";
 import {
   periodToDateRange,
   type PendingActivitiesDateRange,
@@ -14,6 +16,7 @@ export type CollectionPerformanceRequest = {
   header?: string;
   branch_code?: string;
   invoice_id?: number;
+  display_currency?: "LOCAL" | "USD";
 };
 
 let lastCollectionPerformanceRequest: CollectionPerformanceRequest | null = null;
@@ -35,6 +38,7 @@ export function buildCollectionPerformanceRequest(
     company,
     date_from: dateRange.date_from,
     date_to: dateRange.date_to,
+    ...getDashboardDisplayCurrencyFields(),
   };
   const header = options?.header?.trim();
   if (header) payload.header = header;
@@ -54,7 +58,16 @@ export function periodGranularityToDateRange(
 export async function fetchCollectionPerformance(
   payload: CollectionPerformanceRequest,
 ): Promise<unknown> {
-  lastCollectionPerformanceRequest = { ...payload };
+  const withCurrency: CollectionPerformanceRequest = {
+    ...payload,
+    ...getDashboardDisplayCurrencyFields(),
+  };
+  lastCollectionPerformanceRequest = { ...withCurrency };
   // Response interceptor already unwraps axios `response.data` — do not read `.data` again.
-  return apiCallProtected.post(URL.dashboard.collectionTargetVsPerformance, payload);
+  const response = await apiCallProtected.post(
+    URL.dashboard.collectionTargetVsPerformance,
+    withCurrency,
+  );
+  noteMissingDashboardExchangeRate(withCurrency.display_currency, response);
+  return response;
 }

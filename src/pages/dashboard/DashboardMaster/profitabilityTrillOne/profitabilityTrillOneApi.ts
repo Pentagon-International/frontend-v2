@@ -1,6 +1,8 @@
 import dayjs from "dayjs";
 import { apiCallProtected } from "../../../../api/axios";
 import { URL } from "../../../../api/serverUrls";
+import { noteMissingDashboardExchangeRate } from "../../../../service/dashboard.service";
+import { getDashboardDisplayCurrencyFields } from "../../../../utils/dashboardDisplayCurrency";
 import { unwrapProfitabilityPayload } from "../accountsDashboardNormalize";
 import type { ProfitabilityDrillSummary, ProfitabilityJob, ProfitabilityJobSegment } from "./types";
 
@@ -288,9 +290,17 @@ async function fetchProfitabilityDrillData(
   rowKind: "customer" | "job" = "customer",
   headerBranchCode?: string | null,
 ): Promise<ProfitabilityDrillData> {
+  const requestPayload = withHeaderBranchCode(
+    { ...payload, ...getDashboardDisplayCurrencyFields() },
+    headerBranchCode,
+  );
   const body = await apiCallProtected.post(
     URL.dashboard.accountsProfitability,
-    withHeaderBranchCode(payload, headerBranchCode),
+    requestPayload,
+  );
+  noteMissingDashboardExchangeRate(
+    requestPayload.display_currency as string | undefined,
+    body,
   );
   const summary = normalizeDrillSummary(body);
   const jobs = normalizeDrillJobs(body, segmentLabel, rowKind);

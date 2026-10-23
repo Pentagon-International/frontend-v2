@@ -24,6 +24,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import {
@@ -31,6 +32,7 @@ import {
   type CustomerOutstandingVsOverdueItem,
   type CustomerOutstandingVsOverdueResponse,
 } from "../../../service/dashboard.service";
+import PipelineReportCurrencySelect from "../PipelineReport/PipelineReportCurrencySelect";
 import { CustomerOutstandingSendEmailModal } from "./CustomerOutstandingSendEmailModal";
 import {
   formatUserDecimal,
@@ -311,14 +313,17 @@ export default function CustomerOutstandingVsOverdueDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<CustomerOutstandingVsOverdueResponse | null>(null);
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
   const resolveBranchCurrency = useCallback(
     (summaryCurrency?: string | null) =>
-      resolveOutstandingDisplayCurrency(
-        summaryCurrency,
-        branchCurrencyCode,
-        branchCountryCode,
-      ),
-    [branchCurrencyCode, branchCountryCode],
+      displayCurrencyMode === "USD"
+        ? "USD"
+        : resolveOutstandingDisplayCurrency(
+            summaryCurrency,
+            branchCurrencyCode,
+            branchCountryCode,
+          ),
+    [branchCurrencyCode, branchCountryCode, displayCurrencyMode],
   );
   const displayCurrencyCode = resolveBranchCurrency(response?.summary?.currency);
   const amountSymbol = getOutstandingAmountCurrencySymbol(
@@ -393,6 +398,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     index,
     committedSearch,
     activeBucketFilter,
+    displayCurrencyMode,
   ]);
 
   const closeDrawer = useCallback(() => {
@@ -474,7 +480,23 @@ export default function CustomerOutstandingVsOverdueDashboard() {
     filters.location,
     filters.risk,
     committedSearch,
+    displayCurrencyMode,
   ]);
+
+  // Keep customer drawer amounts in sync when parent table refetches (e.g. currency toggle).
+  useEffect(() => {
+    if (!drawerOpened || !drawerDetailMode || drawerDetailMode.type !== "customerLocal") {
+      return;
+    }
+    const name = (drawerDetailMode.row.customer_name || "").trim().toLowerCase();
+    if (!name || !response?.data?.length) return;
+    const fresh =
+      response.data.find(
+        (r) => (r.customer_name || "").trim().toLowerCase() === name,
+      ) ?? drawerDetailMode.row;
+    setDrawerDetailMode({ type: "customerLocal", row: fresh });
+    setDrawerResponse(drawerResponseFromClickedRow(fresh, response));
+  }, [response, drawerOpened, displayCurrencyMode]);
 
   useEffect(() => {
     void fetchData();
@@ -653,6 +675,7 @@ export default function CustomerOutstandingVsOverdueDashboard() {
                 >
                   As of {response?.as_of ? response.as_of : "-"}
                 </Button>
+                <PipelineReportCurrencySelect />
                 <Select
                   size="xs"
                   radius={6}

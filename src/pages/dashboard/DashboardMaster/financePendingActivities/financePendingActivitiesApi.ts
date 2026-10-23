@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import { getDashboardDisplayCurrencyFields } from "../../../../utils/dashboardDisplayCurrency";
 import type { PeriodGranularity } from "../collectionTargetVsPerformance/components/PeriodPillGroup";
 import type { PendingActivityCategory } from "./financePendingActivitiesTypes";
 
@@ -24,6 +25,7 @@ export type PendingActivitiesRequest = {
   credit_notes_pending?: boolean;
   branch_code?: string;
   search?: string;
+  display_currency?: "LOCAL" | "USD";
 };
 
 export const DEFAULT_TOP_LISTS: PendingActivitiesTopLists = {
@@ -155,6 +157,7 @@ export function buildPendingActivitiesRequest(options: {
     date_from: options.dateRange.date_from,
     date_to: options.dateRange.date_to,
     top_lists: options.topLists,
+    ...getDashboardDisplayCurrencyFields(),
   };
 
   for (const category of options.selectedKpiFilters ?? []) {

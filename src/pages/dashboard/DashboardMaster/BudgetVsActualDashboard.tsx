@@ -20,6 +20,8 @@ import dayjs from "dayjs";
 import { ERPListToolbar } from "../../../components";
 import useAuthStore from "../../../store/authStore";
 import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
+import PipelineReportCurrencySelect from "../PipelineReport/PipelineReportCurrencySelect";
 import { DashboardChartSearch } from "../../../components/DashboardChartSearch";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import { ActionIcon } from "@mantine/core";
@@ -109,6 +111,7 @@ export default function BudgetVsActualDashboard() {
   const user = useAuthStore((state) => state.user);
   const { formatBudgetCrL: formatCrL, numberLocale, isIndianBranch, currencySymbol } =
     useBranchNumberFormat();
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
   const routeState = (location.state || {}) as RouteState;
 
   const company = routeState.company?.trim() || user?.company?.company_name || "PENTAGON INDIA";
@@ -186,6 +189,7 @@ export default function BudgetVsActualDashboard() {
     startMonth,
     type,
     committedSearch,
+    displayCurrencyMode,
   ]);
 
   useEffect(() => {
@@ -420,6 +424,7 @@ export default function BudgetVsActualDashboard() {
                   style={{ flex: isCompact ? "1 1 calc(50% - 4px)" : "1 1 118px", minWidth: isCompact ? 0 : 100 }}
                   styles={selectInputStyles}
                 />
+                <PipelineReportCurrencySelect />
                 <Select
                   size="xs"
                   radius={6}

@@ -18,6 +18,7 @@ import {
   type FilteredOutstandingResponse,
 } from "../../../service/dashboard.service";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import {
   formatOutstandingAmountCompact,
   formatUserInteger,
@@ -142,6 +143,7 @@ function mapFilteredResponseToCardSummary(
     total_overdue_percentage: overduePct,
     open_invoices: summary?.total ?? customerCount,
     customer_count: customerCount,
+    currency: summary?.currency,
     ...aggregateAgingFromFilteredResponse(response),
   };
 }
@@ -152,6 +154,7 @@ const OutstandingVsOverdueCard = ({
   globalSearch,
 }: OutstandingVsOverdueCardProps) => {
   const user = useAuthStore((state) => state.user);
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
   const userCountryCode = user?.country?.country_code;
   const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
   const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
@@ -165,11 +168,14 @@ const OutstandingVsOverdueCard = ({
 
   const trimmedSearch = globalSearch?.trim() || "";
 
-  const displayCurrencyCode = resolveOutstandingDisplayCurrency(
-    summary?.currency,
-    branchCurrencyCode,
-    branchCountryCode,
-  );
+  const displayCurrencyCode =
+    displayCurrencyMode === "USD"
+      ? "USD"
+      : resolveOutstandingDisplayCurrency(
+          summary?.currency,
+          branchCurrencyCode,
+          branchCountryCode,
+        );
   const currencyBadgeLabel = getOutstandingCurrencyCodeLabel(
     displayCurrencyCode,
     branchCountryCode,
@@ -213,7 +219,7 @@ const OutstandingVsOverdueCard = ({
     } finally {
       setIsLoading(false);
     }
-  }, [company, trimmedSearch]);
+  }, [company, trimmedSearch, displayCurrencyMode]);
 
   useEffect(() => {
     void fetchCardData();

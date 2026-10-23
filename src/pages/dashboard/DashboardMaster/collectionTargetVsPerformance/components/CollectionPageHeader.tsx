@@ -1,6 +1,7 @@
 import { Box, Button, Flex, Text } from "@mantine/core";
 import { IconDownload, IconRefresh } from "@tabler/icons-react";
 import { SingleDateInput } from "../../../../../components";
+import PipelineReportCurrencySelect from "../../../PipelineReport/PipelineReportCurrencySelect";
 import type { CollectionTargetVsPerformanceData } from "../collectionTargetVsPerformanceTypes";
 import { COL_INK, COL_INK_3, COL_INK_4, COL_LINE } from "../theme";
 import { CollectionBranchFilterSelect } from "./CollectionBranchFilterSelect";
@@ -107,6 +108,9 @@ export function CollectionPageHeader({
             maxDate={new Date()}
             styles={dateFieldStyles}
           />
+        </Box>
+        <Box style={{ alignSelf: "flex-end" }}>
+          <PipelineReportCurrencySelect />
         </Box>
         <CollectionBranchFilterSelect
           value={branchFilter}

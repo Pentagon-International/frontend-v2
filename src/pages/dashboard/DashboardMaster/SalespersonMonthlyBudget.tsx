@@ -22,6 +22,7 @@ import {
   type SalespersonMonthlyBudgetItem,
 } from "../../../service/dashboard.service";
 import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 
 const ERP_FONT_SANS = "'Geist', sans-serif";
 
@@ -107,6 +108,7 @@ export default function SalespersonMonthlyBudget({
     numberLocale,
     isIndianBranch,
   } = useBranchNumberFormat();
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<SalespersonMonthlyBudgetItem[]>([]);
@@ -143,7 +145,10 @@ export default function SalespersonMonthlyBudget({
           totalSalesBudget: toNumber(
             response?.summary?.total_sales_budget ?? payload?.summary?.total_sales_budget
           ),
-          currency: response?.summary?.currency || payload?.currency || "INR",
+          currency:
+            displayCurrencyMode === "USD"
+              ? "USD"
+              : response?.summary?.currency || payload?.currency || "INR",
         });
       } catch (err) {
         console.error("Error loading salesperson monthly budget:", err);
@@ -154,7 +159,7 @@ export default function SalespersonMonthlyBudget({
     };
 
     void fetchMonthlyBudget();
-  }, [opened, company, salesperson, startMonth, endMonth]);
+  }, [opened, company, salesperson, startMonth, endMonth, type, displayCurrencyMode]);
 
   const sparklineOption = useMemo(() => {
     const labels = rows.map((row) => dayjs(`${row.month}-01`).format("MMM"));

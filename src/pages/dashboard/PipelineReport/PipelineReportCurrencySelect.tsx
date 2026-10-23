@@ -63,7 +63,7 @@ export default function PipelineReportCurrencySelect({
 
   return (
     <Select
-      aria-label="Pipeline report currency"
+      aria-label="Display currency"
       size="xs"
       allowDeselect={false}
       data={[

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Alert, Box, Flex, Skeleton } from "@mantine/core";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { useDashboardChartSearch } from "../../../hooks/useDashboardChartSearch";
 import type { PeriodGranularity } from "./collectionTargetVsPerformance/components/PeriodPillGroup";
 import type { OutstandingListFilters } from "./financeOutstandingAgeing/components/OutstandingPageHeader";
@@ -57,6 +58,8 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
     setPageIndex(0);
   }
 
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
+
   const loadDashboard = useCallback(async () => {
     const seq = ++requestSeq.current;
     setLoading(true);
@@ -96,6 +99,7 @@ const FinanceOutstandingAndAgeingDashboard: React.FC = () => {
   }, [
     company,
     committedSearch,
+    displayCurrencyMode,
     filters.customer_name,
     filters.location,
     filters.risk,

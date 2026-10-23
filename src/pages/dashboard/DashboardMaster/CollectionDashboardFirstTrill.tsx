@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { Alert, Box, Drawer, Flex, Loader, Text } from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import {
@@ -46,6 +47,7 @@ export default function CollectionDashboardFirstTrill({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
 
   useEffect(() => {
     if (!opened || !branch) {
@@ -84,7 +86,7 @@ export default function CollectionDashboardFirstTrill({
     };
 
     void load();
-  }, [opened, branch, company, dateRange]);
+  }, [opened, branch, company, dateRange, displayCurrencyMode]);
 
   return (
     <Drawer

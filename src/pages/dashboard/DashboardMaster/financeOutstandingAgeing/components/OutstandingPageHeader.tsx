@@ -2,6 +2,7 @@ import { type Dispatch, type SetStateAction } from "react";
 import { Box, Button, Flex, Select, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { DashboardChartSearch } from "../../../../../components/DashboardChartSearch";
+import PipelineReportCurrencySelect from "../../../PipelineReport/PipelineReportCurrencySelect";
 import type { FinanceOutstandingAgeingData } from "../financeOutstandingAgeingTypes";
 import { OST_INK, OST_INK_3 } from "../theme";
 import type { PeriodGranularity } from "../../collectionTargetVsPerformance/components/PeriodPillGroup";
@@ -102,6 +103,7 @@ export function OutstandingPageHeader({
         >
           {meta.asOfLabel}
         </Button>
+        <PipelineReportCurrencySelect />
         {/* <Select
           size="xs"
           radius={6}

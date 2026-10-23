@@ -89,6 +89,7 @@ import CustomerServiceImportReport from "../CustomerServiceImportReport";
 import CustomerServiceDashboard from "./CustomerServiceDashboard";
 import AccountsDashboard from "./AccountsDashboard";
 import { useListFilterStore } from "../../../store/listFilterStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { useLayoutStore } from "../../../store/useLayoutStore";
 import {
   formatOutstandingAmountCompact,
@@ -236,6 +237,7 @@ function DashSalesLeadershipKpiCard({
   trendSub,
   trendColor,
   sparkKind,
+  loading = false,
 }: {
   label: string;
   value: string;
@@ -244,6 +246,7 @@ function DashSalesLeadershipKpiCard({
   trendSub?: string;
   trendColor: string;
   sparkKind: DashLeadershipSparkKind;
+  loading?: boolean;
 }) {
   return (
     <Box
@@ -271,9 +274,15 @@ function DashSalesLeadershipKpiCard({
           {label}
         </Text>
       </Group>
-      <Text fz={22} fw={800} c="#0F172A" lh={1.15}>
-        {value}
-      </Text>
+      {loading ? (
+        <Box style={{ display: "flex", alignItems: "center", minHeight: 28 }}>
+          <Loader size="sm" color="#105476" />
+        </Box>
+      ) : (
+        <Text fz={22} fw={800} c="#0F172A" lh={1.15}>
+          {value}
+        </Text>
+      )}
       {trendMain ? (
         <Text fz={11} lh={1.35} style={{ whiteSpace: "nowrap" }}>
           <Text span c={trendColor} fw={700}>
@@ -653,6 +662,11 @@ const Dashboard = () => {
   >([]);
   const [pipelineBranchLoading, setPipelineBranchLoading] = useState(false);
   const isPipelineReportTab = activeTab === "pipeline-Report";
+  const showDashboardCurrencySelect =
+    activeTab === "overall" ||
+    activeTab === "pipeline-Report" ||
+    activeTab === "accounts-dashboard";
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
   const isPipelineAdmin = Boolean(user?.is_staff);
   const isIndiaUser =
     (user?.country?.country_code ?? "").toUpperCase() === "IN";
@@ -688,6 +702,10 @@ const Dashboard = () => {
   // Refs to prevent duplicate API calls
   const isInitialLoadRef = useRef(false);
   const isLoadingRef = useRef(false);
+  /** Ignores stale outstanding/budget responses from currency-toggle reloads. */
+  const moneyReloadSeqRef = useRef(0);
+  /** Skip first effect run — initial money data comes from loadInitialData. */
+  const skipCurrencyReloadOnMountRef = useRef(true);
   const locationStateProcessedRef = useRef<string | null>(null);
   const lastCompanyNameRef = useRef<string | null>(null);
   const lastGlobalSearchRef = useRef<string | undefined>(undefined);
@@ -2303,6 +2321,95 @@ const Dashboard = () => {
       isLoadingRef.current = false;
     }
   };
+
+  /**
+   * Currency toggle: refetch only money-bearing Sales APIs (outstanding + budget).
+   * Skips enquiry / call entry / customer interaction to avoid duplicate work.
+   */
+  const reloadDashboardMoneyData = async () => {
+    const seq = ++moneyReloadSeqRef.current;
+    const companyName =
+      user?.company?.company_name || selectedCompany || "PENTAGON INDIA";
+    const search = globalSearch?.trim() || undefined;
+    const budgetYear = selectedYear
+      ? parseInt(selectedYear, 10)
+      : getCurrentFinancialYearStart();
+    const fyRange = calculateFinancialYearBudgetRangeForYear(budgetYear);
+    const startMonth = budgetStartMonth || fyRange.start_month;
+    const endMonth = budgetEndMonth || fyRange.end_month;
+
+    setIsLoadingOutstandingChart(true);
+    setIsLoadingBudget(true);
+
+    try {
+      const results = await Promise.allSettled([
+        getFilteredOutstandingData({
+          company: companyName,
+          ...(search ? { search } : {}),
+        }),
+        getFilteredBudgetData({
+          company: companyName,
+          start_month: startMonth,
+          end_month: endMonth,
+          type: budgetType || "salesperson",
+          ...(search ? { search } : {}),
+        } as any),
+      ]);
+
+      if (seq !== moneyReloadSeqRef.current) return;
+
+      const outstandingResponse =
+        results[0].status === "fulfilled" ? results[0].value : null;
+      const budgetResponse =
+        results[1].status === "fulfilled" ? results[1].value : null;
+
+      if (
+        outstandingResponse?.data &&
+        Array.isArray(outstandingResponse.data)
+      ) {
+        const calculatedData =
+          calculateFilteredAggregatedData(outstandingResponse);
+        setAggregatedData(calculatedData);
+        setLocationData(outstandingResponse.data);
+        setContextTotals({
+          outstanding: calculatedData.totalOutstanding,
+          overdue: calculatedData.totalOverdue,
+        });
+      } else if (results[0].status === "rejected") {
+        console.error("Outstanding money reload failed:", results[0].reason);
+      }
+
+      if (budgetResponse && typeof budgetResponse !== "string") {
+        setBudgetAggregatedData(calculateBudgetAggregatedData(budgetResponse));
+        setBudgetRawData(budgetResponse);
+        const dr = budgetResponse?.data?.[0]?.date_range || "";
+        if (dr) setBudgetDateRange(dr);
+      } else if (results[1].status === "rejected") {
+        console.error("Budget money reload failed:", results[1].reason);
+      }
+    } catch (error) {
+      if (seq !== moneyReloadSeqRef.current) return;
+      console.error("Error reloading dashboard money data:", error);
+    } finally {
+      if (seq === moneyReloadSeqRef.current) {
+        setIsLoadingOutstandingChart(false);
+        setIsLoadingBudget(false);
+      }
+    }
+  };
+
+  // Currency toggle: money APIs only (not full loadInitialData).
+  useEffect(() => {
+    if (skipCurrencyReloadOnMountRef.current) {
+      skipCurrencyReloadOnMountRef.current = false;
+      return;
+    }
+    if (!isInitialLoadRef.current) return;
+    if (isRestoringFromNavigation) return;
+    if (activeTab !== "overall") return;
+    void reloadDashboardMoneyData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayCurrencyMode]);
 
   const resetToInitialState = async () => {
     try {
@@ -7611,11 +7718,14 @@ const Dashboard = () => {
     const e = enquiryConversionAggregatedData;
     const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
     const branchCurrencyCode = getDefaultBranchCurrencyCode(user?.branches);
-    const overdueDisplayCurrency = resolveOutstandingDisplayCurrency(
-      undefined,
-      branchCurrencyCode,
-      branchCountryCode,
-    );
+    const overdueDisplayCurrency =
+      displayCurrencyMode === "USD"
+        ? "USD"
+        : resolveOutstandingDisplayCurrency(
+            undefined,
+            branchCurrencyCode,
+            branchCountryCode,
+          );
     const pipelineN = extractNumericValue(
       (contextTotals as any).outstanding ?? (contextTotals as any).total_outstanding
     );
@@ -7733,6 +7843,7 @@ const Dashboard = () => {
     budgetAggregatedData.totalActualBudget,
     budgetAggregatedData.totalSalesBudget,
     user?.branches,
+    displayCurrencyMode,
   ]);
 
   return (
@@ -7926,6 +8037,9 @@ const Dashboard = () => {
                     containerStyle={{ gap: isPipelineReportTab ? 6 : 8 }}
                   />
                 </Box>
+                {showDashboardCurrencySelect ? (
+                  <PipelineReportCurrencySelect />
+                ) : null}
                 {showPipelineBranchFilter ? (
                   <Select
                     placeholder="Branch"
@@ -7968,7 +8082,6 @@ const Dashboard = () => {
                     />
                   </Box>
                 ) : null}
-                {isPipelineReportTab ? <PipelineReportCurrencySelect /> : null}
                 <Box
                   style={{
                     flexShrink: 0,
@@ -8204,6 +8317,11 @@ const Dashboard = () => {
                         trendSub={kpi.trend?.sub}
                         trendColor={kpi.trend?.color ?? "#64748B"}
                         sparkKind={kpi.spark}
+                        loading={
+                          kpi.key === "overdue-ar"
+                            ? isLoadingOutstandingChart
+                            : false
+                        }
                       />
                     ))}
                   </SimpleGrid>

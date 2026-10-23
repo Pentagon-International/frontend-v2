@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Box, SimpleGrid } from "@mantine/core";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import CollectionDashboardFirstTrill from "./CollectionDashboardFirstTrill";
 import { BranchCollectionTable } from "./collectionTargetVsPerformance/components/BranchCollectionTable";
 import { CollectionKpiRow } from "./collectionTargetVsPerformance/components/CollectionKpiRow";
@@ -72,6 +73,8 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
     [fromDate],
   );
 
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -88,7 +91,7 @@ const CollectionTargetvsPerformanceDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [branchFilter, company, dateRange]);
+  }, [branchFilter, company, dateRange, displayCurrencyMode]);
 
   useEffect(() => {
     void loadDashboard();

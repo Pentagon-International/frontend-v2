@@ -1,6 +1,7 @@
 import { Box, Button, Flex, Select, Text } from "@mantine/core";
 import { IconDownload, IconRefresh } from "@tabler/icons-react";
 import { SingleDateInput } from "../../../../../components";
+import PipelineReportCurrencySelect from "../../../PipelineReport/PipelineReportCurrencySelect";
 import type { FinancePendingActivitiesData } from "../financePendingActivitiesTypes";
 import { PA_INK, PA_INK_3, PA_INK_4, PA_LINE } from "../theme";
 import { PeriodPillGroup, type PeriodGranularity } from "../../collectionTargetVsPerformance/components/PeriodPillGroup";
@@ -106,6 +107,9 @@ export function PendingActivitiesPageHeader({
             maxDate={new Date()}
             styles={dateFieldStyles}
           />
+        </Box>
+        <Box style={{ alignSelf: "flex-end" }}>
+          <PipelineReportCurrencySelect />
         </Box>
         <Select
           size="xs"

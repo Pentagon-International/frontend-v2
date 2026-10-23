@@ -5,6 +5,7 @@ import {
   ERP_LIST_FONT_SANS,
   ERP_LIST_GEIST_ROOT_CLASS,
 } from "../../../components/ERPListPage/erpListGeistShell";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { ChargeLinesTable } from "./collectionDashboardSecondTrill/ChargeLinesTable";
 import { InvoiceDetailHeader } from "./collectionDashboardSecondTrill/InvoiceDetailHeader";
 import {
@@ -46,6 +47,7 @@ export default function CollectionDashboardSecondTrill({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
 
   useEffect(() => {
     if (!opened || !invoice?.invoiceId) {
@@ -83,7 +85,7 @@ export default function CollectionDashboardSecondTrill({
     };
 
     void load();
-  }, [opened, invoice, branchName]);
+  }, [opened, invoice, branchName, displayCurrencyMode]);
 
   return (
     <Drawer

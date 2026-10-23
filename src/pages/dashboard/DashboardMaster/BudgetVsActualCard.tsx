@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useBranchNumberFormat } from "../../../hooks/useBranchNumberFormat";
-import { Badge, Box, Group, SegmentedControl, Select, Text } from "@mantine/core";
+import { Badge, Box, Group, Loader, SegmentedControl, Select, Text } from "@mantine/core";
 import { IconArrowRight } from "@tabler/icons-react";
 import {
   calculateFinancialYearBudgetRangeForYear,
@@ -24,6 +24,7 @@ interface BudgetVsActualCardProps {
   yearOptions: { value: string; label: string }[];
   fromMonthOptions: { value: string; label: string }[];
   toMonthOptions: { value: string; label: string }[];
+  isLoadingBudget?: boolean;
   handleBudgetViewAll: () => void;
   handleBudgetTypeChange: (value: "salesperson" | "non-salesperson") => void;
   handleBudgetMonthFilterChange: (startMonth: string | null, endMonth: string | null) => void;
@@ -60,6 +61,7 @@ const BudgetVsActualCard = ({
   yearOptions,
   fromMonthOptions,
   toMonthOptions,
+  isLoadingBudget = false,
   handleBudgetViewAll,
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
@@ -141,6 +143,20 @@ const BudgetVsActualCard = ({
       </Box>
 
       <Box style={dashboardPanelBody} onClick={(event) => event.stopPropagation()}>
+        {isLoadingBudget ? (
+          <Box
+            style={{
+              flex: 1,
+              minHeight: 160,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Loader size="lg" color="#105476" />
+          </Box>
+        ) : (
+          <>
         <Group gap="xs" wrap="wrap" mb={10}>
           <SegmentedControl
             value={budgetType}
@@ -273,6 +289,8 @@ const BudgetVsActualCard = ({
             </Text>
           </Group>
         </Box>
+          </>
+        )}
       </Box>
     </Box>
   );

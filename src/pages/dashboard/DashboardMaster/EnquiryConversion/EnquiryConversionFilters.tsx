@@ -7,6 +7,7 @@ import {
 } from "../../../../components";
 import { DashboardChartSearch } from "../../../../components/DashboardChartSearch";
 import { Box } from "@mantine/core";
+import PipelineReportCurrencySelect from "../../PipelineReport/PipelineReportCurrencySelect";
 
 export type EnquiryConversionPageFilters = {
   fromDate: Date | null;
@@ -84,6 +85,7 @@ export function EnquiryConversionFilters({
         disabled={disabled}
         containerStyle={{ gap: 6 }}
       />
+      <PipelineReportCurrencySelect />
       <Select
         placeholder="All types"
         size="xs"

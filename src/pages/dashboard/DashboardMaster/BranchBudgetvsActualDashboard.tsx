@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { calculateFinancialYearBudgetRangeForYear } from "../../../service/dashboard.service";
+import { getDashboardDisplayCurrencyFields } from "../../../utils/dashboardDisplayCurrency";
+import PipelineReportCurrencySelect from "../PipelineReport/PipelineReportCurrencySelect";
 import BranchMonthlyBudget from "./BranchMonthlyBudget";
 import {
   Alert,
@@ -366,6 +369,8 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
     setBranchDrawerOpened(true);
   }, []);
 
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
@@ -375,6 +380,7 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
         group_by: groupBy,
         metric: metricFilter,
         performance_metric: metricTab,
+        ...getDashboardDisplayCurrencyFields(),
       });
       setData(normalizeBranchBudgetVsActual(response.data));
       setApiNotice(null);
@@ -386,7 +392,7 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [groupBy, metricFilter, metricTab, periodFilter, periodGranularity]);
+  }, [displayCurrencyMode, groupBy, metricFilter, metricTab, periodFilter, periodGranularity]);
 
   useEffect(() => {
     void loadDashboard();
@@ -547,6 +553,7 @@ const BranchBudgetvsActualDashboard: React.FC = () => {
             >
               {data.meta.periodLabel}
             </Button>
+            <PipelineReportCurrencySelect />
             <Select
               size="xs"
               value={groupBy}

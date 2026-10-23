@@ -50,6 +50,7 @@ const BudgetSection = ({
   yearOptions,
   fromMonthOptions,
   toMonthOptions,
+  isLoadingBudget,
   handleBudgetViewAll,
   handleBudgetTypeChange,
   handleBudgetMonthFilterChange,
@@ -66,6 +67,7 @@ const BudgetSection = ({
       yearOptions={yearOptions}
       fromMonthOptions={fromMonthOptions}
       toMonthOptions={toMonthOptions}
+      isLoadingBudget={isLoadingBudget}
       handleBudgetViewAll={handleBudgetViewAll}
       handleBudgetTypeChange={handleBudgetTypeChange}
       handleBudgetMonthFilterChange={handleBudgetMonthFilterChange}

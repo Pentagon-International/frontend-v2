@@ -28,6 +28,10 @@ import {
 } from "../../../components/ERPListPage/erpListGeistShell";
 import { SingleDateInput } from "../../../components";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
+import { noteMissingDashboardExchangeRate } from "../../../service/dashboard.service";
+import { getDashboardDisplayCurrencyFields } from "../../../utils/dashboardDisplayCurrency";
+import PipelineReportCurrencySelect from "../PipelineReport/PipelineReportCurrencySelect";
 import {
   ALL_BREAKDOWN_DIMENSIONS,
   EMPTY_BREAKDOWN_TOTAL,
@@ -560,6 +564,8 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     if (toDateProp != null) setRangeTo(toDateProp);
   }, [toDateProp]);
 
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setApiNotice(null);
@@ -572,6 +578,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
         date_to: rangeTo ? dayjs(rangeTo).format("YYYY-MM-DD") : dayjs().format("YYYY-MM-DD"),
         compare_previous_period: true,
         ...profitabilityDimensionFlags(activeDimension),
+        ...getDashboardDisplayCurrencyFields(),
       };
       const branchCode = branchFilter?.trim();
       // if (branchCode) payload.branch_code = branchCode;
@@ -580,6 +587,10 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
 
       // Interceptor already returns axios `response.data` (not the full AxiosResponse).
       const body = await apiCallProtected.post(URL.dashboard.accountsProfitability, payload);
+      noteMissingDashboardExchangeRate(
+        payload.display_currency as string | undefined,
+        body,
+      );
       const normalized = normalizeAccountsDashboard(body, activeDimension);
 
       setData((prev) => ({
@@ -597,7 +608,7 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [activeDimension, branchFilter, company, rangeFrom, rangeTo]);
+  }, [activeDimension, branchFilter, company, displayCurrencyMode, rangeFrom, rangeTo]);
 
   useEffect(() => {
     void loadDashboard();
@@ -991,6 +1002,11 @@ const AccountsDashboard: React.FC<AccountsDashboardProps> = ({
                 />
               </Box>
             </Flex>
+
+            {/* Standalone route only — shell toolbar already shows the shared toggle. */}
+            {fromDateProp == null && toDateProp == null ? (
+              <PipelineReportCurrencySelect />
+            ) : null}
 
             {/* <Button
               size="compact-xs"

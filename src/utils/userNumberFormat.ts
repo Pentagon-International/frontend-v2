@@ -132,6 +132,8 @@ export function getOutstandingAmountCurrencySymbol(
   branchCountryCode?: string | null,
 ): string {
   const code = String(currencyCode ?? "").trim().toUpperCase();
+  // Explicit USD (e.g. dashboard display_currency toggle) wins over branch country.
+  if (code === "USD") return "$";
   if (isIndianOutstandingBranch(branchCountryCode, code)) return "₹";
   if (!code) return "";
   if (code === "AED") return "AED ";
@@ -152,6 +154,7 @@ export function getOutstandingCurrencyCodeLabel(
   branchCountryCode?: string | null,
 ): string {
   const code = String(currencyCode ?? "").trim().toUpperCase();
+  if (code === "USD") return "$";
   if (isIndianOutstandingBranch(branchCountryCode, code)) return "₹";
   if (!code) return "";
   if (code === "AED") return "AED";
@@ -169,6 +172,8 @@ export function resolveOutstandingDisplayCurrency(
 ): string {
   const branchCurrency = String(branchCurrencyCode ?? "").trim().toUpperCase();
   const summary = String(summaryCurrency ?? "").trim().toUpperCase();
+  // Backend sets summary currency to USD after display_currency conversion.
+  if (summary === "USD") return "USD";
   if (isIndianOutstandingBranch(branchCountryCode, branchCurrency)) {
     return summary || branchCurrency || "INR";
   }

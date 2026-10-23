@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
 import { Alert, Box, Drawer, Flex, Loader, SimpleGrid, Text } from "@mantine/core";
 import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import dayjs from "dayjs";
@@ -51,6 +52,7 @@ export default function ProfitabilityTrillThree({
   const [detail, setDetail] = useState<InvoiceProfitabilityDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
 
   useEffect(() => {
     if (!opened || !document?.invoiceId) {
@@ -94,7 +96,7 @@ export default function ProfitabilityTrillThree({
     };
 
     void load();
-  }, [opened, document, jobDetail, jobId, company, fromDate, toDate]);
+  }, [opened, document, jobDetail, jobId, company, fromDate, toDate, displayCurrencyMode]);
 
   const invoiceLabel = document?.invoiceId ?? document?.id ?? "Invoice";
 

@@ -5,6 +5,8 @@ import { apiCallProtected } from "../../../api/axios";
 import { URL } from "../../../api/serverUrls";
 import { ERP_LIST_FONT_SANS, ERP_LIST_GEIST_ROOT_CLASS } from "../../../components/ERPListPage/erpListGeistShell";
 import useAuthStore from "../../../store/authStore";
+import { usePipelineReportCurrencyStore } from "../../../store/pipelineReportCurrencyStore";
+import { noteMissingDashboardExchangeRate } from "../../../service/dashboard.service";
 import type { PeriodGranularity } from "./collectionTargetVsPerformance/components/PeriodPillGroup";
 import { ActivityListPanel } from "./financePendingActivities/components/ActivityListPanel";
 import { BranchOpenItemsTable } from "./financePendingActivities/components/BranchOpenItemsTable";
@@ -69,6 +71,8 @@ const FinancePendingActivitiesDashboard: React.FC = () => {
     [fromDate],
   );
 
+  const displayCurrencyMode = usePipelineReportCurrencyStore((state) => state.mode);
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -81,6 +85,7 @@ const FinancePendingActivitiesDashboard: React.FC = () => {
       });
 
       const body = await apiCallProtected.post(URL.dashboard.financePendingActivities, payload);
+      noteMissingDashboardExchangeRate(payload.display_currency, body);
       setData(normalizeFinancePendingActivities(body, topLists));
     } catch {
       setData(null);
@@ -88,7 +93,7 @@ const FinancePendingActivitiesDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [branchFilter, company, dateRange, topLists]);
+  }, [branchFilter, company, dateRange, displayCurrencyMode, topLists]);
 
   useEffect(() => {
     void loadDashboard();

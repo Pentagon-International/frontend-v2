@@ -1,5 +1,7 @@
 import { apiCallProtected } from "../../../../api/axios";
 import { URL } from "../../../../api/serverUrls";
+import { noteMissingDashboardExchangeRate } from "../../../../service/dashboard.service";
+import { getDashboardDisplayCurrencyFields } from "../../../../utils/dashboardDisplayCurrency";
 
 export type OutstandingAgeingRequest = {
   company: string;
@@ -25,6 +27,7 @@ export async function fetchOutstandingAgeing(
   const payload: Record<string, unknown> = {
     company: params.company,
     branch: params.branch,
+    ...getDashboardDisplayCurrencyFields(),
   };
 
   if (params.risk?.trim()) payload.risk = params.risk.trim();
@@ -33,5 +36,10 @@ export async function fetchOutstandingAgeing(
   if (params.search?.trim()) payload.search = params.search.trim();
 
   const url = `${URL.dashboard.customerOutstandingVsOverdue}?${query.toString()}`;
-  return apiCallProtected.post(url, payload);
+  const response = await apiCallProtected.post(url, payload);
+  noteMissingDashboardExchangeRate(
+    payload.display_currency as string | undefined,
+    response,
+  );
+  return response;
 }
