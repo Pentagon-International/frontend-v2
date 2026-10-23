@@ -190,6 +190,18 @@ export const isChargeBranchCurrency = (
   return false;
 };
 
+const lookupCurrencyCodeById = (
+  currencyId: string,
+  currencyData: CurrencyMasterItem[],
+): string => {
+  if (!currencyId) return "";
+  const row = currencyData.find((c) => String(c.id) === currencyId);
+  return (row?.code || row?.currency_code || "")
+    .toString()
+    .trim()
+    .toUpperCase();
+};
+
 export const resolveChargeCurrencyCode = (
   charge: {
     currency?: string;
@@ -204,20 +216,22 @@ export const resolveChargeCurrencyCode = (
   const fromField = (charge.currency ?? charge.currency_code ?? "")
     .trim()
     .toUpperCase();
-  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
-    const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "")
-      .toString()
-      .trim()
-      .toUpperCase();
+
+  // Numeric "currency" values are currency ids (e.g. API `currency: 68`), not codes.
+  if (fromField && /^\d+$/.test(fromField)) {
+    const fromNumeric =
+      lookupCurrencyCodeById(fromField, currencyData) ||
+      lookupCurrencyCodeById(currencyId, currencyData);
+    if (fromNumeric) return fromNumeric;
   }
-  if (fromField) return fromField;
+
+  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
+    const fromId = lookupCurrencyCodeById(currencyId, currencyData);
+    if (fromId) return fromId;
+  }
+  if (fromField && !/^\d+$/.test(fromField)) return fromField;
   if (currencyId) {
-    const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "")
-      .toString()
-      .trim()
-      .toUpperCase();
+    return lookupCurrencyCodeById(currencyId, currencyData);
   }
   return "";
 };
@@ -234,6 +248,9 @@ export const validateRoeForCurrency = (
 ): string | null => {
   if (roe === null || roe === undefined) return ROE_REQUIRED_FIELD;
 
+  const roeNum = Number(roe);
+  if (!Number.isFinite(roeNum)) return ROE_REQUIRED_FIELD;
+
   const branchCurrencyId = options?.branchCurrencyId ?? "";
   const base = branchCurrency?.trim().toUpperCase() ?? "";
   const code = currencyCode?.trim().toUpperCase() ?? "";
@@ -249,10 +266,10 @@ export const validateRoeForCurrency = (
     branchCurrencyId,
   );
 
-  if (isBase && roe !== 1) {
+  if (isBase && roeNum !== 1) {
     return "ROE must be 1 when currency matches local currency";
   }
-  if (!isBase && roe === 1) {
+  if (!isBase && roeNum === 1) {
     return forField ? ROE_CANNOT_BE_ONE_FIELD : ROE_CANNOT_BE_ONE_TOAST;
   }
   return null;

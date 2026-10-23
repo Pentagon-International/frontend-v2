@@ -99,7 +99,10 @@ import {
   isMoneyWholeNumberMode,
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
-import { resolveAgentInvoiceCollectCharges } from "../../../utils/collectAgentInvoiceCharges";
+import {
+  getHousingChargeArray,
+  resolveAgentInvoiceCollectCharges,
+} from "../../../utils/collectAgentInvoiceCharges";
 import { findJobCreateDropdownRow } from "../../../utils/jobCreateDropdown";
 
 // Fetch functions
@@ -437,6 +440,9 @@ const validateRoeForCurrency = (
 ): string | null => {
   if (roe === null || roe === undefined) return "ROE is required";
 
+  const roeNum = Number(roe);
+  if (!Number.isFinite(roeNum)) return "ROE is required";
+
   const branchCurrencyId = options?.branchCurrencyId ?? "";
   const base = branchCurrency?.trim().toUpperCase() ?? "";
   const code = currencyCode?.trim().toUpperCase() ?? "";
@@ -452,10 +458,10 @@ const validateRoeForCurrency = (
     branchCurrencyId,
   );
 
-  if (isBase && roe !== 1) {
+  if (isBase && roeNum !== 1) {
     return "ROE must be 1 when currency matches branch currency";
   }
-  if (!isBase && roe === 1) {
+  if (!isBase && roeNum === 1) {
     return forField ? ROE_CANNOT_BE_ONE_FIELD : ROE_CANNOT_BE_ONE_TOAST;
   }
   return null;
@@ -480,6 +486,18 @@ const isChargeBranchCurrency = (
   return false;
 };
 
+const lookupInvoiceCurrencyCodeById = (
+  currencyId: string,
+  currencyData: { id?: number; code?: string; currency_code?: string }[],
+): string => {
+  if (!currencyId) return "";
+  const row = currencyData.find((c) => String(c.id) === currencyId);
+  return (row?.code || row?.currency_code || "")
+    .toString()
+    .trim()
+    .toUpperCase();
+};
+
 const resolveChargeCurrencyCode = (
   charge: { currency?: string; currency_id?: string },
   currencyData: { id?: number; code?: string; currency_code?: string }[],
@@ -488,20 +506,20 @@ const resolveChargeCurrencyCode = (
     ? String(charge.currency_id).trim()
     : "";
   const fromField = charge.currency?.trim().toUpperCase() ?? "";
-  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
-    const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "")
-      .toString()
-      .trim()
-      .toUpperCase();
+  // Numeric "currency" values are currency ids (e.g. API `currency: 68`), not codes.
+  if (fromField && /^\d+$/.test(fromField)) {
+    const fromNumeric =
+      lookupInvoiceCurrencyCodeById(fromField, currencyData) ||
+      lookupInvoiceCurrencyCodeById(currencyId, currencyData);
+    if (fromNumeric) return fromNumeric;
   }
-  if (fromField) return fromField;
+  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
+    const fromId = lookupInvoiceCurrencyCodeById(currencyId, currencyData);
+    if (fromId) return fromId;
+  }
+  if (fromField && !/^\d+$/.test(fromField)) return fromField;
   if (currencyId) {
-    const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "")
-      .toString()
-      .trim()
-      .toUpperCase();
+    return lookupInvoiceCurrencyCodeById(currencyId, currencyData);
   }
   return "";
 };
@@ -2143,8 +2161,7 @@ function InvoiceCreate({
       return;
     }
 
-    const shouldApplySez =
-      !isAgentInvoice && (isIndiaUser || isVietnamUser);
+    const shouldApplySez = !isAgentInvoice && (isIndiaUser || isVietnamUser);
     if (!shouldApplySez) {
       setHasSez(false);
     }
@@ -2176,8 +2193,7 @@ function InvoiceCreate({
     })();
 
     // Same SEZ tax rules as before: India/Vietnam customer only (not agent).
-    const shouldApplySezTax =
-      (isIndiaUser || isVietnamUser) && !isAgentInvoice;
+    const shouldApplySezTax = (isIndiaUser || isVietnamUser) && !isAgentInvoice;
 
     let cancelled = false;
     void (async () => {
@@ -3223,6 +3239,7 @@ function InvoiceCreate({
 
         // Map house charges → invoice lines.
         // Agent master: Collect from every house. Agent house: only that house.
+        // Customer: form `charges`, else mbl_charges / mawb_charges from job API.
         const chargesSource: unknown[] = (() => {
           if (documentType === "CRN") return [];
           if (isAgent) {
@@ -3232,16 +3249,17 @@ function InvoiceCreate({
               jobHouses: jobHousingArr,
             });
           }
-          if (
-            firstHawb.charges &&
-            Array.isArray(firstHawb.charges) &&
-            firstHawb.charges.length > 0
-          )
-            return firstHawb.charges as unknown[];
-          return [];
+          return getHousingChargeArray(
+            firstHawb as unknown as Record<string, unknown>,
+          );
         })();
 
         if (chargesSource.length > 0) {
+          // Wait for currency master so house currency ids (e.g. 68) resolve to codes (USD)
+          // and house ROE/currency are not wiped before lookup data exists.
+          if (isCurrencyLoading || !Array.isArray(currencyData) || currencyData.length === 0) {
+            return;
+          }
           void (async () => {
             // Agent: header billing currency defaults to USD (see agent useEffect); each charge keeps its own currency from the job.
             const billingCurrency = isAgent
@@ -3251,6 +3269,13 @@ function InvoiceCreate({
             const headerRoe = billingCurrency
               ? await ensureRoeForCurrency(billingCurrency)
               : null;
+            const currencyRows = (
+              Array.isArray(currencyData) ? currencyData : []
+            ) as {
+              id?: number;
+              code?: string;
+              currency_code?: string;
+            }[];
 
             const mappedCharges = await Promise.all(
               (chargesSource as any[]).map(async (charge: any) => {
@@ -3269,11 +3294,15 @@ function InvoiceCreate({
                   currencyDetails?.currency_id ??
                   (typeof charge.currency === "number"
                     ? charge.currency
-                    : null);
+                    : /^\d+$/.test(String(charge.currency ?? "").trim())
+                      ? charge.currency
+                      : null);
+                // House section values first: currency_details / non-numeric code / id lookup.
                 let currency = String(
-                  charge.currency_code ??
-                    currencyDetails?.currency_code ??
-                    (typeof charge.currency === "string"
+                  currencyDetails?.currency_code ??
+                    charge.currency_code ??
+                    (typeof charge.currency === "string" &&
+                    !/^\d+$/.test(charge.currency)
                       ? charge.currency
                       : "") ??
                     "",
@@ -3281,21 +3310,13 @@ function InvoiceCreate({
                   .trim()
                   .toUpperCase();
                 if (
-                  !currency &&
-                  rawCurrencyId != null &&
-                  Array.isArray(currencyData)
+                  (!currency || /^\d+$/.test(currency)) &&
+                  rawCurrencyId != null
                 ) {
-                  const row = (
-                    currencyData as {
-                      id?: number;
-                      code?: string;
-                      currency_code?: string;
-                    }[]
-                  ).find((c) => String(c.id) === String(rawCurrencyId));
-                  currency = (row?.code || row?.currency_code || "")
-                    .toString()
-                    .trim()
-                    .toUpperCase();
+                  currency = lookupInvoiceCurrencyCodeById(
+                    String(rawCurrencyId),
+                    currencyRows,
+                  );
                 }
                 const unit_id =
                   charge.unit_id != null && String(charge.unit_id).trim() !== ""
@@ -3306,7 +3327,9 @@ function InvoiceCreate({
                         ? String(unitDetails.unit_id)
                         : "";
                 const currency_id =
-                  rawCurrencyId != null ? String(rawCurrencyId) : "";
+                  rawCurrencyId != null && String(rawCurrencyId).trim() !== ""
+                    ? String(rawCurrencyId)
+                    : "";
 
                 const noOfUnit = parseNoOfUnitForPayload(charge.no_of_unit);
                 const amountPerUnit =
@@ -3326,31 +3349,32 @@ function InvoiceCreate({
                 if (!currency && chargeIsBranchCurrency && branchBase) {
                   currency = branchBase;
                 }
+
+                // Prefer exact ROE from house; only fetch when house ROE is missing.
+                const houseRoe =
+                  charge.roe != null && String(charge.roe).trim() !== ""
+                    ? typeof charge.roe === "number"
+                      ? charge.roe
+                      : parseFloat(String(charge.roe))
+                    : null;
+                const houseRoeValid =
+                  houseRoe != null &&
+                  Number.isFinite(houseRoe) &&
+                  houseRoe > 0
+                    ? houseRoe
+                    : null;
+
                 const roeVal = await (async (): Promise<number | null> => {
                   if (chargeIsBranchCurrency) return 1;
+                  if (houseRoeValid != null) return houseRoeValid;
                   if (!currency) return null;
-
-                  const fromJob =
-                    charge.roe != null && String(charge.roe).trim() !== ""
-                      ? typeof charge.roe === "number"
-                        ? charge.roe
-                        : parseFloat(String(charge.roe))
-                      : null;
-                  if (
-                    fromJob != null &&
-                    Number.isFinite(fromJob) &&
-                    fromJob !== 1
-                  ) {
-                    return fromJob;
+                  if (currency === headerCode) {
+                    const usableHeader = acceptForeignExchangeRate(headerRoe);
+                    if (usableHeader != null) return usableHeader;
                   }
-                  if (
-                    currency === headerCode &&
-                    headerRoe != null &&
-                    headerRoe !== 1
-                  ) {
-                    return headerRoe;
-                  }
-                  return ensureRoeForCurrency(currency);
+                  return acceptForeignExchangeRate(
+                    await ensureRoeForCurrency(currency),
+                  );
                 })();
 
                 let amount: number | null =
@@ -3418,10 +3442,17 @@ function InvoiceCreate({
                   if (fromHeader != null) headerAmt = fromHeader;
                 }
 
+                // Prefer charge master id from house; do not fall back to mbl/mawb row id.
+                const masterChargeId =
+                  charge.charge_id != null &&
+                  String(charge.charge_id).trim() !== ""
+                    ? Number(charge.charge_id)
+                    : null;
+
                 return {
                   charge_id:
-                    (charge.charge_id ?? charge.id) != null
-                      ? Number(charge.charge_id ?? charge.id)
+                    masterChargeId != null && Number.isFinite(masterChargeId)
+                      ? masterChargeId
                       : null,
                   charge_name: charge.charge_name
                     ? String(charge.charge_name)
@@ -3637,6 +3668,8 @@ function InvoiceCreate({
     location.state?.housingDetails,
     isFromAirExportJob,
     isFromHouseLevel,
+    isCurrencyLoading,
+    currencyData,
   ]);
 
   // When opening invoice view screen from Accounts table (route has :id), fetch latest invoice details
@@ -4616,6 +4649,10 @@ function InvoiceCreate({
 
       if (chargeRoeErrorMessage) {
         setChargeErrors((prev) => ({ ...prev, ...nextChargeErrors }));
+        ToastNotification({
+          message: chargeRoeErrorMessage,
+          type: "error",
+        });
         setIsSubmitting(false);
         return;
       }
@@ -6251,7 +6288,8 @@ function InvoiceCreate({
                   const recalcChargesForBilling = (
                     headerRoe: number | null | undefined,
                   ) => {
-                    const foreignHeaderRoe = acceptForeignExchangeRate(headerRoe);
+                    const foreignHeaderRoe =
+                      acceptForeignExchangeRate(headerRoe);
                     const roeForCalc = isBaseCurrency(newCurrency)
                       ? 1
                       : foreignHeaderRoe;
@@ -6448,8 +6486,7 @@ function InvoiceCreate({
                     }[]) ?? [];
                   const billingUpper =
                     form.values.currency?.trim().toUpperCase() ?? "";
-                  const foreignHeaderRoe =
-                    acceptForeignExchangeRate(numValue);
+                  const foreignHeaderRoe = acceptForeignExchangeRate(numValue);
                   const updatedCharges = form.values.charges.map((charge) => {
                     const chargeCode =
                       resolveChargeCurrencyCode(charge, currencyRows) ||
@@ -6471,9 +6508,7 @@ function InvoiceCreate({
                       nextRoe != null &&
                       nextRoe > 0
                     ) {
-                      amountInLocal = clampLocalAmount(
-                        charge.amount * nextRoe,
-                      );
+                      amountInLocal = clampLocalAmount(charge.amount * nextRoe);
                     }
                     const next = {
                       ...charge,

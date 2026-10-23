@@ -146,11 +146,17 @@ import {
 } from "../../../utils/supplierInvoiceJobPrefill";
 import { generateBillOfLadingPDF } from "../../jobs/pdf/BillOfLadingPDFTemplate";
 import { buildBolFieldRegistry } from "../../../components/PdfEditor/bolFieldRegistry";
-import { normalizePackageTypeCode, resolvePackageTypeName, pickPackageTypeCodeFromCargo } from "../../../utils/packageTypeOptions";
+import {
+  normalizePackageTypeCode,
+  resolvePackageTypeName,
+  pickPackageTypeCodeFromCargo,
+} from "../../../utils/packageTypeOptions";
 import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 
 const BolPdfEditor = lazy(() =>
-  import("../../../components/PdfEditor").then((m) => ({ default: m.PdfEditor })),
+  import("../../../components/PdfEditor").then((m) => ({
+    default: m.PdfEditor,
+  })),
 );
 import { postAPICall } from "../../../service/postApiCall";
 import { getAPICall } from "../../../service/getApiCall";
@@ -586,7 +592,6 @@ function HouseCreate() {
     setPaymentRequestAutomationShipmentNo(normalized);
   }, []);
 
-
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
     if (!normalized) {
@@ -710,7 +715,8 @@ function HouseCreate() {
   );
 
   useLayoutEffect(() => {
-    if (!shouldFocusConsigneeFreeTextRef.current || !consigneeManualMode) return;
+    if (!shouldFocusConsigneeFreeTextRef.current || !consigneeManualMode)
+      return;
     const input = consigneeFreeTextInputRef.current;
     if (!input) return;
     const cursor = input.value.length;
@@ -861,7 +867,11 @@ function HouseCreate() {
   };
 
   const pickPrimaryPartyAddress = <
-    T extends { address?: string; email?: string; address_type?: string | null },
+    T extends {
+      address?: string;
+      email?: string;
+      address_type?: string | null;
+    },
   >(
     addresses: T[],
   ): T | undefined =>
@@ -1054,11 +1064,16 @@ function HouseCreate() {
               chargeable_weight: importHouseCargoWeightFromApi(
                 cargo.chargeable_weight,
               ),
-              haz: cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
-                          ? true
-                          : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
-                            ? false
-                            : null,
+              haz:
+                cargo.haz === true ||
+                cargo.haz === "Yes" ||
+                cargo.is_hazardous === true
+                  ? true
+                  : cargo.haz === false ||
+                      cargo.haz === "No" ||
+                      cargo.is_hazardous === false
+                    ? false
+                    : null,
               un_no: String(cargo.un_no || ""),
               class_name: String(cargo.class_name || ""),
               pkg_group: String(cargo.pkg_group || ""),
@@ -1068,7 +1083,8 @@ function HouseCreate() {
         setCargoDetails(mappedCargoDetails);
       }
 
-      const dimData = (editData as { dimension_data?: unknown[] }).dimension_data;
+      const dimData = (editData as { dimension_data?: unknown[] })
+        .dimension_data;
       if (Array.isArray(dimData) && dimData.length > 0) {
         setDimensions(mapDimensionDataToFormRows(dimData));
         setDimensionUnit(getDimensionUnitFromData(dimData));
@@ -1106,12 +1122,14 @@ function HouseCreate() {
                 unitDetails?.unit_code ??
                 "",
             ).trim();
+            // Prefer currency_details; never treat numeric currency id as a code.
             const currencyCode = String(
-              charge.currency ??
-                currencyDetails?.currency_code ??
-                (charge.currency_details as Record<string, unknown>)
-                  ?.currency_code ??
-                "",
+              currencyDetails?.currency_code ??
+                charge.currency_code ??
+                (charge.currency != null &&
+                !/^\d+$/.test(String(charge.currency))
+                  ? charge.currency
+                  : ""),
             ).trim();
 
             const toNum = (v: unknown): number | null => {
@@ -1173,9 +1191,7 @@ function HouseCreate() {
               supplier_name: charge.supplier_name
                 ? String(charge.supplier_name)
                 : "",
-              pp_cc: normalizeFreightPpCc(
-                charge.pp_cc ?? charge.freight,
-              ),
+              pp_cc: normalizeFreightPpCc(charge.pp_cc ?? charge.freight),
               unit_id,
               unit_code: unitCode,
               no_of_unit: toNum(charge.no_of_unit),
@@ -1259,21 +1275,36 @@ function HouseCreate() {
         );
       }
 
-      if ((editData as { billing_customer_id?: number | null }).billing_customer_id != null) {
+      if (
+        (editData as { billing_customer_id?: number | null })
+          .billing_customer_id != null
+      ) {
         form.setFieldValue(
           "billing_customer_id",
-          Number((editData as { billing_customer_id?: number | null }).billing_customer_id),
+          Number(
+            (editData as { billing_customer_id?: number | null })
+              .billing_customer_id,
+          ),
         );
       }
-      if ((editData as { billing_customer_name?: string }).billing_customer_name) {
+      if (
+        (editData as { billing_customer_name?: string }).billing_customer_name
+      ) {
         form.setFieldValue(
           "billing_customer_name",
-          String((editData as { billing_customer_name?: string }).billing_customer_name),
+          String(
+            (editData as { billing_customer_name?: string })
+              .billing_customer_name,
+          ),
         );
       }
-      if ((editData as { billing_customer_address?: string }).billing_customer_address) {
+      if (
+        (editData as { billing_customer_address?: string })
+          .billing_customer_address
+      ) {
         const addr = String(
-          (editData as { billing_customer_address?: string }).billing_customer_address,
+          (editData as { billing_customer_address?: string })
+            .billing_customer_address,
         );
         form.setFieldValue("billing_customer_address", addr);
         setBillingCustomerAddressOptions([
@@ -1281,15 +1312,21 @@ function HouseCreate() {
             value: addr,
             label: addr,
             email: String(
-              (editData as { billing_customer_email?: string }).billing_customer_email || "",
+              (editData as { billing_customer_email?: string })
+                .billing_customer_email || "",
             ),
           },
         ]);
       }
-      if ((editData as { billing_customer_email?: string }).billing_customer_email) {
+      if (
+        (editData as { billing_customer_email?: string }).billing_customer_email
+      ) {
         form.setFieldValue(
           "billing_customer_email",
-          String((editData as { billing_customer_email?: string }).billing_customer_email),
+          String(
+            (editData as { billing_customer_email?: string })
+              .billing_customer_email,
+          ),
         );
       }
 
@@ -1516,13 +1553,11 @@ function HouseCreate() {
       forwarder_id:
         (editData as { forwarder_id?: number | null } | undefined)
           ?.forwarder_id != null
-          ? Number(
-              (editData as { forwarder_id?: number | null }).forwarder_id,
-            )
+          ? Number((editData as { forwarder_id?: number | null }).forwarder_id)
           : null,
       forwarder_name:
-        (editData as { forwarder_name?: string } | undefined)
-          ?.forwarder_name || "",
+        (editData as { forwarder_name?: string } | undefined)?.forwarder_name ||
+        "",
       forwarder_address:
         (editData as { forwarder_address?: string } | undefined)
           ?.forwarder_address || "",
@@ -1533,7 +1568,8 @@ function HouseCreate() {
         (editData as { billing_customer_id?: number | null } | undefined)
           ?.billing_customer_id != null
           ? Number(
-              (editData as { billing_customer_id?: number | null }).billing_customer_id,
+              (editData as { billing_customer_id?: number | null })
+                .billing_customer_id,
             )
           : null,
       billing_customer_name:
@@ -1691,9 +1727,8 @@ function HouseCreate() {
         originalData &&
         (originalData as Record<string, unknown>).addresses_data
       ) {
-        const addressesData = (
-          originalData as Record<string, unknown>
-        ).addresses_data as Array<{
+        const addressesData = (originalData as Record<string, unknown>)
+          .addresses_data as Array<{
           id: number;
           address: string;
           email?: string;
@@ -1711,8 +1746,7 @@ function HouseCreate() {
 
         const primary =
           addressesData.find(
-            (a) =>
-              String(a.address_type || "").toUpperCase() === "PRIMARY",
+            (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
           ) || addressesData[0];
 
         const keepExisting =
@@ -1769,13 +1803,10 @@ function HouseCreate() {
             ? addressesData.find((a) =>
                 addressesMatchForSelect(a.address, matched.value),
               )
-            : null) ||
-          (keepExisting ? null : primary);
+            : null) || (keepExisting ? null : primary);
         const addrWithState =
           (selectedForState?.state_id != null ? selectedForState : null) ||
-          addressesData.find(
-            (a: { state_id?: number }) => a.state_id != null,
-          );
+          addressesData.find((a: { state_id?: number }) => a.state_id != null);
         if (addrWithState?.state_id != null) {
           form.setFieldValue(
             "shipper_state_id",
@@ -2003,11 +2034,7 @@ function HouseCreate() {
       }
 
       // Calculate: sell_local_amount = amount * roe (0 allowed)
-      if (
-        next.amount != null &&
-        next.roe != null &&
-        next.roe > 0
-      ) {
+      if (next.amount != null && next.roe != null && next.roe > 0) {
         const calculatedSellLocal = next.amount * next.roe;
         if (calculatedSellLocal !== next.sell_local_amount) {
           next.sell_local_amount = calculatedSellLocal;
@@ -2016,11 +2043,7 @@ function HouseCreate() {
         next.sell_local_amount = null;
       }
 
-      if (
-        next.total_cost != null &&
-        next.roe != null &&
-        next.roe > 0
-      ) {
+      if (next.total_cost != null && next.roe != null && next.roe > 0) {
         const calculatedCostLocal = next.total_cost * next.roe;
         if (calculatedCostLocal !== next.cost_local_amount) {
           next.cost_local_amount = calculatedCostLocal;
@@ -2735,7 +2758,8 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount_per_unit:
+              roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
               roundLocalMoneyToDecimals(charge.sell_local_amount) ?? null,
@@ -2757,8 +2781,8 @@ function HouseCreate() {
         }),
       ...(isEditMode &&
         editData?.shipment_id && { shipment_id: editData.shipment_id }),
-      ...((editData as { booking_id?: number | null } | undefined)?.booking_id !=
-        null && {
+      ...((editData as { booking_id?: number | null } | undefined)
+        ?.booking_id != null && {
         booking_id: (editData as { booking_id?: number | null }).booking_id,
       }),
       hbl_number: form.values.hbl_number,
@@ -2982,10 +3006,11 @@ function HouseCreate() {
         nextEditData = houses[nextEditIndex];
       }
 
-            const refreshedNav = mergeMasterNavStateFromSavedJob(
+      const refreshedNav = mergeMasterNavStateFromSavedJob(
         location.state as Record<string, unknown> | undefined,
         (savedJob as Record<string, unknown> | null) ?? {
-          ...((location.state?.job as Record<string, unknown> | undefined) ?? {}),
+          ...((location.state?.job as Record<string, unknown> | undefined) ??
+            {}),
           id: jobId,
           housing_details: houses,
         },
@@ -2994,11 +3019,12 @@ function HouseCreate() {
         replace: true,
         state: {
           ...refreshedNav,
-          job: refreshedNav.job ?? savedJob ?? {
-            ...(location.state?.job ?? {}),
-            id: jobId,
-            housing_details: houses,
-          },
+          job: refreshedNav.job ??
+            savedJob ?? {
+              ...(location.state?.job ?? {}),
+              id: jobId,
+              housing_details: houses,
+            },
           housingDetails: houses,
           editIndex: nextEditIndex,
           editData: nextEditData,
@@ -3166,22 +3192,27 @@ function HouseCreate() {
       const isDraft = options?.draft === true;
       const containerDetailsForPdf =
         (location.state?.containerDetails as Record<string, unknown>[]) ||
-        (location.state?.job as { container_details?: Record<string, unknown>[] })
-          ?.container_details ||
+        (
+          location.state?.job as {
+            container_details?: Record<string, unknown>[];
+          }
+        )?.container_details ||
         [];
       const notifyName = form.values.notify1_customer_name || "";
       const notifyAddress = form.values.notify1_customer_address || "";
       const notifyEmail = form.values.notify1_customer_email || "";
       const freightPpCc = form.values.pp_cc || "Collect";
       const editSummary = (
-        editData as {
-          summary?: {
-            total_no_of_packages?: number | string;
-            total_gross_weight?: number | string;
-            total_volume?: number | string;
-            container_type?: string[];
-          };
-        } | undefined
+        editData as
+          | {
+              summary?: {
+                total_no_of_packages?: number | string;
+                total_gross_weight?: number | string;
+                total_volume?: number | string;
+                container_type?: string[];
+              };
+            }
+          | undefined
       )?.summary;
       const cargoDetailsForPdf = cargoDetails.map((c) => {
         const matchedContainer = containerDetailsForPdf.find(
@@ -3216,8 +3247,7 @@ function HouseCreate() {
           container_type_name:
             (
               matchedContainer?.container_type_details as
-                | { container_type_name?: string }
-                | undefined
+                { container_type_name?: string } | undefined
             )?.container_type_name ||
             (matchedContainer?.container_type_name as string | undefined) ||
             "",
@@ -3244,7 +3274,9 @@ function HouseCreate() {
           new Set(
             cargoDetailsForPdf
               .map((cargo) => cargo.container_type_name)
-              .filter((name): name is string => Boolean(name && String(name).trim())),
+              .filter((name): name is string =>
+                Boolean(name && String(name).trim()),
+              ),
           ),
         ),
       };
@@ -3302,7 +3334,7 @@ function HouseCreate() {
         notify2_customer_email: form.values.notify2_customer_email,
         commodity_description: form.values.commodity_description,
         marks_no: form.values.marks_no,
-      ...housePickupDeliveryPayload(form.values),
+        ...housePickupDeliveryPayload(form.values),
         note: form.values.note || "",
         bl_type: form.values.bl_type || "",
         pp_cc: freightPpCc,
@@ -3327,7 +3359,8 @@ function HouseCreate() {
             currency: charge.currency,
             no_of_unit: charge.no_of_unit,
             roe: roundRoeForPayload(charge.roe) ?? null,
-            amount_per_unit: roundMoneyToDecimals(charge.amount_per_unit) ?? null,
+            amount_per_unit:
+              roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
             sell_local_amount:
               roundLocalMoneyToDecimals(charge.sell_local_amount) ?? null,
@@ -3445,9 +3478,7 @@ function HouseCreate() {
 
   const handleOpenSendEmailForBol = () => {
     setActivePdfBlob(pdfBlob);
-    setActiveFileName(
-      `Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`,
-    );
+    setActiveFileName(`Bill-of-Lading-${form.values.hbl_number || "HBL"}.pdf`);
     setActiveDocumentLabel("Bill Of Lading");
     openSendEmail();
   };
@@ -3501,85 +3532,85 @@ function HouseCreate() {
             Back to Export Job
           </Button> */}
           {!isViewOnly && (
-          <Button
-            color="#105476"
-            variant="outline"
-            loading={isSavingHouse}
-            onClick={() => {
-              if (active === 0) {
-                if (!validateStep1()) {
-                  notifyMandatoryFieldsMissing();
-                  return;
+            <Button
+              color="#105476"
+              variant="outline"
+              loading={isSavingHouse}
+              onClick={() => {
+                if (active === 0) {
+                  if (!validateStep1()) {
+                    notifyMandatoryFieldsMissing();
+                    return;
+                  }
+                  if (!validateStep2()) {
+                    notifyMandatoryFieldsMissing();
+                    setActive(1);
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    notifyMandatoryFieldsMissing();
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 1) {
+                  if (!validateStep2()) {
+                    notifyMandatoryFieldsMissing();
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    notifyMandatoryFieldsMissing();
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 2) {
+                  if (!validateStep3()) {
+                    notifyMandatoryFieldsMissing();
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 3) {
+                  if (!validateStep4()) return;
+                  handleSave();
+                } else if (active === 4) {
+                  if (!validateStep1()) {
+                    notifyMandatoryFieldsMissing();
+                    setActive(0);
+                    return;
+                  }
+                  if (!validateStep2()) {
+                    notifyMandatoryFieldsMissing();
+                    setActive(1);
+                    return;
+                  }
+                  if (!validateStep3()) {
+                    notifyMandatoryFieldsMissing();
+                    setActive(2);
+                    return;
+                  }
+                  if (!validateStep4()) {
+                    setActive(3);
+                    return;
+                  }
+                  handleSave();
+                } else if (active === 5) {
+                  handleSave();
                 }
-                if (!validateStep2()) {
-                  notifyMandatoryFieldsMissing();
-                  setActive(1);
-                  return;
-                }
-                if (!validateStep3()) {
-                  notifyMandatoryFieldsMissing();
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 1) {
-                if (!validateStep2()) {
-                  notifyMandatoryFieldsMissing();
-                  return;
-                }
-                if (!validateStep3()) {
-                  notifyMandatoryFieldsMissing();
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 2) {
-                if (!validateStep3()) {
-                  notifyMandatoryFieldsMissing();
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 3) {
-                if (!validateStep4()) return;
-                handleSave();
-              } else if (active === 4) {
-                if (!validateStep1()) {
-                  notifyMandatoryFieldsMissing();
-                  setActive(0);
-                  return;
-                }
-                if (!validateStep2()) {
-                  notifyMandatoryFieldsMissing();
-                  setActive(1);
-                  return;
-                }
-                if (!validateStep3()) {
-                  notifyMandatoryFieldsMissing();
-                  setActive(2);
-                  return;
-                }
-                if (!validateStep4()) {
-                  setActive(3);
-                  return;
-                }
-                handleSave();
-              } else if (active === 5) {
-                handleSave();
-              }
-            }}
-          >
+              }}
+            >
               Update
             </Button>
           )}
@@ -4349,7 +4380,9 @@ function HouseCreate() {
                   selectPlaceholder="Select shipper address"
                   value={form.values.shipper_address || ""}
                   options={shipperAddressOptions}
-                  partyKey={form.values.shipper_code || form.values.shipper_name || ""}
+                  partyKey={
+                    form.values.shipper_code || form.values.shipper_name || ""
+                  }
                   onChange={(next, option) => {
                     form.setFieldValue("shipper_address", next);
                     if (option?.email) {
@@ -4433,7 +4466,10 @@ function HouseCreate() {
                       setConsigneeAddressOptions(addressOptions);
                       setConsigneeAddressCustom(false);
                       if (primaryAddr?.value) {
-                        form.setFieldValue("consignee_address", primaryAddr.value);
+                        form.setFieldValue(
+                          "consignee_address",
+                          primaryAddr.value,
+                        );
                         setConsigneeAddressSearch(primaryAddr.value);
                       } else {
                         setConsigneeAddressSearch("");
@@ -4485,7 +4521,11 @@ function HouseCreate() {
                   selectPlaceholder="Select consignee address"
                   value={form.values.consignee_address || ""}
                   options={consigneeAddressOptions}
-                  partyKey={form.values.consignee_code || form.values.consignee_name || ""}
+                  partyKey={
+                    form.values.consignee_code ||
+                    form.values.consignee_name ||
+                    ""
+                  }
                   onChange={(next, option) => {
                     form.setFieldValue("consignee_address", next);
                     if (option?.email) {
@@ -4622,7 +4662,11 @@ function HouseCreate() {
                   selectPlaceholder="Select forwarder address"
                   value={form.values.forwarder_address || ""}
                   options={forwarderAddressOptions}
-                  partyKey={form.values.forwarder_id != null ? String(form.values.forwarder_id) : (form.values.forwarder_name || "")}
+                  partyKey={
+                    form.values.forwarder_id != null
+                      ? String(form.values.forwarder_id)
+                      : form.values.forwarder_name || ""
+                  }
                   onChange={(next, option) => {
                     form.setFieldValue("forwarder_address", next);
                     if (option?.email) {
@@ -4636,7 +4680,6 @@ function HouseCreate() {
               </Grid.Col>
             </Grid>
 
-            
             {/* Billing Customer Section */}
             <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
               Billing Customer
@@ -4732,7 +4775,9 @@ function HouseCreate() {
                     }
 
                     requestAnimationFrame(() => {
-                      billingCustomerEmailRef.current?.focus({ preventScroll: true });
+                      billingCustomerEmailRef.current?.focus({
+                        preventScroll: true,
+                      });
                     });
                   }}
                   returnOriginalData={true}
@@ -4759,11 +4804,18 @@ function HouseCreate() {
                   selectPlaceholder="Select billing customer address"
                   value={form.values.billing_customer_address || ""}
                   options={billingCustomerAddressOptions}
-                  partyKey={form.values.billing_customer_id != null ? String(form.values.billing_customer_id) : (form.values.billing_customer_name || "")}
+                  partyKey={
+                    form.values.billing_customer_id != null
+                      ? String(form.values.billing_customer_id)
+                      : form.values.billing_customer_name || ""
+                  }
                   onChange={(next, option) => {
                     form.setFieldValue("billing_customer_address", next);
                     if (option?.email) {
-                      form.setFieldValue("billing_customer_email", option.email);
+                      form.setFieldValue(
+                        "billing_customer_email",
+                        option.email,
+                      );
                     } else if (!next) {
                       form.setFieldValue("billing_customer_email", "");
                     }
@@ -4851,112 +4903,114 @@ function HouseCreate() {
             </Grid>
 
             {!isChaMode && (
-            <>
-            {/* Destination Agent Section */}
-            <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
-              Destination Agent
-            </Text>
-            <Grid mb="xs">
-              <Grid.Col span={4}>
-                <SearchableSelect
-                  label="Destination Agent Name"
-                  placeholder="Type agent name"
-                  apiEndpoint={URL.agent}
-                  dropdownZIndex={10}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code), // Use code as value for API payload
-                    label: String(item.customer_name), // Display name to user
-                  })}
-                  value={form.values.agent_name}
-                  displayValue={form.values.agent_name}
-                  onChange={(value, selectedData, originalData) => {
-                    const newValue = selectedData?.label || value || "";
-                    form.setFieldValue("agent_name", newValue);
+              <>
+                {/* Destination Agent Section */}
+                <Text size="md" mt="md" fw={600} c="#105476" mb="xs">
+                  Destination Agent
+                </Text>
+                <Grid mb="xs">
+                  <Grid.Col span={4}>
+                    <SearchableSelect
+                      label="Destination Agent Name"
+                      placeholder="Type agent name"
+                      apiEndpoint={URL.agent}
+                      dropdownZIndex={10}
+                      searchFields={["customer_name", "customer_code"]}
+                      displayFormat={(item: Record<string, unknown>) => ({
+                        value: String(item.customer_code), // Use code as value for API payload
+                        label: String(item.customer_name), // Display name to user
+                      })}
+                      value={form.values.agent_name}
+                      displayValue={form.values.agent_name}
+                      onChange={(value, selectedData, originalData) => {
+                        const newValue = selectedData?.label || value || "";
+                        form.setFieldValue("agent_name", newValue);
 
-                    // Auto-fill address from addresses_data if available
-                    if (
-                      newValue &&
-                      originalData &&
-                      (originalData as Record<string, unknown>).addresses_data
-                    ) {
-                      const addressesData = (
-                        originalData as Record<string, unknown>
-                      ).addresses_data as Array<{
-                        id: number;
-                        address: string;
-                        email?: string;
-                        address_type?: string;
-                      }>;
+                        // Auto-fill address from addresses_data if available
+                        if (
+                          newValue &&
+                          originalData &&
+                          (originalData as Record<string, unknown>)
+                            .addresses_data
+                        ) {
+                          const addressesData = (
+                            originalData as Record<string, unknown>
+                          ).addresses_data as Array<{
+                            id: number;
+                            address: string;
+                            email?: string;
+                            address_type?: string;
+                          }>;
 
-                      const addressOptions = addressesData
-                        .filter((a) => a.address)
-                        .map((a) => {
-                          const addr = toTitleCase(String(a.address || ""));
-                          return {
-                            value: addr,
-                            label: addr,
-                            email: String(a.email || ""),
-                          };
-                        });
-                      setAgentAddressOptions(addressOptions);
+                          const addressOptions = addressesData
+                            .filter((a) => a.address)
+                            .map((a) => {
+                              const addr = toTitleCase(String(a.address || ""));
+                              return {
+                                value: addr,
+                                label: addr,
+                                email: String(a.email || ""),
+                              };
+                            });
+                          setAgentAddressOptions(addressOptions);
 
-                      const primaryAddr = pickPrimaryPartyAddress(addressesData);
+                          const primaryAddr =
+                            pickPrimaryPartyAddress(addressesData);
 
-                      form.setFieldValue("agent_address", "");
-                      if (primaryAddr?.address) {
-                        form.setFieldValue(
-                          "agent_address",
-                          toTitleCase(String(primaryAddr.address)),
-                        );
-                      }
-                      form.setFieldValue(
-                        "agent_email",
-                        String(primaryAddr?.email || ""),
-                      );
-                    } else {
-                      setAgentAddressOptions([]);
-                      form.setFieldValue("agent_address", "");
-                      form.setFieldValue("agent_email", "");
-                    }
-                  }}
-                  returnOriginalData={true}
-                  error={form.errors.agent_name as string}
-                  minSearchLength={2}
-                />
-              </Grid.Col>
-              <Grid.Col span={4}>
-                <FormTextInput
-                  label="Destination Agent Email"
-                  type="email"
-                  format="normal"
-                  placeholder="Enter Destination Agent Email"
-                  {...form.getInputProps("agent_email")}
-                  error={form.errors.agent_email}
-                />
-              </Grid.Col>
+                          form.setFieldValue("agent_address", "");
+                          if (primaryAddr?.address) {
+                            form.setFieldValue(
+                              "agent_address",
+                              toTitleCase(String(primaryAddr.address)),
+                            );
+                          }
+                          form.setFieldValue(
+                            "agent_email",
+                            String(primaryAddr?.email || ""),
+                          );
+                        } else {
+                          setAgentAddressOptions([]);
+                          form.setFieldValue("agent_address", "");
+                          form.setFieldValue("agent_email", "");
+                        }
+                      }}
+                      returnOriginalData={true}
+                      error={form.errors.agent_name as string}
+                      minSearchLength={2}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={4}>
+                    <FormTextInput
+                      label="Destination Agent Email"
+                      type="email"
+                      format="normal"
+                      placeholder="Enter Destination Agent Email"
+                      {...form.getInputProps("agent_email")}
+                      error={form.errors.agent_email}
+                    />
+                  </Grid.Col>
 
-              <Grid.Col span={4}>
-                <PartyAddressField
-                  label="Destination Agent Address"
-                  placeholder="Enter Destination Agent Address"
-                  selectPlaceholder="Select destination agent address"
-                  value={form.values.agent_address || ""}
-                  options={agentAddressOptions}
-                  partyKey={form.values.agent_name || ""}
-                  onChange={(next, option) => {
-                    form.setFieldValue("agent_address", next);
-                    if (option?.email) {
-                      form.setFieldValue("agent_email", option.email);
-                    } else if (!next) {
-                      form.setFieldValue("agent_email", "");
-                    }
-                  }}
-                  error={form.errors.agent_address}
-                />
-              </Grid.Col>
-            </Grid>
-            </>
+                  <Grid.Col span={4}>
+                    <PartyAddressField
+                      label="Destination Agent Address"
+                      placeholder="Enter Destination Agent Address"
+                      selectPlaceholder="Select destination agent address"
+                      value={form.values.agent_address || ""}
+                      options={agentAddressOptions}
+                      partyKey={form.values.agent_name || ""}
+                      onChange={(next, option) => {
+                        form.setFieldValue("agent_address", next);
+                        if (option?.email) {
+                          form.setFieldValue("agent_email", option.email);
+                        } else if (!next) {
+                          form.setFieldValue("agent_email", "");
+                        }
+                      }}
+                      error={form.errors.agent_address}
+                    />
+                  </Grid.Col>
+                </Grid>
+              </>
             )}
 
             {/* Notify Customer 1 Details */}
@@ -5082,11 +5136,18 @@ function HouseCreate() {
                   selectPlaceholder="Select notify address"
                   value={form.values.notify1_customer_address || ""}
                   options={notifyCustomerAddressOptions}
-                  partyKey={notifyCustomerSelectedId || form.values.notify1_customer_name || ""}
+                  partyKey={
+                    notifyCustomerSelectedId ||
+                    form.values.notify1_customer_name ||
+                    ""
+                  }
                   onChange={(next, option) => {
                     form.setFieldValue("notify1_customer_address", next);
                     if (option?.email) {
-                      form.setFieldValue("notify1_customer_email", option.email);
+                      form.setFieldValue(
+                        "notify1_customer_email",
+                        option.email,
+                      );
                     } else if (!next) {
                       form.setFieldValue("notify1_customer_email", "");
                     }
@@ -5221,11 +5282,18 @@ function HouseCreate() {
                   selectPlaceholder="Select notify address"
                   value={form.values.notify2_customer_address || ""}
                   options={notify2CustomerAddressOptions}
-                  partyKey={notify2CustomerSelectedId || form.values.notify2_customer_name || ""}
+                  partyKey={
+                    notify2CustomerSelectedId ||
+                    form.values.notify2_customer_name ||
+                    ""
+                  }
                   onChange={(next, option) => {
                     form.setFieldValue("notify2_customer_address", next);
                     if (option?.email) {
-                      form.setFieldValue("notify2_customer_email", option.email);
+                      form.setFieldValue(
+                        "notify2_customer_email",
+                        option.email,
+                      );
                     } else if (!next) {
                       form.setFieldValue("notify2_customer_email", "");
                     }
@@ -5236,8 +5304,6 @@ function HouseCreate() {
                 />
               </Grid.Col>
             </Grid>
-
-
           </Box>
         </Tabs.Panel>
 
@@ -5293,410 +5359,440 @@ function HouseCreate() {
                 const cargoSpans = oceanHouseCargoSpans(showHazDetailsCols);
                 return (
                   <>
-              <Grid
-                mb="xs"
-                style={{
-                  fontWeight: 600,
-                  color: "#105476",
-                }}
-                gutter="sm"
-              >
-                <Grid.Col span={cargoSpans.container}>
-                  <RequiredLabel label="Container Number" required={true} />
-                </Grid.Col>
-                <Grid.Col span={cargoSpans.packageType}>
-                  <RequiredLabel label="Package Type" required={false} />
-                </Grid.Col>
-                <Grid.Col span={cargoSpans.noOfPackages}>
-                  <RequiredLabel label="No of Packages" required={true} />
-                </Grid.Col>
-                <Grid.Col span={cargoSpans.gross}>
-                  <RequiredLabel label="Gross Weight (KG)" required={true} />
-                </Grid.Col>
-                <Grid.Col span={cargoSpans.volume}>
-                  <RequiredLabel label="Volume (CBM)" required={true} />
-                </Grid.Col>
-                <Grid.Col span={cargoSpans.chargeable}>
-                  <RequiredLabel
-                    label="Chargeable Weight (CBM)"
-                    required={false}
-                  />
-                </Grid.Col>
-                <Grid.Col span={cargoSpans.haz}>
-                  <RequiredLabel label="Haz" required={false} />
-                </Grid.Col>
-                {showHazDetailsCols && (
-                  <>
-                    <Grid.Col span={cargoSpans.un}>
-                      <RequiredLabel label="UN No" required={false} />
-                    </Grid.Col>
-                    <Grid.Col span={cargoSpans.className}>
-                      <RequiredLabel label="Class" required={false} />
-                    </Grid.Col>
-                    <Grid.Col span={cargoSpans.pkg}>
-                      <RequiredLabel label="PKG Group" required={false} />
-                    </Grid.Col>
-                  </>
-                )}
-                <Grid.Col span={cargoSpans.actions}>
-                  <RequiredLabel label="Actions" required={false} />
-                </Grid.Col>
-              </Grid>
-
-              {cargoDetails.map((cargo, index) => {
-                const isHazRow = cargo.haz === true;
-                return (
-                <Fragment key={index}>
-                <Grid gutter="sm" mb="xs">
-                  <Grid.Col span={cargoSpans.container}>
-                    <Dropdown
-                      placeholder={
-                        containerNumberOptions.length > 0
-                          ? "Select Container Number"
-                          : "No containers available"
-                      }
-                      searchable
-                      data={containerNumberOptions}
-                      value={cargo.container_number || null}
-                      onChange={(value) => {
-                        const containerDetails =
-                          location.state?.containerDetails || [];
-                        const matchedContainer = containerDetails.find(
-                          (container: Record<string, unknown>) =>
-                            container.container_no === value,
-                        );
-                        const containerId =
-                          matchedContainer?.id !== undefined &&
-                          matchedContainer?.id !== null
-                            ? typeof matchedContainer.id === "number"
-                              ? matchedContainer.id
-                              : Number(matchedContainer.id)
-                            : undefined;
-
-                        const updated = [...cargoDetails];
-                        updated[index] = {
-                          ...updated[index],
-                          container_number: value || "",
-                          container_id: containerId,
-                        };
-                        setCargoDetails(updated);
-
-                        if (cargoErrors[index]?.container_number) {
-                          const newErrors = { ...cargoErrors };
-                          if (newErrors[index]) {
-                            delete newErrors[index].container_number;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
-                          }
-                          setCargoErrors(newErrors);
-                        }
+                    <Grid
+                      mb="xs"
+                      style={{
+                        fontWeight: 600,
+                        color: "#105476",
                       }}
-                      disabled={containerNumberOptions.length === 0}
-                      clearable
-                      error={cargoErrors[index]?.container_number}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={cargoSpans.packageType}>
-                    <Dropdown
-                      placeholder="Package Type"
-                      searchable
-                      data={packageTypeOptions}
-                      value={cargo.package_type || null}
-                      onChange={(value) => {
-                        const updated = [...cargoDetails];
-                        updated[index] = {
-                          ...updated[index],
-                          package_type: value || "",
-                        };
-                        setCargoDetails(updated);
-                      }}
-                      clearable
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={cargoSpans.noOfPackages}>
-                    <FormNumberInput
-                      placeholder="Enter No of Packages"
-                      min={0}
-                      hideControls
-                      value={cargo.no_of_packages || undefined}
-                      onChange={(value) => {
-                        const updated = [...cargoDetails];
-                        updated[index] = {
-                          ...updated[index],
-                          no_of_packages: value as number | null,
-                        };
-                        setCargoDetails(updated);
-                        // Clear error when field is updated
-                        if (cargoErrors[index]?.no_of_packages) {
-                          const newErrors = { ...cargoErrors };
-                          if (newErrors[index]) {
-                            delete newErrors[index].no_of_packages;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
-                          }
-                          setCargoErrors(newErrors);
-                        }
-                      }}
-                      error={cargoErrors[index]?.no_of_packages}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={cargoSpans.gross}>
-                    <FormNumberInput
-                      placeholder="Enter Gross Weight"
-                      min={0}
-                      hideControls
-                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
-                      value={cargo.gross_weight ?? undefined}
-                      onChange={(value) => {
-                        const updated = [...cargoDetails];
-                        updated[index] = withRecalculatedChargeableWeight(
-                          {
-                            ...updated[index],
-                            gross_weight: coerceHouseCargoWeightInput(
-                              value,
-                              cargo.gross_weight,
-                            ),
-                          },
-                          "ocean",
-                        );
-                        setCargoDetails(updated);
-                        // Clear error when field is updated
-                        if (cargoErrors[index]?.gross_weight) {
-                          const newErrors = { ...cargoErrors };
-                          if (newErrors[index]) {
-                            delete newErrors[index].gross_weight;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
-                          }
-                          setCargoErrors(newErrors);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        const raw = e.currentTarget.value
-                          .replace(/,/g, "")
-                          .trim();
-                        if (!raw) return;
-                        const updated = [...cargoDetails];
-                        updated[index] = withRecalculatedChargeableWeight(
-                          {
-                            ...updated[index],
-                            gross_weight: coerceHouseCargoWeightInput(
-                              raw,
-                              cargo.gross_weight,
-                            ),
-                          },
-                          "ocean",
-                        );
-                        setCargoDetails(updated);
-                      }}
-                      error={cargoErrors[index]?.gross_weight}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={cargoSpans.volume}>
-                    <FormNumberInput
-                      placeholder="Enter Volume"
-                      min={0}
-                      hideControls
-                      {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
-                      value={cargo.volume ?? undefined}
-                      onChange={(value) => {
-                        const updated = [...cargoDetails];
-                        updated[index] = withRecalculatedChargeableWeight(
-                          {
-                            ...updated[index],
-                            volume: coerceHouseCargoWeightInput(
-                              value,
-                              cargo.volume,
-                            ),
-                          },
-                          "ocean",
-                        );
-                        setCargoDetails(updated);
-                        // Clear error when field is updated
-                        if (cargoErrors[index]?.volume) {
-                          const newErrors = { ...cargoErrors };
-                          if (newErrors[index]) {
-                            delete newErrors[index].volume;
-                            if (Object.keys(newErrors[index]).length === 0) {
-                              delete newErrors[index];
-                            }
-                          }
-                          setCargoErrors(newErrors);
-                        }
-                      }}
-                      onBlur={(e) => {
-                        const raw = e.currentTarget.value
-                          .replace(/,/g, "")
-                          .trim();
-                        if (!raw) return;
-                        const updated = [...cargoDetails];
-                        updated[index] = withRecalculatedChargeableWeight(
-                          {
-                            ...updated[index],
-                            volume: coerceHouseCargoWeightInput(
-                              raw,
-                              cargo.volume,
-                            ),
-                          },
-                          "ocean",
-                        );
-                        setCargoDetails(updated);
-                      }}
-                      error={cargoErrors[index]?.volume}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={cargoSpans.chargeable}>
-                    <FormTextInput
-                      placeholder=""
-                      format="normal"
-                      value={formatHouseCargoChargeableDisplay(
-                        cargo.gross_weight,
-                        cargo.volume,
-                        "ocean",
+                      gutter="sm"
+                    >
+                      <Grid.Col span={cargoSpans.container}>
+                        <RequiredLabel
+                          label="Container Number"
+                          required={true}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={cargoSpans.packageType}>
+                        <RequiredLabel label="Package Type" required={false} />
+                      </Grid.Col>
+                      <Grid.Col span={cargoSpans.noOfPackages}>
+                        <RequiredLabel label="No of Packages" required={true} />
+                      </Grid.Col>
+                      <Grid.Col span={cargoSpans.gross}>
+                        <RequiredLabel
+                          label="Gross Weight (KG)"
+                          required={true}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={cargoSpans.volume}>
+                        <RequiredLabel label="Volume (CBM)" required={true} />
+                      </Grid.Col>
+                      <Grid.Col span={cargoSpans.chargeable}>
+                        <RequiredLabel
+                          label="Chargeable Weight (CBM)"
+                          required={false}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={cargoSpans.haz}>
+                        <RequiredLabel label="Haz" required={false} />
+                      </Grid.Col>
+                      {showHazDetailsCols && (
+                        <>
+                          <Grid.Col span={cargoSpans.un}>
+                            <RequiredLabel label="UN No" required={false} />
+                          </Grid.Col>
+                          <Grid.Col span={cargoSpans.className}>
+                            <RequiredLabel label="Class" required={false} />
+                          </Grid.Col>
+                          <Grid.Col span={cargoSpans.pkg}>
+                            <RequiredLabel label="PKG Group" required={false} />
+                          </Grid.Col>
+                        </>
                       )}
-                      readOnly
-                      disabled
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={cargoSpans.haz}>
-                    <Dropdown
-                      placeholder="Select Haz"
-                      searchable
-                      data={[
-                        { value: "Yes", label: "Yes" },
-                        { value: "No", label: "No" },
-                      ]}
-                      value={
-                        cargo.haz === true
-                          ? "Yes"
-                          : cargo.haz === false
-                            ? "No"
-                            : null
-                      }
-                      onChange={(value) => {
-                        const updated = [...cargoDetails];
-                        const nextHaz = value === "Yes" ? true : false;
-                        updated[index] = {
-                          ...updated[index],
-                          haz: nextHaz,
-                          ...(nextHaz !== true
-                            ? { un_no: "", class_name: "", pkg_group: "" }
-                            : {}),
-                        };
-                        setCargoDetails(updated);
-                      }}
-                    />
-                  </Grid.Col>
-                  {showHazDetailsCols &&
-                    (isHazRow ? (
-                      <>
-                        <Grid.Col span={cargoSpans.un}>
-                          <FormTextInput
-                            placeholder="UN No"
-                            format="normal"
-                            value={cargo.un_no || ""}
-                            onChange={(e) => {
-                              const updated = [...cargoDetails];
-                              updated[index] = {
-                                ...updated[index],
-                                un_no: e.currentTarget.value,
-                              };
-                              setCargoDetails(updated);
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={cargoSpans.className}>
-                          <FormTextInput
-                            placeholder="Class"
-                            format="normal"
-                            value={cargo.class_name || ""}
-                            onChange={(e) => {
-                              const updated = [...cargoDetails];
-                              updated[index] = {
-                                ...updated[index],
-                                class_name: e.currentTarget.value,
-                              };
-                              setCargoDetails(updated);
-                            }}
-                          />
-                        </Grid.Col>
-                        <Grid.Col span={cargoSpans.pkg}>
-                          <FormTextInput
-                            placeholder="PKG Group"
-                            format="normal"
-                            value={cargo.pkg_group || ""}
-                            onChange={(e) => {
-                              const updated = [...cargoDetails];
-                              updated[index] = {
-                                ...updated[index],
-                                pkg_group: e.currentTarget.value,
-                              };
-                              setCargoDetails(updated);
-                            }}
-                          />
-                        </Grid.Col>
-                      </>
-                    ) : (
-                      <>
-                        <Grid.Col span={cargoSpans.un} />
-                        <Grid.Col span={cargoSpans.className} />
-                        <Grid.Col span={cargoSpans.pkg} />
-                      </>
-                    ))}
-                  <Grid.Col span={cargoSpans.actions}>
-                    <Group gap="xs">
-                      {cargoDetails.length > 1 && (
-                        <Button
-                          size="sm"
-                          px={12}
-                          variant="light"
-                          color="red"
-                          onClick={() => {
-                            const updated = cargoDetails.filter(
-                              (_, i) => i !== index,
-                            );
-                            setCargoDetails(updated);
-                          }}
-                        >
-                          <IconTrash size={16} />
-                        </Button>
-                      )}
-                      {cargoDetails.length - 1 === index && (
-                        <Button
-                          size="sm"
-                          px={12}
-                          variant="light"
-                          color="#105476"
-                          onClick={() => {
-                            setCargoDetails([
-                              ...cargoDetails,
-                              {
-                                container_number: "",
-                                package_type: "",
-                                no_of_packages: null,
-                                gross_weight: null,
-                                volume: null,
-                                chargeable_weight: null,
-                                haz: null,
-                                un_no: "",
-                                class_name: "",
-                                pkg_group: "",
-                              },
-                            ]);
-                          }}
-                        >
-                          <IconPlus size={16} />
-                        </Button>
-                      )}
-                    </Group>
-                  </Grid.Col>
-                </Grid>
-                </Fragment>
-                );
-              })}
+                      <Grid.Col span={cargoSpans.actions}>
+                        <RequiredLabel label="Actions" required={false} />
+                      </Grid.Col>
+                    </Grid>
+
+                    {cargoDetails.map((cargo, index) => {
+                      const isHazRow = cargo.haz === true;
+                      return (
+                        <Fragment key={index}>
+                          <Grid gutter="sm" mb="xs">
+                            <Grid.Col span={cargoSpans.container}>
+                              <Dropdown
+                                placeholder={
+                                  containerNumberOptions.length > 0
+                                    ? "Select Container Number"
+                                    : "No containers available"
+                                }
+                                searchable
+                                data={containerNumberOptions}
+                                value={cargo.container_number || null}
+                                onChange={(value) => {
+                                  const containerDetails =
+                                    location.state?.containerDetails || [];
+                                  const matchedContainer =
+                                    containerDetails.find(
+                                      (container: Record<string, unknown>) =>
+                                        container.container_no === value,
+                                    );
+                                  const containerId =
+                                    matchedContainer?.id !== undefined &&
+                                    matchedContainer?.id !== null
+                                      ? typeof matchedContainer.id === "number"
+                                        ? matchedContainer.id
+                                        : Number(matchedContainer.id)
+                                      : undefined;
+
+                                  const updated = [...cargoDetails];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    container_number: value || "",
+                                    container_id: containerId,
+                                  };
+                                  setCargoDetails(updated);
+
+                                  if (cargoErrors[index]?.container_number) {
+                                    const newErrors = { ...cargoErrors };
+                                    if (newErrors[index]) {
+                                      delete newErrors[index].container_number;
+                                      if (
+                                        Object.keys(newErrors[index]).length ===
+                                        0
+                                      ) {
+                                        delete newErrors[index];
+                                      }
+                                    }
+                                    setCargoErrors(newErrors);
+                                  }
+                                }}
+                                disabled={containerNumberOptions.length === 0}
+                                clearable
+                                error={cargoErrors[index]?.container_number}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={cargoSpans.packageType}>
+                              <Dropdown
+                                placeholder="Package Type"
+                                searchable
+                                data={packageTypeOptions}
+                                value={cargo.package_type || null}
+                                onChange={(value) => {
+                                  const updated = [...cargoDetails];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    package_type: value || "",
+                                  };
+                                  setCargoDetails(updated);
+                                }}
+                                clearable
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={cargoSpans.noOfPackages}>
+                              <FormNumberInput
+                                placeholder="Enter No of Packages"
+                                min={0}
+                                hideControls
+                                value={cargo.no_of_packages || undefined}
+                                onChange={(value) => {
+                                  const updated = [...cargoDetails];
+                                  updated[index] = {
+                                    ...updated[index],
+                                    no_of_packages: value as number | null,
+                                  };
+                                  setCargoDetails(updated);
+                                  // Clear error when field is updated
+                                  if (cargoErrors[index]?.no_of_packages) {
+                                    const newErrors = { ...cargoErrors };
+                                    if (newErrors[index]) {
+                                      delete newErrors[index].no_of_packages;
+                                      if (
+                                        Object.keys(newErrors[index]).length ===
+                                        0
+                                      ) {
+                                        delete newErrors[index];
+                                      }
+                                    }
+                                    setCargoErrors(newErrors);
+                                  }
+                                }}
+                                error={cargoErrors[index]?.no_of_packages}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={cargoSpans.gross}>
+                              <FormNumberInput
+                                placeholder="Enter Gross Weight"
+                                min={0}
+                                hideControls
+                                {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                                value={cargo.gross_weight ?? undefined}
+                                onChange={(value) => {
+                                  const updated = [...cargoDetails];
+                                  updated[index] =
+                                    withRecalculatedChargeableWeight(
+                                      {
+                                        ...updated[index],
+                                        gross_weight:
+                                          coerceHouseCargoWeightInput(
+                                            value,
+                                            cargo.gross_weight,
+                                          ),
+                                      },
+                                      "ocean",
+                                    );
+                                  setCargoDetails(updated);
+                                  // Clear error when field is updated
+                                  if (cargoErrors[index]?.gross_weight) {
+                                    const newErrors = { ...cargoErrors };
+                                    if (newErrors[index]) {
+                                      delete newErrors[index].gross_weight;
+                                      if (
+                                        Object.keys(newErrors[index]).length ===
+                                        0
+                                      ) {
+                                        delete newErrors[index];
+                                      }
+                                    }
+                                    setCargoErrors(newErrors);
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  const raw = e.currentTarget.value
+                                    .replace(/,/g, "")
+                                    .trim();
+                                  if (!raw) return;
+                                  const updated = [...cargoDetails];
+                                  updated[index] =
+                                    withRecalculatedChargeableWeight(
+                                      {
+                                        ...updated[index],
+                                        gross_weight:
+                                          coerceHouseCargoWeightInput(
+                                            raw,
+                                            cargo.gross_weight,
+                                          ),
+                                      },
+                                      "ocean",
+                                    );
+                                  setCargoDetails(updated);
+                                }}
+                                error={cargoErrors[index]?.gross_weight}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={cargoSpans.volume}>
+                              <FormNumberInput
+                                placeholder="Enter Volume"
+                                min={0}
+                                hideControls
+                                {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
+                                value={cargo.volume ?? undefined}
+                                onChange={(value) => {
+                                  const updated = [...cargoDetails];
+                                  updated[index] =
+                                    withRecalculatedChargeableWeight(
+                                      {
+                                        ...updated[index],
+                                        volume: coerceHouseCargoWeightInput(
+                                          value,
+                                          cargo.volume,
+                                        ),
+                                      },
+                                      "ocean",
+                                    );
+                                  setCargoDetails(updated);
+                                  // Clear error when field is updated
+                                  if (cargoErrors[index]?.volume) {
+                                    const newErrors = { ...cargoErrors };
+                                    if (newErrors[index]) {
+                                      delete newErrors[index].volume;
+                                      if (
+                                        Object.keys(newErrors[index]).length ===
+                                        0
+                                      ) {
+                                        delete newErrors[index];
+                                      }
+                                    }
+                                    setCargoErrors(newErrors);
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  const raw = e.currentTarget.value
+                                    .replace(/,/g, "")
+                                    .trim();
+                                  if (!raw) return;
+                                  const updated = [...cargoDetails];
+                                  updated[index] =
+                                    withRecalculatedChargeableWeight(
+                                      {
+                                        ...updated[index],
+                                        volume: coerceHouseCargoWeightInput(
+                                          raw,
+                                          cargo.volume,
+                                        ),
+                                      },
+                                      "ocean",
+                                    );
+                                  setCargoDetails(updated);
+                                }}
+                                error={cargoErrors[index]?.volume}
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={cargoSpans.chargeable}>
+                              <FormTextInput
+                                placeholder=""
+                                format="normal"
+                                value={formatHouseCargoChargeableDisplay(
+                                  cargo.gross_weight,
+                                  cargo.volume,
+                                  "ocean",
+                                )}
+                                readOnly
+                                disabled
+                              />
+                            </Grid.Col>
+                            <Grid.Col span={cargoSpans.haz}>
+                              <Dropdown
+                                placeholder="Select Haz"
+                                searchable
+                                data={[
+                                  { value: "Yes", label: "Yes" },
+                                  { value: "No", label: "No" },
+                                ]}
+                                value={
+                                  cargo.haz === true
+                                    ? "Yes"
+                                    : cargo.haz === false
+                                      ? "No"
+                                      : null
+                                }
+                                onChange={(value) => {
+                                  const updated = [...cargoDetails];
+                                  const nextHaz =
+                                    value === "Yes" ? true : false;
+                                  updated[index] = {
+                                    ...updated[index],
+                                    haz: nextHaz,
+                                    ...(nextHaz !== true
+                                      ? {
+                                          un_no: "",
+                                          class_name: "",
+                                          pkg_group: "",
+                                        }
+                                      : {}),
+                                  };
+                                  setCargoDetails(updated);
+                                }}
+                              />
+                            </Grid.Col>
+                            {showHazDetailsCols &&
+                              (isHazRow ? (
+                                <>
+                                  <Grid.Col span={cargoSpans.un}>
+                                    <FormTextInput
+                                      placeholder="UN No"
+                                      format="normal"
+                                      value={cargo.un_no || ""}
+                                      onChange={(e) => {
+                                        const updated = [...cargoDetails];
+                                        updated[index] = {
+                                          ...updated[index],
+                                          un_no: e.currentTarget.value,
+                                        };
+                                        setCargoDetails(updated);
+                                      }}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={cargoSpans.className}>
+                                    <FormTextInput
+                                      placeholder="Class"
+                                      format="normal"
+                                      value={cargo.class_name || ""}
+                                      onChange={(e) => {
+                                        const updated = [...cargoDetails];
+                                        updated[index] = {
+                                          ...updated[index],
+                                          class_name: e.currentTarget.value,
+                                        };
+                                        setCargoDetails(updated);
+                                      }}
+                                    />
+                                  </Grid.Col>
+                                  <Grid.Col span={cargoSpans.pkg}>
+                                    <FormTextInput
+                                      placeholder="PKG Group"
+                                      format="normal"
+                                      value={cargo.pkg_group || ""}
+                                      onChange={(e) => {
+                                        const updated = [...cargoDetails];
+                                        updated[index] = {
+                                          ...updated[index],
+                                          pkg_group: e.currentTarget.value,
+                                        };
+                                        setCargoDetails(updated);
+                                      }}
+                                    />
+                                  </Grid.Col>
+                                </>
+                              ) : (
+                                <>
+                                  <Grid.Col span={cargoSpans.un} />
+                                  <Grid.Col span={cargoSpans.className} />
+                                  <Grid.Col span={cargoSpans.pkg} />
+                                </>
+                              ))}
+                            <Grid.Col span={cargoSpans.actions}>
+                              <Group gap="xs">
+                                {cargoDetails.length > 1 && (
+                                  <Button
+                                    size="sm"
+                                    px={12}
+                                    variant="light"
+                                    color="red"
+                                    onClick={() => {
+                                      const updated = cargoDetails.filter(
+                                        (_, i) => i !== index,
+                                      );
+                                      setCargoDetails(updated);
+                                    }}
+                                  >
+                                    <IconTrash size={16} />
+                                  </Button>
+                                )}
+                                {cargoDetails.length - 1 === index && (
+                                  <Button
+                                    size="sm"
+                                    px={12}
+                                    variant="light"
+                                    color="#105476"
+                                    onClick={() => {
+                                      setCargoDetails([
+                                        ...cargoDetails,
+                                        {
+                                          container_number: "",
+                                          package_type: "",
+                                          no_of_packages: null,
+                                          gross_weight: null,
+                                          volume: null,
+                                          chargeable_weight: null,
+                                          haz: null,
+                                          un_no: "",
+                                          class_name: "",
+                                          pkg_group: "",
+                                        },
+                                      ]);
+                                    }}
+                                  >
+                                    <IconPlus size={16} />
+                                  </Button>
+                                )}
+                              </Group>
+                            </Grid.Col>
+                          </Grid>
+                        </Fragment>
+                      );
+                    })}
                   </>
                 );
               })()}
@@ -5737,9 +5833,8 @@ function HouseCreate() {
                       const fullDetail = getCurrentHousingDetail();
                       const houseShipmentNo = toStr(
                         (fullDetail as { shipment_id?: unknown }).shipment_id ??
-                          (
-                            editData as { shipment_id?: unknown } | undefined
-                          )?.shipment_id,
+                          (editData as { shipment_id?: unknown } | undefined)
+                            ?.shipment_id,
                       );
                       const jobId = toStr(
                         (
@@ -5787,9 +5882,8 @@ function HouseCreate() {
                       const fullDetail = getCurrentHousingDetail();
                       const houseShipmentNo = toStr(
                         (fullDetail as { shipment_id?: unknown }).shipment_id ??
-                          (
-                            editData as { shipment_id?: unknown } | undefined
-                          )?.shipment_id,
+                          (editData as { shipment_id?: unknown } | undefined)
+                            ?.shipment_id,
                       );
                       const jobId = toStr(
                         (
@@ -5963,10 +6057,51 @@ function HouseCreate() {
                     color="#105476"
                     onClick={() => {
                       const fullDetail = getCurrentHousingDetail();
-                      const prepaidCharges = (fullDetail.charges ?? []).filter(
-                        (c: { pp_cc?: string }) =>
-                          String(c.pp_cc ?? "").trim() === "Prepaid",
-                      );
+                      const currencyArr = (currencyData ?? []) as {
+                        id?: number;
+                        code?: string;
+                        currency_code?: string;
+                      }[];
+                      // Pass house charge / currency / ROE as shown on the house form.
+                      const prepaidCharges = (fullDetail.charges ?? [])
+                        .filter(
+                          (c: { pp_cc?: string }) =>
+                            String(c.pp_cc ?? "").trim() === "Prepaid",
+                        )
+                        .map((c) => {
+                          const currencyId = String(
+                            (c as { currency_id?: string | number | null })
+                              .currency_id ?? "",
+                          ).trim();
+                          const rawCode = String(
+                            (c as { currency?: string | null }).currency ?? "",
+                          ).trim();
+                          const currencyCode =
+                            resolveCurrencyCode(
+                              {
+                                currency: rawCode,
+                                currency_id: currencyId,
+                              },
+                              currencyArr,
+                            ) || (!/^\d+$/.test(rawCode) ? rawCode : "");
+                          return {
+                            ...c,
+                            currency: currencyCode || rawCode,
+                            currency_id: currencyId,
+                            currency_code: currencyCode || rawCode,
+                            currency_details: {
+                              currency_id: currencyId
+                                ? Number(currencyId)
+                                : undefined,
+                              currency_code: currencyCode || undefined,
+                            },
+                            roe: (c as { roe?: number | null }).roe,
+                            charge_id: (c as { charge_id?: number | null })
+                              .charge_id,
+                            charge_name: (c as { charge_name?: string })
+                              .charge_name,
+                          };
+                        });
                       const detailForInvoice = {
                         ...fullDetail,
                         charges: prepaidCharges,
@@ -5996,9 +6131,9 @@ function HouseCreate() {
                           },
                         });
                       }}
-                    >
-                      Create Invoice
-                    </Button>
+                  >
+                    Create Invoice
+                  </Button>
                 </Group>
               )}
             </Group>

@@ -124,7 +124,7 @@ import {
 } from "../../../utils/houseChargeAmounts";
 import { buildMasterJobCreatePrqPrefill } from "../../../utils/paymentRequestChargePrefill";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
-import {  } from "../../../utils/invoiceDocumentNumber";
+import {} from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
@@ -1448,11 +1448,16 @@ function InlandImportJobCreate() {
                         chargeable_weight: importHouseCargoWeightFromApi(
                           cargo.chargeable_weight,
                         ),
-                        haz: cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
-                          ? "Yes"
-                          : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
-                            ? "No"
-                            : "",
+                        haz:
+                          cargo.haz === true ||
+                          cargo.haz === "Yes" ||
+                          cargo.is_hazardous === true
+                            ? "Yes"
+                            : cargo.haz === false ||
+                                cargo.haz === "No" ||
+                                cargo.is_hazardous === false
+                              ? "No"
+                              : "",
                       }),
                     )
                   : [],
@@ -1478,8 +1483,14 @@ function InlandImportJobCreate() {
                         unitDetails?.unit_code ??
                         "",
                     ).trim();
+                    // Prefer currency_details; never treat numeric currency id as a code.
                     const currency = String(
-                      charge.currency ?? currencyDetails?.currency_code ?? "",
+                      currencyDetails?.currency_code ??
+                        charge.currency_code ??
+                        (charge.currency != null &&
+                        !/^\d+$/.test(String(charge.currency))
+                          ? charge.currency
+                          : ""),
                     ).trim();
                     const chargeId =
                       charge.charge_id != null
@@ -2146,14 +2157,10 @@ function InlandImportJobCreate() {
     }
 
     const hasNavSnapshot =
-      !!location.state?.mawbDetails ||
-      location.state?.fromHouseCreate === true;
+      !!location.state?.mawbDetails || location.state?.fromHouseCreate === true;
 
     // Same navigation entry: do not re-apply location.state snapshots (tab switch / dep churn)
-    if (
-      hasNavSnapshot &&
-      lastFormRestoreNavKeyRef.current === location.key
-    ) {
+    if (hasNavSnapshot && lastFormRestoreNavKeyRef.current === location.key) {
       if (
         location.state?.hawbDetails &&
         Array.isArray(location.state.hawbDetails) &&
@@ -3321,7 +3328,9 @@ function InlandImportJobCreate() {
                     }}
                     onClick={() => {
                       const allCollectCharges = collectAgentChargesFromHousings(
-                        hawbDetails as unknown as Array<Record<string, unknown>>,
+                        hawbDetails as unknown as Array<
+                          Record<string, unknown>
+                        >,
                       );
 
                       const firstHouse = hawbDetails[0];
@@ -3378,9 +3387,7 @@ function InlandImportJobCreate() {
                       getShipmentIds={() =>
                         hawbDetails.map((hawb) => hawb.shipment_id)
                       }
-                      getStatuses={() =>
-                        hawbDetails.map((hawb) => hawb.status)
-                      }
+                      getStatuses={() => hawbDetails.map((hawb) => hawb.status)}
                       onSuccess={(ids) => {
                         setHawbDetails((prev) =>
                           prev.map((h) =>
@@ -4906,15 +4913,15 @@ function InlandImportJobCreate() {
             active === 3 ||
             (active === 4 && jobData?.id != null)) &&
             !isReadOnly && (
-            <Button
-              leftSection={<IconChevronLeft size={16} />}
-              variant="outline"
-              color="#105476"
-              onClick={handlePrev}
-            >
-              Previous
-            </Button>
-          )}
+              <Button
+                leftSection={<IconChevronLeft size={16} />}
+                variant="outline"
+                color="#105476"
+                onClick={handlePrev}
+              >
+                Previous
+              </Button>
+            )}
         </Group>
 
         <Group>

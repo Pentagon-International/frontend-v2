@@ -597,11 +597,14 @@ function mapExportJobHouseChargeRow(charge: Record<string, unknown>) {
       ? String(unitDetails.unit_code)
       : String(charge.unit ?? "").trim();
 
-  const currencyCode = charge.currency
-    ? String(charge.currency)
-    : currencyDetails?.currency_code
-      ? String(currencyDetails.currency_code)
-      : "";
+  // Prefer currency_details; never treat numeric currency id as a code.
+  const currencyCode = String(
+    currencyDetails?.currency_code ??
+      charge.currency_code ??
+      (charge.currency != null && !/^\d+$/.test(String(charge.currency))
+        ? charge.currency
+        : ""),
+  ).trim();
 
   const roeValue = parseChargeFieldNum(charge.roe);
   const amountPerUnit = parseChargeFieldNum(charge.amount_per_unit);
@@ -641,9 +644,11 @@ function mapExportJobHouseChargeRow(charge: Record<string, unknown>) {
   const currencyIdFromApi =
     charge.currency_id != null
       ? String(charge.currency_id)
-      : currencyDetails?.currency_id != null
-        ? String(currencyDetails.currency_id)
-        : "";
+      : charge.currency != null && /^\d+$/.test(String(charge.currency))
+        ? String(charge.currency)
+        : currencyDetails?.currency_id != null
+          ? String(currencyDetails.currency_id)
+          : "";
 
   return {
     id:
