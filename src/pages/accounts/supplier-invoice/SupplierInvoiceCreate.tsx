@@ -1127,6 +1127,14 @@ export default function SupplierInvoiceCreate({
     saveResponseRef.current = saveResponse;
   }, [saveResponse]);
 
+  /** Keep ref in sync immediately so create→auto-TDS in the same click updates (not creates again). */
+  const writeSaveResponse = (
+    next: NonNullable<typeof saveResponse>,
+  ) => {
+    saveResponseRef.current = next;
+    setSaveResponse(next);
+  };
+
   const [calcLoading, setCalcLoading] = useState(false);
   const [calcLoadingText, setCalcLoadingText] = useState<string>("");
   const editAmountCalcBaselineRef = useRef<string | null>(null);
@@ -2531,7 +2539,7 @@ export default function SupplierInvoiceCreate({
 
     // Reversal create: do not set saveResponse so daybook and date stay editable; saveResponse set after POST
     if (!runForReversalCreate) {
-      setSaveResponse({
+      writeSaveResponse({
         id: data.id != null ? Number(data.id) : undefined,
         crj_number: data.crj_number != null ? String(data.crj_number) : "",
         reverse_crj_number:
@@ -2998,7 +3006,8 @@ export default function SupplierInvoiceCreate({
     values: SupplierInvoiceFormValues,
     statusOverride?: string,
   ) => {
-    const isCreate = saveResponse?.id == null;
+    const savedId = saveResponseRef.current?.id ?? saveResponse?.id;
+    const isCreate = savedId == null;
     const chargesPayload = values.charges_data.map((c) => {
       const taxCode = String(c.tax_code ?? "").trim();
       const base = {
@@ -3023,7 +3032,7 @@ export default function SupplierInvoiceCreate({
       return base;
     });
     return {
-      ...(saveResponse?.id != null ? { id: saveResponse.id } : {}),
+      ...(savedId != null ? { id: savedId } : {}),
       day_book_id: values.day_book_id ? Number(values.day_book_id) : null,
       date: values.date ? formatDDMMYYYY(new Date(values.date)) : "",
       agent_name: agentDisplayName ?? "",
@@ -3343,7 +3352,8 @@ export default function SupplierInvoiceCreate({
       const payload = buildPayload(values);
       (payload as Record<string, unknown>).is_agent =
         resolveIsAgentForPayload();
-      const isEdit = saveResponse?.id != null;
+      const savedId = saveResponseRef.current?.id ?? saveResponse?.id;
+      const isEdit = savedId != null;
       // Reversal create: include source invoice's crj_number (required by API)
       if (isReversal && !isEdit && invoiceFromState) {
         const sourceCrj = (invoiceFromState as Record<string, unknown>)
@@ -3356,13 +3366,13 @@ export default function SupplierInvoiceCreate({
         : URL.supplierInvoice;
       // For multipart, we call apiCallProtected directly (no helper appending payload.id/).
       const reversalEditUrl =
-        isReversal && saveResponse?.id != null
+        isReversal && savedId != null
           ? URL.reverseSupplierInvoice
           : null;
 
       if (isEdit) {
         const baseUrl = reversalEditUrl ?? URL.supplierInvoice;
-        const id = (payload as any).id ?? saveResponse?.id;
+        const id = (payload as any).id ?? savedId;
         const fd = buildSupplierInvoiceFormData(
           payload,
           isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
@@ -3384,18 +3394,19 @@ export default function SupplierInvoiceCreate({
             }
           }
           const dataWithReverse = data as { reverse_crj_number?: string };
-          setSaveResponse({
-            id: data.id ?? saveResponse?.id,
-            crj_number: data.crj_number ?? saveResponse?.crj_number ?? "",
+          const prevSaved = saveResponseRef.current ?? saveResponse;
+          writeSaveResponse({
+            id: data.id ?? prevSaved?.id,
+            crj_number: data.crj_number ?? prevSaved?.crj_number ?? "",
             reverse_crj_number:
               dataWithReverse.reverse_crj_number ??
-              saveResponse?.reverse_crj_number ??
+              prevSaved?.reverse_crj_number ??
               "",
-            Inv_Crn_no: data.Inv_Crn_no ?? saveResponse?.Inv_Crn_no ?? "",
+            Inv_Crn_no: data.Inv_Crn_no ?? prevSaved?.Inv_Crn_no ?? "",
             status:
               data.status != null
                 ? String(data.status)
-                : (saveResponse?.status ?? "UNPOSTED"),
+                : (prevSaved?.status ?? "UNPOSTED"),
           });
           setAuditPatch((prev) => appendEditPageAuditPatch(prev, data));
           if (isReversal) {
@@ -3487,7 +3498,7 @@ export default function SupplierInvoiceCreate({
             }
           }
           const dataWithReverse = data as { reverse_crj_number?: string };
-          setSaveResponse({
+          writeSaveResponse({
             id: data.id,
             crj_number: data.crj_number ?? "",
             reverse_crj_number: dataWithReverse.reverse_crj_number ?? "",
@@ -3554,15 +3565,17 @@ export default function SupplierInvoiceCreate({
         }
       }
     } catch (error: unknown) {
+      const hadSavedId =
+        (saveResponseRef.current?.id ?? saveResponse?.id) != null;
       console.error(
-        saveResponse?.id != null ? "Error updating" : "Error creating",
+        hadSavedId ? "Error updating" : "Error creating",
         "supplier invoice:",
         error,
       );
       ToastNotification({
         message: getServerErrorMessage(
           error,
-          saveResponse?.id != null
+          hadSavedId
             ? "Failed to update supplier invoice"
             : "Failed to create supplier invoice",
         ),
@@ -3573,6 +3586,116 @@ export default function SupplierInvoiceCreate({
       setIsSubmitting(false);
     }
     return null;
+  };
+
+  /** Shared TDS apply used by Calculate TDS and after successful Calculate GST. */
+  const applyTdsCalculation = async (
+    supplierInvoiceId: number,
+    chargesBase?: ChargeRow[],
+    valuesOverride?: Partial<SupplierInvoiceFormValues>,
+  ): Promise<void> => {
+    try {
+      const res = await postAPICall(
+        URL.tdsCalculation,
+        isReversal
+          ? {
+              reverse_supplier_invoice_id: supplierInvoiceId,
+            }
+          : { supplier_invoice_id: supplierInvoiceId },
+        API_HEADER,
+      );
+
+      const data = unwrapApiStatusBody(res) as Record<string, unknown>;
+      const failureMessage = getApiFailureMessage(
+        res,
+        "TDS calculation failed.",
+      );
+      if (failureMessage) {
+        ToastNotification({
+          type: "error",
+          message: failureMessage,
+        });
+        return;
+      }
+      const rows =
+        (data.data as Array<Record<string, unknown>> | undefined) ?? [];
+
+      if (!Array.isArray(rows) || rows.length === 0) {
+        ToastNotification({
+          type: "error",
+          message: "No TDS rows returned from calculation.",
+        });
+        return;
+      }
+
+      const existing = chargesBase ?? form.values.charges_data;
+      const tdsChargeRows: ChargeRow[] = rows
+        .map((r): ChargeRow | null => {
+          const amount = parseNum(r.amount);
+          const currencyId = parseNum(r.currency_id);
+          const roe = parseNum(r.roe);
+          if (amount == null) return null;
+          const accountName = String(r.account_name ?? "");
+          return {
+            account_code: String(r.account_code ?? ""),
+            account_name: accountName,
+            subledger_code: String(r.subledger_code ?? ""),
+            // Do not set CRN from TDS response
+            CRN: "",
+            narration: String(r.narration ?? ""),
+            shipment_no: "",
+            charge_id: null,
+            charge_name: String(r.charge_name ?? ""),
+            currency_id: currencyId != null ? Number(currencyId) : null,
+            roe: parseRoeForPayload(roe),
+            amount: Number(amount),
+            amount_in_local: clampLocalAmount(Number(amount)),
+            tax_code: "",
+            igst_rate: null,
+            igst: null,
+            Dr_Cr: normalizeDrCr(
+              (r.Dr_cr as unknown) ??
+                (r.Dr_Cr as unknown) ??
+                (r.dr_cr as unknown) ??
+                (r.cr_dr as unknown),
+            ),
+          };
+        })
+        .filter((x): x is ChargeRow => x !== null);
+
+      const deduped = tdsChargeRows.filter((nr) => {
+        return !existing.some(
+          (er) =>
+            String(er.account_code ?? "") === String(nr.account_code ?? "") &&
+            String(er.subledger_code ?? "") ===
+              String(nr.subledger_code ?? "") &&
+            Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
+            er.Dr_Cr === nr.Dr_Cr &&
+            String(er.account_name ?? "") === String(nr.account_name ?? ""),
+        );
+      });
+
+      const mergedCharges =
+        deduped.length > 0 ? [...existing, ...deduped] : existing;
+      if (deduped.length > 0) {
+        form.setFieldValue("charges_data", mergedCharges);
+        await handleSubmit({
+          ...form.values,
+          ...valuesOverride,
+          charges_data: mergedCharges,
+        });
+      } else {
+        ToastNotification({
+          type: "success",
+          message: "TDS calculated successfully",
+        });
+      }
+    } catch (e: unknown) {
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(e, "TDS calculation failed."),
+      });
+    }
   };
 
   const handlePost = async () => {
@@ -3619,9 +3742,11 @@ export default function SupplierInvoiceCreate({
           (data as { status?: unknown }).status != null
             ? String((data as { status?: unknown }).status)
             : "POSTED";
-        setSaveResponse((prev) =>
-          prev ? { ...prev, status: statusStr } : null,
-        );
+        setSaveResponse((prev) => {
+          const next = prev ? { ...prev, status: statusStr } : null;
+          saveResponseRef.current = next;
+          return next;
+        });
         setAuditPatch((prev) => appendEditPageAuditPatch(prev, data));
         form.setFieldValue("status", "POSTED");
         if (Array.isArray((data as { charges?: ApiCharge[] }).charges)) {
@@ -5001,11 +5126,14 @@ export default function SupplierInvoiceCreate({
                               Array<Record<string, unknown>> | undefined) ??
                             [];
 
+                          // Local list so auto-TDS merges onto GST rows (not a stale form snapshot).
+                          let chargesAfterGst = form.values.charges_data;
+
                           if (
                             Array.isArray(chargesFromApi) &&
                             chargesFromApi.length
                           ) {
-                            const next = form.values.charges_data.map((c) => {
+                            chargesAfterGst = chargesAfterGst.map((c) => {
                               const match = chargesFromApi.find(
                                 (x) =>
                                   Number(x.charge_id) === Number(c.charge_id),
@@ -5016,14 +5144,13 @@ export default function SupplierInvoiceCreate({
                                 // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
                               };
                             });
-                            form.setFieldValue("charges_data", next);
+                            form.setFieldValue("charges_data", chargesAfterGst);
                           }
 
                           if (
                             Array.isArray(sacWiseTotals) &&
                             sacWiseTotals.length
                           ) {
-                            const existing = form.values.charges_data;
                             const newRows: ChargeRow[] = sacWiseTotals
                               .map((t): ChargeRow | null => {
                                 const chargeId = Number(t.charge_id);
@@ -5074,7 +5201,7 @@ export default function SupplierInvoiceCreate({
                               .filter((x): x is ChargeRow => x !== null);
 
                             const deduped = newRows.filter((nr) => {
-                              return !existing.some(
+                              return !chargesAfterGst.some(
                                 (er) =>
                                   Number(er.charge_id) ===
                                     Number(nr.charge_id) &&
@@ -5089,10 +5216,14 @@ export default function SupplierInvoiceCreate({
                             });
 
                             if (deduped.length) {
-                              form.setFieldValue("charges_data", [
-                                ...existing,
+                              chargesAfterGst = [
+                                ...chargesAfterGst,
                                 ...deduped,
-                              ]);
+                              ];
+                              form.setFieldValue(
+                                "charges_data",
+                                chargesAfterGst,
+                              );
                             }
                           }
 
@@ -5115,6 +5246,26 @@ export default function SupplierInvoiceCreate({
                             form.setFieldValue("sgst_amount", sgst);
                           if (igst != null)
                             form.setFieldValue("igst_amount", igst);
+
+                          // Auto TDS after GST when section is set (standalone TDS unchanged).
+                          if (
+                            String(form.values.tds_section_code ?? "").trim() !==
+                            ""
+                          ) {
+                            setCalcLoadingText("Calculating TDS...");
+                            await applyTdsCalculation(
+                              Number(supplierInvoiceId),
+                              chargesAfterGst,
+                              {
+                                cgst_amount:
+                                  cgst ?? form.values.cgst_amount,
+                                sgst_amount:
+                                  sgst ?? form.values.sgst_amount,
+                                igst_amount:
+                                  igst ?? form.values.igst_amount,
+                              },
+                            );
+                          }
                         } catch (e: unknown) {
                           ToastNotification({
                             type: "error",
@@ -5131,7 +5282,10 @@ export default function SupplierInvoiceCreate({
                       Calculate GST
                     </Button>
                   )}
+                  {/* TDS is auto-applied after Calculate GST on create/edit.
+                      Keep standalone button only for reverse (GST is disabled there). */}
                   {isIndiaUser &&
+                    isReversal &&
                     String(form.values.tds_section_code ?? "").trim() !==
                       "" && (
                       <Button
@@ -5162,9 +5316,7 @@ export default function SupplierInvoiceCreate({
                             if (v.hasErrors) return;
                             setCalcLoading(true);
                             setCalcLoadingText(
-                              isReversal
-                                ? "Creating reverse supplier invoice first"
-                                : "Creating supplier invoice first",
+                              "Creating reverse supplier invoice first",
                             );
                             supplierInvoiceId = await handleSubmit(form.values);
                             if (!supplierInvoiceId) {
@@ -5176,129 +5328,9 @@ export default function SupplierInvoiceCreate({
                           try {
                             setCalcLoading(true);
                             setCalcLoadingText("Calculating TDS...");
-                            const res = await postAPICall(
-                              URL.tdsCalculation,
-                              isReversal
-                                ? {
-                                    reverse_supplier_invoice_id:
-                                      supplierInvoiceId,
-                                  }
-                                : { supplier_invoice_id: supplierInvoiceId },
-                              API_HEADER,
+                            await applyTdsCalculation(
+                              Number(supplierInvoiceId),
                             );
-
-                            const data = unwrapApiStatusBody(res) as Record<
-                              string,
-                              unknown
-                            >;
-                            const failureMessage = getApiFailureMessage(
-                              res,
-                              "TDS calculation failed.",
-                            );
-                            if (failureMessage) {
-                              ToastNotification({
-                                type: "error",
-                                message: failureMessage,
-                              });
-                              return;
-                            }
-                            const rows =
-                              (data.data as
-                                Array<Record<string, unknown>> | undefined) ??
-                              [];
-
-                            if (!Array.isArray(rows) || rows.length === 0) {
-                              ToastNotification({
-                                type: "error",
-                                message:
-                                  "No TDS rows returned from calculation.",
-                              });
-                              return;
-                            }
-
-                            const existing = form.values.charges_data;
-                            const tdsChargeRows: ChargeRow[] = rows
-                              .map((r): ChargeRow | null => {
-                                const amount = parseNum(r.amount);
-                                const currencyId = parseNum(r.currency_id);
-                                const roe = parseNum(r.roe);
-                                if (amount == null) return null;
-                                const accountName = String(
-                                  r.account_name ?? "",
-                                );
-                                return {
-                                  account_code: String(r.account_code ?? ""),
-                                  account_name: accountName,
-                                  subledger_code: String(
-                                    r.subledger_code ?? "",
-                                  ),
-                                  // Do not set CRN from TDS response
-                                  CRN: "",
-                                  narration: String(r.narration ?? ""),
-                                  shipment_no: "",
-                                  charge_id: null,
-                                  charge_name: String(r.charge_name ?? ""),
-                                  currency_id:
-                                    currencyId != null
-                                      ? Number(currencyId)
-                                      : null,
-                                  roe: parseRoeForPayload(roe),
-                                  amount: Number(amount),
-                                  amount_in_local: clampLocalAmount(
-                                    Number(amount),
-                                  ),
-                                  tax_code: "",
-                                  igst_rate: null,
-                                  igst: null,
-                                  Dr_Cr: normalizeDrCr(
-                                    (r.Dr_cr as unknown) ??
-                                      (r.Dr_Cr as unknown) ??
-                                      (r.dr_cr as unknown) ??
-                                      (r.cr_dr as unknown),
-                                  ),
-                                };
-                              })
-                              .filter((x): x is ChargeRow => x !== null);
-
-                            const deduped = tdsChargeRows.filter((nr) => {
-                              return !existing.some(
-                                (er) =>
-                                  String(er.account_code ?? "") ===
-                                    String(nr.account_code ?? "") &&
-                                  String(er.subledger_code ?? "") ===
-                                    String(nr.subledger_code ?? "") &&
-                                  Number(er.amount ?? 0) ===
-                                    Number(nr.amount ?? 0) &&
-                                  er.Dr_Cr === nr.Dr_Cr &&
-                                  String(er.account_name ?? "") ===
-                                    String(nr.account_name ?? ""),
-                              );
-                            });
-
-                            const mergedCharges =
-                              deduped.length > 0
-                                ? [...existing, ...deduped]
-                                : existing;
-                            if (deduped.length > 0) {
-                              form.setFieldValue("charges_data", mergedCharges);
-                              await handleSubmit({
-                                ...form.values,
-                                charges_data: mergedCharges,
-                              });
-                            } else {
-                              ToastNotification({
-                                type: "success",
-                                message: "TDS calculated successfully",
-                              });
-                            }
-                          } catch (e: unknown) {
-                            ToastNotification({
-                              type: "error",
-                              message: getServerErrorMessage(
-                                e,
-                                "TDS calculation failed.",
-                              ),
-                            });
                           } finally {
                             setCalcLoading(false);
                           }
