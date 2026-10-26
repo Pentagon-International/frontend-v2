@@ -106,6 +106,7 @@ import {
   splitPrqChargesForSupplierInvoiceAgentInv,
   type PartyAddressLike,
 } from "../../../utils/paymentRequestChargePrefill";
+import { hasUploadedSupportingDocument } from "../../../utils/customerVerificationFormData";
 
 const fetchCurrencyMaster = async () => {
   try {
@@ -3283,6 +3284,15 @@ export default function SupplierInvoiceCreate({
         ToastNotification({
           type: "error",
           message: "Please enter at least one charge before saving.",
+        });
+        return null;
+      }
+
+      if (!hasUploadedSupportingDocument(values.supporting_documents)) {
+        ToastNotification({
+          type: "error",
+          message:
+            "Please attach at least one supporting document before saving.",
         });
         return null;
       }

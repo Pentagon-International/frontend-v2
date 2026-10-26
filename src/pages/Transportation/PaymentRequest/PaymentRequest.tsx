@@ -116,6 +116,7 @@ import {
   resolvePartyTdsSectionCode,
   resolveStateCodeFromPartyAddress,
 } from "../../../utils/paymentRequestChargePrefill";
+import { hasUploadedSupportingDocument } from "../../../utils/customerVerificationFormData";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -3082,6 +3083,18 @@ function PaymentRequest() {
       ToastNotification({
         type: "error",
         message: "Please enter at least one charge before saving.",
+      });
+      return;
+    }
+
+    if (
+      !isRejectAction &&
+      !hasUploadedSupportingDocument(supportingDocuments)
+    ) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Please attach at least one supporting document before saving.",
       });
       return;
     }

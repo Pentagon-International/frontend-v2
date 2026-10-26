@@ -61,6 +61,8 @@ export type QuotationTableRow = {
   origin_code_list?: string[];
   destination_code_list?: string[];
   valid_upto_list?: string[];
+  etd?: string | null;
+  eta?: string | null;
   reject_remark?: string;
   status?: string;
   temp_customer?: boolean;
@@ -85,6 +87,8 @@ export type QuotationVisibleColumns = {
   customer_name: boolean;
   sales_person: boolean;
   created_at: boolean;
+  etd: boolean;
+  eta: boolean;
   /** One column: origin → destination (same as Air Export Booking “Route”). */
   route: boolean;
   service: boolean;
@@ -647,6 +651,8 @@ export function QuotationListNativeTable({
       visible.customer_name,
       visible.sales_person,
       visible.created_at,
+      visible.etd,
+      visible.eta,
       visible.route,
       visible.service,
       visible.volume,
@@ -779,6 +785,16 @@ export function QuotationListNativeTable({
           {visible.created_at && (
             <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>
               Quote Date
+            </th>
+          )}
+          {visible.etd && (
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>
+              ETD
+            </th>
+          )}
+          {visible.eta && (
+            <th style={{ ...erpListThStyle(theme), whiteSpace: "nowrap" }}>
+              ETA
             </th>
           )}
           {visible.route && (
@@ -1039,6 +1055,30 @@ export function QuotationListNativeTable({
                     }}
                   >
                     {quoteCreatedAt ? dayjs(quoteCreatedAt).format(dateFormat) : "—"}
+                  </td>
+                )}
+                {visible.etd && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      color: muted,
+                      fontFamily: fontSans,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {row.etd ? dayjs(row.etd).format(dateFormat) : "—"}
+                  </td>
+                )}
+                {visible.eta && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      color: muted,
+                      fontFamily: fontSans,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {row.eta ? dayjs(row.eta).format(dateFormat) : "—"}
                   </td>
                 )}
                 {visible.route && (
