@@ -280,13 +280,22 @@ function mapDocuments(
     .filter((doc) => doc.document_name || doc.document_url);
 }
 
+/** Round money values to at most 2 decimal places (avoids float artifacts like .889999999). */
+function round2(value: number | null | undefined): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
 function sumAmounts(
   rows: Array<{ amount: number | null | undefined }>,
 ): number {
-  return rows.reduce((sum, row) => {
-    const n = Number(row.amount);
-    return sum + (Number.isFinite(n) ? n : 0);
-  }, 0);
+  return round2(
+    rows.reduce((sum, row) => {
+      const n = Number(row.amount);
+      return sum + (Number.isFinite(n) ? n : 0);
+    }, 0),
+  );
 }
 
 function formatAmount(value: number): string {
@@ -661,24 +670,24 @@ export default function BankReconciliationCreate() {
     chequeDepositedApiTotal ?? chequeDepositedTotal;
 
   const creditTotal = useMemo(
-    () => chequeIssuedSectionTotal + bankCreditTotal,
+    () => round2(chequeIssuedSectionTotal + bankCreditTotal),
     [chequeIssuedSectionTotal, bankCreditTotal],
   );
 
   const debitTotal = useMemo(
-    () => chequeDepositedSectionTotal + bankDebitTotal,
+    () => round2(chequeDepositedSectionTotal + bankDebitTotal),
     [chequeDepositedSectionTotal, bankDebitTotal],
   );
 
   const grandTotal = useMemo(() => {
     const bankBalance = Number(form.values.bank_balance) || 0;
-    return bankBalance + creditTotal - debitTotal;
+    return round2(bankBalance + creditTotal - debitTotal);
   }, [form.values.bank_balance, creditTotal, debitTotal]);
 
   const differenceAmount = useMemo(() => {
     const statement = Number(form.values.as_per_statement);
     if (!Number.isFinite(statement)) return 0;
-    return Math.round((grandTotal - statement) * 100) / 100;
+    return round2(grandTotal - statement);
   }, [grandTotal, form.values.as_per_statement]);
 
   const isReadOnly =
@@ -835,7 +844,7 @@ export default function BankReconciliationCreate() {
       chq_clrd_date: formatDateDDMMYYYY(row.cheque_clr_date) || null,
       utr_no: row.utr_no.trim() || null,
       paid_to: row.party,
-      amount: row.amount ?? 0,
+      amount: round2(row.amount),
     });
 
     const mapDepositedLine = (row: ChequeNotClearedRow) => ({
@@ -848,7 +857,7 @@ export default function BankReconciliationCreate() {
       chq_clrd_date: formatDateDDMMYYYY(row.cheque_clr_date) || null,
       utr_no: row.utr_no.trim() || null,
       received_from: row.party,
-      amount: row.amount ?? 0,
+      amount: round2(row.amount),
     });
 
     const mapBankLine = (row: BankEntryRow) => ({
@@ -858,7 +867,7 @@ export default function BankReconciliationCreate() {
       chq_clrd_date: formatDateDDMMYYYY(row.cheque_clr_date) || null,
       utr_no: row.utr_no.trim() || null,
       our_reference: row.our_reference,
-      amount: row.amount ?? 0,
+      amount: round2(row.amount),
     });
 
     const values = form.values;
@@ -869,16 +878,16 @@ export default function BankReconciliationCreate() {
       account_code: values.bank_account_code,
       subledger: values.bank_account_sub_code.trim() || "0",
       currency_id: resolveCurrencyId(),
-      as_per_statement: values.as_per_statement ?? 0,
-      bank_balance: values.bank_balance ?? 0,
-      cheque_issued_total: chequeIssuedSectionTotal,
-      bank_credit_total: bankCreditTotal,
-      cheque_deposited_total: chequeDepositedSectionTotal,
-      bank_debit_total: bankDebitTotal,
-      credit_total: creditTotal,
-      debit_total: debitTotal,
-      grand_total: grandTotal,
-      difference_amount: differenceAmount,
+      as_per_statement: round2(values.as_per_statement),
+      bank_balance: round2(values.bank_balance),
+      cheque_issued_total: round2(chequeIssuedSectionTotal),
+      bank_credit_total: round2(bankCreditTotal),
+      cheque_deposited_total: round2(chequeDepositedSectionTotal),
+      bank_debit_total: round2(bankDebitTotal),
+      credit_total: round2(creditTotal),
+      debit_total: round2(debitTotal),
+      grand_total: round2(grandTotal),
+      difference_amount: round2(differenceAmount),
       status: overrideStatus ?? values.status ?? "UNPOSTED",
       remarks: values.remarks ?? "",
       cheque_issued_lines: values.cheque_issued
