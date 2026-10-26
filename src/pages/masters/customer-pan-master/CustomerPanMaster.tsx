@@ -520,27 +520,10 @@ export default function CustomerPanMaster({
       setSearchMessage("");
 
       const response = await searchGstinByPan(pan);
-
-      if (!response.valid) {
-        ToastNotification({
-          type: "error",
-          message:
-            response.message ||
-            "No valid GST registrations found for this PAN.",
-        });
-        return;
-      }
-
       const list = response.records ?? [];
-      if (!list.length) {
-        ToastNotification({
-          type: "info",
-          message: "No GST registrations found for this PAN.",
-        });
-        return;
-      }
 
-      if (allAttestrAddressesEmpty(list)) {
+      // Invalid PAN lookup, empty results, or unusable addresses → manual create
+      if (!response.valid || !list.length || allAttestrAddressesEmpty(list)) {
         goToManualCreate(list);
         return;
       }
