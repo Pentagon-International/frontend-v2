@@ -124,7 +124,7 @@ import {
 } from "../../../utils/houseChargeAmounts";
 import { buildMasterJobCreatePrqPrefill } from "../../../utils/paymentRequestChargePrefill";
 import { collectAgentChargesFromHousings } from "../../../utils/collectAgentInvoiceCharges";
-import {  } from "../../../utils/invoiceDocumentNumber";
+import {} from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
@@ -572,7 +572,6 @@ function InlandExportJobCreate() {
     }
     setPaymentRequestAutomationShipmentNo(normalized);
   }, []);
-
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -1394,11 +1393,16 @@ function InlandExportJobCreate() {
                         chargeable_weight: importHouseCargoWeightFromApi(
                           cargo.chargeable_weight,
                         ),
-                        haz: cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
-                          ? "Yes"
-                          : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
-                            ? "No"
-                            : "",
+                        haz:
+                          cargo.haz === true ||
+                          cargo.haz === "Yes" ||
+                          cargo.is_hazardous === true
+                            ? "Yes"
+                            : cargo.haz === false ||
+                                cargo.haz === "No" ||
+                                cargo.is_hazardous === false
+                              ? "No"
+                              : "",
                       }),
                     )
                   : [],
@@ -1424,8 +1428,14 @@ function InlandExportJobCreate() {
                         unitDetails?.unit_code ??
                         "",
                     ).trim();
+                    // Prefer currency_details; never treat numeric currency id as a code.
                     const currency = String(
-                      charge.currency ?? currencyDetails?.currency_code ?? "",
+                      currencyDetails?.currency_code ??
+                        charge.currency_code ??
+                        (charge.currency != null &&
+                        !/^\d+$/.test(String(charge.currency))
+                          ? charge.currency
+                          : ""),
                     ).trim();
                     const chargeId =
                       charge.charge_id != null
@@ -2092,14 +2102,10 @@ function InlandExportJobCreate() {
     }
 
     const hasNavSnapshot =
-      !!location.state?.mawbDetails ||
-      location.state?.fromHouseCreate === true;
+      !!location.state?.mawbDetails || location.state?.fromHouseCreate === true;
 
     // Same navigation entry: do not re-apply location.state snapshots (tab switch / dep churn)
-    if (
-      hasNavSnapshot &&
-      lastFormRestoreNavKeyRef.current === location.key
-    ) {
+    if (hasNavSnapshot && lastFormRestoreNavKeyRef.current === location.key) {
       if (
         location.state?.hawbDetails &&
         Array.isArray(location.state.hawbDetails) &&
@@ -3244,7 +3250,9 @@ function InlandExportJobCreate() {
                     }}
                     onClick={() => {
                       const allCollectCharges = collectAgentChargesFromHousings(
-                        hawbDetails as unknown as Array<Record<string, unknown>>,
+                        hawbDetails as unknown as Array<
+                          Record<string, unknown>
+                        >,
                       );
 
                       const firstHouse = hawbDetails[0];
@@ -3301,9 +3309,7 @@ function InlandExportJobCreate() {
                       getShipmentIds={() =>
                         hawbDetails.map((hawb) => hawb.shipment_id)
                       }
-                      getStatuses={() =>
-                        hawbDetails.map((hawb) => hawb.status)
-                      }
+                      getStatuses={() => hawbDetails.map((hawb) => hawb.status)}
                       onSuccess={(ids) => {
                         setHawbDetails((prev) =>
                           prev.map((h) =>
@@ -4473,212 +4479,224 @@ function InlandExportJobCreate() {
               <Group gap="xs" wrap="nowrap">
                 {mode === "edit" && !isReadOnly && (
                   <>
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    size="sm"
-                    onClick={() => {
-                      const toStr = (v: unknown) => String(v ?? "").trim();
-                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                      if (!jobId) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Job ID not found for Supplier Invoice prefill.",
-                        });
-                        return;
-                      }
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      size="sm"
+                      onClick={() => {
+                        const toStr = (v: unknown) => String(v ?? "").trim();
+                        const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                        if (!jobId) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Job ID not found for Supplier Invoice prefill.",
+                          });
+                          return;
+                        }
 
-                      const estimates = estimatesForm.values.estimates ?? [];
-                      const estimateCharges = estimates
-                        .map((e) => ({
-                          shipment_no: jobId,
-                          charge_id: e.charge_id ?? null,
-                          charge_name: e.charge_name ?? "",
-                          currency_id: e.currency_id ?? null,
-                          roe: e.roe ?? null,
-                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
-                          supplier_code: toStr(e.supplier_code),
-                          supplier_name: toStr(e.supplier_name),
-                        }))
-                        .filter(
-                          (c) =>
-                            toStr((c as any).shipment_no) &&
-                            (c as any).charge_id != null &&
-                            (c as any).amount != null &&
-                            (c as any).amount !== "" &&
-                            (toStr((c as any).supplier_code) ||
-                              toStr((c as any).supplier_name)),
-                        );
+                        const estimates = estimatesForm.values.estimates ?? [];
+                        const estimateCharges = estimates
+                          .map((e) => ({
+                            shipment_no: jobId,
+                            charge_id: e.charge_id ?? null,
+                            charge_name: e.charge_name ?? "",
+                            currency_id: e.currency_id ?? null,
+                            roe: e.roe ?? null,
+                            amount: resolveSupplierInvoiceEstimateCostAmount(e),
+                            supplier_code: toStr(e.supplier_code),
+                            supplier_name: toStr(e.supplier_name),
+                          }))
+                          .filter(
+                            (c) =>
+                              toStr((c as any).shipment_no) &&
+                              (c as any).charge_id != null &&
+                              (c as any).amount != null &&
+                              (c as any).amount !== "" &&
+                              (toStr((c as any).supplier_code) ||
+                                toStr((c as any).supplier_name)),
+                          );
 
-                      const houseCharges = (hawbDetails ?? [])
-                        .flatMap((h) => {
-                          const rec = h as unknown as Record<string, unknown>;
-                          const shipmentNo = toStr((rec as any).shipment_id);
-                          const chargesArr = Array.isArray((rec as any).charges)
-                            ? ((rec as any).charges as unknown[])
-                            : Array.isArray((rec as any).mawb_charges)
-                              ? ((rec as any).mawb_charges as unknown[])
-                              : [];
-                          return chargesArr
-                            .map((c) => {
-                              const cr = c as Record<string, unknown>;
-                              return {
-                                shipment_no: shipmentNo,
-                                charge_id:
-                                  cr.charge_id != null
-                                    ? Number(cr.charge_id)
-                                    : null,
-                                charge_name: toStr(cr.charge_name),
-                                currency_id:
-                                  (cr as any).currency_id ??
-                                  (cr as any).currency ??
-                                  null,
-                                roe: (cr as any).roe ?? null,
-                                amount:
-                                  resolveSupplierInvoiceHouseCostAmount(cr),
-                                supplier_code: toStr((cr as any).supplier_code),
-                                supplier_name: toStr((cr as any).supplier_name),
-                              };
-                            })
-                            .filter(
-                              (x) =>
-                                toStr((x as any).shipment_no) &&
-                                (x as any).charge_id != null &&
-                                (x as any).amount != null &&
-                                (x as any).amount !== "" &&
-                                (toStr((x as any).supplier_code) ||
-                                  toStr((x as any).supplier_name)),
-                            );
-                        })
-                        .filter(Boolean);
+                        const houseCharges = (hawbDetails ?? [])
+                          .flatMap((h) => {
+                            const rec = h as unknown as Record<string, unknown>;
+                            const shipmentNo = toStr((rec as any).shipment_id);
+                            const chargesArr = Array.isArray(
+                              (rec as any).charges,
+                            )
+                              ? ((rec as any).charges as unknown[])
+                              : Array.isArray((rec as any).mawb_charges)
+                                ? ((rec as any).mawb_charges as unknown[])
+                                : [];
+                            return chargesArr
+                              .map((c) => {
+                                const cr = c as Record<string, unknown>;
+                                return {
+                                  shipment_no: shipmentNo,
+                                  charge_id:
+                                    cr.charge_id != null
+                                      ? Number(cr.charge_id)
+                                      : null,
+                                  charge_name: toStr(cr.charge_name),
+                                  currency_id:
+                                    (cr as any).currency_id ??
+                                    (cr as any).currency ??
+                                    null,
+                                  roe: (cr as any).roe ?? null,
+                                  amount:
+                                    resolveSupplierInvoiceHouseCostAmount(cr),
+                                  supplier_code: toStr(
+                                    (cr as any).supplier_code,
+                                  ),
+                                  supplier_name: toStr(
+                                    (cr as any).supplier_name,
+                                  ),
+                                };
+                              })
+                              .filter(
+                                (x) =>
+                                  toStr((x as any).shipment_no) &&
+                                  (x as any).charge_id != null &&
+                                  (x as any).amount != null &&
+                                  (x as any).amount !== "" &&
+                                  (toStr((x as any).supplier_code) ||
+                                    toStr((x as any).supplier_name)),
+                              );
+                          })
+                          .filter(Boolean);
 
-                      const charges = [...estimateCharges, ...houseCharges];
-                      if (charges.length === 0) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Select a supplier/vendor to create supplier invoice",
-                        });
-                        return;
-                      }
+                        const charges = [...estimateCharges, ...houseCharges];
+                        if (charges.length === 0) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Select a supplier/vendor to create supplier invoice",
+                          });
+                          return;
+                        }
 
-                      navigate("/supplier-invoice/create", {
-                        state: {
-                          prefillSupplierInvoiceFromJob: {
-                            source: "air-import-job",
-                            job_id: jobId,
-                            charges,
+                        navigate("/supplier-invoice/create", {
+                          state: {
+                            prefillSupplierInvoiceFromJob: {
+                              source: "air-import-job",
+                              job_id: jobId,
+                              charges,
+                            },
                           },
-                        },
-                      });
-                    }}
-                  >
-                    Create Supplier Invoice
-                  </Button>
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    size="sm"
-                    onClick={() => {
-                      const toStr = (v: unknown) => String(v ?? "").trim();
-                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                      if (!jobId) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Job ID not found for Supplier Invoice prefill.",
                         });
-                        return;
-                      }
+                      }}
+                    >
+                      Create Supplier Invoice
+                    </Button>
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      size="sm"
+                      onClick={() => {
+                        const toStr = (v: unknown) => String(v ?? "").trim();
+                        const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                        if (!jobId) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Job ID not found for Supplier Invoice prefill.",
+                          });
+                          return;
+                        }
 
-                      const estimates = estimatesForm.values.estimates ?? [];
-                      const estimateCharges = estimates
-                        .map((e) => ({
-                          shipment_no: jobId,
-                          charge_id: e.charge_id ?? null,
-                          charge_name: e.charge_name ?? "",
-                          currency_id: e.currency_id ?? null,
-                          roe: e.roe ?? null,
-                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
-                          supplier_code: toStr(e.supplier_code),
-                          supplier_name: toStr(e.supplier_name),
-                        }))
-                        .filter(
-                          (c) =>
-                            toStr((c as any).shipment_no) &&
-                            (c as any).charge_id != null &&
-                            (c as any).amount != null &&
-                            (c as any).amount !== "" &&
-                            (toStr((c as any).supplier_code) ||
-                              toStr((c as any).supplier_name)),
-                        );
+                        const estimates = estimatesForm.values.estimates ?? [];
+                        const estimateCharges = estimates
+                          .map((e) => ({
+                            shipment_no: jobId,
+                            charge_id: e.charge_id ?? null,
+                            charge_name: e.charge_name ?? "",
+                            currency_id: e.currency_id ?? null,
+                            roe: e.roe ?? null,
+                            amount: resolveSupplierInvoiceEstimateCostAmount(e),
+                            supplier_code: toStr(e.supplier_code),
+                            supplier_name: toStr(e.supplier_name),
+                          }))
+                          .filter(
+                            (c) =>
+                              toStr((c as any).shipment_no) &&
+                              (c as any).charge_id != null &&
+                              (c as any).amount != null &&
+                              (c as any).amount !== "" &&
+                              (toStr((c as any).supplier_code) ||
+                                toStr((c as any).supplier_name)),
+                          );
 
-                      const houseCharges = (hawbDetails ?? [])
-                        .flatMap((h) => {
-                          const rec = h as unknown as Record<string, unknown>;
-                          const shipmentNo = toStr((rec as any).shipment_id);
-                          const chargesArr = Array.isArray((rec as any).charges)
-                            ? ((rec as any).charges as unknown[])
-                            : Array.isArray((rec as any).mawb_charges)
-                              ? ((rec as any).mawb_charges as unknown[])
-                              : [];
-                          return chargesArr
-                            .map((c) => {
-                              const cr = c as Record<string, unknown>;
-                              return {
-                                shipment_no: shipmentNo,
-                                charge_id:
-                                  cr.charge_id != null
-                                    ? Number(cr.charge_id)
-                                    : null,
-                                charge_name: toStr(cr.charge_name),
-                                currency_id:
-                                  (cr as any).currency_id ??
-                                  (cr as any).currency ??
-                                  null,
-                                roe: (cr as any).roe ?? null,
-                                amount:
-                                  resolveSupplierInvoiceHouseCostAmount(cr),
-                                supplier_code: toStr((cr as any).supplier_code),
-                                supplier_name: toStr((cr as any).supplier_name),
-                              };
-                            })
-                            .filter(
-                              (x) =>
-                                toStr((x as any).shipment_no) &&
-                                (x as any).charge_id != null &&
-                                (x as any).amount != null &&
-                                (x as any).amount !== "" &&
-                                (toStr((x as any).supplier_code) ||
-                                  toStr((x as any).supplier_name)),
-                            );
-                        })
-                        .filter(Boolean);
+                        const houseCharges = (hawbDetails ?? [])
+                          .flatMap((h) => {
+                            const rec = h as unknown as Record<string, unknown>;
+                            const shipmentNo = toStr((rec as any).shipment_id);
+                            const chargesArr = Array.isArray(
+                              (rec as any).charges,
+                            )
+                              ? ((rec as any).charges as unknown[])
+                              : Array.isArray((rec as any).mawb_charges)
+                                ? ((rec as any).mawb_charges as unknown[])
+                                : [];
+                            return chargesArr
+                              .map((c) => {
+                                const cr = c as Record<string, unknown>;
+                                return {
+                                  shipment_no: shipmentNo,
+                                  charge_id:
+                                    cr.charge_id != null
+                                      ? Number(cr.charge_id)
+                                      : null,
+                                  charge_name: toStr(cr.charge_name),
+                                  currency_id:
+                                    (cr as any).currency_id ??
+                                    (cr as any).currency ??
+                                    null,
+                                  roe: (cr as any).roe ?? null,
+                                  amount:
+                                    resolveSupplierInvoiceHouseCostAmount(cr),
+                                  supplier_code: toStr(
+                                    (cr as any).supplier_code,
+                                  ),
+                                  supplier_name: toStr(
+                                    (cr as any).supplier_name,
+                                  ),
+                                };
+                              })
+                              .filter(
+                                (x) =>
+                                  toStr((x as any).shipment_no) &&
+                                  (x as any).charge_id != null &&
+                                  (x as any).amount != null &&
+                                  (x as any).amount !== "" &&
+                                  (toStr((x as any).supplier_code) ||
+                                    toStr((x as any).supplier_name)),
+                              );
+                          })
+                          .filter(Boolean);
 
-                      const charges = [...estimateCharges, ...houseCharges];
-                      if (charges.length === 0) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Select a supplier/vendor to create supplier invoice",
-                        });
-                        return;
-                      }
+                        const charges = [...estimateCharges, ...houseCharges];
+                        if (charges.length === 0) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Select a supplier/vendor to create supplier invoice",
+                          });
+                          return;
+                        }
 
-                      navigate("/supplier-invoice-rcm/create", {
-                        state: {
-                          prefillSupplierInvoiceFromJob: {
-                            source: "air-import-job",
-                            job_id: jobId,
-                            charges,
+                        navigate("/supplier-invoice-rcm/create", {
+                          state: {
+                            prefillSupplierInvoiceFromJob: {
+                              source: "air-import-job",
+                              job_id: jobId,
+                              charges,
+                            },
                           },
-                        },
-                      });
-                    }}
-                  >
-                    Create Supplier (RCM)
-                  </Button>
+                        });
+                      }}
+                    >
+                      Create Supplier (RCM)
+                    </Button>
                   </>
                 )}
 
@@ -4813,15 +4831,15 @@ function InlandExportJobCreate() {
             active === 3 ||
             (active === 4 && jobData?.id != null)) &&
             !isReadOnly && (
-            <Button
-              leftSection={<IconChevronLeft size={16} />}
-              variant="outline"
-              color="#105476"
-              onClick={handlePrev}
-            >
-              Previous
-            </Button>
-          )}
+              <Button
+                leftSection={<IconChevronLeft size={16} />}
+                variant="outline"
+                color="#105476"
+                onClick={handlePrev}
+              >
+                Previous
+              </Button>
+            )}
         </Group>
 
         <Group>

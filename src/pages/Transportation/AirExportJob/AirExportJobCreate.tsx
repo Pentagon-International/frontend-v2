@@ -131,7 +131,7 @@ import {
   parseJobSaveResponse,
   resolveSavedJobId,
 } from "../../../utils/jobSaveResponse";
-import {  } from "../../../utils/invoiceDocumentNumber";
+import {} from "../../../utils/invoiceDocumentNumber";
 import { HouseCardSummaryTotals } from "../../../components/JobChargeSummaryDisplay";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
 import { HouseAutomateVendorInvoiceMenuItem } from "../../../components/HouseAutomateVendorInvoiceMenuItem";
@@ -499,7 +499,11 @@ function AirExportJobCreate() {
   const [active, setActive] = useState(() =>
     readJobFormActiveTabFromLocation(location.state),
   );
-  const { basePath: jobModuleBasePath, isChaMode, chaConfig } = useJobModulePaths({
+  const {
+    basePath: jobModuleBasePath,
+    isChaMode,
+    chaConfig,
+  } = useJobModulePaths({
     basePath: "/air/export-job",
     listKey: "AIR_EXPORT_JOB_MASTER",
     invoiceServiceType: "AIR",
@@ -627,7 +631,6 @@ function AirExportJobCreate() {
     }
     setPaymentRequestAutomationShipmentNo(normalized);
   }, []);
-
 
   const openVendorInvoiceAutomation = useCallback((shipmentNo: string) => {
     const normalized = shipmentNo.trim();
@@ -758,11 +761,8 @@ function AirExportJobCreate() {
     initialValues: {
       service:
         jobData?.service || location.state?.mawbDetails?.service || "AIR", // Auto-selected for Air
-      service_id:
-        jobData?.service_id != null ? String(jobData.service_id) : "",
-      service_code: jobData?.service_code
-        ? String(jobData.service_code)
-        : "",
+      service_id: jobData?.service_id != null ? String(jobData.service_id) : "",
+      service_code: jobData?.service_code ? String(jobData.service_code) : "",
       pp_cc: resolveJobFreightPpCc(
         jobData?.pp_cc,
         (jobData as { freight?: string } | undefined)?.freight,
@@ -904,11 +904,8 @@ function AirExportJobCreate() {
     ),
   });
 
-  const {
-    serviceDropdownData,
-    serviceDropdownValue,
-    handleServiceChange,
-  } = useChaJobServiceField(["AIR"], mawbDetailsForm);
+  const { serviceDropdownData, serviceDropdownValue, handleServiceChange } =
+    useChaJobServiceField(["AIR"], mawbDetailsForm);
 
   const partyDetailsForm = mawbDetailsForm;
   const [shipperAddressOptions, setShipperAddressOptions] = useState<
@@ -1439,11 +1436,16 @@ function AirExportJobCreate() {
                         chargeable_weight: importHouseCargoWeightFromApi(
                           cargo.chargeable_weight,
                         ),
-                        haz: cargo.haz === true || cargo.haz === "Yes" || cargo.is_hazardous === true
-                          ? "Yes"
-                          : cargo.haz === false || cargo.haz === "No" || cargo.is_hazardous === false
-                            ? "No"
-                            : "",
+                        haz:
+                          cargo.haz === true ||
+                          cargo.haz === "Yes" ||
+                          cargo.is_hazardous === true
+                            ? "Yes"
+                            : cargo.haz === false ||
+                                cargo.haz === "No" ||
+                                cargo.is_hazardous === false
+                              ? "No"
+                              : "",
                         un_no: String(cargo.un_no ?? ""),
                         class_name: String(cargo.class_name ?? ""),
                         pkg_group: String(cargo.pkg_group ?? ""),
@@ -1458,7 +1460,8 @@ function AirExportJobCreate() {
                       (house as { dimension_details?: unknown[] })
                         .dimension_details,
                     )
-                  ? (house as { dimension_details: unknown[] }).dimension_details
+                  ? (house as { dimension_details: unknown[] })
+                      .dimension_details
                   : [],
               charges: (() => {
                 const chargesArray = (house.charges || house.mawb_charges) as
@@ -1482,8 +1485,14 @@ function AirExportJobCreate() {
                         unitDetails?.unit_code ??
                         "",
                     ).trim();
+                    // Prefer currency_details; never treat numeric currency id as a code.
                     const currency = String(
-                      charge.currency ?? currencyDetails?.currency_code ?? "",
+                      currencyDetails?.currency_code ??
+                        charge.currency_code ??
+                        (charge.currency != null &&
+                        !/^\d+$/.test(String(charge.currency))
+                          ? charge.currency
+                          : ""),
                     ).trim();
                     const chargeId =
                       charge.charge_id != null
@@ -2121,14 +2130,10 @@ function AirExportJobCreate() {
     }
 
     const hasNavSnapshot =
-      !!location.state?.mawbDetails ||
-      location.state?.fromHouseCreate === true;
+      !!location.state?.mawbDetails || location.state?.fromHouseCreate === true;
 
     // Same navigation entry: do not re-apply location.state snapshots (tab switch / dep churn)
-    if (
-      hasNavSnapshot &&
-      lastFormRestoreNavKeyRef.current === location.key
-    ) {
+    if (hasNavSnapshot && lastFormRestoreNavKeyRef.current === location.key) {
       if (
         location.state?.hawbDetails &&
         Array.isArray(location.state.hawbDetails) &&
@@ -3375,10 +3380,10 @@ function AirExportJobCreate() {
             ...(hawb.shipment_terms_code != null &&
               hawb.shipment_terms_code !== "" && {
                 shipment_terms_code: hawb.shipment_terms_code,
-                ...((hawb as { shipment_terms_name?: string }).shipment_terms_name !=
-                  null &&
-                  (hawb as { shipment_terms_name?: string }).shipment_terms_name !==
-                    "" && {
+                ...((hawb as { shipment_terms_name?: string })
+                  .shipment_terms_name != null &&
+                  (hawb as { shipment_terms_name?: string })
+                    .shipment_terms_name !== "" && {
                     shipment_terms_name: (
                       hawb as { shipment_terms_name?: string }
                     ).shipment_terms_name,
@@ -3426,9 +3431,7 @@ function AirExportJobCreate() {
               const chargeSource =
                 hawb.charges ??
                 (hawb.mawb_charges as typeof hawb.charges | undefined) ??
-                (
-                  hawb as { mbl_charges?: typeof hawb.charges }
-                ).mbl_charges ??
+                (hawb as { mbl_charges?: typeof hawb.charges }).mbl_charges ??
                 [];
               const meaningful = getMeaningfulHouseCharges(chargeSource);
               if (meaningful.length === 0) return [];
@@ -3797,7 +3800,9 @@ function AirExportJobCreate() {
                     }}
                     onClick={() => {
                       const allCollectCharges = collectAgentChargesFromHousings(
-                        hawbDetails as unknown as Array<Record<string, unknown>>,
+                        hawbDetails as unknown as Array<
+                          Record<string, unknown>
+                        >,
                       );
 
                       const firstHouse = hawbDetails[0];
@@ -3854,9 +3859,7 @@ function AirExportJobCreate() {
                       getShipmentIds={() =>
                         hawbDetails.map((hawb) => hawb.shipment_id)
                       }
-                      getStatuses={() =>
-                        hawbDetails.map((hawb) => hawb.status)
-                      }
+                      getStatuses={() => hawbDetails.map((hawb) => hawb.status)}
                       onSuccess={(ids) => {
                         setHawbDetails((prev) =>
                           prev.map((h) =>
@@ -4126,47 +4129,47 @@ function AirExportJobCreate() {
               </Grid.Col>
 
               {!isChaMode && (
-              <Grid.Col span={3}>
-                <SearchableSelect
-                  key={`origin-agent-${formInitializedKey}`}
-                  label="Destination Agent"
-                  required={!mawbDetailsForm.values.is_direct}
-                  placeholder="Type agent name"
-                  apiEndpoint={URL.agent}
-                  searchFields={["customer_name", "customer_code"]}
-                  displayFormat={(item: Record<string, unknown>) => ({
-                    value: String(item.customer_code), // Use code as value for API payload
-                    label: String(item.customer_name), // Display name to user
-                  })}
-                  value={mawbDetailsForm.values.agent_code || null} // Stores agent_code
-                  displayValue={mawbDetailsForm.values.agent_name || null} // Displays agent_name
-                  onChange={(value, selectedData, originalData) => {
-                    // Store customer_code as value (for API payload)
-                    mawbDetailsForm.setFieldValue("agent_code", value || "");
-                    // Store customer_name for display
-                    mawbDetailsForm.setFieldValue(
-                      "agent_name",
-                      selectedData?.label || "",
-                    );
+                <Grid.Col span={3}>
+                  <SearchableSelect
+                    key={`origin-agent-${formInitializedKey}`}
+                    label="Destination Agent"
+                    required={!mawbDetailsForm.values.is_direct}
+                    placeholder="Type agent name"
+                    apiEndpoint={URL.agent}
+                    searchFields={["customer_name", "customer_code"]}
+                    displayFormat={(item: Record<string, unknown>) => ({
+                      value: String(item.customer_code), // Use code as value for API payload
+                      label: String(item.customer_name), // Display name to user
+                    })}
+                    value={mawbDetailsForm.values.agent_code || null} // Stores agent_code
+                    displayValue={mawbDetailsForm.values.agent_name || null} // Displays agent_name
+                    onChange={(value, selectedData, originalData) => {
+                      // Store customer_code as value (for API payload)
+                      mawbDetailsForm.setFieldValue("agent_code", value || "");
+                      // Store customer_name for display
+                      mawbDetailsForm.setFieldValue(
+                        "agent_name",
+                        selectedData?.label || "",
+                      );
 
-                    console.log("🔍 MAWB Destination Agent Selected:", {
-                      agentCode: value,
-                      agentName: selectedData?.label,
-                      originalData,
-                      hasAddressesData: originalData?.addresses_data,
-                      addressesData: originalData?.addresses_data,
-                    });
+                      console.log("🔍 MAWB Destination Agent Selected:", {
+                        agentCode: value,
+                        agentName: selectedData?.label,
+                        originalData,
+                        hasAddressesData: originalData?.addresses_data,
+                        addressesData: originalData?.addresses_data,
+                      });
 
-                    // Store origin agent data in ref for persistence
-                    originAgentDataRef.current = originalData || null;
-                    // Note: Don't update location.state on every keystroke - only when navigating to HouseCreate
-                    // This prevents infinite re-renders and API calls
-                  }}
-                  returnOriginalData={true}
-                  error={mawbDetailsForm.errors.agent_code as string}
-                  minSearchLength={2}
-                />
-              </Grid.Col>
+                      // Store origin agent data in ref for persistence
+                      originAgentDataRef.current = originalData || null;
+                      // Note: Don't update location.state on every keystroke - only when navigating to HouseCreate
+                      // This prevents infinite re-renders and API calls
+                    }}
+                    returnOriginalData={true}
+                    error={mawbDetailsForm.errors.agent_code as string}
+                    minSearchLength={2}
+                  />
+                </Grid.Col>
               )}
 
               <Grid.Col span={3}>
@@ -4478,9 +4481,7 @@ function AirExportJobCreate() {
                       carrierDetailsForm.clearFieldError("mawb_number");
                     }
                   }}
-                  onBlur={() =>
-                    carrierDetailsForm.validateField("mawb_number")
-                  }
+                  onBlur={() => carrierDetailsForm.validateField("mawb_number")}
                 />
               </Grid.Col>
 
@@ -5148,212 +5149,224 @@ function AirExportJobCreate() {
               <Group gap="xs" wrap="nowrap">
                 {mode === "edit" && !isReadOnly && (
                   <>
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    size="sm"
-                    onClick={() => {
-                      const toStr = (v: unknown) => String(v ?? "").trim();
-                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                      if (!jobId) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Job ID not found for Supplier Invoice prefill.",
-                        });
-                        return;
-                      }
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      size="sm"
+                      onClick={() => {
+                        const toStr = (v: unknown) => String(v ?? "").trim();
+                        const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                        if (!jobId) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Job ID not found for Supplier Invoice prefill.",
+                          });
+                          return;
+                        }
 
-                      const estimates = estimatesForm.values.estimates ?? [];
-                      const estimateCharges = estimates
-                        .map((e) => ({
-                          shipment_no: jobId,
-                          charge_id: e.charge_id ?? null,
-                          charge_name: e.charge_name ?? "",
-                          currency_id: e.currency_id ?? null,
-                          roe: e.roe ?? null,
-                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
-                          supplier_code: toStr(e.supplier_code),
-                          supplier_name: toStr(e.supplier_name),
-                        }))
-                        .filter(
-                          (c) =>
-                            toStr((c as any).shipment_no) &&
-                            (c as any).charge_id != null &&
-                            (c as any).amount != null &&
-                            (c as any).amount !== "" &&
-                            (toStr((c as any).supplier_code) ||
-                              toStr((c as any).supplier_name)),
-                        );
+                        const estimates = estimatesForm.values.estimates ?? [];
+                        const estimateCharges = estimates
+                          .map((e) => ({
+                            shipment_no: jobId,
+                            charge_id: e.charge_id ?? null,
+                            charge_name: e.charge_name ?? "",
+                            currency_id: e.currency_id ?? null,
+                            roe: e.roe ?? null,
+                            amount: resolveSupplierInvoiceEstimateCostAmount(e),
+                            supplier_code: toStr(e.supplier_code),
+                            supplier_name: toStr(e.supplier_name),
+                          }))
+                          .filter(
+                            (c) =>
+                              toStr((c as any).shipment_no) &&
+                              (c as any).charge_id != null &&
+                              (c as any).amount != null &&
+                              (c as any).amount !== "" &&
+                              (toStr((c as any).supplier_code) ||
+                                toStr((c as any).supplier_name)),
+                          );
 
-                      const houseCharges = (hawbDetails ?? [])
-                        .flatMap((h) => {
-                          const rec = h as unknown as Record<string, unknown>;
-                          const shipmentNo = toStr((rec as any).shipment_id);
-                          const chargesArr = Array.isArray((rec as any).charges)
-                            ? ((rec as any).charges as unknown[])
-                            : Array.isArray((rec as any).mawb_charges)
-                              ? ((rec as any).mawb_charges as unknown[])
-                              : [];
-                          return chargesArr
-                            .map((c) => {
-                              const cr = c as Record<string, unknown>;
-                              return {
-                                shipment_no: shipmentNo,
-                                charge_id:
-                                  cr.charge_id != null
-                                    ? Number(cr.charge_id)
-                                    : null,
-                                charge_name: toStr(cr.charge_name),
-                                currency_id:
-                                  (cr as any).currency_id ??
-                                  (cr as any).currency ??
-                                  null,
-                                roe: (cr as any).roe ?? null,
-                                amount:
-                                  resolveSupplierInvoiceHouseCostAmount(cr),
-                                supplier_code: toStr((cr as any).supplier_code),
-                                supplier_name: toStr((cr as any).supplier_name),
-                              };
-                            })
-                            .filter(
-                              (x) =>
-                                toStr((x as any).shipment_no) &&
-                                (x as any).charge_id != null &&
-                                (x as any).amount != null &&
-                                (x as any).amount !== "" &&
-                                (toStr((x as any).supplier_code) ||
-                                  toStr((x as any).supplier_name)),
-                            );
-                        })
-                        .filter(Boolean);
+                        const houseCharges = (hawbDetails ?? [])
+                          .flatMap((h) => {
+                            const rec = h as unknown as Record<string, unknown>;
+                            const shipmentNo = toStr((rec as any).shipment_id);
+                            const chargesArr = Array.isArray(
+                              (rec as any).charges,
+                            )
+                              ? ((rec as any).charges as unknown[])
+                              : Array.isArray((rec as any).mawb_charges)
+                                ? ((rec as any).mawb_charges as unknown[])
+                                : [];
+                            return chargesArr
+                              .map((c) => {
+                                const cr = c as Record<string, unknown>;
+                                return {
+                                  shipment_no: shipmentNo,
+                                  charge_id:
+                                    cr.charge_id != null
+                                      ? Number(cr.charge_id)
+                                      : null,
+                                  charge_name: toStr(cr.charge_name),
+                                  currency_id:
+                                    (cr as any).currency_id ??
+                                    (cr as any).currency ??
+                                    null,
+                                  roe: (cr as any).roe ?? null,
+                                  amount:
+                                    resolveSupplierInvoiceHouseCostAmount(cr),
+                                  supplier_code: toStr(
+                                    (cr as any).supplier_code,
+                                  ),
+                                  supplier_name: toStr(
+                                    (cr as any).supplier_name,
+                                  ),
+                                };
+                              })
+                              .filter(
+                                (x) =>
+                                  toStr((x as any).shipment_no) &&
+                                  (x as any).charge_id != null &&
+                                  (x as any).amount != null &&
+                                  (x as any).amount !== "" &&
+                                  (toStr((x as any).supplier_code) ||
+                                    toStr((x as any).supplier_name)),
+                              );
+                          })
+                          .filter(Boolean);
 
-                      const charges = [...estimateCharges, ...houseCharges];
-                      if (charges.length === 0) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Select a supplier/vendor to create supplier invoice",
-                        });
-                        return;
-                      }
+                        const charges = [...estimateCharges, ...houseCharges];
+                        if (charges.length === 0) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Select a supplier/vendor to create supplier invoice",
+                          });
+                          return;
+                        }
 
-                      navigate("/supplier-invoice/create", {
-                        state: {
-                          prefillSupplierInvoiceFromJob: {
-                            source: "air-import-job",
-                            job_id: jobId,
-                            charges,
+                        navigate("/supplier-invoice/create", {
+                          state: {
+                            prefillSupplierInvoiceFromJob: {
+                              source: "air-import-job",
+                              job_id: jobId,
+                              charges,
+                            },
                           },
-                        },
-                      });
-                    }}
-                  >
-                    Create Supplier Invoice
-                  </Button>
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    size="sm"
-                    onClick={() => {
-                      const toStr = (v: unknown) => String(v ?? "").trim();
-                      const jobId = toStr(jobData?.job_id ?? jobData?.id);
-                      if (!jobId) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Job ID not found for Supplier Invoice prefill.",
                         });
-                        return;
-                      }
+                      }}
+                    >
+                      Create Supplier Invoice
+                    </Button>
+                    <Button
+                      variant="outline"
+                      color="#105476"
+                      size="sm"
+                      onClick={() => {
+                        const toStr = (v: unknown) => String(v ?? "").trim();
+                        const jobId = toStr(jobData?.job_id ?? jobData?.id);
+                        if (!jobId) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Job ID not found for Supplier Invoice prefill.",
+                          });
+                          return;
+                        }
 
-                      const estimates = estimatesForm.values.estimates ?? [];
-                      const estimateCharges = estimates
-                        .map((e) => ({
-                          shipment_no: jobId,
-                          charge_id: e.charge_id ?? null,
-                          charge_name: e.charge_name ?? "",
-                          currency_id: e.currency_id ?? null,
-                          roe: e.roe ?? null,
-                          amount: resolveSupplierInvoiceEstimateCostAmount(e),
-                          supplier_code: toStr(e.supplier_code),
-                          supplier_name: toStr(e.supplier_name),
-                        }))
-                        .filter(
-                          (c) =>
-                            toStr((c as any).shipment_no) &&
-                            (c as any).charge_id != null &&
-                            (c as any).amount != null &&
-                            (c as any).amount !== "" &&
-                            (toStr((c as any).supplier_code) ||
-                              toStr((c as any).supplier_name)),
-                        );
+                        const estimates = estimatesForm.values.estimates ?? [];
+                        const estimateCharges = estimates
+                          .map((e) => ({
+                            shipment_no: jobId,
+                            charge_id: e.charge_id ?? null,
+                            charge_name: e.charge_name ?? "",
+                            currency_id: e.currency_id ?? null,
+                            roe: e.roe ?? null,
+                            amount: resolveSupplierInvoiceEstimateCostAmount(e),
+                            supplier_code: toStr(e.supplier_code),
+                            supplier_name: toStr(e.supplier_name),
+                          }))
+                          .filter(
+                            (c) =>
+                              toStr((c as any).shipment_no) &&
+                              (c as any).charge_id != null &&
+                              (c as any).amount != null &&
+                              (c as any).amount !== "" &&
+                              (toStr((c as any).supplier_code) ||
+                                toStr((c as any).supplier_name)),
+                          );
 
-                      const houseCharges = (hawbDetails ?? [])
-                        .flatMap((h) => {
-                          const rec = h as unknown as Record<string, unknown>;
-                          const shipmentNo = toStr((rec as any).shipment_id);
-                          const chargesArr = Array.isArray((rec as any).charges)
-                            ? ((rec as any).charges as unknown[])
-                            : Array.isArray((rec as any).mawb_charges)
-                              ? ((rec as any).mawb_charges as unknown[])
-                              : [];
-                          return chargesArr
-                            .map((c) => {
-                              const cr = c as Record<string, unknown>;
-                              return {
-                                shipment_no: shipmentNo,
-                                charge_id:
-                                  cr.charge_id != null
-                                    ? Number(cr.charge_id)
-                                    : null,
-                                charge_name: toStr(cr.charge_name),
-                                currency_id:
-                                  (cr as any).currency_id ??
-                                  (cr as any).currency ??
-                                  null,
-                                roe: (cr as any).roe ?? null,
-                                amount:
-                                  resolveSupplierInvoiceHouseCostAmount(cr),
-                                supplier_code: toStr((cr as any).supplier_code),
-                                supplier_name: toStr((cr as any).supplier_name),
-                              };
-                            })
-                            .filter(
-                              (x) =>
-                                toStr((x as any).shipment_no) &&
-                                (x as any).charge_id != null &&
-                                (x as any).amount != null &&
-                                (x as any).amount !== "" &&
-                                (toStr((x as any).supplier_code) ||
-                                  toStr((x as any).supplier_name)),
-                            );
-                        })
-                        .filter(Boolean);
+                        const houseCharges = (hawbDetails ?? [])
+                          .flatMap((h) => {
+                            const rec = h as unknown as Record<string, unknown>;
+                            const shipmentNo = toStr((rec as any).shipment_id);
+                            const chargesArr = Array.isArray(
+                              (rec as any).charges,
+                            )
+                              ? ((rec as any).charges as unknown[])
+                              : Array.isArray((rec as any).mawb_charges)
+                                ? ((rec as any).mawb_charges as unknown[])
+                                : [];
+                            return chargesArr
+                              .map((c) => {
+                                const cr = c as Record<string, unknown>;
+                                return {
+                                  shipment_no: shipmentNo,
+                                  charge_id:
+                                    cr.charge_id != null
+                                      ? Number(cr.charge_id)
+                                      : null,
+                                  charge_name: toStr(cr.charge_name),
+                                  currency_id:
+                                    (cr as any).currency_id ??
+                                    (cr as any).currency ??
+                                    null,
+                                  roe: (cr as any).roe ?? null,
+                                  amount:
+                                    resolveSupplierInvoiceHouseCostAmount(cr),
+                                  supplier_code: toStr(
+                                    (cr as any).supplier_code,
+                                  ),
+                                  supplier_name: toStr(
+                                    (cr as any).supplier_name,
+                                  ),
+                                };
+                              })
+                              .filter(
+                                (x) =>
+                                  toStr((x as any).shipment_no) &&
+                                  (x as any).charge_id != null &&
+                                  (x as any).amount != null &&
+                                  (x as any).amount !== "" &&
+                                  (toStr((x as any).supplier_code) ||
+                                    toStr((x as any).supplier_name)),
+                              );
+                          })
+                          .filter(Boolean);
 
-                      const charges = [...estimateCharges, ...houseCharges];
-                      if (charges.length === 0) {
-                        ToastNotification({
-                          type: "error",
-                          message:
-                            "Select a supplier/vendor to create supplier invoice",
-                        });
-                        return;
-                      }
+                        const charges = [...estimateCharges, ...houseCharges];
+                        if (charges.length === 0) {
+                          ToastNotification({
+                            type: "error",
+                            message:
+                              "Select a supplier/vendor to create supplier invoice",
+                          });
+                          return;
+                        }
 
-                      navigate("/supplier-invoice-rcm/create", {
-                        state: {
-                          prefillSupplierInvoiceFromJob: {
-                            source: "air-import-job",
-                            job_id: jobId,
-                            charges,
+                        navigate("/supplier-invoice-rcm/create", {
+                          state: {
+                            prefillSupplierInvoiceFromJob: {
+                              source: "air-import-job",
+                              job_id: jobId,
+                              charges,
+                            },
                           },
-                        },
-                      });
-                    }}
-                  >
-                    Create Supplier (RCM)
-                  </Button>
+                        });
+                      }}
+                    >
+                      Create Supplier (RCM)
+                    </Button>
                   </>
                 )}
 

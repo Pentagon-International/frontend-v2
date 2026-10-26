@@ -207,10 +207,7 @@ function resolveVatTaxBase(
 ): number | null | undefined {
   if (isVndCurrency(billingCurrency)) {
     const base =
-      charge.header_amount ??
-      charge.amount_in_local ??
-      charge.amount ??
-      null;
+      charge.header_amount ?? charge.amount_in_local ?? charge.amount ?? null;
     if (base == null) return null;
     return clampLocalAmount(base);
   }
@@ -223,10 +220,7 @@ function resolveVatTaxBase(
 
   if (isMoneyWholeNumberMode() && isVndCurrency(charge.currency)) {
     const base =
-      charge.amount_in_local ??
-      charge.header_amount ??
-      charge.amount ??
-      null;
+      charge.amount_in_local ?? charge.header_amount ?? charge.amount ?? null;
     if (base == null) return null;
     return clampLocalAmount(base);
   }
@@ -237,9 +231,7 @@ function resolveVatTaxBase(
 }
 
 /** Per-unit / currency amount: always 2 decimal places (including Vietnam). */
-function clampCurrencyAmount(
-  value: number | null | undefined,
-): number | null {
+function clampCurrencyAmount(value: number | null | undefined): number | null {
   return clampMoneyAmount(value, false);
 }
 
@@ -359,6 +351,9 @@ const validateRoeForCurrency = (
 ): string | null => {
   if (roe === null || roe === undefined) return "ROE is required";
 
+  const roeNum = Number(roe);
+  if (!Number.isFinite(roeNum)) return "ROE is required";
+
   const branchCurrencyId = options?.branchCurrencyId ?? "";
   const base = branchCurrency?.trim().toUpperCase() ?? "";
   const code = currencyCode?.trim().toUpperCase() ?? "";
@@ -374,10 +369,10 @@ const validateRoeForCurrency = (
     branchCurrencyId,
   );
 
-  if (isBase && roe !== 1) {
+  if (isBase && roeNum !== 1) {
     return "ROE must be 1 when currency matches branch currency";
   }
-  if (!isBase && roe === 1) {
+  if (!isBase && roeNum === 1) {
     return forField ? ROE_CANNOT_BE_ONE_FIELD : ROE_CANNOT_BE_ONE_TOAST;
   }
   return null;
@@ -402,6 +397,18 @@ const isChargeBranchCurrency = (
   return false;
 };
 
+const lookupCreditNoteCurrencyCodeById = (
+  currencyId: string,
+  currencyData: { id?: number; code?: string; currency_code?: string }[],
+): string => {
+  if (!currencyId) return "";
+  const row = currencyData.find((c) => String(c.id) === currencyId);
+  return (row?.code || row?.currency_code || "")
+    .toString()
+    .trim()
+    .toUpperCase();
+};
+
 const resolveChargeCurrencyCode = (
   charge: { currency?: string; currency_id?: string },
   currencyData: { id?: number; code?: string; currency_code?: string }[],
@@ -410,20 +417,20 @@ const resolveChargeCurrencyCode = (
     ? String(charge.currency_id).trim()
     : "";
   const fromField = charge.currency?.trim().toUpperCase() ?? "";
-  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
-    const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "")
-      .toString()
-      .trim()
-      .toUpperCase();
+  // Numeric "currency" values are currency ids (e.g. API `currency: 68`), not codes.
+  if (fromField && /^\d+$/.test(fromField)) {
+    const fromNumeric =
+      lookupCreditNoteCurrencyCodeById(fromField, currencyData) ||
+      lookupCreditNoteCurrencyCodeById(currencyId, currencyData);
+    if (fromNumeric) return fromNumeric;
   }
-  if (fromField) return fromField;
+  if (fromField && currencyId && fromField === currencyId.toUpperCase()) {
+    const fromId = lookupCreditNoteCurrencyCodeById(currencyId, currencyData);
+    if (fromId) return fromId;
+  }
+  if (fromField && !/^\d+$/.test(fromField)) return fromField;
   if (currencyId) {
-    const row = currencyData.find((c) => String(c.id) === currencyId);
-    return (row?.code || row?.currency_code || "")
-      .toString()
-      .trim()
-      .toUpperCase();
+    return lookupCreditNoteCurrencyCodeById(currencyId, currencyData);
   }
   return "";
 };
@@ -579,10 +586,16 @@ const fetchCheckSezStatus = async (payload: {
     if (payload.document_date) {
       body.document_date = payload.document_date;
     }
-    if (payload.service_id != null && Number.isFinite(Number(payload.service_id))) {
+    if (
+      payload.service_id != null &&
+      Number.isFinite(Number(payload.service_id))
+    ) {
       body.service_id = Number(payload.service_id);
     }
-    if (payload.branch_id != null && Number.isFinite(Number(payload.branch_id))) {
+    if (
+      payload.branch_id != null &&
+      Number.isFinite(Number(payload.branch_id))
+    ) {
       body.branch_id = Number(payload.branch_id);
     }
     const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
@@ -787,9 +800,7 @@ function resolveMasterChargeIdForPayload(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function resolveSelectedMasterChargeId(
-  value: string | null,
-): number | null {
+function resolveSelectedMasterChargeId(value: string | null): number | null {
   if (!value || String(value).startsWith("temp_")) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -976,8 +987,9 @@ function calcChargeTotalsByDrCr(
   const crLocalTotal = clampLocalAmount(crLocal) ?? 0;
   const drLocalTotal = clampLocalAmount(drLocal) ?? 0;
   const amount_total =
-    clampCurrencyAmount(invertNet ? drAmount - crAmount : crAmount - drAmount) ??
-    0;
+    clampCurrencyAmount(
+      invertNet ? drAmount - crAmount : crAmount - drAmount,
+    ) ?? 0;
   const header_total =
     clampHeaderAmount(
       invertNet ? drHeader - crHeader : crHeader - drHeader,
@@ -1157,7 +1169,7 @@ function resolvePartyStateIdFromHousing(
   };
   const keys = isAgent
     ? ["agent_state_id"]
-    : stateKeysByParty[billToParty] ?? [];
+    : (stateKeysByParty[billToParty] ?? []);
   const sources = [firstHawb, jobHouse0, jobRoot];
   let raw: unknown = null;
   for (const key of keys) {
@@ -1887,8 +1899,7 @@ function CreditNoteCreate() {
       return;
     }
 
-    const shouldApplySez =
-      !isAgentInvoice && (isIndiaUser || isVietnamUser);
+    const shouldApplySez = !isAgentInvoice && (isIndiaUser || isVietnamUser);
     if (!shouldApplySez) {
       setHasSez(false);
     }
@@ -1920,8 +1931,7 @@ function CreditNoteCreate() {
     })();
 
     // Same SEZ tax rules as before: India/Vietnam customer only (not agent).
-    const shouldApplySezTax =
-      (isIndiaUser || isVietnamUser) && !isAgentInvoice;
+    const shouldApplySezTax = (isIndiaUser || isVietnamUser) && !isAgentInvoice;
 
     let cancelled = false;
     void (async () => {
@@ -2604,7 +2614,8 @@ function CreditNoteCreate() {
                     )
                   : null) ??
                 addressesData.find(
-                  (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
+                  (a) =>
+                    String(a.address_type || "").toUpperCase() === "PRIMARY",
                 ) ??
                 addressesData[0];
               if (matchedAddr) {
@@ -2638,8 +2649,7 @@ function CreditNoteCreate() {
                   if (!Array.isArray(results) || results.length === 0) return;
                   const matched =
                     (results as Record<string, unknown>[]).find(
-                      (row) =>
-                        String(row.customer_code ?? "").trim() === code,
+                      (row) => String(row.customer_code ?? "").trim() === code,
                     ) ?? null;
                   if (matched) applyAddressesFromParty(code, matched);
                 } catch (err) {
@@ -3955,8 +3965,7 @@ function CreditNoteCreate() {
             if (!Array.isArray(results) || results.length === 0) return;
             const matched =
               (results as Record<string, unknown>[]).find(
-                (row) =>
-                  String(row.customer_code ?? "").trim() === partyCode,
+                (row) => String(row.customer_code ?? "").trim() === partyCode,
               ) ?? null;
             if (!matched || !Array.isArray(matched.addresses_data)) return;
             const addressesData = matched.addresses_data as Array<{
@@ -3977,8 +3986,7 @@ function CreditNoteCreate() {
             );
             const primary =
               addressesData.find(
-                (a) =>
-                  String(a.address_type || "").toUpperCase() === "PRIMARY",
+                (a) => String(a.address_type || "").toUpperCase() === "PRIMARY",
               ) ?? addressesData[0];
             if (primary) {
               form.setFieldValue("address", String(primary.id));
@@ -3987,8 +3995,7 @@ function CreditNoteCreate() {
               }
               if (isGstInvoiceUser || isKenyaUser) {
                 const gstOrPan =
-                  primary.gst_id != null &&
-                  String(primary.gst_id).trim() !== ""
+                  primary.gst_id != null && String(primary.gst_id).trim() !== ""
                     ? String(primary.gst_id)
                     : primary.pan_no != null &&
                         String(primary.pan_no).trim() !== ""
@@ -3998,10 +4005,7 @@ function CreditNoteCreate() {
               }
             }
           } catch (err) {
-            console.error(
-              "Error loading Bill To from conditional-list:",
-              err,
-            );
+            console.error("Error loading Bill To from conditional-list:", err);
           }
         })();
       }
@@ -4150,6 +4154,10 @@ function CreditNoteCreate() {
 
       if (chargeRoeErrorMessage) {
         setChargeErrors((prev) => ({ ...prev, ...nextChargeErrors }));
+        ToastNotification({
+          message: chargeRoeErrorMessage,
+          type: "error",
+        });
         setIsSubmitting(false);
         return;
       }
@@ -4754,7 +4762,8 @@ function CreditNoteCreate() {
         ? percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
-              const taxableTotal = clampLocalAmount(row.taxable_total ?? 0) ?? 0;
+              const taxableTotal =
+                clampLocalAmount(row.taxable_total ?? 0) ?? 0;
               const { amountInLocal, amountInHeader, currencyAmount } =
                 calcTaxRowAmountsFromBreakupTotal(
                   taxableTotal,
@@ -4793,7 +4802,8 @@ function CreditNoteCreate() {
                 return true;
               })
               .map((row) => {
-                const totalAmount = clampLocalAmount(row.total_amount ?? 0) ?? 0;
+                const totalAmount =
+                  clampLocalAmount(row.total_amount ?? 0) ?? 0;
                 const { amountInLocal, amountInHeader, currencyAmount } =
                   calcTaxRowAmountsFromBreakupTotal(
                     totalAmount,
@@ -5890,8 +5900,7 @@ function CreditNoteCreate() {
                     }[]) ?? [];
                   const billingUpper =
                     form.values.currency?.trim().toUpperCase() ?? "";
-                  const foreignHeaderRoe =
-                    acceptForeignExchangeRate(numValue);
+                  const foreignHeaderRoe = acceptForeignExchangeRate(numValue);
                   const updatedCharges = form.values.charges.map((charge) => {
                     const chargeCode =
                       resolveChargeCurrencyCode(charge, currencyRows) ||
@@ -5913,9 +5922,7 @@ function CreditNoteCreate() {
                       nextRoe != null &&
                       nextRoe > 0
                     ) {
-                      amountInLocal = clampLocalAmount(
-                        charge.amount * nextRoe,
-                      );
+                      amountInLocal = clampLocalAmount(charge.amount * nextRoe);
                     }
                     const next = {
                       ...charge,
@@ -7439,8 +7446,9 @@ function CreditNoteCreate() {
                                 const newIndex = form.values.charges.length;
                                 chargeUnitsByIndexRef.current[newIndex] = "|";
                                 const defaultShipmentId =
-                                  String(form.values.shipment_no ?? "").trim() ||
-                                  undefined;
+                                  String(
+                                    form.values.shipment_no ?? "",
+                                  ).trim() || undefined;
                                 void ensureRoeForCurrency(
                                   newChargeCurrency,
                                 ).then((roe) => {

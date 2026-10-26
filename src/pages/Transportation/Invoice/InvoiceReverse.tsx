@@ -4331,15 +4331,61 @@ function InvoiceReverse() {
                         <FormNumberInput
                           value={charge.no_of_unit ?? undefined}
                           onChange={(v) => {
-                            // Keep invoice amounts as-is — do not enable auto-calc on reverse.
-                            form.setFieldValue(
-                              `charges.${index}.no_of_unit`,
+                            enableChargeAmountAutoCalcRef.current = true;
+                            const noOfUnit =
                               typeof v === "number"
                                 ? parseNoOfUnitForPayload(v)
                                 : v === ""
                                   ? null
-                                  : parseNoOfUnitForPayload(String(v)),
+                                  : parseNoOfUnitForPayload(String(v));
+                            const currentCharge = form.values.charges[index];
+                            let amount = currentCharge.amount;
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
+
+                            if (
+                              currentCharge.amount_per_unit != null &&
+                              currentCharge.amount_per_unit > 0 &&
+                              noOfUnit != null &&
+                              noOfUnit > 0
+                            ) {
+                              amount = clampAmount(
+                                noOfUnit * currentCharge.amount_per_unit,
+                              );
+                              const roeVal = currentCharge.roe;
+                              if (
+                                amount != null &&
+                                amount > 0 &&
+                                roeVal != null &&
+                                roeVal > 0
+                              ) {
+                                amountInLocal = clampAmount(amount * roeVal);
+                              }
+                              headerAmt =
+                                calcChargeHeaderAmount(
+                                  {
+                                    ...currentCharge,
+                                    amount,
+                                    amount_in_local: amountInLocal,
+                                  },
+                                  form.values.currency,
+                                  form.values.roe,
+                                ) ?? headerAmt;
+                            }
+
+                            const updatedCharges = form.values.charges.map(
+                              (c, i) =>
+                                i !== index
+                                  ? c
+                                  : {
+                                      ...c,
+                                      no_of_unit: noOfUnit,
+                                      amount,
+                                      amount_in_local: amountInLocal,
+                                      header_amount: headerAmt,
+                                    },
                             );
+                            form.setFieldValue("charges", updatedCharges);
                           }}
                           min={0}
                           decimalScale={3}
@@ -4352,17 +4398,62 @@ function InvoiceReverse() {
                         <FormNumberInput
                           value={charge.amount_per_unit ?? undefined}
                           onChange={(v) => {
-                            // Keep invoice amounts as-is — do not enable auto-calc on reverse.
-                            form.setFieldValue(
-                              `charges.${index}.amount_per_unit`,
-                              clampAmount(
-                                typeof v === "number"
-                                  ? v
-                                  : v === ""
-                                    ? null
-                                    : parseFloat(String(v)) || null,
-                              ),
+                            enableChargeAmountAutoCalcRef.current = true;
+                            const amountPerUnit = clampAmount(
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
                             );
+                            const currentCharge = form.values.charges[index];
+                            let amount = currentCharge.amount;
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
+
+                            if (
+                              amountPerUnit != null &&
+                              amountPerUnit > 0 &&
+                              currentCharge.no_of_unit != null &&
+                              currentCharge.no_of_unit > 0
+                            ) {
+                              amount = clampAmount(
+                                currentCharge.no_of_unit * amountPerUnit,
+                              );
+                              const roeVal = currentCharge.roe;
+                              if (
+                                amount != null &&
+                                amount > 0 &&
+                                roeVal != null &&
+                                roeVal > 0
+                              ) {
+                                amountInLocal = clampAmount(amount * roeVal);
+                              }
+                              headerAmt =
+                                calcChargeHeaderAmount(
+                                  {
+                                    ...currentCharge,
+                                    amount,
+                                    amount_in_local: amountInLocal,
+                                  },
+                                  form.values.currency,
+                                  form.values.roe,
+                                ) ?? headerAmt;
+                            }
+
+                            const updatedCharges = form.values.charges.map(
+                              (c, i) =>
+                                i !== index
+                                  ? c
+                                  : {
+                                      ...c,
+                                      amount_per_unit: amountPerUnit,
+                                      amount,
+                                      amount_in_local: amountInLocal,
+                                      header_amount: headerAmt,
+                                    },
+                            );
+                            form.setFieldValue("charges", updatedCharges);
                           }}
                           min={0}
                           decimalScale={amountDecimalScale}
@@ -4376,17 +4467,51 @@ function InvoiceReverse() {
                           placeholder="Currency Amount"
                           value={charge.amount ?? undefined}
                           onChange={(v) => {
-                            // Keep local/header amounts as loaded — do not enable auto-calc on reverse.
-                            form.setFieldValue(
-                              `charges.${index}.amount`,
-                              clampAmount(
-                                typeof v === "number"
-                                  ? v
-                                  : v === ""
-                                    ? null
-                                    : parseFloat(String(v)) || null,
-                              ),
+                            enableChargeAmountAutoCalcRef.current = true;
+                            const currencyAmount = clampAmount(
+                              typeof v === "number"
+                                ? v
+                                : v === ""
+                                  ? null
+                                  : parseFloat(String(v)) || null,
                             );
+                            const currentCharge = form.values.charges[index];
+                            let amountInLocal = currentCharge.amount_in_local;
+                            let headerAmt = currentCharge.header_amount;
+
+                            if (
+                              currencyAmount != null &&
+                              currencyAmount > 0 &&
+                              currentCharge.roe != null &&
+                              currentCharge.roe > 0
+                            ) {
+                              amountInLocal = clampAmount(
+                                currencyAmount * currentCharge.roe,
+                              );
+                            }
+                            headerAmt =
+                              calcChargeHeaderAmount(
+                                {
+                                  ...currentCharge,
+                                  amount: currencyAmount,
+                                  amount_in_local: amountInLocal,
+                                },
+                                form.values.currency,
+                                form.values.roe,
+                              ) ?? headerAmt;
+
+                            const updatedCharges = form.values.charges.map(
+                              (c, i) =>
+                                i !== index
+                                  ? c
+                                  : {
+                                      ...c,
+                                      amount: currencyAmount,
+                                      amount_in_local: amountInLocal,
+                                      header_amount: headerAmt,
+                                    },
+                            );
+                            form.setFieldValue("charges", updatedCharges);
                             if (chargeErrors[index]?.amount) {
                               const newErrors = { ...chargeErrors };
                               if (newErrors[index]) {
