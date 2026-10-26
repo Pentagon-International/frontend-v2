@@ -191,31 +191,45 @@ const toCanDisplayValue = (value: unknown): string => {
   return text;
 };
 
-/** e.g. "1 Carton, 2 Block" from cargo_details no_of_packages + package_type_name */
-const formatCanPackagesWithType = (cargoDetails: unknown[]): string => {
-  const parts: string[] = [];
-  for (const row of cargoDetails) {
-    const cargo = (row ?? {}) as Record<string, unknown>;
-    const qtyRaw = parseFloat(String(cargo.no_of_packages ?? ""));
-    if (!Number.isFinite(qtyRaw) || qtyRaw <= 0) continue;
-    const qtyDisplay = Number.isInteger(qtyRaw)
-      ? String(qtyRaw)
-      : String(qtyRaw);
-    const typeName =
-      pickCanField(cargo.package_type_name) ||
-      formatPackageTypeNameForBol(
-        String(cargo.package_type_code ?? cargo.package_type ?? ""),
-      );
-    parts.push(typeName ? `${qtyDisplay} ${typeName}` : qtyDisplay);
+/** Total packages only, e.g. "1800 Package" (no per-type breakdown). */
+const formatCanPackagesTotal = (cargoDetails: unknown[]): string => {
+  const total = cargoDetails.reduce((sum: number, row) => {
+    const qtyRaw = parseFloat(
+      String((row as Record<string, unknown>)?.no_of_packages ?? ""),
+    );
+    return sum + (Number.isFinite(qtyRaw) && qtyRaw > 0 ? qtyRaw : 0);
+  }, 0);
+  if (total <= 0) return "";
+  const qtyDisplay = Number.isInteger(total) ? String(total) : String(total);
+  return `${qtyDisplay} ${qtyDisplay > 1 ? "Packages" : "Package"}`;
+};
+
+/** e.g. "10 Carton" from qty + package type for a single cargo/container row */
+const formatCanPackageQtyWithType = (record: Record<string, unknown>): string => {
+  const qtyRaw = parseFloat(
+    String(record.no_of_packages ?? record.packages ?? record.no_of_pcs ?? ""),
+  );
+  if (!Number.isFinite(qtyRaw) || qtyRaw <= 0) {
+    return toCanDisplayValue(
+      record.no_of_packages ?? record.packages ?? record.no_of_pcs,
+    );
   }
-  return parts.join(", ");
+  const qtyDisplay = Number.isInteger(qtyRaw)
+    ? String(qtyRaw)
+    : String(qtyRaw);
+  const typeName =
+    pickCanField(record.package_type_name) ||
+    formatPackageTypeNameForBol(
+      String(record.package_type_code ?? record.package_type ?? ""),
+    );
+  return typeName ? `${qtyDisplay} ${typeName}` : qtyDisplay;
 };
 
 type CanContainerDetailRow = {
   containerNo: string;
   containerType: string;
   sealNumber: string;
-  noOfPieces: string;
+  noOfPkgs: string;
   grossWeight: string;
   volume: string;
 };
@@ -278,9 +292,7 @@ const resolveCanContainerDetailRows = (
         match.seal_no,
         match.seal_number,
       ),
-      noOfPieces: toCanDisplayValue(
-        record.no_of_packages ?? record.packages ?? record.no_of_pcs,
-      ),
+      noOfPkgs: formatCanPackageQtyWithType(record),
       grossWeight: toCanDisplayValue(record.gross_weight),
       volume: toCanDisplayValue(record.volume ?? record.volume_weight),
     });
@@ -1850,7 +1862,7 @@ export const generateCargoArrivalNoticePDF = (
       }, 0);
 
       const commodity = commodityDescription;
-      const noOfPkgs = formatCanPackagesWithType(cargoDetails);
+      const noOfPkgs = formatCanPackagesTotal(cargoDetails);
       const charWeight = totalCharWeight > 0 ? String(totalCharWeight) : "";
       const grossWeight = totalGrossWeight > 0 ? String(totalGrossWeight) : "";
 
@@ -2097,7 +2109,7 @@ export const generateCargoArrivalNoticePDF = (
         "Container No",
         "Container Type",
         "Seal Number",
-        "No of Pieces",
+        "No of Pkgs",
         "Gross Weight",
         "Volume",
       ];
@@ -2258,7 +2270,7 @@ export const generateCargoArrivalNoticePDF = (
           row.containerNo,
           row.containerType,
           row.sealNumber,
-          row.noOfPieces,
+          row.noOfPkgs,
           row.grossWeight,
           row.volume,
         ];

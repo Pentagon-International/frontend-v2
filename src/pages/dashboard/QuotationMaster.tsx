@@ -166,6 +166,8 @@ type QuotationData = {
   quote_type_list?: string[];
   remark_list?: string[];
   valid_upto_list?: string[];
+  etd?: string | null;
+  eta?: string | null;
   reject_remark?: string;
 };
 
@@ -416,6 +418,8 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       customer_name: true,
       sales_person: true,
       created_at: true,
+      etd: true,
+      eta: true,
       route: true,
       service: true,
       volume: true,
@@ -2853,6 +2857,20 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
             ...p,
             created_at: !p.created_at,
           })),
+      },
+      {
+        id: "etd",
+        label: "ETD",
+        checked: quotationVisibleColumns.etd !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, etd: !p.etd })),
+      },
+      {
+        id: "eta",
+        label: "ETA",
+        checked: quotationVisibleColumns.eta !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({ ...p, eta: !p.eta })),
       },
       {
         id: "route",
