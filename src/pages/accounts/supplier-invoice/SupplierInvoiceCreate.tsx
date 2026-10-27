@@ -3297,7 +3297,11 @@ export default function SupplierInvoiceCreate({
         return null;
       }
 
-      if (!hasUploadedSupportingDocument(values.supporting_documents)) {
+      // Mandatory on supplier invoice create/edit only; reverse remains optional.
+      if (
+        !isReversal &&
+        !hasUploadedSupportingDocument(values.supporting_documents)
+      ) {
         ToastNotification({
           type: "error",
           message:
