@@ -1869,6 +1869,14 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         },
       },
       {
+        key: "etd",
+        header: "ETD",
+      },
+      {
+        key: "eta",
+        header: "ETA",
+      },
+      {
         key: "container_detail",
         header: "Container Detail",
         transform: (_value: any, item: any) => {
