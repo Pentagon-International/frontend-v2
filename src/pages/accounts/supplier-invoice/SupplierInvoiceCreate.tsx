@@ -10,7 +10,10 @@ import {
   Menu,
   Modal,
   NumberInput,
+  ScrollArea,
   Stack,
+  Table,
+  Tabs,
   Text,
   Textarea,
   TextInput,
@@ -225,6 +228,8 @@ type ChargeRow = {
   shipment_no: string;
   charge_id: number | null;
   charge_name?: string;
+  /** Charge master code when returned by API (e.g. VAT). */
+  charge_code?: string;
   /** GST breakup rows appended by Calculate GST do not require shipment no. */
   is_gst_breakup?: boolean;
   currency_id: number | null;
@@ -362,6 +367,69 @@ function calcChargeVatAmount(
     return null;
   }
   return clampLocalAmount((localAmount * vatRate) / 100);
+}
+
+/** VAT breakup from calculate-gst-breakup (vat: true) — Invoice Tax-tab shape. */
+type SupplierVatBreakup = {
+  vat?: boolean;
+  percentage_wise_totals?: Array<{
+    charge_id?: number;
+    charge_name?: string;
+    charge_code?: string;
+    vat_charge_id?: number;
+    vat_charge_name?: string;
+    vat_charge_code?: string;
+    rate_name?: string;
+    rate?: number;
+    tax_rate?: number;
+    rate_type?: string;
+    taxable_total?: number;
+    amount_in_local?: number;
+    account_code?: string;
+    account_name?: string;
+    subledger_code?: string;
+    narration?: string;
+    currency_id?: number;
+    roe?: number;
+    Dr_Cr?: string;
+  }>;
+  vat_total?: string;
+  total?: string;
+};
+
+async function fetchSupplierVatBreakup(payload: {
+  supplier_invoice_id?: number;
+  reverse_supplier_invoice_id?: number;
+}): Promise<SupplierVatBreakup> {
+  const response = await postAPICall(
+    URL.invoiceCalculateGstBreakup,
+    { ...payload, vat: true },
+    API_HEADER,
+  );
+  const raw = response as { data?: SupplierVatBreakup; [k: string]: unknown };
+  return (raw?.data ?? response) as SupplierVatBreakup;
+}
+
+/** Appended VAT ChargeMaster rows (Invoice post pattern) / name+code detect. */
+function isSupplierVatBreakupRow(row: {
+  charge_name?: string;
+  charge_code?: string;
+  is_gst_breakup?: boolean;
+}): boolean {
+  const code = String(row.charge_code ?? "")
+    .trim()
+    .toUpperCase();
+  if (code === "VAT") return true;
+  const name = String(row.charge_name ?? "")
+    .trim()
+    .toUpperCase();
+  if (!name) return false;
+  return (
+    name === "VAT" ||
+    name.includes("VALUE ADDED TAX") ||
+    name.includes("VAT") ||
+    (row.is_gst_breakup === true && name.includes("VAT"))
+  );
 }
 
 type AmountCalcBaselineInput = {
@@ -543,10 +611,11 @@ function resolveSupplierGstKind(chargeName: unknown): ChargeGstKind | null {
   return null;
 }
 
-/** GST tax lines (Calculate GST / SAC breakup) are charges without a shipment. */
+/** GST/VAT tax lines (Calculate GST / post VAT append) are charges without a shipment. */
 function isSupplierGstChargeRow(row: {
   charge_id?: number | null;
   charge_name?: string;
+  charge_code?: string;
   is_gst_breakup?: boolean;
   CRN?: string;
   shipment_no?: string;
@@ -554,6 +623,7 @@ function isSupplierGstChargeRow(row: {
   account_name?: string;
 }): boolean {
   if (row.is_gst_breakup) return true;
+  if (isSupplierVatBreakupRow(row)) return true;
   if (
     isGstChargeRow(row.charge_name) ||
     resolveSupplierGstKind(row.charge_name) != null
@@ -695,6 +765,8 @@ type ApiCharge = {
   job_no?: string;
   job_id?: string;
   charge_id?: number;
+  charge_name?: string;
+  charge_code?: string;
   currency_id?: number;
   roe?: number | string;
   amount?: number | string;
@@ -846,9 +918,9 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
   if (!Array.isArray(charges)) return [];
   return charges.map((c) => {
     const chargeName =
-      (c as { charge_name?: unknown }).charge_name != null
-        ? String((c as { charge_name?: unknown }).charge_name)
-        : "";
+      c.charge_name != null ? String(c.charge_name) : "";
+    const chargeCode =
+      c.charge_code != null ? String(c.charge_code) : "";
     const shipmentNo = String(
       c.shipment_no ?? c.job_no ?? c.job_id ?? "",
     ).trim();
@@ -867,9 +939,11 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     shipment_no: shipmentNo,
     charge_id: chargeId,
     charge_name: chargeName,
+    charge_code: chargeCode || undefined,
     is_gst_breakup: isSupplierGstChargeRow({
       charge_id: chargeId,
       charge_name: chargeName,
+      charge_code: chargeCode,
       CRN: crn,
       shipment_no: shipmentNo,
       account_code: accountCode,
@@ -1138,6 +1212,10 @@ export default function SupplierInvoiceCreate({
   const [calcLoading, setCalcLoading] = useState(false);
   const [calcLoadingText, setCalcLoadingText] = useState<string>("");
   const editAmountCalcBaselineRef = useRef<string | null>(null);
+  /** Overseas only: Charges | Tax tabs after save (Invoice pattern). */
+  const [chargesTabActive, setChargesTabActive] = useState("charges");
+  const [vatBreakup, setVatBreakup] = useState<SupplierVatBreakup | null>(null);
+  const [vatBreakupLoading, setVatBreakupLoading] = useState(false);
 
   const parseNum = (v: unknown): number | null => {
     if (v == null || v === "") return null;
@@ -1225,6 +1303,9 @@ export default function SupplierInvoiceCreate({
     user?.country?.country_code,
     user?.country?.country_name,
   ]);
+
+  /** Overseas SI: Tax tab after save (Invoice pattern). India keeps Calculate GST. */
+  const showTaxTab = !isIndiaUser;
 
   const isChinaUser = useMemo(() => {
     const branchCountryCode = getDefaultBranchCountryCode(user?.branches);
@@ -2246,9 +2327,20 @@ export default function SupplierInvoiceCreate({
     .join(",");
   useEffect(() => {
     if (isReversal) return;
+    // Posted: do not rewrite charge locals/VAT from rates (keep API figures).
+    const statusUpper = String(
+      saveResponse?.status ?? form.values.status ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (statusUpper === "POSTED") return;
     const charges = form.values.charges_data;
     let changed = false;
     const next = charges.map((c) => {
+      // Appended VAT/GST tax rows keep their breakup amounts as-is.
+      if (isSupplierVatBreakupRow(c) || isSupplierGstChargeRow(c)) {
+        return c;
+      }
       const amount = c.amount ?? 0;
       const roe = c.roe ?? 0;
       const local = clampLocalAmount(amount * roe);
@@ -2263,6 +2355,37 @@ export default function SupplierInvoiceCreate({
     if (changed) form.setFieldValue("charges_data", next);
   }, [chargesAmountRoeKey, isReversal, isIndiaUser]);
 
+  // Overseas Tax tab: fetch VAT breakup after save (Invoice pattern).
+  useEffect(() => {
+    if (
+      chargesTabActive !== "tax" ||
+      !saveResponse?.id ||
+      !showTaxTab
+    ) {
+      return;
+    }
+    let cancelled = false;
+    setVatBreakupLoading(true);
+    setVatBreakup(null);
+    fetchSupplierVatBreakup(
+      isReversal
+        ? { reverse_supplier_invoice_id: saveResponse.id as number }
+        : { supplier_invoice_id: saveResponse.id as number },
+    )
+      .then((data) => {
+        if (!cancelled) setVatBreakup(data);
+      })
+      .catch(() => {
+        if (!cancelled) setVatBreakup(null);
+      })
+      .finally(() => {
+        if (!cancelled) setVatBreakupLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chargesTabActive, saveResponse?.id, showTaxTab, isReversal]);
+
   useEffect(() => {
     if (!isEditMode) {
       editAmountCalcBaselineRef.current = null;
@@ -2273,6 +2396,14 @@ export default function SupplierInvoiceCreate({
 
   const shouldSkipAmountAutoCalc = useCallback(() => {
     if (isReversal || isViewMode) return true;
+    // Posted docs: keep API/persisted amounts — do not recompute (VAT row remap
+    // would otherwise double-count charge igst into approved_amount).
+    const statusUpper = String(
+      saveResponse?.status ?? form.values.status ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (statusUpper === "POSTED") return true;
     if (!isEditMode) return false;
     const baseline = editAmountCalcBaselineRef.current;
     if (!baseline) return true;
@@ -2295,6 +2426,8 @@ export default function SupplierInvoiceCreate({
     form.values.igst_amount,
     form.values.roe,
     form.values.charges_data,
+    form.values.status,
+    saveResponse?.status,
     isEditMode,
     isReversal,
     isViewMode,
@@ -2348,16 +2481,29 @@ export default function SupplierInvoiceCreate({
 
   // Auto-calc Approved Amount = |sum(Dr) − sum(Cr)| of (local amount + VAT amount).
   // Difference Amount = Inv/Crn Amount − Approved Amount.
+  // When VAT ChargeMaster rows are already appended (post / reload), do not also
+  // add per-charge igst — same as Invoice base + tax-row totals.
   const chargesNetKey = form.values.charges_data
-    .map((c) => `${c.amount_in_local}-${c.igst}-${c.Dr_Cr}`)
+    .map(
+      (c) =>
+        `${c.amount_in_local}-${c.igst}-${c.Dr_Cr}-${c.is_gst_breakup ? 1 : 0}-${c.charge_name ?? ""}-${c.charge_code ?? ""}`,
+    )
     .join(",");
   useEffect(() => {
     if (shouldSkipAmountAutoCalc()) return;
     const charges = form.values.charges_data ?? [];
+    // VAT rows after remap may only have is_gst_breakup / Neutral (not IGST/CGST/SGST).
+    const hasVatBreakupRows = charges.some(
+      (row) =>
+        isSupplierVatBreakupRow(row) ||
+        (row.is_gst_breakup === true &&
+          resolveSupplierGstKind(row.charge_name) == null),
+    );
     const netLocal = round2(
       charges.reduce((acc, row) => {
         const amt = parseNum(row.amount_in_local) ?? 0;
-        const vat = isIndiaUser ? 0 : (parseNum(row.igst) ?? 0);
+        const vat =
+          isIndiaUser || hasVatBreakupRows ? 0 : (parseNum(row.igst) ?? 0);
         const total = amt + vat;
         if (!total) return acc;
         // Dr adds, Cr subtracts — difference of all Drs vs Crs
@@ -2390,11 +2536,19 @@ export default function SupplierInvoiceCreate({
   // format is kept. Reversal flips the direction again.
   // India GST column totals use calculated rows when present, otherwise
   // header CGST/SGST/IGST.
+  // Overseas VAT Total: charge.igst before post; after VAT ChargeMaster rows
+  // exist, use those rows only (never both — same exclusivity as approved_amount).
   const chargesSectionTotals = useMemo(() => {
     const isCrnType = form.values.type === "CRN";
     const netDirection: "drMinusCr" | "crMinusDr" =
       isReversal === isCrnType ? "drMinusCr" : "crMinusDr";
     const charges = form.values.charges_data ?? [];
+    const hasVatBreakupRows = charges.some(
+      (row) =>
+        isSupplierVatBreakupRow(row) ||
+        (row.is_gst_breakup === true &&
+          resolveSupplierGstKind(row.charge_name) == null),
+    );
     let local = 0;
     let igst = 0;
     let cgst = 0;
@@ -2420,6 +2574,15 @@ export default function SupplierInvoiceCreate({
         continue;
       }
 
+      // VAT ChargeMaster rows (appended on post): count local amount as VAT total.
+      if (isSupplierVatBreakupRow(row) || (hasVatBreakupRows && row.is_gst_breakup)) {
+        hasChargeVat = true;
+        vat += signed;
+        continue;
+      }
+
+      // Pre-post overseas: VAT lives on charge.igst. Skip once VAT rows exist.
+      if (hasVatBreakupRows) continue;
       const vatAmount = parseNum(row.igst);
       if (vatAmount != null) {
         hasChargeVat = true;
@@ -3715,7 +3878,99 @@ export default function SupplierInvoiceCreate({
         return;
       }
 
-      const payload = buildPayload(form.values, "POSTED");
+      // Overseas: append VAT ChargeMaster rows on post (Invoice pattern).
+      // India: leave charges as-is (Calculate GST already appended GST rows).
+      let valuesForPost = form.values;
+      if (showTaxTab) {
+        const existingCharges = form.values.charges_data ?? [];
+        const alreadyHasVatRows = existingCharges.some((row) =>
+          isSupplierVatBreakupRow(row),
+        );
+        if (!alreadyHasVatRows) {
+          let breakupData = vatBreakup;
+          if (!breakupData?.percentage_wise_totals?.length) {
+            breakupData = await fetchSupplierVatBreakup(
+              isReversal
+                ? { reverse_supplier_invoice_id: saveResponse.id as number }
+                : { supplier_invoice_id: saveResponse.id as number },
+            );
+            setVatBreakup(breakupData);
+          }
+          const percentageWiseTotals =
+            breakupData?.percentage_wise_totals ?? [];
+          const isCrnType = form.values.type === "CRN";
+          const taxRowDrCr: "Dr" | "Cr" = isReversal
+            ? isCrnType
+              ? "Dr"
+              : "Cr"
+            : isCrnType
+              ? "Cr"
+              : "Dr";
+          const vatRows: ChargeRow[] = percentageWiseTotals
+            .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
+            .map((row) => {
+              const taxableTotal =
+                clampLocalAmount(row.taxable_total ?? 0) ?? 0;
+              const chargeId =
+                row.vat_charge_id != null &&
+                Number.isFinite(Number(row.vat_charge_id))
+                  ? Number(row.vat_charge_id)
+                  : null;
+              const currencyId =
+                row.currency_id != null &&
+                Number.isFinite(Number(row.currency_id))
+                  ? Number(row.currency_id)
+                  : form.values.currency_id
+                    ? Number(form.values.currency_id)
+                    : null;
+              return {
+                account_code: String(row.account_code ?? ""),
+                account_name: String(row.account_name ?? ""),
+                subledger_code: String(row.subledger_code ?? ""),
+                CRN: "Neutral",
+                narration: String(row.narration ?? ""),
+                shipment_no: "",
+                charge_id: chargeId,
+                charge_name:
+                  row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
+                charge_code: row.vat_charge_code ?? "VAT",
+                is_gst_breakup: true,
+                currency_id: currencyId,
+                roe: 1,
+                amount: taxableTotal,
+                amount_in_local: taxableTotal,
+                tax_code: "",
+                igst_rate: null,
+                igst: null,
+                Dr_Cr: normalizeDrCr(row.Dr_Cr ?? taxRowDrCr),
+              };
+            })
+            .filter((row) => row.charge_id != null);
+
+          const dedupedVatRows = vatRows.filter(
+            (nr) =>
+              !existingCharges.some(
+                (er) =>
+                  Number(er.charge_id) === Number(nr.charge_id) &&
+                  String(er.account_code ?? "") ===
+                    String(nr.account_code ?? "") &&
+                  Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
+                  er.Dr_Cr === nr.Dr_Cr,
+              ),
+          );
+
+          if (dedupedVatRows.length > 0) {
+            const mergedCharges = [...existingCharges, ...dedupedVatRows];
+            valuesForPost = {
+              ...form.values,
+              charges_data: mergedCharges,
+            };
+            form.setFieldValue("charges_data", mergedCharges);
+          }
+        }
+      }
+
+      const payload = buildPayload(valuesForPost, "POSTED");
       (payload as Record<string, unknown>).is_agent =
         resolveIsAgentForPayload();
       const postUrl = isReversal
@@ -3725,7 +3980,7 @@ export default function SupplierInvoiceCreate({
       const fd = buildSupplierInvoiceFormData(
         payload,
         isReversal ? "reverse_supplier_invoice" : "supplier_invoice",
-        form.values.supporting_documents,
+        valuesForPost.supporting_documents,
       );
 
       const raw = (await apiCallProtected.put(
@@ -3753,6 +4008,37 @@ export default function SupplierInvoiceCreate({
         });
         setAuditPatch((prev) => appendEditPageAuditPatch(prev, data));
         form.setFieldValue("status", "POSTED");
+        // Trust API header amounts after post (avoids UI double-counting VAT).
+        const postedApproved = toLocalAmount(
+          (data as { approved_amount?: unknown }).approved_amount as
+            | number
+            | string
+            | null
+            | undefined,
+        );
+        const postedDifference = toLocalAmount(
+          (data as { difference_amount?: unknown }).difference_amount as
+            | number
+            | string
+            | null
+            | undefined,
+        );
+        const postedIgst = toLocalAmount(
+          (data as { igst_amount?: unknown }).igst_amount as
+            | number
+            | string
+            | null
+            | undefined,
+        );
+        if (postedApproved != null) {
+          form.setFieldValue("approved_amount", postedApproved);
+        }
+        if (postedDifference != null) {
+          form.setFieldValue("difference_amount", postedDifference);
+        }
+        if (postedIgst != null) {
+          form.setFieldValue("igst_amount", postedIgst);
+        }
         if (Array.isArray((data as { charges?: ApiCharge[] }).charges)) {
           form.setFieldValue(
             "charges_data",
@@ -5060,10 +5346,26 @@ export default function SupplierInvoiceCreate({
             </Grid.Col>
           </Grid>
 
-          {/* Charges Section — span 12, grid form like InvoiceCreate */}
+          {/* Charges Section — span 12, grid form like InvoiceCreate.
+              Overseas: Charges | Tax tabs after save (Invoice pattern). */}
           <Grid mt={"sm"}>
             <Grid.Col span={12}>
-              <Group justify="space-between" align="center">
+              <Tabs
+                variant="default"
+                color={"#105476"}
+                value={chargesTabActive}
+                onChange={(v) => setChargesTabActive(v ?? "charges")}
+                defaultValue="charges"
+              >
+                {saveResponse && showTaxTab && (
+                  <Tabs.List>
+                    <Tabs.Tab value="charges">Charges</Tabs.Tab>
+                    <Tabs.Tab value="tax">Tax</Tabs.Tab>
+                  </Tabs.List>
+                )}
+
+                <Tabs.Panel value="charges">
+              <Group justify="space-between" align="center" mt={saveResponse && showTaxTab ? "sm" : undefined}>
                 <Text size="sm" fw={600} c="#105476">
                   Charges
                 </Text>
@@ -6277,6 +6579,106 @@ export default function SupplierInvoiceCreate({
                   </Box>
                 )}
               </Box>
+                </Tabs.Panel>
+
+                {saveResponse && showTaxTab && (
+                  <Tabs.Panel value="tax">
+                    {vatBreakupLoading && (
+                      <Stack align="center" py="xl">
+                        <Loader size="md" color="#105476" />
+                        <Text size="sm" c="dimmed">
+                          Loading VAT breakup...
+                        </Text>
+                      </Stack>
+                    )}
+                    {!vatBreakupLoading &&
+                      !vatBreakup &&
+                      chargesTabActive === "tax" &&
+                      saveResponse?.id && (
+                        <Text size="sm" c="dimmed" py="md">
+                          No VAT breakup data.
+                        </Text>
+                      )}
+                    {!vatBreakupLoading && vatBreakup && (
+                      <ScrollArea mt="md">
+                        <Table
+                          withTableBorder
+                          withColumnBorders
+                          striped
+                          highlightOnHover
+                          style={{ minWidth: 520 }}
+                        >
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Tax Name
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Rate
+                              </Table.Th>
+                              <Table.Th
+                                style={{ fontSize: "12px", fontWeight: 600 }}
+                              >
+                                Tax Amount
+                              </Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {(vatBreakup.percentage_wise_totals ?? []).map(
+                              (row, idx) => (
+                                <Table.Tr key={idx}>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.rate_name ?? "—"}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {(() => {
+                                      const rateVal = row.rate ?? row.tax_rate;
+                                      const rateType = row.rate_type ?? "";
+                                      if (rateVal == null || rateVal === "")
+                                        return "—";
+                                      const typeStr = String(rateType).trim();
+                                      if (typeStr === "%" || typeStr === "％")
+                                        return `${rateVal}%`;
+                                      if (typeStr !== "")
+                                        return `${rateVal}${typeStr}`;
+                                      return String(rateVal);
+                                    })()}
+                                  </Table.Td>
+                                  <Table.Td style={{ fontSize: "13px" }}>
+                                    {row.taxable_total != null
+                                      ? formatMoneyAmountForUi(
+                                          Number(row.taxable_total),
+                                        )
+                                      : "—"}
+                                  </Table.Td>
+                                </Table.Tr>
+                              ),
+                            )}
+                          </Table.Tbody>
+                          <Table.Tfoot>
+                            <Table.Tr>
+                              <Table.Td colSpan={2} />
+                              <Table.Td
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: 600,
+                                  color: "#105476",
+                                }}
+                              >
+                                Total: {vatBreakup.total ?? vatBreakup.vat_total ?? "0.00"}
+                              </Table.Td>
+                            </Table.Tr>
+                          </Table.Tfoot>
+                        </Table>
+                      </ScrollArea>
+                    )}
+                  </Tabs.Panel>
+                )}
+              </Tabs>
             </Grid.Col>
           </Grid>
 
