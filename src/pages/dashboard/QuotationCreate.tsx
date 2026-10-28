@@ -304,6 +304,13 @@ const dynamicFormSchema = Yup.object().shape({
         roe: Yup.number()
           .typeError("ROE is required")
           .required("ROE is required"),
+        cost_currency_country_code: Yup.string().nullable(),
+        cost_roe: Yup.number()
+          .typeError("Must be a number")
+          .nullable()
+          .transform((value, originalValue) =>
+            originalValue === "" ? null : value,
+          ),
         unit: Yup.string().required("Unit is required"),
         no_of_units: Yup.number()
           .typeError("Must be a number")
@@ -352,6 +359,8 @@ type ChargeType = {
   charge_id?: number | string | null;
   currency_country_code: string;
   roe: number | string;
+  cost_currency_country_code: string;
+  cost_roe: number | string;
   unit: string;
   no_of_units: string;
   sell_per_unit: string;
@@ -375,18 +384,55 @@ function computeChargeLineTotals(charge: {
   sell_per_unit?: string | number;
   cost_per_unit?: string | number;
   roe?: string | number;
+  cost_roe?: string | number;
 }): { total_sell: string; total_cost: string } {
   const noOfUnits = parseFloat(String(charge.no_of_units ?? "")) || 0;
   const sellPerUnit = parseFloat(String(charge.sell_per_unit ?? "")) || 0;
   const costPerUnit = parseFloat(String(charge.cost_per_unit ?? "")) || 0;
   const roe = parseFloat(String(charge.roe ?? "")) || 1;
+  const costRoe = parseFloat(String(charge.cost_roe ?? "")) || 1;
   const calculatedSell = noOfUnits * sellPerUnit * roe;
-  const calculatedCost = noOfUnits * costPerUnit * roe;
+  const calculatedCost = noOfUnits * costPerUnit * costRoe;
   const format = (value: number) =>
     formatMoneyAmountBound(Number.isFinite(value) ? value : 0);
   return {
     total_sell: format(calculatedSell),
     total_cost: format(calculatedCost),
+  };
+}
+
+/** Map API charge FX → form; cost falls back to sell for legacy rows. */
+function mapChargeFxFromApi(charge: {
+  currency?: string | null;
+  currency_code?: string | null;
+  currency_country_code?: string | null;
+  roe?: string | number | null;
+  cost_currency?: string | null;
+  cost_currency_country_code?: string | null;
+  cost_roe?: string | number | null;
+}): {
+  currency_country_code: string;
+  roe: string;
+  cost_currency_country_code: string;
+  cost_roe: string;
+} {
+  // Strict: sell fields from sell data only; cost fields from cost data only.
+  const sellCurrency = String(
+    charge.currency_country_code ||
+      charge.currency ||
+      charge.currency_code ||
+      "",
+  );
+  const sellRoe = formatRoeAsString(charge.roe) || "";
+  const costCurrency = String(
+    charge.cost_currency_country_code || charge.cost_currency || "",
+  );
+  const costRoe = formatRoeAsString(charge.cost_roe) || "";
+  return {
+    currency_country_code: sellCurrency,
+    roe: sellRoe,
+    cost_currency_country_code: costCurrency,
+    cost_roe: costRoe,
   };
 }
 
@@ -628,6 +674,9 @@ function QuotationCreate({
     [isVietnamBranch],
   );
   const [chargeRoeErrors, setChargeRoeErrors] = useState<
+    Record<number, string>
+  >({});
+  const [costChargeRoeErrors, setCostChargeRoeErrors] = useState<
     Record<number, string>
   >({});
   const [fetchedQuoteCurrencyRoe, setFetchedQuoteCurrencyRoe] = useState<
@@ -1133,6 +1182,13 @@ function QuotationCreate({
               : defaultBranchCurrency
                 ? ""
                 : "1",
+          cost_currency_country_code: defaultBranchCurrency || "",
+          cost_roe:
+            defaultBranchCurrency && isBaseCurrency(defaultBranchCurrency)
+              ? "1"
+              : defaultBranchCurrency
+                ? ""
+                : "1",
           unit: "",
           no_of_units: "",
           sell_per_unit: "",
@@ -1257,28 +1313,147 @@ function QuotationCreate({
     ],
   );
 
+  const clearCostChargeRoeError = useCallback((index: number) => {
+    setCostChargeRoeErrors((prev) => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  }, []);
+
+  const handleCostChargeCurrencyChange = useCallback(
+    (index: number, currencyCode: string) => {
+      const code = currencyCode.trim();
+      dynamicForm.setFieldValue(
+        `charges.${index}.cost_currency_country_code`,
+        code,
+      );
+      if (!code) {
+        syncChargeTotalsAtIndex(index, { cost_currency_country_code: "" });
+        clearCostChargeRoeError(index);
+        return;
+      }
+      if (isBaseCurrency(code)) {
+        dynamicForm.setFieldValue(`charges.${index}.cost_roe`, "1");
+        syncChargeTotalsAtIndex(index, {
+          cost_currency_country_code: code,
+          cost_roe: "1",
+        });
+      } else {
+        dynamicForm.setFieldValue(`charges.${index}.cost_roe`, "");
+        syncChargeTotalsAtIndex(index, {
+          cost_currency_country_code: code,
+          cost_roe: "",
+        });
+        void ensureRoeForCurrency(code.toUpperCase()).then((roe) => {
+          if (roe == null) return;
+          const current = dynamicForm.values.charges[index];
+          if (
+            String(current?.cost_currency_country_code ?? "")
+              .trim()
+              .toUpperCase() !== code.toUpperCase()
+          ) {
+            return;
+          }
+          dynamicForm.setFieldValue(
+            `charges.${index}.cost_roe`,
+            formatRoeAsString(roe),
+          );
+          syncChargeTotalsAtIndex(index, {
+            cost_roe: formatRoeAsString(roe),
+          });
+        });
+      }
+      clearCostChargeRoeError(index);
+    },
+    [
+      clearCostChargeRoeError,
+      dynamicForm,
+      ensureRoeForCurrency,
+      isBaseCurrency,
+      syncChargeTotalsAtIndex,
+    ],
+  );
+
+  const handleCostChargeRoeChange = useCallback(
+    (index: number, rawValue: string) => {
+      const charge = dynamicForm.values.charges[index];
+      const code = String(charge?.cost_currency_country_code ?? "").trim();
+      if (code && isBaseCurrency(code)) {
+        dynamicForm.setFieldValue(`charges.${index}.cost_roe`, "1");
+        syncChargeTotalsAtIndex(index, { cost_roe: "1" });
+        clearCostChargeRoeError(index);
+        return;
+      }
+      const sanitized = sanitizeRoeInput(rawValue);
+      dynamicForm.setFieldValue(`charges.${index}.cost_roe`, sanitized);
+      syncChargeTotalsAtIndex(index, { cost_roe: sanitized });
+      const roeError = validateRoeField(code, parseBookingRoe(sanitized));
+      setCostChargeRoeErrors((prev) => {
+        if (roeError) return { ...prev, [index]: roeError };
+        if (!prev[index]) return prev;
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    },
+    [
+      clearCostChargeRoeError,
+      dynamicForm,
+      isBaseCurrency,
+      syncChargeTotalsAtIndex,
+      validateRoeField,
+    ],
+  );
+
   const validateChargesRoe = useCallback((): boolean => {
     const chargeList = dynamicForm.values.charges || [];
     let toastMessage: string | null = null;
     const errors: Record<number, string> = {};
+    const costErrors: Record<number, string> = {};
 
     chargeList.forEach((charge, index) => {
       const code = String(charge.currency_country_code ?? "").trim();
-      if (!code) return;
-      const roeError = validateRoeField(code, parseBookingRoe(charge.roe));
-      if (!roeError) return;
-      errors[index] = roeError;
-      if (!toastMessage) {
-        toastMessage =
-          roeError === ROE_CANNOT_BE_ONE_FIELD
-            ? ROE_CANNOT_BE_ONE_TOAST
-            : roeError;
+      if (code) {
+        const roeError = validateRoeField(code, parseBookingRoe(charge.roe));
+        if (roeError) {
+          errors[index] = roeError;
+          if (!toastMessage) {
+            toastMessage =
+              roeError === ROE_CANNOT_BE_ONE_FIELD
+                ? ROE_CANNOT_BE_ONE_TOAST
+                : roeError;
+          }
+        }
+      }
+      const costCode = String(charge.cost_currency_country_code ?? "").trim();
+      if (costCode) {
+        const costRoeError = validateRoeField(
+          costCode,
+          parseBookingRoe(charge.cost_roe),
+        );
+        if (costRoeError) {
+          costErrors[index] = costRoeError;
+          if (!toastMessage) {
+            toastMessage =
+              costRoeError === ROE_CANNOT_BE_ONE_FIELD
+                ? ROE_CANNOT_BE_ONE_TOAST
+                : costRoeError;
+          }
+        }
       }
     });
 
-    if (Object.keys(errors).length === 0) return true;
+    if (
+      Object.keys(errors).length === 0 &&
+      Object.keys(costErrors).length === 0
+    ) {
+      return true;
+    }
 
     setChargeRoeErrors(errors);
+    setCostChargeRoeErrors(costErrors);
     ToastNotification({
       type: "error",
       message: toastMessage ?? ROE_CANNOT_BE_ONE_TOAST,
@@ -1296,6 +1471,8 @@ function QuotationCreate({
     return {
       currency_country_code: currencyCode,
       roe: isBaseCurrency(currencyCode) ? "1" : "",
+      cost_currency_country_code: currencyCode,
+      cost_roe: isBaseCurrency(currencyCode) ? "1" : "",
     };
   }, [defaultBranchCurrency, isBaseCurrency]);
 
@@ -1416,8 +1593,7 @@ function QuotationCreate({
         const formattedCharges = quotationData.charges.map((charge: any) => ({
           charge_name: charge.charge_name || "",
           charge_id: charge.charge_id ?? null,
-          currency_country_code: charge.currency || "",
-          roe: formatRoeAsString(charge.roe) || "1",
+          ...mapChargeFxFromApi(charge),
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
           sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
@@ -1765,8 +1941,7 @@ function QuotationCreate({
                 quotation.charges?.map((charge: any) => ({
                   charge_name: charge.charge_name || "",
                   charge_id: charge.charge_id ?? null,
-                  currency_country_code: charge.currency || "",
-                  roe: formatRoeAsString(charge.roe) || "1",
+                  ...mapChargeFxFromApi(charge),
                   unit: charge.unit || "",
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
@@ -1849,8 +2024,7 @@ function QuotationCreate({
         const mappedCharges = quotation.charges.map((charge: any) => ({
           charge_name: charge.charge_name || "",
           charge_id: charge.charge_id ?? null,
-          currency_country_code: charge.currency || "",
-          roe: formatRoeAsString(charge.roe) || "1",
+          ...mapChargeFxFromApi(charge),
           unit: charge.unit || "",
           no_of_units: formatQuotationNoOfUnitsFromApi(charge.no_of_units),
           sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
@@ -1861,6 +2035,10 @@ function QuotationCreate({
             sell_per_unit: currencyApiValueToFormString(charge.sell_per_unit),
             cost_per_unit: currencyApiValueToFormString(charge.cost_per_unit),
             roe: parseRoeForPayload(charge.roe) ?? 1,
+            cost_roe:
+              parseRoeForPayload(charge.cost_roe) ??
+              parseRoeForPayload(charge.roe) ??
+              1,
           }),
           // preserve existing quotation charge id (fallbacks)
           id: charge.id ?? charge.charge_id ?? charge.quotation_charge_id,
@@ -1940,6 +2118,8 @@ function QuotationCreate({
           charge_id: (charge as any).charge_id ?? null,
           currency_country_code: charge.currency ?? "",
           roe: roe,
+          cost_currency_country_code: "",
+          cost_roe: "",
           unit: unit,
           no_of_units: calculatedNoOfUnits,
           sell_per_unit: isLCL ? currencyApiValueToFormString(rate) : "",
@@ -2034,6 +2214,8 @@ function QuotationCreate({
             charge_id: charge.charge_id ?? null,
             currency_country_code: charge.currency_code || "INR",
             roe: 1,
+            cost_currency_country_code: "",
+            cost_roe: "",
             unit: charge.unit || "",
             no_of_units: noOfContainers,
             sell_per_unit: "", // Leave empty for user to enter manually
@@ -2209,8 +2391,10 @@ function QuotationCreate({
         return {
           charge_name: charge.charge_name || "",
           charge_id: charge.charge_id ?? null,
-          currency_country_code: charge.currency_country_code || "INR",
-          roe: formatRoeAsString(charge.roe) || "1",
+          ...mapChargeFxFromApi({
+            ...charge,
+            currency_country_code: charge.currency_country_code || "INR",
+          }),
           unit: charge.unit || "",
           no_of_units:
             charge.no_of_units != null
@@ -2302,6 +2486,67 @@ function QuotationCreate({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrenciesKey]);
+
+  const costChargeCurrenciesKey = charges
+    .map((c) => String(c.cost_currency_country_code ?? "").trim())
+    .join("|");
+
+  useEffect(() => {
+    if (!defaultBranchCurrency) return;
+    let changed = false;
+    const updated = charges.map((charge) => {
+      const code = String(charge.cost_currency_country_code ?? "").trim();
+      if (code && isBaseCurrency(code) && parseBookingRoe(charge.cost_roe) !== 1) {
+        changed = true;
+        return {
+          ...charge,
+          cost_roe: "1",
+          ...computeChargeLineTotals({ ...charge, cost_roe: "1" }),
+        };
+      }
+      return charge;
+    });
+    if (changed) dynamicForm.setValues({ charges: updated });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [costChargeCurrenciesKey, defaultBranchCurrency]);
+
+  useEffect(() => {
+    charges.forEach((charge, index) => {
+      const code = String(charge.cost_currency_country_code ?? "")
+        .trim()
+        .toUpperCase();
+      if (!code) return;
+      const roeEmpty =
+        charge.cost_roe === "" ||
+        charge.cost_roe === null ||
+        charge.cost_roe === undefined;
+      if (!roeEmpty) return;
+      if (isBaseCurrency(code)) return;
+      void ensureRoeForCurrency(code).then((roe) => {
+        if (roe == null) return;
+        const current = dynamicForm.values.charges[index];
+        if (!current) return;
+        const stillEmpty =
+          current.cost_roe === "" ||
+          current.cost_roe === null ||
+          current.cost_roe === undefined;
+        if (
+          String(current.cost_currency_country_code ?? "")
+            .trim()
+            .toUpperCase() !== code
+        ) {
+          return;
+        }
+        if (!stillEmpty) return;
+        dynamicForm.setFieldValue(
+          `charges.${index}.cost_roe`,
+          formatRoeAsString(roe),
+        );
+        syncChargeTotalsAtIndex(index, { cost_roe: formatRoeAsString(roe) });
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [costChargeCurrenciesKey]);
 
   const netCost = charges.reduce((sum: number, item: any) => {
     const cost = parseFloat(item.total_cost || "0");
@@ -2926,6 +3171,9 @@ function QuotationCreate({
             : null,
         currency_country_code: charge.currency_country_code,
         roe: parseRoeForPayload(charge.roe) ?? 1,
+        cost_currency_country_code:
+          charge.cost_currency_country_code || "",
+        cost_roe: parseRoeForPayload(charge.cost_roe) ?? null,
         unit: charge.unit,
         no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
         sell_per_unit: parseCurrencyMoneyForPayload(charge.sell_per_unit),
@@ -3094,6 +3342,9 @@ function QuotationCreate({
                   : null,
               currency_country_code: charge.currency_country_code,
               roe: parseRoeForPayload(charge.roe) ?? 1,
+              cost_currency_country_code:
+                charge.cost_currency_country_code || "",
+              cost_roe: parseRoeForPayload(charge.cost_roe) ?? null,
               unit: charge.unit,
               no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
               sell_per_unit: parseCurrencyMoneyForPayload(charge.sell_per_unit),
@@ -3383,6 +3634,8 @@ function QuotationCreate({
         ...c,
         currency_country_code: nextCurrency,
         roe: isBaseCurrency(nextCurrency) ? "1" : "",
+        cost_currency_country_code: nextCurrency,
+        cost_roe: isBaseCurrency(nextCurrency) ? "1" : "",
       };
     });
 
@@ -3618,8 +3871,7 @@ function QuotationCreate({
               ? quotationForService.charges.map((charge: any) => ({
                   charge_name: charge.charge_name || "",
                   charge_id: charge.charge_id ?? null,
-                  currency_country_code: charge.currency || "",
-                  roe: formatRoeAsString(charge.roe) || "1",
+                  ...mapChargeFxFromApi(charge),
                   unit: charge.unit || "",
                   no_of_units: formatQuotationNoOfUnitsFromApi(
                     charge.no_of_units,
@@ -3639,6 +3891,12 @@ function QuotationCreate({
                     charge_id: null,
                     currency_country_code: defaultBranchCurrency || "INR",
                     roe:
+                      defaultBranchCurrency &&
+                      isBaseCurrency(defaultBranchCurrency)
+                        ? "1"
+                        : "",
+                    cost_currency_country_code: defaultBranchCurrency || "INR",
+                    cost_roe:
                       defaultBranchCurrency &&
                       isBaseCurrency(defaultBranchCurrency)
                         ? "1"
@@ -4567,6 +4825,8 @@ function QuotationCreate({
               charge_id: charge.charge_id ?? null,
               currency_country_code: currencyCode,
               roe: calculatedRoe,
+              cost_currency_country_code: currencyCode,
+              cost_roe: calculatedRoe,
               unit: unit,
               no_of_units: calculatedNoOfUnits,
               sell_per_unit: "",
@@ -5904,7 +6164,7 @@ function QuotationCreate({
                         }}
                         gutter="sm"
                       >
-                        <Grid.Col span={2}>
+                        <Grid.Col span={1.4}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -5916,7 +6176,7 @@ function QuotationCreate({
                             Charge Name
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -5925,10 +6185,10 @@ function QuotationCreate({
                               color: "#000000",
                             }}
                           >
-                            Currency
+                            Sell Currency
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={0.75}>
+                        <Grid.Col span={0.7}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -5937,10 +6197,10 @@ function QuotationCreate({
                               color: "#000000",
                             }}
                           >
-                            ROE
+                            Sell ROE
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -5964,7 +6224,7 @@ function QuotationCreate({
                             No of Units
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -5976,7 +6236,7 @@ function QuotationCreate({
                             Sell Per Unit
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -5988,7 +6248,31 @@ function QuotationCreate({
                             Min Sell
                           </Text>
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Cost Currency
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={0.9}>
+                          <Text
+                            style={{
+                              fontFamily: "Inter",
+                              fontSize: "14px",
+                              fontWeight: 700,
+                              color: "#000000",
+                            }}
+                          >
+                            Cost ROE
+                          </Text>
+                        </Grid.Col>
+                        <Grid.Col span={0.9}>
                           <Text
                             style={{
                               fontFamily: "Inter",
@@ -6040,7 +6324,7 @@ function QuotationCreate({
                         // mt={"md"}
                       >
                         <Grid gutter="sm">
-                          <Grid.Col span={2}>
+                          <Grid.Col span={1.4}>
                             {dynamicForm.values.charges[index]?.charge_id !=
                             null ? (
                               <TextInput
@@ -6205,7 +6489,7 @@ function QuotationCreate({
                               />
                             )}
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.9}>
                             <Dropdown
                               placeholder="Select Currency"
                               searchable
@@ -6236,7 +6520,7 @@ function QuotationCreate({
                               disabled={isViewMode}
                             />
                           </Grid.Col>
-                          <Grid.Col span={0.75}>
+                          <Grid.Col span={0.7}>
                             <TextInput
                               key={
                                 // dynamicForm.values.charges[index]?.roe ||
@@ -6267,7 +6551,7 @@ function QuotationCreate({
                               }
                             />
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.9}>
                             <Dropdown
                               searchable
                               placeholder="Select Unit"
@@ -6320,7 +6604,7 @@ function QuotationCreate({
                               }
                             />
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.9}>
                             <FormNumberInput
                               key={`unit-${index}-sell_per_unit`}
                               min={0}
@@ -6338,7 +6622,7 @@ function QuotationCreate({
                               disabled={isViewMode}
                             />
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.9}>
                             <FormNumberInput
                               key={`unit-${index}-min_sell`}
                               disabled={
@@ -6359,7 +6643,66 @@ function QuotationCreate({
                               {...bindChargeMoneyField(index, "min_sell")}
                             />
                           </Grid.Col>
-                          <Grid.Col span={1}>
+                          <Grid.Col span={0.9}>
+                            <Dropdown
+                              placeholder="Select Currency"
+                              searchable
+                              key={`unit-${index}-cost_currency_country_code`}
+                              data={currency}
+                              styles={{
+                                input: {
+                                  fontSize: "14px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              {...dynamicForm.getInputProps(
+                                `charges.${index}.cost_currency_country_code`,
+                              )}
+                              onChange={(value) => {
+                                if (!isViewMode) {
+                                  handleCostChargeCurrencyChange(index, value || "");
+                                }
+                              }}
+                              readOnly={isViewMode}
+                              disabled={isViewMode}
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={0.7}>
+                            <TextInput
+                              key={`unit-${index}-cost_roe`}
+                              min={1}
+                              styles={{
+                                input: {
+                                  fontSize: "14px",
+                                  fontFamily: "Inter",
+                                  height: "36px",
+                                },
+                              }}
+                              value={dynamicForm.values.charges[index]?.cost_roe ?? ""}
+                              error={
+                                ((dynamicForm.errors as any)?.charges?.[index]?.cost_roe as
+                                  | string
+                                  | undefined) || costChargeRoeErrors[index]
+                              }
+                              onChange={(event) =>
+                                handleCostChargeRoeChange(index, event.currentTarget.value)
+                              }
+                              readOnly={
+                                isViewMode ||
+                                isBaseCurrency(
+                                  dynamicForm.values.charges[index]?.cost_currency_country_code,
+                                )
+                              }
+                              disabled={
+                                isViewMode ||
+                                isBaseCurrency(
+                                  dynamicForm.values.charges[index]?.cost_currency_country_code,
+                                )
+                              }
+                            />
+                          </Grid.Col>
+                          <Grid.Col span={0.9}>
                             <FormNumberInput
                               key={`unit-${index}-cost_per_unit`}
                               disabled={
@@ -6498,7 +6841,7 @@ function QuotationCreate({
 
                           {dynamicForm.values.charges.length - 1 === index &&
                             !isViewMode && (
-                              <Grid.Col span={0.75}>
+                              <Grid.Col span={0.5}>
                                 <Button
                                   radius={"sm"}
                                   variant="light"
@@ -6524,7 +6867,7 @@ function QuotationCreate({
                               </Grid.Col>
                             )}
                           {!isViewMode && (
-                            <Grid.Col span={0.75}>
+                            <Grid.Col span={0.5}>
                               {dynamicForm.values.charges.length > 1 ? (
                                 <Button
                                   variant="light"
@@ -6554,7 +6897,7 @@ function QuotationCreate({
                         paddingTop: "0.5rem",
                       }}
                     >
-                      <Grid.Col span={7.5} />
+                      <Grid.Col span={7.95} />
                       <Grid.Col span={1} ml={10}>
                         {" "}
                         Total:
@@ -6569,7 +6912,7 @@ function QuotationCreate({
                         color: profit >= 0 ? "green" : "red",
                       }}
                     >
-                      <Grid.Col span={7.5} />
+                      <Grid.Col span={7.95} />
 
                       <Grid.Col span={1} ml={10}>
                         Profit
@@ -6585,7 +6928,7 @@ function QuotationCreate({
                           color: profitInQuoteCurrency >= 0 ? "green" : "red",
                         }}
                       >
-                        <Grid.Col span={7.5} />
+                        <Grid.Col span={7.95} />
                         <Grid.Col span={1} ml={10}>
                           Profit ({normalizedQuoteCurrency})=
                         </Grid.Col>
@@ -7345,7 +7688,7 @@ function QuotationCreate({
                       }}
                       gutter="sm"
                     >
-                      <Grid.Col span={2}>
+                      <Grid.Col span={1.4}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7357,7 +7700,7 @@ function QuotationCreate({
                           Charge Name
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7366,10 +7709,10 @@ function QuotationCreate({
                             color: "#000000",
                           }}
                         >
-                          Currency
+                          Sell Currency
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={0.7}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7378,10 +7721,10 @@ function QuotationCreate({
                             color: "#000000",
                           }}
                         >
-                          ROE
+                          Sell ROE
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7393,7 +7736,7 @@ function QuotationCreate({
                           Unit
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={0.5}>
+                      <Grid.Col span={0.75}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7405,7 +7748,7 @@ function QuotationCreate({
                           No of Units
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7417,7 +7760,7 @@ function QuotationCreate({
                           Sell Per Unit
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7429,7 +7772,31 @@ function QuotationCreate({
                           Min Sell
                         </Text>
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
+                        <Text
+                          style={{
+                            fontFamily: "Inter",
+                            fontSize: "14px",
+                            fontWeight: 700,
+                            color: "#000000",
+                          }}
+                        >
+                          Cost Currency
+                        </Text>
+                      </Grid.Col>
+                      <Grid.Col span={0.9}>
+                        <Text
+                          style={{
+                            fontFamily: "Inter",
+                            fontSize: "14px",
+                            fontWeight: 700,
+                            color: "#000000",
+                          }}
+                        >
+                          Cost ROE
+                        </Text>
+                      </Grid.Col>
+                      <Grid.Col span={0.9}>
                         <Text
                           style={{
                             fontFamily: "Inter",
@@ -7472,7 +7839,7 @@ function QuotationCreate({
                   {dynamicForm.values.charges.map((_, index) => (
                     <Box key={index}>
                       <Grid gutter="sm">
-                        <Grid.Col span={2}>
+                        <Grid.Col span={1.4}>
                           {dynamicForm.values.charges[index]?.charge_id !=
                           null ? (
                             <TextInput
@@ -7634,7 +8001,7 @@ function QuotationCreate({
                             />
                           )}
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <Dropdown
                             placeholder="Select Currency"
                             searchable
@@ -7655,7 +8022,7 @@ function QuotationCreate({
                             }}
                           />
                         </Grid.Col>
-                        <Grid.Col span={0.75}>
+                        <Grid.Col span={0.7}>
                           <TextInput
                             key={`unit-${index}-roe`}
                             min={1}
@@ -7683,7 +8050,7 @@ function QuotationCreate({
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <Dropdown
                             searchable
                             placeholder="Select Unit"
@@ -7708,7 +8075,7 @@ function QuotationCreate({
                             disabled={isLoadingUnitData}
                           />
                         </Grid.Col>
-                        <Grid.Col span={0.5}>
+                        <Grid.Col span={0.75}>
                           <TextInput
                             key={`unit-${index}-no_of_units`}
                             min={1}
@@ -7725,7 +8092,7 @@ function QuotationCreate({
                             }
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <FormNumberInput
                             key={`unit-${index}-sell_per_unit`}
                             min={0}
@@ -7741,7 +8108,7 @@ function QuotationCreate({
                             {...bindChargeMoneyField(index, "sell_per_unit")}
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
                           <FormNumberInput
                             key={`unit-${index}-min_sell`}
                             disabled={
@@ -7760,7 +8127,66 @@ function QuotationCreate({
                             {...bindChargeMoneyField(index, "min_sell")}
                           />
                         </Grid.Col>
-                        <Grid.Col span={1}>
+                        <Grid.Col span={0.9}>
+                          <Dropdown
+                            placeholder="Select Currency"
+                            searchable
+                            key={`unit-${index}-cost_currency_country_code`}
+                            data={currency}
+                            styles={{
+                              input: {
+                                fontSize: "14px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                            }}
+                            {...dynamicForm.getInputProps(
+                              `charges.${index}.cost_currency_country_code`,
+                            )}
+                            onChange={(value) => {
+                              if (!isViewMode) {
+                                handleCostChargeCurrencyChange(index, value || "");
+                              }
+                            }}
+                            readOnly={isViewMode}
+                            disabled={isViewMode}
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={0.7}>
+                          <TextInput
+                            key={`unit-${index}-cost_roe`}
+                            min={1}
+                            styles={{
+                              input: {
+                                fontSize: "14px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                              },
+                            }}
+                            value={dynamicForm.values.charges[index]?.cost_roe ?? ""}
+                            error={
+                              ((dynamicForm.errors as any)?.charges?.[index]?.cost_roe as
+                                | string
+                                | undefined) || costChargeRoeErrors[index]
+                            }
+                            onChange={(event) =>
+                              handleCostChargeRoeChange(index, event.currentTarget.value)
+                            }
+                            readOnly={
+                              isViewMode ||
+                              isBaseCurrency(
+                                dynamicForm.values.charges[index]?.cost_currency_country_code,
+                              )
+                            }
+                            disabled={
+                              isViewMode ||
+                              isBaseCurrency(
+                                dynamicForm.values.charges[index]?.cost_currency_country_code,
+                              )
+                            }
+                          />
+                        </Grid.Col>
+                        <Grid.Col span={0.9}>
                           <FormNumberInput
                             key={`unit-${index}-cost_per_unit`}
                             disabled={
@@ -7831,7 +8257,7 @@ function QuotationCreate({
                         </Grid.Col>
 
                         {dynamicForm.values.charges.length - 1 === index && (
-                          <Grid.Col span={0.75}>
+                          <Grid.Col span={0.5}>
                             <Button
                               radius={"sm"}
                               variant="light"
@@ -7855,7 +8281,7 @@ function QuotationCreate({
                             </Button>
                           </Grid.Col>
                         )}
-                        <Grid.Col span={0.75}>
+                        <Grid.Col span={0.5}>
                           {dynamicForm.values.charges.length > 1 ? (
                             <Button
                               variant="light"
@@ -7881,7 +8307,7 @@ function QuotationCreate({
                       paddingTop: "0.5rem",
                     }}
                   >
-                    <Grid.Col span={7.5} />
+                    <Grid.Col span={7.95} />
                     <Grid.Col span={1} ml={10}>
                       Total:
                     </Grid.Col>
@@ -7895,7 +8321,7 @@ function QuotationCreate({
                       color: profit >= 0 ? "green" : "red",
                     }}
                   >
-                    <Grid.Col span={7.5} />
+                    <Grid.Col span={7.95} />
                     <Grid.Col span={1} ml={10}>
                       Profit
                       {branchCurrencyCode ? ` (${branchCurrencyCode})` : ""}=
@@ -7910,7 +8336,7 @@ function QuotationCreate({
                         color: profitInQuoteCurrency >= 0 ? "green" : "red",
                       }}
                     >
-                      <Grid.Col span={7.5} />
+                      <Grid.Col span={7.95} />
                       <Grid.Col span={1} ml={10}>
                         Profit ({normalizedQuoteCurrency})=
                       </Grid.Col>
@@ -8970,6 +9396,26 @@ function QuotationCreate({
                         backgroundColor: "#105476",
                       }}
                     >
+                      Cost Currency
+                    </Table.Th>
+                    <Table.Th
+                      style={{
+                        color: "white",
+                        fontWeight: 600,
+                        textAlign: "center",
+                        backgroundColor: "#105476",
+                      }}
+                    >
+                      Cost ROE
+                    </Table.Th>
+                    <Table.Th
+                      style={{
+                        color: "white",
+                        fontWeight: 600,
+                        textAlign: "center",
+                        backgroundColor: "#105476",
+                      }}
+                    >
                       Cost Per Unit
                     </Table.Th>
                     {/* <Table.Th
@@ -9067,6 +9513,17 @@ function QuotationCreate({
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
                         {formatHistoryCurrencyMoney(historyItem.min_sell)}
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        {historyItem.cost_currency_code ||
+                          historyItem.cost_currency_country_code ||
+                          historyItem.cost_currency ||
+                          "-"}
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        {historyItem.cost_roe
+                          ? parseFloat(String(historyItem.cost_roe)).toFixed(6)
+                          : "-"}
                       </Table.Td>
                       <Table.Td style={{ textAlign: "center" }}>
                         {formatHistoryCurrencyMoney(historyItem.cost_per_unit)}

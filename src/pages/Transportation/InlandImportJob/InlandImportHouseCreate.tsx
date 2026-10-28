@@ -164,6 +164,7 @@ import useAuthStore from "../../../store/authStore";
 import FormTextInput from "../../../components/FormTextInput";
 import RequiredLabel from "../../../components/RequiredLabel";
 import { ChargesLocalAmountTotalsRow } from "../../../components/JobChargeSummaryDisplay";
+import { resolveHouseChargeCostFx } from "../../../utils/exchangeRateRoe";
 import FormTextArea from "../../../components/FormTextArea";
 import FormNumberInput from "../../../components/FormNumberInput";
 import { commonSearchAPI } from "../../../service/searchApi";
@@ -247,6 +248,9 @@ type ChargeDetail = {
   currency_id: string;
   currency: string;
   roe: number | null;
+  cost_currency_id: string;
+  cost_currency: string;
+  cost_roe: number | null;
   amount_per_unit: number | null;
   amount: number | null;
   // Sell group UI fields
@@ -371,8 +375,10 @@ function HouseCreate() {
     ROE_CANNOT_BE_ONE_FIELD,
     ROE_CANNOT_BE_ONE_TOAST,
     getBranchCurrencyDefaults,
+    getBranchCostCurrencyDefaults,
   } = useExchangeRateRoe();
   const branchCurrencyDefaults = getBranchCurrencyDefaults();
+  const branchCostCurrencyDefaults = getBranchCostCurrencyDefaults();
 
   const calculateChargeableWeight = useCallback(
     (grossWeight: HouseCargoWeightValue, volumeWeight: HouseCargoWeightValue) =>
@@ -505,6 +511,7 @@ function HouseCreate() {
           unit_id: "",
           no_of_unit: null,
           ...branchCurrencyDefaults,
+          ...branchCostCurrencyDefaults,
           amount_per_unit: null,
           amount: null,
           local_amount: null,
@@ -1340,6 +1347,11 @@ function HouseCreate() {
             currency_id,
             currency: currencyCode,
             roe: toNum(charge.roe),
+            ...resolveHouseChargeCostFx(
+              charge,
+              { currency_id, currency: currencyCode, roe: toNum(charge.roe) },
+              currencyDataArr,
+            ),
             amount_per_unit: toNum(charge.amount_per_unit),
             amount: toNum(charge.amount),
             local_amount: toNum(
@@ -1372,6 +1384,9 @@ function HouseCreate() {
     .map((c) => c.no_of_unit)
     .join(",");
   const chargeRoes = chargesForm.values.charges.map((c) => c.roe).join(",");
+  const chargeCostRoes = chargesForm.values.charges
+    .map((c) => c.cost_roe)
+    .join(",");
   const chargeAmounts = chargesForm.values.charges
     .map((c) => c.amount)
     .join(",");
@@ -1416,14 +1431,15 @@ function HouseCreate() {
       }
 
       // Recalculate cost_local_amount from total_cost and roe (0 allowed)
+      const costRoeForLocal = next.cost_roe;
       if (
         next.total_cost !== null &&
         next.total_cost !== undefined &&
-        next.roe !== null &&
-        next.roe !== undefined &&
-        next.roe > 0
+        costRoeForLocal !== null &&
+        costRoeForLocal !== undefined &&
+        costRoeForLocal > 0
       ) {
-        const calculatedCostLocal = next.total_cost * next.roe;
+        const calculatedCostLocal = next.total_cost * costRoeForLocal;
         if (calculatedCostLocal !== next.cost_local_amount) {
           next.cost_local_amount = calculatedCostLocal;
         }
@@ -1457,6 +1473,7 @@ function HouseCreate() {
     chargeAmountPerUnits,
     chargeNoOfUnits,
     chargeRoes,
+    chargeCostRoes,
     chargeAmounts,
     chargeTotalCosts,
   ]);
@@ -1906,6 +1923,61 @@ function HouseCreate() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeCurrenciesKey, currencyData]);
+  const costChargeCurrenciesKey = chargesForm.values.charges
+    .map((c) => `${c.cost_currency ?? ""}|${c.cost_currency_id ?? ""}`)
+    .join("|");
+  // When cost currency matches branch currency, cost ROE must always be 1
+  useEffect(() => {
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
+    let changed = false;
+    const updatedCharges = chargesForm.values.charges.map((charge) => {
+      if (
+        isChargeBaseCurrencyFor(
+          {
+            currency: charge.cost_currency,
+            currency_id: charge.cost_currency_id,
+          },
+          currencyArr,
+        ) &&
+        charge.cost_roe !== 1
+      ) {
+        changed = true;
+        return { ...charge, cost_roe: 1 };
+      }
+      return charge;
+    });
+    if (changed) chargesForm.setValues({ charges: updatedCharges });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [costChargeCurrenciesKey, currencyData]);
+
+  useEffect(() => {
+    const currencyArr = (currencyData ?? []) as {
+      id?: number;
+      code?: string;
+      currency_code?: string;
+    }[];
+    chargesForm.values.charges.forEach((charge, index) => {
+      if (!charge.cost_currency_id || charge.cost_roe != null) return;
+      const costCharge = {
+        currency: charge.cost_currency,
+        currency_id: charge.cost_currency_id,
+      };
+      if (isChargeBaseCurrencyFor(costCharge, currencyArr)) return;
+      const code = resolveCurrencyCode(costCharge, currencyArr);
+      if (!code) return;
+      void ensureRoeForCurrency(code).then((roe) => {
+        if (chargesForm.values.charges[index]?.cost_roe == null) {
+          chargesForm.setFieldValue(`charges.${index}.cost_roe`, roe);
+        }
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [costChargeCurrenciesKey, currencyData]);
+
 
   // Resolve charge unit_id/currency_id once masters are available (patch only; do not reload editData)
   useEffect(() => {
@@ -1948,8 +2020,20 @@ function HouseCreate() {
           changed = true;
         }
       }
-      return unit_id !== charge.unit_id || currency_id !== charge.currency_id
-        ? { ...charge, unit_id, currency_id }
+      let cost_currency_id = charge.cost_currency_id ?? "";
+      if (!cost_currency_id && charge.cost_currency) {
+        const match = currencyDataArr.find(
+          (c) => (c.currency_code ?? c.code ?? "") === charge.cost_currency,
+        );
+        if (match?.id != null) {
+          cost_currency_id = String(match.id);
+          changed = true;
+        }
+      }
+      return unit_id !== charge.unit_id ||
+        currency_id !== charge.currency_id ||
+        cost_currency_id !== (charge.cost_currency_id ?? "")
+        ? { ...charge, unit_id, currency_id, cost_currency_id }
         : charge;
     });
     if (changed) {
@@ -2342,6 +2426,18 @@ function HouseCreate() {
       {
         roeCannotBeOneField: ROE_CANNOT_BE_ONE_FIELD,
         roeCannotBeOneToast: ROE_CANNOT_BE_ONE_TOAST,
+        validateCostRoe: (charge) =>
+          validateRoeField(
+            resolveCurrencyCode(
+              {
+                currency: charge.cost_currency,
+                currency_id: String(charge.cost_currency_id ?? ""),
+              },
+              currencyArr,
+            ),
+            charge.cost_roe,
+            String(charge.cost_currency_id ?? ""),
+          ),
       },
     );
 
@@ -2807,6 +2903,8 @@ function HouseCreate() {
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,
             no_of_unit: roundToDecimals(charge.no_of_unit) ?? null,
             roe: roundRoeForPayload(charge.roe) ?? null,
+            cost_currency_id: charge.cost_currency_id ? Number(charge.cost_currency_id) : null,
+            cost_roe: roundRoeForPayload(charge.cost_roe) ?? null,
             amount_per_unit:
               roundMoneyToDecimals(charge.amount_per_unit) ?? null,
             amount: roundMoneyToDecimals(charge.amount) ?? null,
@@ -5162,13 +5260,13 @@ function HouseCreate() {
             <Box mb="md">
               {/* Group title row: Sell / Cost */}
               <Grid mb={2} gutter="sm" style={{ fontWeight: 700 }}>
-                <Grid.Col span={1.4} />
-                <Grid.Col span={0.9} />
                 <Grid.Col span={1.2} />
                 <Grid.Col span={0.8} />
+                <Grid.Col span={1} />
+                <Grid.Col span={0.7} />
                 <Grid.Col span={0.6} />
                 <Grid.Col span={0.6} />
-                <Grid.Col span={2.25}>
+                <Grid.Col span={2.1}>
                   <Box
                     style={{
                       border: "1.5px solid #228be6",
@@ -5184,7 +5282,7 @@ function HouseCreate() {
                     SELL
                   </Box>
                 </Grid.Col>
-                <Grid.Col span={3.35}>
+                <Grid.Col span={4.3}>
                   <Box
                     style={{
                       border: "1.5px solid #e67700",
@@ -5211,43 +5309,49 @@ function HouseCreate() {
                 }}
                 gutter="sm"
               >
-                <Grid.Col span={1.4}>
+                <Grid.Col span={1.2}>
                   <RequiredLabel label="Charge Name" required />
                 </Grid.Col>
-                <Grid.Col span={0.9}>
+                <Grid.Col span={0.8}>
                   <RequiredLabel label="PP/CC" required />
                 </Grid.Col>
-                <Grid.Col span={1.2}>
+                <Grid.Col span={1}>
                   <RequiredLabel label="Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.8}>
-                  <RequiredLabel label="Currency" required />
+                <Grid.Col span={0.7}>
+                  <RequiredLabel label="Sell Currency" required />
                 </Grid.Col>
                 <Grid.Col span={0.6}>
-                  <RequiredLabel label="ROE" required />
+                  <RequiredLabel label="Sell ROE" required />
                 </Grid.Col>
                 <Grid.Col span={0.6}>
                   <RequiredLabel label="No of Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Amount/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Amount" required />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Local Amount" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
+                  <RequiredLabel label="Cost Currency" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.6}>
+                  <RequiredLabel label="Cost ROE" required={false} />
+                </Grid.Col>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Cost/Unit" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Total Cost" required={false} />
                 </Grid.Col>
-                <Grid.Col span={0.75}>
+                <Grid.Col span={0.7}>
                   <RequiredLabel label="Local Amount" required={false} />
                 </Grid.Col>
-                <Grid.Col span={1.1}>
+                <Grid.Col span={0.9}>
                   <RequiredLabel label="Supplier" required={false} />
                 </Grid.Col>
                 <Grid.Col span={0.5}>
@@ -5257,7 +5361,7 @@ function HouseCreate() {
 
               {chargesForm.values.charges.map((charge, index) => (
                 <Grid key={index} gutter="sm" mb="xs">
-                  <Grid.Col span={1.4}>
+                  <Grid.Col span={1.2}>
                     <SearchableSelect
                       placeholder="Type charge name"
                       apiEndpoint={URL.chargeMaster}
@@ -5352,7 +5456,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.9}>
+                  <Grid.Col span={0.8}>
                     <Dropdown
                       placeholder="PP/CC"
                       searchable
@@ -5380,7 +5484,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.pp_cc}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.2}>
+                  <Grid.Col span={1}>
                     <Dropdown
                       placeholder="Select Unit"
                       searchable
@@ -5411,7 +5515,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.8}>
+                  <Grid.Col span={0.7}>
                     <Dropdown
                       placeholder="Select Currency"
                       searchable
@@ -5579,7 +5683,7 @@ function HouseCreate() {
                       })()}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="Amount/Unit"
                       min={0}
@@ -5624,7 +5728,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount_per_unit}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="Amount"
                       min={0}
@@ -5649,7 +5753,7 @@ function HouseCreate() {
                       error={chargeErrors[index]?.amount}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="Local Amount"
                       min={0}
@@ -5665,7 +5769,92 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
+                    <Dropdown
+                      placeholder="Select Currency"
+                      searchable
+                      data={currencyOptions}
+                      value={charge.cost_currency_id || null}
+                      onChange={(value) => {
+                        const currencyId = value ?? "";
+                        const code =
+                          currencyOptions.find((o) => o.value === currencyId)?.label ?? "";
+                        chargesForm.setFieldValue(
+                          `charges.${index}.cost_currency_id`,
+                          currencyId,
+                        );
+                        chargesForm.setFieldValue(`charges.${index}.cost_currency`, code);
+                        if (isBaseCurrency(code)) {
+                          chargesForm.setFieldValue(`charges.${index}.cost_roe`, 1);
+                        } else {
+                          void ensureRoeForCurrency(code).then((roe) => {
+                            chargesForm.setFieldValue(`charges.${index}.cost_roe`, roe);
+                          });
+                        }
+                      }}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.6}>
+                    <FormNumberInput
+                      placeholder="ROE"
+                      min={0}
+                      hideControls
+                      decimalScale={ROE_DECIMAL_PLACES}
+                      readOnly={isChargeBaseCurrencyFor(
+                        {
+                          currency: charge.cost_currency,
+                          currency_id: charge.cost_currency_id,
+                        },
+                        (currencyData ?? []) as {
+        id?: number;
+        code?: string;
+        currency_code?: string;
+      }[],
+                      )}
+                      value={charge.cost_roe || undefined}
+                      onChange={(value) => {
+                        const costCharge = {
+                          currency: charge.cost_currency,
+                          currency_id: charge.cost_currency_id,
+                        };
+                        const currencyArr = (currencyData ?? []) as {
+        id?: number;
+        code?: string;
+        currency_code?: string;
+      }[];
+                        if (isChargeBaseCurrencyFor(costCharge, currencyArr)) {
+                          chargesForm.setFieldValue(`charges.${index}.cost_roe`, 1);
+                          return;
+                        }
+                        const roe = value as number | null;
+                        chargesForm.setFieldValue(`charges.${index}.cost_roe`, roe);
+                        const roeError = validateRoeField(
+                          resolveCurrencyCode(costCharge, currencyArr),
+                          roe,
+                          charge.cost_currency_id,
+                        );
+                        if (roeError) {
+                          setChargeErrors((prev) => ({
+                            ...prev,
+                            [index]: { ...(prev[index] ?? {}), cost_roe: roeError },
+                          }));
+                        } else {
+                          setChargeErrors((prev) => {
+                            if (!prev[index]?.cost_roe) return prev;
+                            const newErrors = { ...prev };
+                            if (newErrors[index]) {
+                              delete newErrors[index].cost_roe;
+                              if (Object.keys(newErrors[index]).length === 0)
+                                delete newErrors[index];
+                            }
+                            return newErrors;
+                          });
+                        }
+                      }}
+                      error={chargeErrors[index]?.cost_roe}
+                    />
+                  </Grid.Col>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="Cost/Unit"
                       min={0}
@@ -5698,7 +5887,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="Total Cost"
                       min={0}
@@ -5714,7 +5903,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={0.75}>
+                  <Grid.Col span={0.7}>
                     <FormNumberInput
                       placeholder="Local Amount"
                       min={0}
@@ -5730,7 +5919,7 @@ function HouseCreate() {
                       }}
                     />
                   </Grid.Col>
-                  <Grid.Col span={1.1}>
+                  <Grid.Col span={0.9}>
                     <SearchableSelect
                       placeholder="Type supplier"
                       apiEndpoint={ESTIMATE_SUPPLIER_ENDPOINT}
@@ -5785,6 +5974,7 @@ function HouseCreate() {
                             unit_id: "",
                             no_of_unit: null,
                             ...branchCurrencyDefaults,
+                            ...branchCostCurrencyDefaults,
                             amount_per_unit: null,
                             amount: null,
                             local_amount: null,
@@ -5815,7 +6005,11 @@ function HouseCreate() {
               ))}
 
               <ChargesLocalAmountTotalsRow
-                offsetBeforeSellCol={7.1}
+                offsetBeforeSellCol={6.3}
+                amountColSpan={0.7}
+                sellColSpan={0.7}
+                middleColSpan={2.7}
+                costColSpan={0.7}
                 house={{
                   charges: getMeaningfulHouseCharges(
                     chargesForm.values.charges,

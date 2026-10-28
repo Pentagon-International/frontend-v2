@@ -1,3 +1,4 @@
+import { resolveHouseChargeCostFx } from "../../../utils/exchangeRateRoe";
 import {
   Box,
   Button,
@@ -587,6 +588,9 @@ type HousingDetail = HouseDocumentFields & {
     currency_id?: string;
     currency: string;
     roe: number | null;
+    cost_currency_id?: string;
+    cost_currency?: string;
+    cost_roe?: number | null;
     amount_per_unit: number | null;
     amount: number | null;
     sell_local_amount?: number | null;
@@ -1798,6 +1802,20 @@ function ImportJobCreate() {
                         return "";
                       })(),
                       roe: roundRoeForPayload(charge.roe) ?? null,
+                      ...resolveHouseChargeCostFx(charge, {
+                        currency_id:
+                          charge.currency_id != null
+                            ? String(charge.currency_id)
+                            : "",
+                        currency: String(
+                          charge.currency_code ??
+                            (charge.currency != null &&
+                            !/^\d+$/.test(String(charge.currency))
+                              ? charge.currency
+                              : ""),
+                        ),
+                        roe: roundRoeForPayload(charge.roe) ?? null,
+                      }),
                       amount_per_unit:
                         charge.amount_per_unit != null
                           ? typeof charge.amount_per_unit === "string"
@@ -1969,6 +1987,11 @@ function ImportJobCreate() {
                                 : null,
                             currency: currencyCode,
                             roe: roeValue,
+                            ...resolveHouseChargeCostFx(charge, {
+                              currency_id: currencyIdFromApi,
+                              currency: currencyCode,
+                              roe: roeValue,
+                            }),
                             amount_per_unit: amountPerUnit,
                             amount: amount,
                             sell_local_amount: sellLocal,
@@ -4678,6 +4701,12 @@ function ImportJobCreate() {
                     : null,
               no_of_unit: parseNoOfUnitForPayload(charge.no_of_unit),
               roe: roundRoeForPayload(charge.roe as number | string) ?? null,
+              cost_currency_id:
+                charge.cost_currency_id != null && charge.cost_currency_id !== ""
+                  ? Number(charge.cost_currency_id)
+                  : null,
+              cost_roe:
+                roundRoeForPayload(charge.cost_roe as number | string) ?? null,
               amount_per_unit:
                 roundMoneyToDecimals(
                   charge.amount_per_unit as number | string,
@@ -7253,10 +7282,8 @@ function ImportJobCreate() {
                                     : null,
                                 charge_name: toStr(cr.charge_name),
                                 currency_id:
-                                  (cr as any).currency_id ??
-                                  (cr as any).currency ??
-                                  null,
-                                roe: (cr as any).roe ?? null,
+                                  (cr as any).cost_currency_id ?? null,
+                                roe: (cr as any).cost_roe ?? null,
                                 amount:
                                   resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr((cr as any).supplier_code),
@@ -7356,10 +7383,8 @@ function ImportJobCreate() {
                                     : null,
                                 charge_name: toStr(cr.charge_name),
                                 currency_id:
-                                  (cr as any).currency_id ??
-                                  (cr as any).currency ??
-                                  null,
-                                roe: (cr as any).roe ?? null,
+                                  (cr as any).cost_currency_id ?? null,
+                                roe: (cr as any).cost_roe ?? null,
                                 amount:
                                   resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr((cr as any).supplier_code),

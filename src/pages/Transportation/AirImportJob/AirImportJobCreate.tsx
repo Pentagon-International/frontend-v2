@@ -1,3 +1,4 @@
+import { resolveHouseChargeCostFx } from "../../../utils/exchangeRateRoe";
 import {
   Box,
   Button,
@@ -359,6 +360,9 @@ type HAWBDetail = HouseDocumentFields & {
     currency_id?: string;
     currency?: string;
     roe: number | null;
+    cost_currency_id?: string;
+    cost_currency?: string;
+    cost_roe?: number | null;
     amount_per_unit: number | null;
     amount: number | null;
     // New payload fields (edit flow + submit payload)
@@ -1458,6 +1462,11 @@ function AirImportJobCreate() {
                   currency,
                   no_of_unit: toNum(charge.no_of_unit),
                   roe: toNum(charge.roe),
+                  ...resolveHouseChargeCostFx(charge, {
+                    currency_id: currencyId,
+                    currency,
+                    roe: toNum(charge.roe),
+                  }),
                   amount_per_unit: toNum(charge.amount_per_unit),
                   amount: toNum(charge.amount),
                   sell_local_amount: toNum(
@@ -4161,6 +4170,17 @@ function AirImportJobCreate() {
                         string | number | null | undefined,
                     )
                   : null,
+              cost_currency_id:
+                charge.cost_currency_id != null && charge.cost_currency_id !== ""
+                  ? Number(charge.cost_currency_id)
+                  : null,
+              cost_roe:
+                charge.cost_roe != null
+                  ? roundRoeForPayload(
+                      charge.cost_roe as unknown as
+                        string | number | null | undefined,
+                    )
+                  : null,
               amount_per_unit:
                 charge.amount_per_unit != null
                   ? roundMoneyToDecimals(
@@ -6269,11 +6289,11 @@ function AirImportJobCreate() {
                                     : null,
                                 charge_name: toStr(cr.charge_name),
                                 currency_id:
-                                  (cr as { currency_id?: unknown })
-                                    .currency_id ??
-                                  (cr as { currency?: unknown }).currency ??
+                                  (cr as { cost_currency_id?: unknown })
+                                    .cost_currency_id ?? null,
+                                roe:
+                                  (cr as { cost_roe?: unknown }).cost_roe ??
                                   null,
-                                roe: cr.roe ?? null,
                                 amount:
                                   resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr(cr.supplier_code),
@@ -6403,11 +6423,11 @@ function AirImportJobCreate() {
                                     : null,
                                 charge_name: toStr(cr.charge_name),
                                 currency_id:
-                                  (cr as { currency_id?: unknown })
-                                    .currency_id ??
-                                  (cr as { currency?: unknown }).currency ??
+                                  (cr as { cost_currency_id?: unknown })
+                                    .cost_currency_id ?? null,
+                                roe:
+                                  (cr as { cost_roe?: unknown }).cost_roe ??
                                   null,
-                                roe: cr.roe ?? null,
                                 amount:
                                   resolveSupplierInvoiceHouseCostAmount(cr),
                                 supplier_code: toStr(cr.supplier_code),

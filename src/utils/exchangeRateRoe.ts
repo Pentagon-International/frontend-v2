@@ -55,14 +55,92 @@ export function getBranchCurrencyDefaults(
   };
 }
 
-/** Default currency + ROE for new booking charge rows (active branch currency). */
+/** Default cost currency/ROE for new house charge rows (sell side uses getBranchCurrencyDefaults). */
+export function getBranchCostCurrencyDefaults(
+  branchCurrencyId: string,
+  branchCurrencyCode: string,
+): {
+  cost_currency_id: string;
+  cost_currency: string;
+  cost_roe: number | null;
+} {
+  const hasBranch = Boolean(
+    String(branchCurrencyId).trim() || String(branchCurrencyCode).trim(),
+  );
+  return {
+    cost_currency_id: branchCurrencyId,
+    cost_currency: branchCurrencyCode,
+    cost_roe: hasBranch ? 1 : null,
+  };
+}
+
+const toChargeFxNumber = (v: unknown): number | null => {
+  if (v == null || v === "") return null;
+  if (typeof v === "number") return Number.isNaN(v) ? null : v;
+  const n = parseFloat(String(v));
+  return Number.isNaN(n) ? null : n;
+};
+
+/**
+ * Map API house charge cost currency/ROE → form fields.
+ * Cost fields only — never copy sell currency/ROE into cost.
+ */
+export function resolveHouseChargeCostFx(
+  charge: Record<string, unknown>,
+  _sell?: { currency_id?: string; currency?: string; roe?: number | null },
+  currencyData: CurrencyMasterItem[] = [],
+): {
+  cost_currency_id: string;
+  cost_currency: string;
+  cost_roe: number | null;
+} {
+  const rawCurrency =
+    charge.cost_currency != null ? String(charge.cost_currency).trim() : "";
+  const rawIdField =
+    charge.cost_currency_id != null && charge.cost_currency_id !== ""
+      ? String(charge.cost_currency_id).trim()
+      : "";
+  let costId = rawIdField || (/^\d+$/.test(rawCurrency) ? rawCurrency : "");
+  let costCode = String(
+    charge.cost_currency_code ??
+      charge.cost_currency_country_code ??
+      (rawCurrency && !/^\d+$/.test(rawCurrency) ? rawCurrency : ""),
+  ).trim();
+
+  if (!costCode && costId) {
+    const match = currencyData.find((c) => String(c.id) === costId);
+    costCode = String(match?.currency_code ?? match?.code ?? "").trim();
+  }
+  if (!costId && costCode) {
+    const match = currencyData.find(
+      (c) => (c.currency_code ?? c.code ?? "") === costCode,
+    );
+    if (match?.id != null) costId = String(match.id);
+  }
+
+  return {
+    cost_currency_id: costId,
+    cost_currency: costCode,
+    cost_roe: toChargeFxNumber(charge.cost_roe),
+  };
+}
+
+/** Default sell + cost currency/ROE for new booking/quotation charge rows (active branch currency). */
 export function getDefaultBookingChargeCurrencyFields(
   branches?: BranchCurrencyLike[],
-): { currency_country_code: string; roe: string } {
+): {
+  currency_country_code: string;
+  roe: string;
+  cost_currency_country_code: string;
+  cost_roe: string;
+} {
   const { branchCurrencyCode } = getDefaultBranchCurrencyFromUser(branches);
+  const roe = branchCurrencyCode ? "1" : "";
   return {
     currency_country_code: branchCurrencyCode,
-    roe: branchCurrencyCode ? "1" : "",
+    roe,
+    cost_currency_country_code: branchCurrencyCode,
+    cost_roe: roe,
   };
 }
 

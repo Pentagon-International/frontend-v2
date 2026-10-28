@@ -599,6 +599,9 @@ type QuotationCharge = {
   pp_cc?: string | null;
   currency: string;
   roe: number;
+  cost_currency?: string | null;
+  cost_currency_country_code?: string | null;
+  cost_roe?: number | string | null;
   no_of_units: number;
   unit: string;
   sell_per_unit: number;
@@ -702,6 +705,8 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
       pp_cc: string;
       currency_country_code: string;
       roe: number | "";
+      cost_currency_country_code: string;
+      cost_roe: number | "";
       unit: string;
       no_of_units: number | "";
       sell_per_unit: number | "";
@@ -1090,14 +1095,16 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             field === "no_of_units" ||
             field === "unit" ||
             field === "cost_per_unit" ||
-            field === "roe"
+            field === "cost_roe"
           ) {
             const noOfUnits = parseFloat(updatedCharge.no_of_units) || 0;
             const costPerUnit = parseFloat(updatedCharge.cost_per_unit) || 0;
-            const roe = parseFloat(updatedCharge.roe) || 1;
+            const costRoe =
+              parseFloat(String(updatedCharge.cost_roe)) ||
+              1;
 
             updatedCharge.total_cost = formatMoneyAmountBound(
-              noOfUnits * costPerUnit * roe,
+              noOfUnits * costPerUnit * costRoe,
             );
           }
 
@@ -2017,6 +2024,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           pp_cc: charge.pp_cc ? String(charge.pp_cc) : "Prepaid",
           currency_country_code: String(charge.currency || ""),
           roe: charge.roe ? String(charge.roe) : "",
+          cost_currency_country_code: String(
+            charge.cost_currency_country_code ||
+              charge.cost_currency ||
+              "",
+          ),
+          cost_roe: charge.cost_roe != null && charge.cost_roe !== ""
+            ? String(charge.cost_roe)
+            : "",
           unit: String(charge.unit || ""),
           no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
           sell_per_unit: charge.sell_per_unit
@@ -2466,6 +2481,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
           charge.currency_country_code ?? charge.currency ?? "",
         ),
         roe: charge.roe != null ? String(charge.roe) : "",
+        cost_currency_country_code: String(
+          charge.cost_currency_country_code ||
+            charge.cost_currency ||
+            "",
+        ),
+        cost_roe: charge.cost_roe != null && charge.cost_roe !== ""
+          ? String(charge.cost_roe)
+          : "",
         unit: String(charge.unit ?? ""),
         no_of_units:
           charge.no_of_units != null ? String(charge.no_of_units) : "",
@@ -2816,6 +2839,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
               charge.currency_country_code || charge.currency || "",
             ),
             roe: charge.roe ? String(charge.roe) : "",
+            cost_currency_country_code: String(
+              charge.cost_currency_country_code ||
+                charge.cost_currency ||
+                "",
+            ),
+            cost_roe: charge.cost_roe != null && charge.cost_roe !== ""
+              ? String(charge.cost_roe)
+              : "",
             unit: String(charge.unit || ""),
             no_of_units: charge.no_of_units ? String(charge.no_of_units) : "",
             sell_per_unit: charge.sell_per_unit
@@ -3299,6 +3330,9 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
             pp_cc: charge.pp_cc || "",
             currency_country_code: charge.currency_country_code,
             roe: roundRoeForPayload(charge.roe) ?? 1,
+            cost_currency_country_code:
+              charge.cost_currency_country_code || "",
+            cost_roe: roundRoeForPayload(charge.cost_roe) ?? null,
             unit: charge.unit,
             no_of_units: parseNoOfUnitForPayload(charge.no_of_units) ?? 0,
             sell_per_unit:
@@ -6572,6 +6606,14 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                                   charge.currency || "",
                                 ),
                                 roe: charge.roe ? String(charge.roe) : "",
+                                cost_currency_country_code: String(
+                                  charge.cost_currency_country_code ||
+                                    charge.cost_currency ||
+                                    "",
+                                ),
+                                cost_roe: charge.cost_roe != null && charge.cost_roe !== ""
+                                  ? String(charge.cost_roe)
+                                  : "",
                                 unit: String(charge.unit || ""),
                                 no_of_units: charge.no_of_units
                                   ? String(charge.no_of_units)
@@ -6646,40 +6688,46 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                     }}
                     gutter="sm"
                   >
-                    <Grid.Col span={1.5}>
+                    <Grid.Col span={1.2}>
                       <RequiredLabel label="Charge Name" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={0.95}>
+                    <Grid.Col span={0.85}>
                       <RequiredLabel label="PP/CC" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
-                      <RequiredLabel label="Currency" required={false} />
+                    <Grid.Col span={0.75}>
+                      <RequiredLabel label="Sell Currency" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
-                      <RequiredLabel label="ROE" required={false} />
+                    <Grid.Col span={0.6}>
+                      <RequiredLabel label="Sell ROE" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.9}>
                       <RequiredLabel label="Unit" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={0.8}>
+                    <Grid.Col span={0.65}>
                       <RequiredLabel label="No of Units" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.85}>
                       <RequiredLabel label="Sell Per Unit" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.8}>
                       <RequiredLabel label="Min Sell" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.75}>
+                      <RequiredLabel label="Cost Currency" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.6}>
+                      <RequiredLabel label="Cost ROE" required={false} />
+                    </Grid.Col>
+                    <Grid.Col span={0.85}>
                       <RequiredLabel label="Cost Per Unit" required={false} />
                     </Grid.Col>
-                    <Grid.Col span={1}>
+                    <Grid.Col span={0.9}>
                       <RequiredLabel
                         label={`Total Sell (${defaultCurrency})`}
                         required={false}
                       />
                     </Grid.Col>
-                    <Grid.Col span={1.05}>
+                    <Grid.Col span={0.9}>
                       <RequiredLabel
                         label={`Total Cost (${defaultCurrency})`}
                         required={false}
@@ -6693,7 +6741,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                 {charges.map((charge, index) => (
                   <Box key={`charge-row-${index}`}>
                     <Grid gutter="sm">
-                      <Grid.Col span={1.5}>
+                      <Grid.Col span={1.2}>
                         <SearchableSelect
                           apiEndpoint={URL.chargeMaster}
                           placeholder="Charge Name"
@@ -6754,7 +6802,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           }}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.85}>
                         <Dropdown
                           placeholder="Prepaid/Collect"
                           searchable
@@ -6766,7 +6814,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.8}>
+                      <Grid.Col span={0.75}>
                         <Dropdown
                           placeholder="Select Currency"
                           searchable
@@ -6782,7 +6830,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.8}>
+                      <Grid.Col span={0.6}>
                         <FormNumberInput
                           placeholder="ROE"
                           value={charge.roe}
@@ -6801,7 +6849,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           decimalScale={ROE_DECIMAL_PLACES}
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <Dropdown
                           placeholder="Select Unit"
                           searchable
@@ -6816,7 +6864,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={0.8}>
+                      <Grid.Col span={0.65}>
                         <FormNumberInput
                           placeholder="0"
                           {...HOUSE_CARGO_WEIGHT_NUMBER_INPUT_PROPS}
@@ -6827,7 +6875,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.85}>
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.sell_per_unit}
@@ -6838,7 +6886,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.8}>
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.min_sell}
@@ -6849,7 +6897,38 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.75}>
+                        <Dropdown
+                          placeholder="Select Currency"
+                          searchable
+                          value={charge.cost_currency_country_code}
+                          onChange={(value) =>
+                            bookingRoe.handleCostCurrencyChange(
+                              index,
+                              value || "",
+                              updateCharge,
+                            )
+                          }
+                          data={currencyOptions}
+                          size="xs"
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.6}>
+                        <FormNumberInput
+                          placeholder="ROE"
+                          value={charge.cost_roe}
+                          readOnly={bookingRoe.isChargeBaseCurrency(
+                            charge.cost_currency_country_code,
+                          )}
+                          onChange={(val) =>
+                            bookingRoe.handleCostRoeChange(index, val || "", updateCharge)
+                          }
+                          error={bookingRoe.costChargeRoeErrors[index]}
+                          size="xs"
+                          decimalScale={ROE_DECIMAL_PLACES}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={0.85}>
                         <FormNumberInput
                           placeholder="0.00"
                           value={charge.cost_per_unit}
@@ -6860,7 +6939,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <FormNumberInput
                           value={charge.total_sell || ""}
                           decimalScale={localAmountDecimalScale}
@@ -6869,7 +6948,7 @@ const AirExportBookingStepper: React.FC<ExportShipmentStepperProps> = ({
                           size="xs"
                         />
                       </Grid.Col>
-                      <Grid.Col span={1}>
+                      <Grid.Col span={0.9}>
                         <FormNumberInput
                           value={charge.total_cost || ""}
                           decimalScale={localAmountDecimalScale}

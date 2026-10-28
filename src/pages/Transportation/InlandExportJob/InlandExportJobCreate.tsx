@@ -1,3 +1,4 @@
+import { resolveHouseChargeCostFx } from "../../../utils/exchangeRateRoe";
 import {
   Box,
   Button,
@@ -325,6 +326,9 @@ type HAWBDetail = HouseDocumentFields & {
     currency_id?: string;
     currency: string;
     roe: number | null;
+    cost_currency_id?: string;
+    cost_currency?: string;
+    cost_roe?: number | null;
     amount_per_unit: number | null;
     amount: number | null;
     local_amount?: number | null;
@@ -1481,6 +1485,11 @@ function InlandExportJobCreate() {
                       currency,
                       no_of_unit: toNum(charge.no_of_unit),
                       roe: toNum(charge.roe),
+                      ...resolveHouseChargeCostFx(charge, {
+                        currency_id: currencyId,
+                        currency,
+                        roe: toNum(charge.roe),
+                      }),
                       amount_per_unit: toNum(charge.amount_per_unit),
                       amount: toNum(charge.amount),
                       sell_local_amount: toNum(
@@ -2986,6 +2995,10 @@ function InlandExportJobCreate() {
               no_of_unit: roundToDecimals(charge.no_of_unit) || null,
               currency_id: charge.currency_id ? String(charge.currency_id) : "",
               roe: roundRoeForPayload(charge.roe) ?? null,
+              cost_currency_id: charge.cost_currency_id
+                ? String(charge.cost_currency_id)
+                : "",
+              cost_roe: roundRoeForPayload(charge.cost_roe) ?? null,
               amount_per_unit:
                 roundMoneyToDecimals(charge.amount_per_unit) ?? null,
               amount: roundMoneyToDecimals(charge.amount) ?? null,
@@ -4540,10 +4553,8 @@ function InlandExportJobCreate() {
                                       : null,
                                   charge_name: toStr(cr.charge_name),
                                   currency_id:
-                                    (cr as any).currency_id ??
-                                    (cr as any).currency ??
-                                    null,
-                                  roe: (cr as any).roe ?? null,
+                                    (cr as any).cost_currency_id ?? null,
+                                  roe: (cr as any).cost_roe ?? null,
                                   amount:
                                     resolveSupplierInvoiceHouseCostAmount(cr),
                                   supplier_code: toStr(
@@ -4649,10 +4660,8 @@ function InlandExportJobCreate() {
                                       : null,
                                   charge_name: toStr(cr.charge_name),
                                   currency_id:
-                                    (cr as any).currency_id ??
-                                    (cr as any).currency ??
-                                    null,
-                                  roe: (cr as any).roe ?? null,
+                                    (cr as any).cost_currency_id ?? null,
+                                  roe: (cr as any).cost_roe ?? null,
                                   amount:
                                     resolveSupplierInvoiceHouseCostAmount(cr),
                                   supplier_code: toStr(

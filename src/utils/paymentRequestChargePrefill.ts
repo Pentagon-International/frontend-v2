@@ -12,6 +12,11 @@ export type ChargeSourceForPrqPrefill = {
   currency_code?: string;
   currency_id?: string | number | null;
   roe?: number | null;
+  /** House charges: cost-side FX (PRQ uses cost only — no sell fallback). */
+  cost_currency?: string;
+  cost_currency_code?: string;
+  cost_currency_id?: string | number | null;
+  cost_roe?: number | null;
   unit_code?: string;
   unit?: string;
   unit_id?: string | number | null;
@@ -503,9 +508,33 @@ export function mapChargeToPaymentRequestPrefill(
   options?: { source?: PaymentRequestPrefillSource },
 ): Record<string, unknown> {
   const source = options?.source ?? "house";
-  const roe = toNumOrNull(charge.roe);
+  // PRQ is cost-side:
+  // - house: cost_currency_* / cost_roe only (never sell FX)
+  // - estimate: single currency_id/roe on the row are already cost-only
+  const costCurrencyLabel =
+    source === "estimate"
+      ? String(charge.currency_code ?? charge.currency ?? "").trim()
+      : String(
+          charge.cost_currency_code ??
+            (charge.cost_currency != null &&
+            !/^\d+$/.test(String(charge.cost_currency))
+              ? charge.cost_currency
+              : ""),
+        ).trim();
+  const roe =
+    source === "estimate"
+      ? toNumOrNull(charge.roe)
+      : toNumOrNull(charge.cost_roe);
   const noOfUnit = toNumOrNull(charge.no_of_unit ?? charge.no_of_units);
   const amountPerUnit = resolvePrqCostPerUnit(charge);
+  const costCurrencyId =
+    source === "estimate"
+      ? charge.currency_id != null && String(charge.currency_id) !== ""
+        ? charge.currency_id
+        : null
+      : charge.cost_currency_id != null && String(charge.cost_currency_id) !== ""
+        ? charge.cost_currency_id
+        : null;
 
   const base = {
     charge_id: charge.charge_id ?? null,
@@ -514,8 +543,8 @@ export function mapChargeToPaymentRequestPrefill(
     job_no: context.job_no,
     sub_job: context.sub_job ?? "",
     cn_r: context.cn_r ?? "",
-    currency: charge.currency_code ?? charge.currency ?? "",
-    currency_id: charge.currency_id ?? "",
+    currency: costCurrencyLabel,
+    currency_id: costCurrencyId ?? "",
     roe,
     unit_code: charge.unit_code ?? charge.unit ?? "",
     unit_id: charge.unit_id ?? "",

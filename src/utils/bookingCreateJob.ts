@@ -664,6 +664,31 @@ function resolveJobUnitFromBookingRow(row: Record<string, unknown>): {
   return { unit_id: null, unit_code: explicitCode || rawStr };
 }
 
+/**
+ * Cost-side currency/ROE for a booking rate row (cost fields only — no sell fallback).
+ */
+function resolveBookingRowCostFx(row: Record<string, unknown>): {
+  hasCostCurrency: boolean;
+  cost_currency_id: string | number;
+  cost_currency: string;
+  cost_roe: number | null;
+} {
+  const rawId =
+    row.cost_currency_id != null && row.cost_currency_id !== ""
+      ? row.cost_currency_id
+      : null;
+  const rawCode = String(
+    row.cost_currency_code ?? row.cost_currency_country_code ?? "",
+  ).trim();
+  const hasCostCurrency = rawId != null || rawCode !== "";
+  return {
+    hasCostCurrency,
+    cost_currency_id: (rawId as string | number | null) ?? "",
+    cost_currency: rawCode,
+    cost_roe: toNumberOrNull(row.cost_roe),
+  };
+}
+
 /** Map booking quotation/rate lines to job master-level estimates (FCL Export). */
 function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
   const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
@@ -671,6 +696,9 @@ function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
     const row = c as Record<string, unknown>;
     const chargeId = row.charge_id != null ? Number(row.charge_id) : null;
     const { unit_id, unit_code } = resolveJobUnitFromBookingRow(row);
+    // Estimates are cost-only: use booking cost currency/ROE only.
+    const costFx = resolveBookingRowCostFx(row);
+    const costCurrencyIdNum = toNumberOrNull(costFx.cost_currency_id);
     return {
       supplier_code: null,
       charge_id: chargeId != null && !Number.isNaN(chargeId) ? chargeId : null,
@@ -680,13 +708,8 @@ function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
       no_of_unit:
         parseNoOfUnitForPayload(row.no_of_units) ??
         parseNoOfUnitForPayload(row.no_of_unit),
-      currency_id:
-        row.currency_id != null
-          ? Number(row.currency_id)
-          : row.currency_country_code != null
-            ? Number(row.currency_country_code)
-            : null,
-      roe: toNumberOrNull(row.roe) ?? 1,
+      currency_id: costCurrencyIdNum,
+      roe: costFx.cost_roe,
       cost_per_unit:
         toMoneyOrNull(row.cost_per_unit) ?? toMoneyOrNull(row.sell_per_unit),
       total_cost:
@@ -766,6 +789,8 @@ function mapHouseChargesFromBooking(
     const sellPerUnit = toMoneyOrNull(row.sell_per_unit);
     const minSell = toMoneyOrNull(row.min_sell);
     const roe = row.roe ?? "";
+    const costFx = resolveBookingRowCostFx(row);
+    const costRoe = costFx.cost_roe;
 
     // Currency sell: units × sell_per_unit (never use booking.total_sell — that is local).
     let currencySell: number | null = null;
@@ -813,7 +838,7 @@ function mapHouseChargesFromBooking(
     const costLocalAmount = includeCost
       ? bookingTotalCost != null && bookingTotalCost > 0
         ? roundLocalChargeAmount(bookingTotalCost)
-        : costLocalAmountForPayload(totalCost, roe)
+        : costLocalAmountForPayload(totalCost, costRoe)
       : "";
 
     return {
@@ -830,6 +855,9 @@ function mapHouseChargesFromBooking(
       amount_per_unit: amountPerUnit,
       currency_id: row.currency_id || "",
       roe,
+      // Numeric FK only (like currency_id) — code strings fail MblChargesSerializer
+      cost_currency_id: costFx.cost_currency_id,
+      cost_roe: costRoe,
       sell_local_amount: sellLocalAmount,
       total_cost: totalCost,
       unit_cost: unitCost,

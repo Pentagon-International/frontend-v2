@@ -4,6 +4,7 @@ import {
   type CurrencyMasterItem,
   fetchExchangeRateMaster,
   getBranchCurrencyDefaults,
+  getBranchCostCurrencyDefaults,
   isChargeBaseCurrency,
   isChargeBranchCurrency,
   resolveChargeCurrencyCode,
@@ -181,6 +182,15 @@ export function useExchangeRateRoe() {
     [defaultBranchCurrencyId, defaultBranchCurrency],
   );
 
+  const getBranchCostCurrencyDefaultsForForm = useCallback(
+    () =>
+      getBranchCostCurrencyDefaults(
+        defaultBranchCurrencyId,
+        defaultBranchCurrency,
+      ),
+    [defaultBranchCurrencyId, defaultBranchCurrency],
+  );
+
   return {
     defaultBranchCurrency,
     defaultBranchCurrencyId,
@@ -192,6 +202,7 @@ export function useExchangeRateRoe() {
     validateRoeToast,
     resolveCurrencyCode,
     getBranchCurrencyDefaults: getBranchCurrencyDefaultsForForm,
+    getBranchCostCurrencyDefaults: getBranchCostCurrencyDefaultsForForm,
     roeCacheRef,
     ROE_CANNOT_BE_ONE_FIELD,
     ROE_CANNOT_BE_ONE_TOAST,

@@ -66,8 +66,9 @@ export function buildHouseSupplierInvoicePrefill(
         shipment_no: houseShipmentNo,
         charge_id: c.charge_id != null ? Number(c.charge_id) : null,
         charge_name: toStr(c.charge_name),
-        currency_id: c.currency_id ?? c.currency ?? null,
-        roe: c.roe ?? null,
+        // Cost-side FX only (never sell currency/roe)
+        currency_id: c.cost_currency_id ?? null,
+        roe: c.cost_roe ?? null,
         amount: resolveSupplierInvoiceHouseCostAmount(c),
         supplier_code: toStr(c.supplier_code),
         supplier_name: toStr(c.supplier_name),

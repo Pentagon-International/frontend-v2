@@ -354,6 +354,15 @@ function mapHouseChargeForPayload(
       charge.roe != null
         ? roundRoeForPayload(charge.roe as number | string | null)
         : null,
+    ...(charge.cost_currency_id != null || charge.cost_roe != null
+      ? {
+          cost_currency_id: toPk(charge.cost_currency_id),
+          cost_roe:
+            charge.cost_roe != null
+              ? roundRoeForPayload(charge.cost_roe as number | string | null)
+              : null,
+        }
+      : {}),
     amount_per_unit:
       charge.amount_per_unit != null
         ? roundMoneyToDecimals(charge.amount_per_unit)

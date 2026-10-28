@@ -9,6 +9,9 @@ export type HouseChargeLike = {
   currency_id?: string | number | null;
   currency?: string;
   roe?: number | null;
+  cost_currency_id?: string | number | null;
+  cost_currency?: string;
+  cost_roe?: number | null;
   amount_per_unit?: number | null;
   amount?: number | null;
   sell_local_amount?: number | null;
@@ -109,6 +112,8 @@ export function validateMeaningfulHouseCharges(
   options?: {
     roeCannotBeOneField?: string;
     roeCannotBeOneToast?: string;
+    /** Validates cost ROE for rows that have a cost currency set. */
+    validateCostRoe?: HouseChargeRoeValidator;
   },
 ): HouseChargeValidationResult {
   const errors: Record<number, Record<string, string>> = {};
@@ -150,6 +155,31 @@ export function validateMeaningfulHouseCharges(
           !roeToastMessage
         ) {
           roeToastMessage = options.roeCannotBeOneToast;
+        }
+      }
+    }
+    // Cost currency/ROE (validate only when cost currency is set — no sell fallback).
+    if (
+      options?.validateCostRoe &&
+      charge.cost_currency_id != null &&
+      String(charge.cost_currency_id).trim() !== ""
+    ) {
+      if (charge.cost_roe === null || charge.cost_roe === undefined) {
+        chargeError.cost_roe = "ROE is required";
+        hasErrors = true;
+      } else {
+        const costRoeRuleError = options.validateCostRoe(charge, index);
+        if (costRoeRuleError) {
+          chargeError.cost_roe = costRoeRuleError;
+          hasErrors = true;
+          if (
+            options?.roeCannotBeOneField &&
+            options?.roeCannotBeOneToast &&
+            costRoeRuleError === options.roeCannotBeOneField &&
+            !roeToastMessage
+          ) {
+            roeToastMessage = options.roeCannotBeOneToast;
+          }
         }
       }
     }
