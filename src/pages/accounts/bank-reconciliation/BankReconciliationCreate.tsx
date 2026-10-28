@@ -8,6 +8,7 @@ import {
   Grid,
   Group,
   Loader,
+  Modal,
   NumberInput,
   Select,
   Stack,
@@ -557,6 +558,7 @@ export default function BankReconciliationCreate() {
   const appliedRecordIdRef = useRef<number | null>(null);
   // const [fileInputKey, setFileInputKey] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [localBankConfirmOpen, setLocalBankConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [saveResponse, setSaveResponse] =
@@ -906,7 +908,7 @@ export default function BankReconciliationCreate() {
   //   form.setFieldValue("file_name", file?.name ?? "");
   // };
 
-  const handleGetDetail = async () => {
+  const handleGetDetailClick = () => {
     const accountCode = form.values.bank_account_code.trim();
     if (!accountCode) {
       ToastNotification({
@@ -922,11 +924,18 @@ export default function BankReconciliationCreate() {
       });
       return;
     }
+    setLocalBankConfirmOpen(true);
+  };
 
+  const handleGetDetail = async (overseas: boolean) => {
+    setLocalBankConfirmOpen(false);
+
+    const accountCode = form.values.bank_account_code.trim();
     const payload = {
       account_code: accountCode,
       subledger: form.values.bank_account_sub_code.trim() || "0",
       as_on_date: formatDateYYYYMMDD(form.values.date),
+      overseas,
     };
 
     setDetailLoading(true);
@@ -1511,7 +1520,7 @@ export default function BankReconciliationCreate() {
         <Group gap="md" wrap="wrap" align="center">
           <Button
             variant="default"
-            onClick={() => void handleGetDetail()}
+            onClick={handleGetDetailClick}
             loading={detailLoading}
             disabled={isReadOnly}
             leftSection={detailLoading ? <Loader size={14} /> : undefined}
@@ -1836,6 +1845,38 @@ export default function BankReconciliationCreate() {
             </Button>
           )}
       </Group>
+
+      <Modal
+        opened={localBankConfirmOpen}
+        onClose={() => setLocalBankConfirmOpen(false)}
+        title={
+          <Text fw={600} size="md" style={{ fontFamily: "Inter" }}>
+            Bank reconciliation
+          </Text>
+        }
+        centered
+        zIndex={400}
+      >
+        <Text size="sm" mb="md" style={{ fontFamily: "Inter" }}>
+          Are you trying to reconcile local bank?
+        </Text>
+        <Group justify="flex-end" gap="xs">
+          <Button
+            variant="default"
+            onClick={() => void handleGetDetail(true)}
+            disabled={detailLoading}
+          >
+            No
+          </Button>
+          <Button
+            color="#105476"
+            onClick={() => void handleGetDetail(false)}
+            loading={detailLoading}
+          >
+            Yes
+          </Button>
+        </Group>
+      </Modal>
     </Box>
   );
 }
