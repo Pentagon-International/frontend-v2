@@ -900,7 +900,8 @@ function ImportJobCreate() {
   );
   const isReadOnly = isViewOnly || isClosedJob;
   const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
-  const documentsReadOnly = isViewOnly;
+  // Closed jobs keep forms locked via isReadOnly but can still attach docs.
+  const documentsReadOnly = isViewOnly && !isClosedJob;
 
   useChaJobEditHydration(
     mode,
@@ -4785,7 +4786,7 @@ function ImportJobCreate() {
 
       // API call to create or update import job
       let saveResponse: unknown;
-      if (mode === "edit" && jobData?.id) {
+      if ((mode === "edit" || isClosedJob) && jobData?.id) {
         if (isChaMode) {
           saveResponse = await putAPICall(
             `${URL.base}${URL.jobCreate}`,
@@ -5203,7 +5204,7 @@ function ImportJobCreate() {
             returnToState={location.state}
           />
         )}
-        {isReadOnly && mode === "edit" && (
+        {isClosedJob && (
           <Button
             color="#105476"
             variant={canCreateJob ? "filled" : "outline"}

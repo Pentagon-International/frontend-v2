@@ -79,6 +79,7 @@ import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { getOceanJobListVolumeDisplay } from "../../../utils/oceanJobListVolume";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { getClosedAwareJobNavigation } from "../../../utils/closeJob";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { buildChaListFilters } from "../chaJob/chaJobService";
 import { firstChaHouseConsigneeName } from "../chaJob/chaJobCustomsFields";
@@ -1638,17 +1639,22 @@ function ExportJobMaster() {
                                     variant="job-page"
                                     canCancel={canCancel}
                                     onEdit={() => {
-                                      persistListAndNavigate(`${basePath}/edit`, {
+                                      const nav = getClosedAwareJobNavigation({
+                                        editPath: `${basePath}/edit`,
+                                        viewPath: `${basePath}/view`,
                                         job: row,
+                                        intent: "edit",
                                       });
+                                      persistListAndNavigate(nav.path, nav.state);
                                     }}
                                     onView={() => {
-                                      persistListAndNavigate(`${basePath}/view`, {
+                                      const nav = getClosedAwareJobNavigation({
+                                        editPath: `${basePath}/edit`,
+                                        viewPath: `${basePath}/view`,
                                         job: row,
-                                        jobId: row.id ?? row.job_id,
-                                        actionType: "view",
-                                        viewMode: true,
+                                        intent: "view",
                                       });
+                                      persistListAndNavigate(nav.path, nav.state);
                                     }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />

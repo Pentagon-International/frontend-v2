@@ -898,11 +898,12 @@ function HouseCreate() {
     viewMode: location.state?.viewMode,
     actionType: location.state?.actionType,
   });
-  const isReadOnly =
-    isViewOnly ||
-    isJobClosed(
-      (location.state?.job as { status?: string | null } | undefined)?.status,
-    );
+  const isClosedJob = isJobClosed(
+    (location.state?.job as { status?: string | null } | undefined)?.status,
+  );
+  const isReadOnly = isViewOnly || isClosedJob;
+  // Closed jobs keep forms locked but can still attach docs.
+  const documentsReadOnly = isViewOnly && !isClosedJob;
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const pendingLeaveActionRef = useRef<(() => void) | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -4226,7 +4227,7 @@ function HouseCreate() {
           >
             Back to Import Job
           </Button> */}
-          {!isViewOnly && (
+          {(!isViewOnly || isClosedJob) && (
             <Button
               color="#105476"
               variant="outline"
@@ -7169,7 +7170,7 @@ function HouseCreate() {
 
       <HousePageDocumentsModal
         documents={housePageDocuments}
-        readOnly={isViewOnly}
+        readOnly={documentsReadOnly}
       />
 
       <Modal
@@ -7235,7 +7236,7 @@ function HouseCreate() {
         <Group>
           <HousePageDocumentsButton
             documents={housePageDocuments}
-            readOnly={isViewOnly}
+            readOnly={documentsReadOnly}
           />
           {active > 0 && (
             <Button

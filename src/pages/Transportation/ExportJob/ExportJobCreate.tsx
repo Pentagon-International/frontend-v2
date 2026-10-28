@@ -871,7 +871,8 @@ function ExportJobCreate() {
     jobModuleBasePath,
     setIsFetchingJobById,
   );
-  const documentsReadOnly = isViewOnly;
+  // Closed jobs keep forms locked via isReadOnly but can still attach docs.
+  const documentsReadOnly = isViewOnly && !isClosedJob;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -4118,7 +4119,7 @@ function ExportJobCreate() {
 
       // API call to create or update export job
       let saveResponse: unknown;
-      if (mode === "edit" && jobData?.id) {
+      if ((mode === "edit" || isClosedJob) && jobData?.id) {
         if (isChaMode) {
           saveResponse = await putAPICall(
             `${URL.base}${URL.jobCreate}`,
@@ -4520,7 +4521,7 @@ function ExportJobCreate() {
               returnToState={location.state}
             />
           )}
-          {isReadOnly && mode === "edit" && (
+          {isClosedJob && (
             <Button
               color="#105476"
               variant={canCreateJob ? "filled" : "outline"}

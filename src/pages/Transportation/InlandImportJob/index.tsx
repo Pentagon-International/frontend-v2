@@ -78,6 +78,7 @@ import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmen
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import useDateFormat from "../../../hooks/useDateFormat";
+import { getClosedAwareJobNavigation } from "../../../utils/closeJob";
 import { withInlandImportJobServiceFields } from "./inlandImportJobService";
 
 const LIST_KEY = "INLAND_IMPORT_JOB_MASTER";
@@ -1627,33 +1628,31 @@ function InlandImportJobMaster() {
                                       setStoreFilters(LIST_KEY, appliedFilters);
                                       setStoreSearch(LIST_KEY, search);
                                       setShouldRestore(LIST_KEY, true);
-                                      navigate(`/inland/import-job/edit`, {
-                                        state: {
-                                          job: withInlandImportJobServiceFields(
-                                            row as unknown as Record<
-                                              string,
-                                              unknown
-                                            >,
-                                          ),
-                                        },
+                                      const job = withInlandImportJobServiceFields(
+                                        row as unknown as Record<string, unknown>,
+                                      );
+                                      const nav = getClosedAwareJobNavigation({
+                                        editPath: `/inland/import-job/edit`,
+                                        viewPath: `/inland/import-job/view`,
+                                        job,
+                                        intent: "edit",
                                       });
+                                      navigate(nav.path, { state: nav.state });
                                     }}
                                     onView={() => {
                                       setStoreFilters(LIST_KEY, appliedFilters);
                                       setStoreSearch(LIST_KEY, search);
                                       setShouldRestore(LIST_KEY, true);
-                                      navigate(`/inland/import-job/view`, {
-                                        state: {
-                                          job: withInlandImportJobServiceFields(
-                                            row as unknown as Record<
-                                              string,
-                                              unknown
-                                            >,
-                                          ),
-                                          actionType: "view",
-                                          viewMode: true,
-                                        },
+                                      const job = withInlandImportJobServiceFields(
+                                        row as unknown as Record<string, unknown>,
+                                      );
+                                      const nav = getClosedAwareJobNavigation({
+                                        editPath: `/inland/import-job/edit`,
+                                        viewPath: `/inland/import-job/view`,
+                                        job,
+                                        intent: "view",
                                       });
+                                      navigate(nav.path, { state: nav.state });
                                     }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />

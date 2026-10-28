@@ -706,7 +706,8 @@ function AirImportJobCreate() {
     jobModuleBasePath,
     setIsFetchingJobById,
   );
-  const documentsReadOnly = isViewOnly;
+  // Closed jobs keep forms locked via isReadOnly but can still attach docs.
+  const documentsReadOnly = isViewOnly && !isClosedJob;
 
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const leaveJobPage = () => {
@@ -4265,7 +4266,7 @@ function AirImportJobCreate() {
 
       // API call to create or update air import job
       let saveResponse: unknown;
-      if (mode === "edit" && jobData?.id) {
+      if ((mode === "edit" || isClosedJob) && jobData?.id) {
         saveResponse = await putAPICall(
           `${URL.base}${URL.jobCreate}`,
           {
@@ -4622,7 +4623,7 @@ function AirImportJobCreate() {
         )}
         {isReadOnly && (
           <Group gap="xs">
-            {mode === "edit" && (
+            {isClosedJob && (
               <Button
                 color="#105476"
                 variant={canCreateJob ? "filled" : "outline"}
