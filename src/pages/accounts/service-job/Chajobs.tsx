@@ -62,6 +62,7 @@ import FormTextInput from "../../../components/FormTextInput";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
+import { getClosedAwareJobNavigation } from "../../../utils/closeJob";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import dayjs from "dayjs";
 import useDateFormat from "../../../hooks/useDateFormat";
@@ -774,23 +775,24 @@ export default function ServiceJobMaster() {
                                 status={row.status}
                                 variant="job-page"
                                 canCancel={canCancel}
-                                onEdit={() =>
-                                  persistListAndNavigate(
-                                    `/service-job/edit/${row.id}`,
-                                    { job: row },
-                                  )
-                                }
-                                onView={() =>
-                                  persistListAndNavigate(
-                                    `/service-job/view/${row.id}`,
-                                    {
-                                      job: row,
-                                      jobId: row.id,
-                                      actionType: "view",
-                                      viewMode: true,
-                                    },
-                                  )
-                                }
+                                onEdit={() => {
+                                  const nav = getClosedAwareJobNavigation({
+                                    editPath: `/service-job/edit/${row.id}`,
+                                    viewPath: `/service-job/view/${row.id}`,
+                                    job: row,
+                                    intent: "edit",
+                                  });
+                                  persistListAndNavigate(nav.path, nav.state);
+                                }}
+                                onView={() => {
+                                  const nav = getClosedAwareJobNavigation({
+                                    editPath: `/service-job/edit/${row.id}`,
+                                    viewPath: `/service-job/view/${row.id}`,
+                                    job: row,
+                                    intent: "view",
+                                  });
+                                  persistListAndNavigate(nav.path, nav.state);
+                                }}
                                 onCancel={() => setCancelConfirmRow(row)}
                               />
                             </td>

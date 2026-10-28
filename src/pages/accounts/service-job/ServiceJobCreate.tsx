@@ -1424,7 +1424,8 @@ export default function ServiceJobCreate() {
   );
   const isReadOnly = isViewOnly || isClosedJob;
   const isServiceLocked = Boolean(routeId || jobData?.id);
-  const documentsReadOnly = isViewOnly;
+  // Closed jobs keep forms locked via isReadOnly but can still attach docs.
+  const documentsReadOnly = isViewOnly && !isClosedJob;
   const jobDocuments = useJobDocuments();
   const [confirmBackToListOpen, setConfirmBackToListOpen] = useState(false);
   const handleBackToListClick = () => {
@@ -2666,7 +2667,7 @@ export default function ServiceJobCreate() {
               returnTo={location.pathname}
               returnToState={location.state}
             />
-            {mode === "edit" && (
+            {isClosedJob && (
               <Button
                 color="#105476"
                 leftSection={<IconCheck size={18} />}

@@ -621,7 +621,8 @@ function InlandExportJobCreate() {
   );
   const isReadOnly = isViewOnly || isClosedJob;
   const showDubaiBoeNumber = isDubaiBranchUser(user);
-  const documentsReadOnly = isViewOnly;
+  // Closed jobs keep forms locked via isReadOnly but can still attach docs.
+  const documentsReadOnly = isViewOnly && !isClosedJob;
 
   const { data: inlandExportServices = [] } = useQuery({
     queryKey: ["serviceMaster", "inland_export"],
@@ -3041,7 +3042,7 @@ function InlandExportJobCreate() {
 
       // API call to create or update inland export job
       let saveResponse: unknown;
-      if (mode === "edit" && jobData?.id) {
+      if ((mode === "edit" || isClosedJob) && jobData?.id) {
         saveResponse = await putAPICall(
           `${URL.base}${URL.jobCreate}`,
           {
@@ -3433,7 +3434,7 @@ function InlandExportJobCreate() {
             returnToState={location.state}
           />
         )}
-        {isReadOnly && mode === "edit" && (
+        {isClosedJob && (
           <Button
             color="#105476"
             variant={canCreateJob ? "filled" : "outline"}

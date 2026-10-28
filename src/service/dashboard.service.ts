@@ -10,6 +10,8 @@ import {
   getDashboardDisplayCurrencyFields,
   withDisplayCurrency,
 } from "../utils/dashboardDisplayCurrency";
+import { extractCustomerServiceShipmentFilterRows } from "../utils/bookingCreateJob";
+import { getBookingShipmentFilterListTotal } from "../utils/bookingShipmentFilterListTotal";
 
 /** Shared toast/reset when USD conversion rate is missing (Pipeline + Dashboard). */
 export function noteMissingDashboardExchangeRate(
@@ -3139,143 +3141,156 @@ export interface BookingFilters {
   date_to: string;
 }
 
-// Get Booking data
+function formatBookingShipmentVolume(
+  service: string,
+  cargoDetails: Array<Record<string, unknown>>,
+): string {
+  const serviceUpper = service.toUpperCase();
+  const first = cargoDetails[0];
+
+  if (serviceUpper === "AIR") {
+    const weight = first?.chargeable_weight ?? first?.gross_weight;
+    if (weight != null && String(weight).trim() !== "") {
+      return `${weight} Kilos`;
+    }
+    return "";
+  }
+
+  if (serviceUpper === "FCL" || serviceUpper === "INLAND") {
+    return cargoDetails
+      .map((cargo) => {
+        const containers = cargo.no_of_containers;
+        if (containers == null || String(containers).trim() === "") return "";
+        const code =
+          (cargo.container_code as string) ||
+          (cargo.container_type_code as string) ||
+          "";
+        return code
+          ? `${containers} x ${code}`
+          : String(containers);
+      })
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (serviceUpper === "LCL") {
+    const volume = first?.chargeable_volume ?? first?.volume;
+    if (volume != null && String(volume).trim() !== "") {
+      return `${volume} CBM`;
+    }
+    return "";
+  }
+
+  // Fallback: prefer container summary, then weight/volume fields
+  const containerParts = cargoDetails
+    .map((cargo) => {
+      const containers = cargo.no_of_containers;
+      if (containers == null || String(containers).trim() === "") return "";
+      const code =
+        (cargo.container_code as string) ||
+        (cargo.container_type_code as string) ||
+        "";
+      return code ? `${containers} x ${code}` : String(containers);
+    })
+    .filter(Boolean);
+  if (containerParts.length) return containerParts.join(", ");
+
+  const weight = first?.chargeable_weight ?? first?.gross_weight;
+  if (weight != null && String(weight).trim() !== "") return `${weight} Kilos`;
+  const volume = first?.chargeable_volume ?? first?.volume;
+  if (volume != null && String(volume).trim() !== "") return `${volume} CBM`;
+  return "";
+}
+
+function mapShipmentToBookingItem(
+  shipment: Record<string, unknown>,
+): BookingItem {
+  const service = String(shipment.service ?? "");
+  const serviceType = String(shipment.service_type ?? "");
+  const product =
+    `${service} ${serviceType}`.trim() ||
+    String(shipment.service_name ?? "");
+
+  const cargoDetails = Array.isArray(shipment.cargo_details)
+    ? (shipment.cargo_details as Array<Record<string, unknown>>)
+    : [];
+
+  const salesperson = String(
+    shipment.sales_person ??
+      shipment.routed_by ??
+      shipment.customer_service_name ??
+      shipment.created_by ??
+      "",
+  );
+
+  const rawDate = shipment.date;
+  const date =
+    typeof rawDate === "string" && rawDate.trim()
+      ? dayjs(rawDate).isValid()
+        ? dayjs(rawDate).format("YYYY-MM-DD")
+        : rawDate
+      : "";
+
+  return {
+    salesperson,
+    customer_name: String(shipment.customer_name ?? ""),
+    product,
+    volume: formatBookingShipmentVolume(service, cargoDetails),
+    date,
+  };
+}
+
+/** Dashboard Booking tab — `customer-service-shipment/filter/` with index/limit pagination. */
 export const getBookingData = async (
   fromDate?: Date | null,
   toDate?: Date | null,
-  search?: string
+  search?: string,
+  pageIndex: number = 0,
+  pageSize: number = 25,
 ): Promise<BookingResponse> => {
   try {
-    // Step 1: Call quotation filter API with status "GAINED"
-    const requestBody = {
-      filters: {
-        status: "GAINED",
-        ...(search && search.trim() && { search: search.trim() }),
-        // Add date filters in the same format as quotation list page
-        ...(fromDate && toDate && {
-          enquiry_received_date_from: dayjs(fromDate).format("YYYY-MM-DD"),
-          enquiry_received_date_to: dayjs(toDate).format("YYYY-MM-DD"),
-        }),
-      },
-    };
+    const index = Math.max(0, pageIndex) * Math.max(1, pageSize);
+    const limit = Math.max(1, pageSize);
 
-    console.log("Calling quotation filter API with GAINED status...");
-    const quotationResponse = await apiCallProtected.post(
-      URL.quotationFilter,
-      requestBody
-    );
-    const quotationData = quotationResponse as any;
-
-    if (!quotationData || !Array.isArray(quotationData.data)) {
-      console.warn("No quotation data received or invalid format");
-      return {
-        success: true,
-        message: "No booking data found",
-        count: 0,
-        index: 0,
-        limit: null,
-        total_pagination: 0,
-        total: 0,
-        data: [],
-      };
+    const filters: Record<string, string> = {};
+    if (search?.trim()) filters.search = search.trim();
+    if (fromDate && toDate) {
+      filters.date_from = dayjs(fromDate).format("YYYY-MM-DD");
+      filters.date_to = dayjs(toDate).format("YYYY-MM-DD");
     }
 
-    console.log(
-      `Received ${quotationData.data.length} quotations with GAINED status`
-    );
+    const response = (await apiCallProtected.post(
+      `${URL.customerServiceShipmentFilter}?index=${index}&limit=${limit}`,
+      { filters },
+    )) as Record<string, unknown>;
 
-    // Step 2: Use filtered quotations directly (date filtering is now done by API)
-    let filteredQuotations = quotationData.data;
+    const rows = extractCustomerServiceShipmentFilterRows(response);
+    const bookingItems = rows.map(mapShipmentToBookingItem);
+    const total = getBookingShipmentFilterListTotal(response, rows, index);
 
-    // Step 3: Transform data to BookingItem format
-    const bookingItems: BookingItem[] = [];
+    const countRaw = response.count;
+    const count =
+      typeof countRaw === "number" && !Number.isNaN(countRaw)
+        ? countRaw
+        : bookingItems.length;
 
-    filteredQuotations.forEach((quotation: any) => {
-      const salesperson = quotation.sales_person || "";
-      const customerName = quotation.customer_name || "";
-      const updatedAt = quotation.updated_at
-        ? dayjs(quotation.updated_at).format("YYYY-MM-DD")
-        : "";
-
-      // Process each quotation service
-      if (quotation.quotation && Array.isArray(quotation.quotation)) {
-        quotation.quotation.forEach((quote: any) => {
-          const serviceType = quote.service_type || "";
-          const trade = quote.trade || "";
-          const product = `${serviceType} ${trade}`.trim();
-
-          // Get cargo_details
-          const cargoDetails = quote.cargo_details || [];
-
-          if (serviceType.toUpperCase() === "AIR") {
-            // AIR: chargeable_weight + " Kilos"
-            if (cargoDetails.length > 0 && cargoDetails[0].chargeable_weight) {
-              const volume = `${cargoDetails[0].chargeable_weight} Kilos`;
-              bookingItems.push({
-                salesperson,
-                customer_name: customerName,
-                product,
-                volume,
-                date: updatedAt,
-              });
-            }
-          } else if (serviceType.toUpperCase() === "FCL") {
-            // FCL: no_of_containers x container_code (multiple rows if multiple cargo_details)
-            if (cargoDetails.length > 0) {
-              cargoDetails.forEach((cargo: any) => {
-                if (cargo.no_of_containers) {
-                  // Try container_code first, then container_type_code as fallback
-                  const containerCode =
-                    cargo.container_code || cargo.container_type_code || "";
-                  if (containerCode) {
-                    const volume = `${cargo.no_of_containers} x ${containerCode}`;
-                    bookingItems.push({
-                      salesperson,
-                      customer_name: customerName,
-                      product,
-                      volume,
-                      date: updatedAt,
-                    });
-                  }
-                }
-              });
-            }
-          } else if (serviceType.toUpperCase() === "LCL") {
-            // LCL: chargeable_volume + " CBM"
-            if (cargoDetails.length > 0 && cargoDetails[0].chargeable_volume) {
-              const volume = `${cargoDetails[0].chargeable_volume} CBM`;
-              bookingItems.push({
-                salesperson,
-                customer_name: customerName,
-                product,
-                volume,
-                date: updatedAt,
-              });
-            }
-          }
-        });
-      }
-    });
-
-    console.log(`Transformed to ${bookingItems.length} booking items`);
-
-    // Sort by salesperson
-    bookingItems.sort((a, b) => {
-      const salespersonA = a.salesperson.toLowerCase();
-      const salespersonB = b.salesperson.toLowerCase();
-      if (salespersonA < salespersonB) return -1;
-      if (salespersonA > salespersonB) return 1;
-      return 0;
-    });
+    const totalPaginationRaw = response.total_pagination;
+    const totalPagination =
+      typeof totalPaginationRaw === "number" && !Number.isNaN(totalPaginationRaw)
+        ? totalPaginationRaw
+        : Math.max(1, Math.ceil(total / limit));
 
     return {
       success: true,
-      message: "Booking data retrieved successfully",
-      count: bookingItems.length,
-      index: 0,
-      limit: null,
-      total_pagination: 1,
-      total: bookingItems.length,
+      message:
+        typeof response.message === "string"
+          ? response.message
+          : "Booking data retrieved successfully",
+      count,
+      index,
+      limit,
+      total_pagination: totalPagination,
+      total,
       data: bookingItems,
     };
   } catch (error) {

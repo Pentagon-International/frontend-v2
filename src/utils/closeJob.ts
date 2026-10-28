@@ -21,6 +21,38 @@ export function isJobOpenedAsView(options: {
   );
 }
 
+type JobNavRow = {
+  id?: number | string | null;
+  job_id?: number | string | null;
+  status?: string | null;
+};
+
+/**
+ * List/search navigation for opening a job.
+ * Closed jobs always open via editPath (no viewMode) so Attach Documents can
+ * persist; job pages already lock every other field when status is CLOSED.
+ */
+export function getClosedAwareJobNavigation(options: {
+  editPath: string;
+  viewPath: string;
+  job: JobNavRow;
+  intent: "view" | "edit";
+}): { path: string; state: Record<string, unknown> } {
+  const { editPath, viewPath, job, intent } = options;
+  if (intent === "edit" || isJobClosed(job.status)) {
+    return { path: editPath, state: { job } };
+  }
+  return {
+    path: viewPath,
+    state: {
+      job,
+      jobId: job.id ?? job.job_id,
+      actionType: "view",
+      viewMode: true,
+    },
+  };
+}
+
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message.trim()) {
     return err.message;

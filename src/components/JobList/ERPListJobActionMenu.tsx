@@ -17,7 +17,7 @@ type ERPListJobActionMenuProps = {
   status: string | null | undefined;
   variant?: "job-page" | "closure-page" | "reopen-page";
   onEdit?: () => void;
-  /** When job is CLOSED, opens view-only flow (same as global search). */
+  /** Prefer edit for CLOSED jobs so Attach Documents can persist (forms stay locked). */
   onView?: () => void;
   onCancel?: () => void;
   onCloseJob?: () => void;

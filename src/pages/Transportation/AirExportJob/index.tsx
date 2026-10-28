@@ -77,6 +77,7 @@ import { useListFilterStore } from "../../../store/listFilterStore";
 import { getBookingShipmentFilterListTotal } from "../../../utils/bookingShipmentFilterListTotal";
 import { formatDisplayJobId } from "../../../utils/displayJobId";
 import { ERPListJobActionMenu } from "../../../components/JobList/ERPListJobActionMenu";
+import { getClosedAwareJobNavigation } from "../../../utils/closeJob";
 import useDateFormat from "../../../hooks/useDateFormat";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { buildChaListFilters } from "../chaJob/chaJobService";
@@ -1511,22 +1512,25 @@ function AirExportJobMaster() {
                                       setStoreFilters(listKey, appliedFilters);
                                       setStoreSearch(listKey, search);
                                       setShouldRestore(listKey, true);
-                                      navigate(`${basePath}/edit`, {
-                                        state: { job: row },
+                                      const nav = getClosedAwareJobNavigation({
+                                        editPath: `${basePath}/edit`,
+                                        viewPath: `${basePath}/view`,
+                                        job: row,
+                                        intent: "edit",
                                       });
+                                      navigate(nav.path, { state: nav.state });
                                     }}
                                     onView={() => {
                                       setStoreFilters(listKey, appliedFilters);
                                       setStoreSearch(listKey, search);
                                       setShouldRestore(listKey, true);
-                                      navigate(`${basePath}/view`, {
-                                        state: {
-                                          job: row,
-                                          jobId: row.id ?? row.job_id,
-                                          actionType: "view",
-                                          viewMode: true,
-                                        },
+                                      const nav = getClosedAwareJobNavigation({
+                                        editPath: `${basePath}/edit`,
+                                        viewPath: `${basePath}/view`,
+                                        job: row,
+                                        intent: "view",
                                       });
+                                      navigate(nav.path, { state: nav.state });
                                     }}
                                     onCancel={() => setCancelConfirmRow(row)}
                                   />
