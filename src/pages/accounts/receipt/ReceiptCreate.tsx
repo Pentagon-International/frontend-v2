@@ -260,41 +260,11 @@ function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   return null;
 }
 
-/** When API omits Dr_Cr (saved allocations), infer from document type. */
-function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
-  const t = String(type ?? "")
-    .trim()
-    .toUpperCase();
-  if (!t) return null;
-  if (
-    t === "INV" ||
-    t === "INVOICE" ||
-    t === "DBN" ||
-    t === "DN" ||
-    t === "DEBIT" ||
-    t.startsWith("DEBIT")
-  ) {
-    return "Dr";
-  }
-  if (
-    t === "CRN" ||
-    t === "CN" ||
-    t === "CDN" ||
-    t === "CREDIT" ||
-    t.startsWith("CREDIT")
-  ) {
-    return "Cr";
-  }
-  return null;
-}
-
+/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
   Dr_Cr?: "Cr" | "Dr" | null;
-  type?: string;
 }): "Cr" | "Dr" | null {
-  return (
-    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
-  );
+  return normalizeAllocationDrCr(a.Dr_Cr);
 }
 
 function normalizeObjSno(value: unknown): string {
@@ -305,7 +275,7 @@ function allocationDocumentKey(documentNo: unknown, objSno: unknown): string {
   return `${String(documentNo ?? "").trim()}|${normalizeObjSno(objSno)}`;
 }
 
-/** Receipt allocation net = Dr − Cr. Missing Dr_Cr (and type) counts as Dr. */
+/** Receipt allocation net = Dr − Cr. Missing Dr_Cr counts as Dr. */
 function receiptAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -735,7 +705,7 @@ function computeSyncedDetailRow(
   }
   const matching = getMatchingAllocationsForParty(row, adjustments);
   if (matching.length === 0) return row;
-  // Party local from allocations: Dr − Cr when Dr_Cr (or type) is present.
+  // Party local from allocations: Dr − Cr when Dr_Cr is present.
   const sum = sumAdjustmentLocalAmounts(matching);
   const local = clampLocalAmount(sum);
   const roeVal =
@@ -1165,9 +1135,7 @@ export default function ReceiptCreate({
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
             const typeVal = (a.type_name ?? a.type ?? "").toString();
-            const sourceDrCr =
-              normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
-              inferAllocationDrCrFromType(typeVal);
+            const sourceDrCr = normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr);
             // Reversal create from receipt: swap allocation Dr/Cr like party rows.
             const allocationDrCr =
               isReversalCreate && sourceDrCr
@@ -1842,11 +1810,7 @@ export default function ReceiptCreate({
             : inv.id != null
               ? Number(inv.id)
               : null,
-        Dr_Cr:
-          normalizeAllocationDrCr(inv.Dr_Cr) ??
-          inferAllocationDrCrFromType(
-            inv.day_book_document_type ?? inv.day_book_type,
-          ),
+        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -2620,7 +2584,6 @@ export default function ReceiptCreate({
             toLocalAmount(a.adj_local_amount) ?? prev?.adj_local_amount ?? null,
           Dr_Cr:
             normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
-            inferAllocationDrCrFromType(typeVal) ??
             prev?.Dr_Cr ??
             null,
         };
@@ -4164,10 +4127,7 @@ export default function ReceiptCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
-                            inferAllocationDrCrFromType(
-                              inv.day_book_document_type ?? inv.day_book_type,
-                            ) ??
+                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
                             "—"}
                         </Table.Td>
                       </Table.Tr>

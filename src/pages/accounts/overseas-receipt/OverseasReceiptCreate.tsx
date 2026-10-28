@@ -255,44 +255,14 @@ function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   return null;
 }
 
-/** When API omits Dr_Cr (saved allocations), infer from document type. */
-function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
-  const t = String(type ?? "")
-    .trim()
-    .toUpperCase();
-  if (!t) return null;
-  if (
-    t === "INV" ||
-    t === "INVOICE" ||
-    t === "DBN" ||
-    t === "DN" ||
-    t === "DEBIT" ||
-    t.startsWith("DEBIT")
-  ) {
-    return "Dr";
-  }
-  if (
-    t === "CRN" ||
-    t === "CN" ||
-    t === "CDN" ||
-    t === "CREDIT" ||
-    t.startsWith("CREDIT")
-  ) {
-    return "Cr";
-  }
-  return null;
-}
-
+/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
   Dr_Cr?: "Cr" | "Dr" | null;
-  type?: string;
 }): "Cr" | "Dr" | null {
-  return (
-    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
-  );
+  return normalizeAllocationDrCr(a.Dr_Cr);
 }
 
-/** Receipt allocation net = Dr − Cr. Missing Dr_Cr (and type) counts as Dr. */
+/** Receipt allocation net = Dr − Cr. Missing Dr_Cr counts as Dr. */
 function receiptAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -1103,6 +1073,12 @@ export default function OverseasReceiptCreate({
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
             const typeVal = (a.type_name ?? a.type ?? "").toString();
+            const sourceDrCr = normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr);
+            // Reversal create from receipt: swap allocation Dr/Cr like party rows.
+            const allocationDrCr =
+              isReversalCreate && sourceDrCr
+                ? flipDrCr(sourceDrCr)
+                : sourceDrCr;
             return {
               id: a.id ?? null,
               invoice_id: a.invoice_id != null ? Number(a.invoice_id) : null,
@@ -1121,15 +1097,13 @@ export default function OverseasReceiptCreate({
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
-              Dr_Cr:
-                normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
-                inferAllocationDrCrFromType(typeVal),
+              Dr_Cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
 
     // Edit: allocation Dr/Cr from the list drives party and header amounts.
-    // TDS rows keep saved amounts. Reversal keeps the reversed receipt values.
+    // TDS rows keep saved amounts. Reversal create flips allocation Dr/Cr; edit/view keep API values.
     const detailsForForm = _isReversal
       ? details
       : computeOverseasReceiptDetailsSyncedFromAllocations(
@@ -1667,11 +1641,7 @@ export default function OverseasReceiptCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : totalNum,
         invoice_id: inv.id != null ? Number(inv.id) : null,
-        Dr_Cr:
-          normalizeAllocationDrCr(inv.Dr_Cr) ??
-          inferAllocationDrCrFromType(
-            inv.day_book_document_type ?? inv.day_book_type,
-          ),
+        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -3852,10 +3822,7 @@ export default function OverseasReceiptCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
-                            inferAllocationDrCrFromType(
-                              inv.day_book_document_type ?? inv.day_book_type,
-                            ) ??
+                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
                             "—"}
                         </Table.Td>
                         <Table.Td>

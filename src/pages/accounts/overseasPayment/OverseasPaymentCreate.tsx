@@ -256,44 +256,14 @@ function normalizeAllocationDrCr(
   return null;
 }
 
-/** When API omits Dr_Cr (saved allocations), infer from document type. */
-function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
-  const t = String(type ?? "")
-    .trim()
-    .toUpperCase();
-  if (!t) return null;
-  if (
-    t === "INV" ||
-    t === "INVOICE" ||
-    t === "DBN" ||
-    t === "DN" ||
-    t === "DEBIT" ||
-    t.startsWith("DEBIT")
-  ) {
-    return "Dr";
-  }
-  if (
-    t === "CRN" ||
-    t === "CN" ||
-    t === "CDN" ||
-    t === "CREDIT" ||
-    t.startsWith("CREDIT")
-  ) {
-    return "Cr";
-  }
-  return null;
-}
-
+/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
   Dr_Cr?: "Cr" | "Dr" | null;
-  type?: string;
 }): "Cr" | "Dr" | null {
-  return (
-    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
-  );
+  return normalizeAllocationDrCr(a.Dr_Cr);
 }
 
-/** Payment allocation net = Cr − Dr. Missing Dr_Cr (and type) counts as Cr. */
+/** Payment allocation net = Cr − Dr. Missing Dr_Cr counts as Cr. */
 function paymentAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -557,6 +527,10 @@ type PaymentFormValues = {
   supporting_documents: SupportingDocument[];
 };
 
+function flipDrCr(side: "Dr" | "Cr"): "Dr" | "Cr" {
+  return side === "Dr" ? "Cr" : "Dr";
+}
+
 function mapPaymentPartyDrCr(
   raw: string | null | undefined,
   flipForReversalSource: boolean,
@@ -568,7 +542,7 @@ function mapPaymentPartyDrCr(
       ? "Dr"
       : "Cr";
   if (!flipForReversalSource) return side;
-  return side === "Dr" ? "Cr" : "Dr";
+  return flipDrCr(side);
 }
 
 /** Payment header nets Dr − Cr; reversal nets Cr − Dr so the header amount matches the source payment. */
@@ -1103,6 +1077,14 @@ export default function OverseasPaymentCreate({
               dr_cr?: string | null;
             };
             const roeFromApi = aAny.invoice_roe ?? aAny.roe;
+            const sourceDrCr = normalizeAllocationDrCr(
+              aAny.Dr_Cr ?? aAny.dr_cr,
+            );
+            // Reversal create from payment: swap allocation Dr/Cr like party rows.
+            const allocationDrCr =
+              isReversalCreate && sourceDrCr
+                ? flipDrCr(sourceDrCr)
+                : sourceDrCr;
             return {
               id: aAny.id ?? null,
               invoice_id:
@@ -1131,15 +1113,13 @@ export default function OverseasPaymentCreate({
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: toLocalAmount(aAny.adj_local_amount),
-              Dr_Cr:
-                normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
-                inferAllocationDrCrFromType(aAny.type ?? aAny.type_name),
+              Dr_Cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
 
     // Edit: allocation Dr/Cr from the list drives party and header amounts.
-    // Reversal keeps the reversed payment values; backend handles Dr/Cr.
+    // Reversal create flips allocation Dr/Cr; edit/view keep API values.
     const detailsForForm = _isReversal
       ? details
       : computeOverseasDetailsSyncedFromAllocations(details, adjustments);
@@ -1795,11 +1775,7 @@ export default function OverseasPaymentCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : toLocalAmount(totalNum),
         invoice_id: resolveSupplierInvoiceId(inv),
-        Dr_Cr:
-          normalizeAllocationDrCr(inv.Dr_Cr) ??
-          inferAllocationDrCrFromType(
-            inv.day_book_document_type ?? inv.day_book_type,
-          ),
+        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -3967,10 +3943,7 @@ export default function OverseasPaymentCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
-                            inferAllocationDrCrFromType(
-                              inv.day_book_document_type ?? inv.day_book_type,
-                            ) ??
+                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
                             "—"}
                         </Table.Td>
                         <Table.Td>

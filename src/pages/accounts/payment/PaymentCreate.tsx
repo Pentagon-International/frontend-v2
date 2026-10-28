@@ -257,44 +257,14 @@ function normalizeAllocationDrCr(
   return null;
 }
 
-/** When API omits Dr_Cr (saved allocations), infer from document type. */
-function inferAllocationDrCrFromType(type: unknown): "Cr" | "Dr" | null {
-  const t = String(type ?? "")
-    .trim()
-    .toUpperCase();
-  if (!t) return null;
-  if (
-    t === "INV" ||
-    t === "INVOICE" ||
-    t === "DBN" ||
-    t === "DN" ||
-    t === "DEBIT" ||
-    t.startsWith("DEBIT")
-  ) {
-    return "Dr";
-  }
-  if (
-    t === "CRN" ||
-    t === "CN" ||
-    t === "CDN" ||
-    t === "CREDIT" ||
-    t.startsWith("CREDIT")
-  ) {
-    return "Cr";
-  }
-  return null;
-}
-
+/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
   Dr_Cr?: "Cr" | "Dr" | null;
-  type?: string;
 }): "Cr" | "Dr" | null {
-  return (
-    normalizeAllocationDrCr(a.Dr_Cr) ?? inferAllocationDrCrFromType(a.type)
-  );
+  return normalizeAllocationDrCr(a.Dr_Cr);
 }
 
-/** Payment allocation net = Cr − Dr. Missing Dr_Cr (and type) counts as Cr. */
+/** Payment allocation net = Cr − Dr. Missing Dr_Cr counts as Cr. */
 function paymentAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -1042,9 +1012,9 @@ export default function PaymentCreate({
             const roeFromApi =
               aAny.supplier_invoice_roe ?? aAny.invoice_roe ?? aAny.roe;
             const typeVal = String(aAny.type ?? aAny.type_name ?? "").trim();
-            const sourceDrCr =
-              normalizeAllocationDrCr(aAny.Dr_Cr ?? aAny.dr_cr) ??
-              inferAllocationDrCrFromType(typeVal);
+            const sourceDrCr = normalizeAllocationDrCr(
+              aAny.Dr_Cr ?? aAny.dr_cr,
+            );
             // Reversal create from payment: swap allocation Dr/Cr like party rows.
             const allocationDrCr =
               isReversalCreate && sourceDrCr
@@ -1682,11 +1652,7 @@ export default function PaymentCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : toLocalAmount(totalNum),
         invoice_id: inv.id != null ? Number(inv.id) : null,
-        Dr_Cr:
-          normalizeAllocationDrCr(inv.Dr_Cr) ??
-          inferAllocationDrCrFromType(
-            inv.day_book_document_type ?? inv.day_book_type,
-          ),
+        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -3823,10 +3789,7 @@ export default function PaymentCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr) ??
-                            inferAllocationDrCrFromType(
-                              inv.day_book_document_type ?? inv.day_book_type,
-                            ) ??
+                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
                             "—"}
                         </Table.Td>
                       </Table.Tr>
