@@ -58,6 +58,9 @@ type CustomerRelationshipMappingData = {
   service_name: string;
   branch_code: string | null;
   branch_name: string | null;
+  country_id?: number | null;
+  country_code?: string | null;
+  country_name?: string | null;
   credit_day?: number | null;
   credit_amount?: number | string | null;
   created_by: string;
@@ -384,6 +387,14 @@ function CustomerRelationshipMappingMaster() {
         size: 150,
         Cell: ({ row }) => {
           return <Text size="sm">{row.original.branch_name || "-"}</Text>;
+        },
+      },
+      {
+        accessorKey: "country_name",
+        header: "Country",
+        size: 120,
+        Cell: ({ row }) => {
+          return <Text size="sm">{row.original.country_name || "-"}</Text>;
         },
       },
       {

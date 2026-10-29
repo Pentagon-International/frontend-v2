@@ -43,12 +43,20 @@ import {
 
 const COMMON_SERVICE_CODE = "0";
 
+type BranchOption = {
+  value: string;
+  label: string;
+  country_id: number | null;
+  country_name: string | null;
+};
+
 type RelationshipDetail = {
   id?: number; // Optional - only exists for existing entries in edit mode
   emp_id_input: string;
   relationship_type: string;
   service_id: number | null;
   branch_id: number | null;
+  country_id: number | null;
   credit_day: string;
   credit_amount: string;
 };
@@ -63,6 +71,7 @@ const emptyRelationshipDetail = (): RelationshipDetail => ({
   relationship_type: "Sales",
   service_id: null,
   branch_id: null,
+  country_id: null,
   credit_day: "",
   credit_amount: "",
 });
@@ -72,6 +81,15 @@ const relationshipDetailSchema = yup.object({
   relationship_type: yup.string().required("Relationship Type is required"),
   service_id: yup.number().nullable(),
   branch_id: yup.number().nullable(),
+  country_id: yup
+    .number()
+    .nullable()
+    .when("branch_id", {
+      is: (branchId: number | null) => branchId != null,
+      then: (schema) =>
+        schema.required("Country is required when branch is selected"),
+      otherwise: (schema) => schema.nullable(),
+    }),
   credit_day: yup
     .string()
     .optional()
@@ -101,17 +119,29 @@ const validationSchema = yup.object({
     .min(1, "At least one relationship detail is required"),
 });
 
-function serviceBranchKey(serviceId: number | null, branchId: number | null) {
-  return `${serviceId ?? "null"}::${branchId ?? "null"}`;
+function serviceBranchCountryKey(
+  serviceId: number | null,
+  branchId: number | null,
+  countryId: number | null,
+) {
+  return `${serviceId ?? "null"}::${branchId ?? "null"}::${countryId ?? "null"}`;
 }
 
 function findDuplicateServiceBranchIndexes(
   details: RelationshipDetail[],
+  commonServiceId: number | null = null,
 ): number[] {
   const seen = new Map<string, number>();
   const dupes: number[] = [];
   details.forEach((detail, index) => {
-    const key = serviceBranchKey(detail.service_id, detail.branch_id);
+    // Empty service is treated as Common (same as save fallback)
+    const effectiveServiceId =
+      detail.service_id != null ? detail.service_id : commonServiceId;
+    const key = serviceBranchCountryKey(
+      effectiveServiceId,
+      detail.branch_id,
+      detail.country_id,
+    );
     if (seen.has(key)) {
       dupes.push(index);
     } else {
@@ -136,6 +166,9 @@ type EditResponseItem = {
   branch_id: number | null;
   branch_code: string | null;
   branch_name: string | null;
+  country_id?: number | null;
+  country_code?: string | null;
+  country_name?: string | null;
   credit_day?: number | null;
   credit_amount?: number | string | null;
   created_by: string;
@@ -222,7 +255,7 @@ function CustomerRelationshipMappingCreate() {
 
   // Branch options state - array for each relationship detail index
   const [branchOptionsMap, setBranchOptionsMap] = useState<
-    Record<number, Array<{ value: string; label: string }>>
+    Record<number, BranchOption[]>
   >({});
   const [isLoadingBranchesMap, setIsLoadingBranchesMap] = useState<
     Record<number, boolean>
@@ -236,9 +269,12 @@ function CustomerRelationshipMappingCreate() {
         salesperson?: string | null;
         service?: string | null;
         branch?: string | null;
+        country?: string | null;
       }
     >
   >({});
+
+  const [commonServiceId, setCommonServiceId] = useState<number | null>(null);
 
   // Custom validation function that allows null customer_id when fromCustomerMaster
   const validateForm = useMemo(() => {
@@ -264,6 +300,10 @@ function CustomerRelationshipMappingCreate() {
           errors[`customer_relationship_details.${index}.relationship_type`] =
             "Relationship Type is required";
         }
+        if (detail.branch_id != null && detail.country_id == null) {
+          errors[`customer_relationship_details.${index}.country_id`] =
+            "Country is required when branch is selected";
+        }
         if (
           detail.credit_day &&
           !/^\d+$/.test(String(detail.credit_day).trim())
@@ -283,9 +323,10 @@ function CustomerRelationshipMappingCreate() {
 
       findDuplicateServiceBranchIndexes(
         values.customer_relationship_details,
+        commonServiceId,
       ).forEach((index) => {
         errors[`customer_relationship_details.${index}.service_id`] =
-          "Same service cannot be duplicated for a single branch";
+          "Same service cannot be duplicated for a single branch and country";
       });
     };
 
@@ -306,7 +347,7 @@ function CustomerRelationshipMappingCreate() {
       validateDetails(values, errors);
       return errors;
     };
-  }, [fromCustomerMaster]);
+  }, [fromCustomerMaster, commonServiceId]);
 
   const form = useForm<CustomerRelationshipMappingFormData>({
     validate: validateForm,
@@ -315,8 +356,6 @@ function CustomerRelationshipMappingCreate() {
       customer_relationship_details: [emptyRelationshipDetail()],
     },
   });
-
-  const [commonServiceId, setCommonServiceId] = useState<number | null>(null);
 
   // Resolve Common service (service_code = 0) for labels / optional prefill
   useEffect(() => {
@@ -416,9 +455,13 @@ function CustomerRelationshipMappingCreate() {
         `customer_relationship_details.${index}.branch_id`,
         null,
       );
+      form.setFieldValue(
+        `customer_relationship_details.${index}.country_id`,
+        null,
+      );
       setDisplayNamesMap((prev) => ({
         ...prev,
-        [index]: { ...prev[index], branch: null },
+        [index]: { ...prev[index], branch: null, country: null },
       }));
       return;
     }
@@ -438,11 +481,25 @@ function CustomerRelationshipMappingCreate() {
       };
 
       if (response?.success && response?.data && Array.isArray(response.data)) {
-        const options = response.data.map(
-          (branch: Record<string, unknown>) => ({
-            value: String(branch.id || ""),
-            label: String(branch.branch_name || ""),
-          }),
+        const options: BranchOption[] = response.data.map(
+          (branch: Record<string, unknown>) => {
+            const rawCountryId = branch.country_id;
+            const countryId =
+              rawCountryId != null &&
+              String(rawCountryId).trim() !== "" &&
+              Number.isFinite(Number(rawCountryId))
+                ? Number(rawCountryId)
+                : null;
+            return {
+              value: String(branch.id || ""),
+              label: String(branch.branch_name || ""),
+              country_id: countryId,
+              country_name:
+                branch.country_name != null
+                  ? String(branch.country_name)
+                  : null,
+            };
+          },
         );
         setBranchOptionsMap((prev) => ({ ...prev, [index]: options }));
       } else {
@@ -499,6 +556,7 @@ function CustomerRelationshipMappingCreate() {
                 relationship_type: item.relationship_type || "Sales",
                 service_id: item.service_id || null,
                 branch_id: item.branch_id || null,
+                country_id: item.country_id || null,
                 credit_day:
                   item.credit_day != null && item.credit_day !== undefined
                     ? String(item.credit_day)
@@ -526,18 +584,17 @@ function CustomerRelationshipMappingCreate() {
                 salesperson?: string | null;
                 service?: string | null;
                 branch?: string | null;
+                country?: string | null;
               }
             > = {};
-            const newBranchOptionsMap: Record<
-              number,
-              Array<{ value: string; label: string }>
-            > = {};
+            const newBranchOptionsMap: Record<number, BranchOption[]> = {};
 
             response.forEach((item, index) => {
               newDisplayNamesMap[index] = {
                 salesperson: item.emp_name || null,
                 service: item.service_name || null,
                 branch: item.branch_name || null,
+                country: item.country_name || null,
               };
 
               // If branch_id and branch_name exist, add to branch options
@@ -546,6 +603,8 @@ function CustomerRelationshipMappingCreate() {
                   {
                     value: String(item.branch_id),
                     label: item.branch_name,
+                    country_id: item.country_id || null,
+                    country_name: item.country_name || null,
                   },
                 ];
               } else {
@@ -731,8 +790,13 @@ function CustomerRelationshipMappingCreate() {
             const detailPayload: Record<string, unknown> = {
               emp_id_input: detail.emp_id_input,
               relationship_type: detail.relationship_type,
-              service_id: detail.service_id,
+              // Empty service → Common (service_code='0'); backend also enforces this
+              service_id:
+                detail.service_id != null
+                  ? detail.service_id
+                  : commonServiceId,
               branch_id: detail.branch_id,
+              country_id: detail.country_id,
               credit_day:
                 detail.credit_day === "" || detail.credit_day == null
                   ? 0
@@ -910,425 +974,543 @@ function CustomerRelationshipMappingCreate() {
               <Stack gap="md">
                 {form.values.customer_relationship_details.map(
                   (detail, index) => (
-                    <Box key={index}>
-                      <Grid gutter="md" columns={12}>
-                        {/* Branch Name - Order 1 */}
-                        <Grid.Col span={2}>
-                          <Tooltip
-                            label={
-                              !form.values.customer_id && !fromCustomerMaster
-                                ? "Select Customer first"
-                                : !detail.emp_id_input
-                                  ? "Select Salesperson first"
-                                  : isLoadingBranchesMap[index]
-                                    ? "Branches are loading"
-                                    : (branchOptionsMap[index]?.length || 0) ===
-                                        0
-                                      ? "No branches available"
-                                      : ""
-                            }
-                            withArrow
-                            disabled={
-                              !!(
-                                (form.values.customer_id ||
-                                  fromCustomerMaster) &&
-                                detail.emp_id_input &&
-                                !isLoadingBranchesMap[index] &&
-                                (branchOptionsMap[index]?.length || 0) > 0
-                              )
-                            }
-                            withinPortal
-                            position="top"
-                          >
-                            <Dropdown
-                              key={`branch-select-${index}-${detail.emp_id_input || "none"}`}
-                              label="Branch Name"
-                              placeholder={
-                                isLoadingBranchesMap[index]
-                                  ? "Loading branches..."
-                                  : "Select branch name"
-                              }
-                              searchable
-                              data={branchOptionsMap[index] || []}
-                              value={
-                                detail.branch_id
-                                  ? String(detail.branch_id)
-                                  : null
-                              }
-                              onChange={(value) => {
-                                if (value === null || value === "") {
+                    <Box key={index} w="100%">
+                      <Flex gap="md" align="flex-end" w="100%">
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                          <Grid gutter="md" columns={7}>
+                            {/* Branch Name */}
+                            <Grid.Col span={1}>
+                              <Tooltip
+                                label={
+                                  !form.values.customer_id &&
+                                  !fromCustomerMaster
+                                    ? "Select Customer first"
+                                    : !detail.emp_id_input
+                                      ? "Select Salesperson first"
+                                      : isLoadingBranchesMap[index]
+                                        ? "Branches are loading"
+                                        : (branchOptionsMap[index]?.length ||
+                                              0) === 0
+                                          ? "No branches available"
+                                          : ""
+                                }
+                                withArrow
+                                disabled={
+                                  !!(
+                                    (form.values.customer_id ||
+                                      fromCustomerMaster) &&
+                                    detail.emp_id_input &&
+                                    !isLoadingBranchesMap[index] &&
+                                    (branchOptionsMap[index]?.length || 0) > 0
+                                  )
+                                }
+                                withinPortal
+                                position="top"
+                              >
+                                <Dropdown
+                                  key={`branch-select-${index}-${detail.emp_id_input || "none"}`}
+                                  label="Branch Name"
+                                  placeholder={
+                                    isLoadingBranchesMap[index]
+                                      ? "Loading branches..."
+                                      : "Select branch name"
+                                  }
+                                  searchable
+                                  data={branchOptionsMap[index] || []}
+                                  value={
+                                    detail.branch_id
+                                      ? String(detail.branch_id)
+                                      : null
+                                  }
+                                  onChange={(value) => {
+                                    if (value === null || value === "") {
+                                      // Clear branch only; keep country so it can stay set without branch
+                                      form.setFieldValue(
+                                        `customer_relationship_details.${index}.branch_id`,
+                                        null,
+                                      );
+                                      setDisplayNamesMap((prev) => ({
+                                        ...prev,
+                                        [index]: {
+                                          ...prev[index],
+                                          branch: null,
+                                        },
+                                      }));
+                                    } else {
+                                      const branchId = value
+                                        ? Number(value)
+                                        : null;
+                                      const selectedBranch = (
+                                        branchOptionsMap[index] || []
+                                      ).find((opt) => opt.value === value);
+                                      form.setFieldValue(
+                                        `customer_relationship_details.${index}.branch_id`,
+                                        branchId,
+                                      );
+                                      // Auto-fill country from branch when present
+                                      if (selectedBranch?.country_id != null) {
+                                        form.setFieldValue(
+                                          `customer_relationship_details.${index}.country_id`,
+                                          selectedBranch.country_id,
+                                        );
+                                      }
+                                      setDisplayNamesMap((prev) => ({
+                                        ...prev,
+                                        [index]: {
+                                          ...prev[index],
+                                          branch:
+                                            selectedBranch?.label || null,
+                                          ...(selectedBranch?.country_name
+                                            ? {
+                                                country:
+                                                  selectedBranch.country_name,
+                                              }
+                                            : {}),
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                  error={
+                                    (
+                                      (
+                                        form.errors
+                                          .customer_relationship_details as Record<
+                                          string,
+                                          any
+                                        >
+                                      )?.[index] as Record<string, string>
+                                    )?.branch_id
+                                  }
+                                  disabled={
+                                    (!form.values.customer_id &&
+                                      !fromCustomerMaster) ||
+                                    !detail.emp_id_input ||
+                                    isLoadingBranchesMap[index] ||
+                                    (branchOptionsMap[index]?.length || 0) ===
+                                      0
+                                  }
+                                  rightSection={
+                                    isLoadingBranchesMap[index] ? (
+                                      <Loader size="xs" />
+                                    ) : undefined
+                                  }
+                                  clearable
+                                />
+                              </Tooltip>
+                            </Grid.Col>
+
+                            {/* Country - always editable; auto-filled from branch when branch selected */}
+                            <Grid.Col span={1}>
+                              <SearchableSelect
+                                label="Country"
+                                placeholder="Type country name"
+                                apiEndpoint={URL.country}
+                                searchFields={["country_name", "country_code"]}
+                                displayFormat={(
+                                  item: Record<string, unknown>,
+                                ) => ({
+                                  value: String(item.id || ""),
+                                  label: String(
+                                    item.country_name ||
+                                      item.country_code ||
+                                      "",
+                                  ),
+                                })}
+                                value={
+                                  detail.country_id
+                                    ? String(detail.country_id)
+                                    : ""
+                                }
+                                displayValue={
+                                  displayNamesMap[index]?.country || null
+                                }
+                                returnOriginalData={true}
+                                withAsterisk={detail.branch_id != null}
+                                clearable
+                                onChange={(value, selectedData) => {
+                                  if (value === null || value === "") {
+                                    form.setFieldValue(
+                                      `customer_relationship_details.${index}.country_id`,
+                                      null,
+                                    );
+                                    setDisplayNamesMap((prev) => ({
+                                      ...prev,
+                                      [index]: {
+                                        ...prev[index],
+                                        country: null,
+                                      },
+                                    }));
+                                  } else {
+                                    form.setFieldValue(
+                                      `customer_relationship_details.${index}.country_id`,
+                                      Number(value),
+                                    );
+                                    setDisplayNamesMap((prev) => ({
+                                      ...prev,
+                                      [index]: {
+                                        ...prev[index],
+                                        country: selectedData?.label || null,
+                                      },
+                                    }));
+                                  }
+                                }}
+                                error={
+                                  form.errors[
+                                    `customer_relationship_details.${index}.country_id`
+                                  ]
+                                }
+                                minSearchLength={1}
+                              />
+                            </Grid.Col>
+
+                            {/* Service Name */}
+                            <Grid.Col span={1}>
+                              <SearchableSelect
+                                label="Service Name"
+                                placeholder="Type service name (0 = Common)"
+                                apiEndpoint={URL.serviceMaster}
+                                searchFields={["service_name", "service_code"]}
+                                displayFormat={(
+                                  item: Record<string, unknown>,
+                                ) => ({
+                                  value: String(item.id || ""),
+                                  label:
+                                    String(item.service_code ?? "") ===
+                                    COMMON_SERVICE_CODE
+                                      ? `${item.service_name || "Common"} (Common)`
+                                      : String(item.service_name || ""),
+                                })}
+                                value={
+                                  detail.service_id
+                                    ? String(detail.service_id)
+                                    : ""
+                                }
+                                displayValue={
+                                  displayNamesMap[index]?.service ||
+                                  (detail.service_id != null &&
+                                  commonServiceId != null &&
+                                  detail.service_id === commonServiceId
+                                    ? "Common"
+                                    : null)
+                                }
+                                returnOriginalData={true}
+                                onChange={(
+                                  value,
+                                  selectedData,
+                                  originalData,
+                                ) => {
+                                  if (value === null || value === "") {
+                                    form.setFieldValue(
+                                      `customer_relationship_details.${index}.service_id`,
+                                      null,
+                                    );
+                                    setDisplayNamesMap((prev) => ({
+                                      ...prev,
+                                      [index]: {
+                                        ...prev[index],
+                                        service: null,
+                                      },
+                                    }));
+                                  } else {
+                                    const serviceId = originalData?.id
+                                      ? Number(originalData.id)
+                                      : value
+                                        ? Number(value)
+                                        : null;
+                                    const isCommon =
+                                      String(
+                                        originalData?.service_code ?? "",
+                                      ) === COMMON_SERVICE_CODE ||
+                                      (commonServiceId != null &&
+                                        serviceId === commonServiceId);
+                                    form.setFieldValue(
+                                      `customer_relationship_details.${index}.service_id`,
+                                      serviceId,
+                                    );
+                                    setDisplayNamesMap((prev) => ({
+                                      ...prev,
+                                      [index]: {
+                                        ...prev[index],
+                                        service: isCommon
+                                          ? "Common"
+                                          : selectedData?.label ||
+                                            (originalData?.service_name
+                                              ? String(
+                                                  originalData.service_name,
+                                                )
+                                              : null),
+                                      },
+                                    }));
+                                  }
+                                }}
+                                error={
+                                  form.errors[
+                                    `customer_relationship_details.${index}.service_id`
+                                  ]
+                                }
+                                minSearchLength={1}
+                                disabled={
+                                  !form.values.customer_id &&
+                                  !fromCustomerMaster
+                                }
+                              />
+                            </Grid.Col>
+
+                            {/* Relationship Type */}
+                            <Grid.Col span={1}>
+                              <Dropdown
+                                label="Relationship Type"
+                                placeholder="Select relationship type"
+                                searchable
+                                withAsterisk
+                                data={["Sales"]}
+                                value={detail.relationship_type}
+                                onChange={(value) =>
                                   form.setFieldValue(
-                                    `customer_relationship_details.${index}.branch_id`,
-                                    null,
-                                  );
-                                  setDisplayNamesMap((prev) => ({
-                                    ...prev,
-                                    [index]: { ...prev[index], branch: null },
-                                  }));
-                                } else {
-                                  const branchId = value ? Number(value) : null;
+                                    `customer_relationship_details.${index}.relationship_type`,
+                                    value || "Sales",
+                                  )
+                                }
+                                error={
+                                  (
+                                    (
+                                      form.errors
+                                        .customer_relationship_details as Record<
+                                        string,
+                                        any
+                                      >
+                                    )?.[index] as Record<string, string>
+                                  )?.relationship_type
+                                }
+                                disabled={
+                                  !form.values.customer_id &&
+                                  !fromCustomerMaster
+                                }
+                                clearable={false}
+                              />
+                            </Grid.Col>
+
+                            {/* Salesperson Name */}
+                            <Grid.Col span={1}>
+                              <SearchableSelect
+                                label="Salesperson Name"
+                                placeholder="Type salesperson name"
+                                apiEndpoint={URL.user}
+                                searchFields={[
+                                  "user_name",
+                                  "employee_id",
+                                  "user_id",
+                                ]}
+                                displayFormat={(
+                                  item: Record<string, unknown>,
+                                ) => ({
+                                  value: String(item.employee_id || ""),
+                                  label: String(item.user_name || ""),
+                                })}
+                                value={detail.emp_id_input}
+                                displayValue={
+                                  displayNamesMap[index]?.salesperson
+                                }
+                                returnOriginalData={true}
+                                withAsterisk={true}
+                                onChange={(
+                                  value,
+                                  selectedData,
+                                  originalData,
+                                ) => {
+                                  const empId = originalData?.employee_id
+                                    ? String(originalData.employee_id)
+                                    : value || "";
+
                                   form.setFieldValue(
-                                    `customer_relationship_details.${index}.branch_id`,
-                                    branchId,
+                                    `customer_relationship_details.${index}.emp_id_input`,
+                                    empId,
                                   );
-                                  const selectedBranch = (
-                                    branchOptionsMap[index] || []
-                                  ).find((opt) => opt.value === value);
                                   setDisplayNamesMap((prev) => ({
                                     ...prev,
                                     [index]: {
                                       ...prev[index],
-                                      branch: selectedBranch?.label || null,
+                                      salesperson:
+                                        selectedData?.label || null,
                                     },
                                   }));
-                                }
-                              }}
-                              error={
-                                (
+
+                                  // Clear branch + country when salesperson changes
+                                  form.setFieldValue(
+                                    `customer_relationship_details.${index}.branch_id`,
+                                    null,
+                                  );
+                                  form.setFieldValue(
+                                    `customer_relationship_details.${index}.country_id`,
+                                    null,
+                                  );
+                                  setDisplayNamesMap((prev) => ({
+                                    ...prev,
+                                    [index]: {
+                                      ...prev[index],
+                                      branch: null,
+                                      country: null,
+                                    },
+                                  }));
+
+                                  // Fetch branches for the selected employee
+                                  if (empId) {
+                                    fetchBranchesByEmployeeId(empId, index);
+                                  } else {
+                                    setBranchOptionsMap((prev) => ({
+                                      ...prev,
+                                      [index]: [],
+                                    }));
+                                  }
+                                }}
+                                error={
                                   (
-                                    form.errors
-                                      .customer_relationship_details as Record<
-                                      string,
-                                      any
-                                    >
-                                  )?.[index] as Record<string, string>
-                                )?.branch_id
-                              }
-                              disabled={
-                                (!form.values.customer_id &&
-                                  !fromCustomerMaster) ||
-                                !detail.emp_id_input ||
-                                isLoadingBranchesMap[index] ||
-                                (branchOptionsMap[index]?.length || 0) === 0
-                              }
-                              rightSection={
-                                isLoadingBranchesMap[index] ? (
-                                  <Loader size="xs" />
-                                ) : undefined
-                              }
-                              clearable
-                            />
-                          </Tooltip>
-                        </Grid.Col>
+                                    (
+                                      form.errors
+                                        .customer_relationship_details as Record<
+                                        string,
+                                        any
+                                      >
+                                    )?.[index] as Record<string, string>
+                                  )?.emp_id_input
+                                }
+                                minSearchLength={2}
+                                disabled={
+                                  !form.values.customer_id &&
+                                  !fromCustomerMaster
+                                }
+                              />
+                            </Grid.Col>
 
-                        {/* Service Name - Order 2 */}
-                        <Grid.Col span={2}>
-                          <SearchableSelect
-                            label="Service Name"
-                            placeholder="Type service name (0 = Common)"
-                            apiEndpoint={URL.serviceMaster}
-                            searchFields={["service_name", "service_code"]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.id || ""),
-                              label:
-                                String(item.service_code ?? "") ===
-                                COMMON_SERVICE_CODE
-                                  ? `${item.service_name || "Common"} (Common)`
-                                  : String(item.service_name || ""),
-                            })}
-                            value={
-                              detail.service_id ? String(detail.service_id) : ""
-                            }
-                            displayValue={
-                              displayNamesMap[index]?.service ||
-                              (detail.service_id != null &&
-                              commonServiceId != null &&
-                              detail.service_id === commonServiceId
-                                ? "Common"
-                                : null)
-                            }
-                            returnOriginalData={true}
-                            onChange={(value, selectedData, originalData) => {
-                              if (value === null || value === "") {
-                                form.setFieldValue(
-                                  `customer_relationship_details.${index}.service_id`,
-                                  null,
-                                );
-                                setDisplayNamesMap((prev) => ({
-                                  ...prev,
-                                  [index]: { ...prev[index], service: null },
-                                }));
-                              } else {
-                                const serviceId = originalData?.id
-                                  ? Number(originalData.id)
-                                  : value
-                                    ? Number(value)
-                                    : null;
-                                const isCommon =
-                                  String(originalData?.service_code ?? "") ===
-                                    COMMON_SERVICE_CODE ||
-                                  (commonServiceId != null &&
-                                    serviceId === commonServiceId);
-                                form.setFieldValue(
-                                  `customer_relationship_details.${index}.service_id`,
-                                  serviceId,
-                                );
-                                setDisplayNamesMap((prev) => ({
-                                  ...prev,
-                                  [index]: {
-                                    ...prev[index],
-                                    service: isCommon
-                                      ? "Common"
-                                      : selectedData?.label ||
-                                        (originalData?.service_name
-                                          ? String(originalData.service_name)
-                                          : null),
-                                  },
-                                }));
-                              }
-                            }}
-                            error={
-                              form.errors[
-                                `customer_relationship_details.${index}.service_id`
-                              ]
-                            }
-                            minSearchLength={1}
-                            disabled={
-                              !form.values.customer_id && !fromCustomerMaster
-                            }
-                          />
-                        </Grid.Col>
+                            {/* Credit Days */}
+                            <Grid.Col span={1}>
+                              <FormNumberInput
+                                label="Credit Days"
+                                placeholder="Days"
+                                hideControls
+                                allowDecimal={false}
+                                allowNegative={false}
+                                decimalScale={0}
+                                value={
+                                  detail.credit_day === ""
+                                    ? ""
+                                    : Number(detail.credit_day)
+                                }
+                                onChange={(value) => {
+                                  form.setFieldValue(
+                                    `customer_relationship_details.${index}.credit_day`,
+                                    value === "" || value == null
+                                      ? ""
+                                      : String(value),
+                                  );
+                                }}
+                                error={
+                                  form.errors[
+                                    `customer_relationship_details.${index}.credit_day`
+                                  ]
+                                }
+                                disabled={
+                                  !form.values.customer_id &&
+                                  !fromCustomerMaster
+                                }
+                              />
+                            </Grid.Col>
 
-                        {/* Relationship Type - Order 3 */}
-                        <Grid.Col span={2}>
-                          <Dropdown
-                            label="Relationship Type"
-                            placeholder="Select relationship type"
-                            searchable
-                            withAsterisk
-                            data={["Sales"]}
-                            value={detail.relationship_type}
-                            onChange={(value) =>
-                              form.setFieldValue(
-                                `customer_relationship_details.${index}.relationship_type`,
-                                value || "Sales",
-                              )
-                            }
-                            error={
-                              (
-                                (
-                                  form.errors
-                                    .customer_relationship_details as Record<
-                                    string,
-                                    any
-                                  >
-                                )?.[index] as Record<string, string>
-                              )?.relationship_type
-                            }
-                            disabled={
-                              !form.values.customer_id && !fromCustomerMaster
-                            }
-                            clearable={false}
-                          />
-                        </Grid.Col>
-
-                        {/* Salesperson Name - Order 4 */}
-                        <Grid.Col span={2}>
-                          <SearchableSelect
-                            label="Salesperson Name"
-                            placeholder="Type salesperson name"
-                            apiEndpoint={URL.user}
-                            searchFields={[
-                              "user_name",
-                              "employee_id",
-                              "user_id",
-                            ]}
-                            displayFormat={(item: Record<string, unknown>) => ({
-                              value: String(item.employee_id || ""),
-                              label: String(item.user_name || ""),
-                            })}
-                            value={detail.emp_id_input}
-                            displayValue={displayNamesMap[index]?.salesperson}
-                            returnOriginalData={true}
-                            withAsterisk={true}
-                            onChange={(value, selectedData, originalData) => {
-                              const empId = originalData?.employee_id
-                                ? String(originalData.employee_id)
-                                : value || "";
-
-                              form.setFieldValue(
-                                `customer_relationship_details.${index}.emp_id_input`,
-                                empId,
-                              );
-                              setDisplayNamesMap((prev) => ({
-                                ...prev,
-                                [index]: {
-                                  ...prev[index],
-                                  salesperson: selectedData?.label || null,
-                                },
-                              }));
-
-                              // Clear branch when salesperson changes
-                              form.setFieldValue(
-                                `customer_relationship_details.${index}.branch_id`,
-                                null,
-                              );
-                              setDisplayNamesMap((prev) => ({
-                                ...prev,
-                                [index]: { ...prev[index], branch: null },
-                              }));
-
-                              // Fetch branches for the selected employee
-                              if (empId) {
-                                fetchBranchesByEmployeeId(empId, index);
-                              } else {
-                                setBranchOptionsMap((prev) => ({
-                                  ...prev,
-                                  [index]: [],
-                                }));
-                              }
-                            }}
-                            error={
-                              (
-                                (
-                                  form.errors
-                                    .customer_relationship_details as Record<
-                                    string,
-                                    any
-                                  >
-                                )?.[index] as Record<string, string>
-                              )?.emp_id_input
-                            }
-                            minSearchLength={2}
-                            disabled={
-                              !form.values.customer_id && !fromCustomerMaster
-                            }
-                          />
-                        </Grid.Col>
-
-                        {/* Credit Days */}
-                        <Grid.Col span={1.5}>
-                          <FormNumberInput
-                            label="Credit Days"
-                            placeholder="Days"
-                            hideControls
-                            allowDecimal={false}
-                            allowNegative={false}
-                            decimalScale={0}
-                            value={
-                              detail.credit_day === ""
-                                ? ""
-                                : Number(detail.credit_day)
-                            }
-                            onChange={(value) => {
-                              form.setFieldValue(
-                                `customer_relationship_details.${index}.credit_day`,
-                                value === "" || value == null
-                                  ? ""
-                                  : String(value),
-                              );
-                            }}
-                            error={
-                              form.errors[
-                                `customer_relationship_details.${index}.credit_day`
-                              ]
-                            }
-                            disabled={
-                              !form.values.customer_id && !fromCustomerMaster
-                            }
-                          />
-                        </Grid.Col>
-
-                        {/* Credit Amount */}
-                        <Grid.Col span={1.5}>
-                          <FormNumberInput
-                            label="Credit Amount"
-                            placeholder="Amount"
-                            hideControls
-                            allowNegative={false}
-                            decimalScale={2}
-                            value={
-                              detail.credit_amount === ""
-                                ? ""
-                                : Number(detail.credit_amount)
-                            }
-                            onChange={(value) => {
-                              form.setFieldValue(
-                                `customer_relationship_details.${index}.credit_amount`,
-                                value === "" || value == null
-                                  ? ""
-                                  : String(value),
-                              );
-                            }}
-                            error={
-                              form.errors[
-                                `customer_relationship_details.${index}.credit_amount`
-                              ]
-                            }
-                            disabled={
-                              !form.values.customer_id && !fromCustomerMaster
-                            }
-                          />
-                        </Grid.Col>
+                            {/* Credit Amount */}
+                            <Grid.Col span={1}>
+                              <FormNumberInput
+                                label="Credit Amount"
+                                placeholder="Amount"
+                                hideControls
+                                allowNegative={false}
+                                decimalScale={2}
+                                value={
+                                  detail.credit_amount === ""
+                                    ? ""
+                                    : Number(detail.credit_amount)
+                                }
+                                onChange={(value) => {
+                                  form.setFieldValue(
+                                    `customer_relationship_details.${index}.credit_amount`,
+                                    value === "" || value == null
+                                      ? ""
+                                      : String(value),
+                                  );
+                                }}
+                                error={
+                                  form.errors[
+                                    `customer_relationship_details.${index}.credit_amount`
+                                  ]
+                                }
+                                disabled={
+                                  !form.values.customer_id &&
+                                  !fromCustomerMaster
+                                }
+                              />
+                            </Grid.Col>
+                          </Grid>
+                        </Box>
 
                         {form.values.customer_relationship_details.length >
                           1 && (
-                          <Grid.Col
-                            span={1}
-                            style={{
-                              display: "flex",
-                              alignItems: "end",
-                              justifyContent: "flex-end",
+                          <Button
+                            variant="light"
+                            color="red"
+                            size="sm"
+                            mb={2}
+                            style={{ flexShrink: 0 }}
+                            onClick={() => {
+                              form.removeListItem(
+                                "customer_relationship_details",
+                                index,
+                              );
+                              // Clean up branch options and display names for removed index
+                              setBranchOptionsMap((prev) => {
+                                const newMap = { ...prev };
+                                delete newMap[index];
+                                // Reindex remaining entries
+                                const reindexed: Record<
+                                  number,
+                                  BranchOption[]
+                                > = {};
+                                Object.keys(newMap).forEach((key) => {
+                                  const oldIndex = Number(key);
+                                  if (oldIndex > index) {
+                                    reindexed[oldIndex - 1] = newMap[oldIndex];
+                                  } else if (oldIndex < index) {
+                                    reindexed[oldIndex] = newMap[oldIndex];
+                                  }
+                                });
+                                return reindexed;
+                              });
+                              setDisplayNamesMap((prev) => {
+                                const newMap = { ...prev };
+                                delete newMap[index];
+                                const reindexed: Record<
+                                  number,
+                                  {
+                                    salesperson?: string | null;
+                                    service?: string | null;
+                                    branch?: string | null;
+                                    country?: string | null;
+                                  }
+                                > = {};
+                                Object.keys(newMap).forEach((key) => {
+                                  const oldIndex = Number(key);
+                                  if (oldIndex > index) {
+                                    reindexed[oldIndex - 1] = newMap[oldIndex];
+                                  } else if (oldIndex < index) {
+                                    reindexed[oldIndex] = newMap[oldIndex];
+                                  }
+                                });
+                                return reindexed;
+                              });
                             }}
                           >
-                            <Button
-                              variant="light"
-                              color="red"
-                              size="sm"
-                              onClick={() => {
-                                form.removeListItem(
-                                  "customer_relationship_details",
-                                  index,
-                                );
-                                // Clean up branch options and display names for removed index
-                                setBranchOptionsMap((prev) => {
-                                  const newMap = { ...prev };
-                                  delete newMap[index];
-                                  // Reindex remaining entries
-                                  const reindexed: Record<
-                                    number,
-                                    Array<{ value: string; label: string }>
-                                  > = {};
-                                  Object.keys(newMap).forEach((key) => {
-                                    const oldIndex = Number(key);
-                                    if (oldIndex > index) {
-                                      reindexed[oldIndex - 1] =
-                                        newMap[oldIndex];
-                                    } else if (oldIndex < index) {
-                                      reindexed[oldIndex] = newMap[oldIndex];
-                                    }
-                                  });
-                                  return reindexed;
-                                });
-                                setDisplayNamesMap((prev) => {
-                                  const newMap = { ...prev };
-                                  delete newMap[index];
-                                  const reindexed: Record<
-                                    number,
-                                    {
-                                      salesperson?: string | null;
-                                      service?: string | null;
-                                      branch?: string | null;
-                                    }
-                                  > = {};
-                                  Object.keys(newMap).forEach((key) => {
-                                    const oldIndex = Number(key);
-                                    if (oldIndex > index) {
-                                      reindexed[oldIndex - 1] =
-                                        newMap[oldIndex];
-                                    } else if (oldIndex < index) {
-                                      reindexed[oldIndex] = newMap[oldIndex];
-                                    }
-                                  });
-                                  return reindexed;
-                                });
-                              }}
-                            >
-                              <IconTrash size={20} />
-                            </Button>
-                          </Grid.Col>
+                            <IconTrash size={20} />
+                          </Button>
                         )}
-                      </Grid>
+                      </Flex>
                     </Box>
                   ),
                 )}

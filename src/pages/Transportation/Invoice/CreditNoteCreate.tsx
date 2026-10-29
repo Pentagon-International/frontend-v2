@@ -571,6 +571,7 @@ const fetchCheckSezStatus = async (payload: {
   document_date?: string;
   service_id?: number | null;
   branch_id?: number | null;
+  country_id?: number | null;
 }): Promise<SezStatusResult> => {
   try {
     const body: {
@@ -579,6 +580,7 @@ const fetchCheckSezStatus = async (payload: {
       document_date?: string;
       service_id?: number;
       branch_id?: number;
+      country_id?: number;
     } = {
       customer_code: payload.customer_code,
       address: payload.address,
@@ -597,6 +599,12 @@ const fetchCheckSezStatus = async (payload: {
       Number.isFinite(Number(payload.branch_id))
     ) {
       body.branch_id = Number(payload.branch_id);
+    }
+    if (
+      payload.country_id != null &&
+      Number.isFinite(Number(payload.country_id))
+    ) {
+      body.country_id = Number(payload.country_id);
     }
     const response = await postAPICall(URL.checkSezStatus, body, API_HEADER);
     const root = response as {
@@ -1985,12 +1993,20 @@ function CreditNoteCreate() {
       pendingApplyDueDateFromCreditRef.current = false;
     };
 
-    const activeBranchId = (() => {
+    const { activeBranchId, activeCountryId } = (() => {
       const b =
         user?.branches?.find((br) => br.is_default === true) ??
         user?.branches?.[0];
       const id = b?.branch_id;
-      return id != null && Number.isFinite(Number(id)) ? Number(id) : null;
+      const countryId = b?.country_id;
+      return {
+        activeBranchId:
+          id != null && Number.isFinite(Number(id)) ? Number(id) : null,
+        activeCountryId:
+          countryId != null && Number.isFinite(Number(countryId))
+            ? Number(countryId)
+            : null,
+      };
     })();
 
     // Same SEZ tax rules as before: India/Vietnam customer only (not agent).
@@ -2032,6 +2048,7 @@ function CreditNoteCreate() {
         ...(indiaDocumentDate ? { document_date: indiaDocumentDate } : {}),
         service_id: serviceIdForCredit,
         branch_id: activeBranchId,
+        country_id: activeCountryId,
       });
       if (cancelled) return;
 
