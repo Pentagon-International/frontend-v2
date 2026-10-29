@@ -368,6 +368,10 @@ function getApprovalEditValidationError(
   row: CustomerPanApprovalRow,
   _requireIndiaTaxIds: boolean,
 ): string | null {
+  if (!String(row.customer_name ?? "").trim()) {
+    return "Name is required";
+  }
+
   const term = String(row.term_code ?? "").trim().toUpperCase();
   if (term === "CREDIT") {
     const days =
@@ -867,14 +871,13 @@ export function CustomerPanApprovalDetails({
     <Stack gap="md">
       <Card withBorder padding="md" radius="md" bg="#fafbfc">
         <Stack gap="md">
-          <Box>
-            <Text size="xs" c="dimmed" fw={500} mb={4}>
-              {entityLabel} Name
-            </Text>
-            <Text size="md" fw={600} c="#105476" style={{ lineHeight: 1.4 }}>
-              {row.customer_name || "—"}
-            </Text>
-          </Box>
+          <FormTextInput
+            format="normal"
+            label={`${entityLabel} Name`}
+            value={row.customer_name ?? ""}
+            onChange={(e) => updateRow({ customer_name: e.target.value })}
+            required
+          />
 
           <Text size="xs" fw={700} c="#105476" tt="uppercase">
             General Information
@@ -2248,32 +2251,56 @@ export default function ApproveCustomerPanMaster({
   const handleConfirmAction = async () => {
     if (!pendingAction || pendingAction.type === "view") return;
 
-    if (
-      pendingAction.type === "approve" &&
-      countPendingNewSupportingDocuments(supportingDocuments) > 0
-    ) {
-      ToastNotification({
-        type: "error",
-        message: "Please click Update to save attached documents before approving.",
-      });
-      return;
-    }
+    if (pendingAction.type === "approve") {
+      const rowToUpdate = editableApprovalRow ?? pendingAction.row;
+      const validationError = getApprovalEditValidationError(
+        rowToUpdate,
+        isIndiaUser,
+      );
+      if (validationError) {
+        ToastNotification({ type: "error", message: validationError });
+        return;
+      }
 
-    setIsSubmittingAction(true);
-    try {
-      if (pendingAction.type === "approve") {
+      const sizeError = validateSupportingDocumentSizes(supportingDocuments);
+      if (sizeError) {
+        ToastNotification({ type: "error", message: sizeError });
+        return;
+      }
+
+      setIsSubmittingAction(true);
+      try {
+        // Persist edits (including name/docs) before approving
+        await updateCustomerVerification(
+          pendingAction.row.id,
+          buildCustomerVerificationPayload(rowToUpdate),
+          supportingDocuments,
+        );
         await approveCustomerPan(pendingAction.row.id);
         ToastNotification({
           type: "success",
           message: `${entityLabel} approved successfully.`,
         });
-      } else {
-        await rejectCustomerPan(pendingAction.row.id);
+        resetApprovalModalState();
+        await refreshList();
+      } catch (error) {
         ToastNotification({
-          type: "success",
-          message: `${entityLabel} rejected successfully.`,
+          type: "error",
+          message: extractApiErrorMessage(error),
         });
+      } finally {
+        setIsSubmittingAction(false);
       }
+      return;
+    }
+
+    setIsSubmittingAction(true);
+    try {
+      await rejectCustomerPan(pendingAction.row.id);
+      ToastNotification({
+        type: "success",
+        message: `${entityLabel} rejected successfully.`,
+      });
       resetApprovalModalState();
       await refreshList();
     } catch (error) {
@@ -2834,7 +2861,7 @@ export default function ApproveCustomerPanMaster({
           >
             <Text size="sm" fw={500}>
               {pendingAction?.type === "approve"
-                ? `Review and edit ${entityLabelLower} details, including documents. Use Update to save changes, or Approve to approve.`
+                ? `Review and edit ${entityLabelLower} details, including documents. Use Update to save without approving, or Approve to save changes and approve.`
                 : pendingAction?.type === "reject"
                   ? `Please review all ${entityLabelLower} and address details before rejecting.`
                   : `${entityLabel} details are shown in view-only mode.`}
