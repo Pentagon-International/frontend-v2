@@ -218,7 +218,7 @@ type AdjustmentRow = {
   /** Outstanding allocation serial; sent back on the receipt allocation payload. */
   obj_sno?: string | null;
   /** Outstanding allocation side; used for party/header net (Dr − Cr). */
-  Dr_Cr?: "Cr" | "Dr" | null;
+  dr_cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -242,7 +242,7 @@ type InvoiceCombinedItem = {
   currency_code?: string;
   account_code?: string;
   roe?: number | string;
-  Dr_Cr?: string | null;
+  dr_cr?: string | null;
   [key: string]: unknown;
 };
 
@@ -255,14 +255,14 @@ function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   return null;
 }
 
-/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
+/** Use only dr_cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
-  Dr_Cr?: "Cr" | "Dr" | null;
+  dr_cr?: "Cr" | "Dr" | null;
 }): "Cr" | "Dr" | null {
-  return normalizeAllocationDrCr(a.Dr_Cr);
+  return normalizeAllocationDrCr(a.dr_cr);
 }
 
-/** Receipt allocation net = Dr − Cr. Missing Dr_Cr counts as Dr. */
+/** Receipt allocation net = Dr − Cr. Missing dr_cr counts as Dr. */
 function receiptAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -509,7 +509,6 @@ type ReceiptListItem = {
     currency_code?: string;
     currency_id?: number;
     roe?: string | number;
-    Dr_Cr?: string | null;
     dr_cr?: string | null;
   }>;
   [key: string]: unknown;
@@ -580,7 +579,7 @@ const getDefaultAdjustmentRow = (
   adj_local_amount: null,
   invoice_id: null,
   obj_sno: null,
-  Dr_Cr: null,
+  dr_cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -1073,7 +1072,7 @@ export default function OverseasReceiptCreate({
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
             const typeVal = (a.type_name ?? a.type ?? "").toString();
-            const sourceDrCr = normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr);
+            const sourceDrCr = normalizeAllocationDrCr(a.dr_cr);
             // Reversal create from receipt: swap allocation Dr/Cr like party rows.
             const allocationDrCr =
               isReversalCreate && sourceDrCr
@@ -1097,7 +1096,7 @@ export default function OverseasReceiptCreate({
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
-              Dr_Cr: allocationDrCr,
+              dr_cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
@@ -1641,7 +1640,7 @@ export default function OverseasReceiptCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : totalNum,
         invoice_id: inv.id != null ? Number(inv.id) : null,
-        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
+        dr_cr: normalizeAllocationDrCr(inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1758,7 +1757,7 @@ export default function OverseasReceiptCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
-        Dr_Cr: resolveAllocationDrCr(a) ?? "",
+        dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -1845,7 +1844,7 @@ export default function OverseasReceiptCreate({
           : {}),
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
-        Dr_Cr: resolveAllocationDrCr(a) ?? "",
+        dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -3822,8 +3821,7 @@ export default function OverseasReceiptCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
-                            "—"}
+                          {normalizeAllocationDrCr(inv.dr_cr) ?? "—"}
                         </Table.Td>
                         <Table.Td>
                           {(inv.currency_code ?? "—").toString().trim() || "—"}

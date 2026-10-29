@@ -83,7 +83,7 @@ export default function PaymentApprovalAllocationsTable({ allocations }: Props) 
               const account =
                 row.subledger_name || row.subledger || row.account_code;
               const currency = row.currency_code || row.currency_name;
-              const drCr = row.dr_cr || row.Dr_Cr;
+              const drCr = row.dr_cr;
               const invCrn = row.Inv_Crn_no;
               const documentNo = String(row.document_no ?? "").trim();
               const docCount = Array.isArray(row.documents)

@@ -223,7 +223,7 @@ type AdjustmentRow = {
   /** Outstanding allocation serial; sent back on the receipt allocation payload. */
   obj_sno?: string | null;
   /** Outstanding allocation side; used for party/header net (Dr − Cr). */
-  Dr_Cr?: "Cr" | "Dr" | null;
+  dr_cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -247,7 +247,7 @@ type InvoiceCombinedItem = {
   amount?: number | string;
   amount_in_local?: number | string;
   obj_sno?: string | number | null;
-  Dr_Cr?: string | null;
+  dr_cr?: string | null;
   [key: string]: unknown;
 };
 
@@ -260,11 +260,11 @@ function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   return null;
 }
 
-/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
+/** Use only dr_cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
-  Dr_Cr?: "Cr" | "Dr" | null;
+  dr_cr?: "Cr" | "Dr" | null;
 }): "Cr" | "Dr" | null {
-  return normalizeAllocationDrCr(a.Dr_Cr);
+  return normalizeAllocationDrCr(a.dr_cr);
 }
 
 function normalizeObjSno(value: unknown): string {
@@ -275,7 +275,7 @@ function allocationDocumentKey(documentNo: unknown, objSno: unknown): string {
   return `${String(documentNo ?? "").trim()}|${normalizeObjSno(objSno)}`;
 }
 
-/** Receipt allocation net = Dr − Cr. Missing Dr_Cr counts as Dr. */
+/** Receipt allocation net = Dr − Cr. Missing dr_cr counts as Dr. */
 function receiptAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -417,7 +417,6 @@ type ReceiptListItem = {
     currency_code?: string;
     currency_id?: number;
     roe?: string | number;
-    Dr_Cr?: string | null;
     dr_cr?: string | null;
   }>;
   [key: string]: unknown;
@@ -484,7 +483,7 @@ const getDefaultAdjustmentRow = (localCurrency: string): AdjustmentRow => ({
   adj_local_amount: null,
   invoice_id: null,
   obj_sno: null,
-  Dr_Cr: null,
+  dr_cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -705,7 +704,7 @@ function computeSyncedDetailRow(
   }
   const matching = getMatchingAllocationsForParty(row, adjustments);
   if (matching.length === 0) return row;
-  // Party local from allocations: Dr − Cr when Dr_Cr is present.
+  // Party local from allocations: Dr − Cr when dr_cr is present.
   const sum = sumAdjustmentLocalAmounts(matching);
   const local = clampLocalAmount(sum);
   const roeVal =
@@ -1135,7 +1134,7 @@ export default function ReceiptCreate({
         ? allocations.map((a) => {
             const roeFromApi = a.invoice_roe ?? a.roe;
             const typeVal = (a.type_name ?? a.type ?? "").toString();
-            const sourceDrCr = normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr);
+            const sourceDrCr = normalizeAllocationDrCr(a.dr_cr);
             // Reversal create from receipt: swap allocation Dr/Cr like party rows.
             const allocationDrCr =
               isReversalCreate && sourceDrCr
@@ -1157,7 +1156,7 @@ export default function ReceiptCreate({
               roe: parseNum(roeFromApi),
               adj_curr_amount: parseNum(a.adj_curr_amount),
               adj_local_amount: toLocalAmount(a.adj_local_amount),
-              Dr_Cr: allocationDrCr,
+              dr_cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(localCurrency)];
@@ -1810,7 +1809,7 @@ export default function ReceiptCreate({
             : inv.id != null
               ? Number(inv.id)
               : null,
-        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
+        dr_cr: normalizeAllocationDrCr(inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1917,7 +1916,7 @@ export default function ReceiptCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
-        Dr_Cr: resolveAllocationDrCr(a) ?? "",
+        dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -2005,7 +2004,7 @@ export default function ReceiptCreate({
           : {}),
         adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
-        Dr_Cr: resolveAllocationDrCr(a) ?? "",
+        dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -2491,7 +2490,6 @@ export default function ReceiptCreate({
         id?: number;
         type?: string;
         type_name?: string;
-        Dr_Cr?: string | null;
         dr_cr?: string | null;
         adj_curr_amount?: string | number;
         adj_local_amount?: string | number;
@@ -2582,9 +2580,9 @@ export default function ReceiptCreate({
             parseNum(a.adj_curr_amount) ?? prev?.adj_curr_amount ?? null,
           adj_local_amount:
             toLocalAmount(a.adj_local_amount) ?? prev?.adj_local_amount ?? null,
-          Dr_Cr:
-            normalizeAllocationDrCr(a.Dr_Cr ?? a.dr_cr) ??
-            prev?.Dr_Cr ??
+          dr_cr:
+            normalizeAllocationDrCr(a.dr_cr) ??
+            prev?.dr_cr ??
             null,
         };
       });
@@ -4127,8 +4125,7 @@ export default function ReceiptCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
-                            "—"}
+                          {normalizeAllocationDrCr(inv.dr_cr) ?? "—"}
                         </Table.Td>
                       </Table.Tr>
                     ))}

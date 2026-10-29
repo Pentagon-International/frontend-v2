@@ -218,7 +218,7 @@ type AdjustmentRow = {
   /** Outstanding allocation serial; sent back on the payment allocation payload. */
   obj_sno?: string | null;
   /** Outstanding allocation side; used for party/header net (Cr − Dr). */
-  Dr_Cr?: "Cr" | "Dr" | null;
+  dr_cr?: "Cr" | "Dr" | null;
 };
 
 type InvoiceCombinedItem = {
@@ -241,7 +241,7 @@ type InvoiceCombinedItem = {
   amount?: number | string;
   amount_in_local?: number | string;
   obj_sno?: string | number | null;
-  Dr_Cr?: string | null;
+  dr_cr?: string | null;
   [key: string]: unknown;
 };
 
@@ -256,14 +256,14 @@ function normalizeAllocationDrCr(
   return null;
 }
 
-/** Use only Dr_Cr received from outstanding / saved allocation APIs (no type inference). */
+/** Use only dr_cr received from outstanding / saved allocation APIs (no type inference). */
 function resolveAllocationDrCr(a: {
-  Dr_Cr?: "Cr" | "Dr" | null;
+  dr_cr?: "Cr" | "Dr" | null;
 }): "Cr" | "Dr" | null {
-  return normalizeAllocationDrCr(a.Dr_Cr);
+  return normalizeAllocationDrCr(a.dr_cr);
 }
 
-/** Payment allocation net = Cr − Dr. Missing Dr_Cr counts as Cr. */
+/** Payment allocation net = Cr − Dr. Missing dr_cr counts as Cr. */
 function paymentAllocationNetSign(
   drCr: "Cr" | "Dr" | null | undefined,
 ): 1 | -1 {
@@ -488,7 +488,6 @@ type PaymentListItem = {
     document_no?: string;
     document_date?: string;
     obj_sno?: string | number | null;
-    Dr_Cr?: string | null;
     dr_cr?: string | null;
     adj_curr_amount?: string | number;
     adj_local_amount?: string | number;
@@ -590,7 +589,7 @@ const getDefaultAdjustmentRow = (
   adj_local_amount: null,
   invoice_id: null,
   obj_sno: null,
-  Dr_Cr: null,
+  dr_cr: null,
 });
 
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -1073,13 +1072,10 @@ export default function OverseasPaymentCreate({
               currency_code?: string;
               adj_curr_amount?: string | number;
               adj_local_amount?: string | number;
-              Dr_Cr?: string | null;
               dr_cr?: string | null;
             };
             const roeFromApi = aAny.invoice_roe ?? aAny.roe;
-            const sourceDrCr = normalizeAllocationDrCr(
-              aAny.Dr_Cr ?? aAny.dr_cr,
-            );
+            const sourceDrCr = normalizeAllocationDrCr(aAny.dr_cr);
             // Reversal create from payment: swap allocation Dr/Cr like party rows.
             const allocationDrCr =
               isReversalCreate && sourceDrCr
@@ -1113,7 +1109,7 @@ export default function OverseasPaymentCreate({
               roe: parseAllocationDocumentRoe(roeFromApi),
               adj_curr_amount: parseNum(aAny.adj_curr_amount),
               adj_local_amount: toLocalAmount(aAny.adj_local_amount),
-              Dr_Cr: allocationDrCr,
+              dr_cr: allocationDrCr,
             };
           })
         : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
@@ -1775,7 +1771,7 @@ export default function OverseasPaymentCreate({
               ? clampLocalAmount(totalNum * invRoe)
               : toLocalAmount(totalNum),
         invoice_id: resolveSupplierInvoiceId(inv),
-        Dr_Cr: normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr),
+        dr_cr: normalizeAllocationDrCr(inv.dr_cr),
       };
     });
     let withoutThisPartyManaged = currentAdjustments.filter(
@@ -1889,7 +1885,7 @@ export default function OverseasPaymentCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
-        Dr_Cr: resolveAllocationDrCr(a) ?? "",
+        dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isEdit && options.status != null) {
@@ -1974,7 +1970,7 @@ export default function OverseasPaymentCreate({
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
         adj_curr_amount: a.adj_curr_amount ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
-        Dr_Cr: resolveAllocationDrCr(a) ?? "",
+        dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
     };
     if (isUpdate && options?.reversalId != null) {
@@ -3943,8 +3939,7 @@ export default function OverseasPaymentCreate({
                           {formatOutstandingDocumentAmountInLocal(inv.amount)}
                         </Table.Td>
                         <Table.Td>
-                          {normalizeAllocationDrCr(inv.Dr_Cr ?? inv.dr_cr) ??
-                            "—"}
+                          {normalizeAllocationDrCr(inv.dr_cr) ?? "—"}
                         </Table.Td>
                         <Table.Td>
                           {(inv.currency_code ?? "—").toString().trim() || "—"}

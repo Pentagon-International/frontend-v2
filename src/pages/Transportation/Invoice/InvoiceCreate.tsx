@@ -7541,6 +7541,20 @@ function InvoiceCreate({
                                   },
                           );
                           form.setFieldValue("charges", updatedCharges);
+
+                          if (
+                            amount != null &&
+                            amount > 0 &&
+                            chargeErrors[index]?.amount
+                          ) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].amount;
+                              if (Object.keys(newErrors[index]).length === 0)
+                                delete newErrors[index];
+                            }
+                            setChargeErrors(newErrors);
+                          }
                         }}
                       />
                     </Grid.Col>
@@ -7609,6 +7623,20 @@ function InvoiceCreate({
                                   },
                           );
                           form.setFieldValue("charges", updatedCharges);
+
+                          if (
+                            amount != null &&
+                            amount > 0 &&
+                            chargeErrors[index]?.amount
+                          ) {
+                            const newErrors = { ...chargeErrors };
+                            if (newErrors[index]) {
+                              delete newErrors[index].amount;
+                              if (Object.keys(newErrors[index]).length === 0)
+                                delete newErrors[index];
+                            }
+                            setChargeErrors(newErrors);
+                          }
                         }}
                       />
                     </Grid.Col>
@@ -7621,62 +7649,8 @@ function InvoiceCreate({
                           charge.currency,
                         )}
                         withAsterisk
-                        // disabled={isReadOnly}
-                        readOnly={isReadOnly}
+                        readOnly
                         value={charge.amount || undefined}
-                        onChange={(value) => {
-                          const currentCharge = form.values.charges[index];
-                          const currencyAmount = clampCurrencyAmount(
-                            value as number | null,
-                            currentCharge.currency,
-                          );
-                          let amountInLocal = currentCharge.amount_in_local;
-                          let headerAmt = currentCharge.header_amount;
-
-                          if (
-                            currencyAmount != null &&
-                            currencyAmount > 0 &&
-                            currentCharge.roe != null &&
-                            currentCharge.roe > 0
-                          ) {
-                            amountInLocal = clampLocalAmount(
-                              currencyAmount * currentCharge.roe,
-                            );
-                          }
-                          headerAmt =
-                            calcChargeHeaderAmount(
-                              {
-                                ...currentCharge,
-                                amount: currencyAmount,
-                                amount_in_local: amountInLocal,
-                              },
-                              form.values.currency,
-                              form.values.roe,
-                            ) ?? headerAmt;
-
-                          const updatedCharges = form.values.charges.map(
-                            (c, i) =>
-                              i !== index
-                                ? c
-                                : {
-                                    ...c,
-                                    amount: currencyAmount,
-                                    amount_in_local: amountInLocal,
-                                    header_amount: headerAmt,
-                                  },
-                          );
-                          form.setFieldValue("charges", updatedCharges);
-
-                          if (chargeErrors[index]?.amount) {
-                            const newErrors = { ...chargeErrors };
-                            if (newErrors[index]) {
-                              delete newErrors[index].amount;
-                              if (Object.keys(newErrors[index]).length === 0)
-                                delete newErrors[index];
-                            }
-                            setChargeErrors(newErrors);
-                          }
-                        }}
                         error={chargeErrors[index]?.amount}
                       />
                     </Grid.Col>
@@ -7687,18 +7661,8 @@ function InvoiceCreate({
                         hideControls
                         groupThousands
                         decimalScale={headerAmountDecimalScale}
-                        // disabled={isReadOnly}
-                        readOnly={isReadOnly}
+                        readOnly
                         value={charge.header_amount || undefined}
-                        onChange={(value) => {
-                          form.setFieldValue(
-                            `charges.${index}.header_amount`,
-                            clampHeaderAmount(
-                              value as number | null,
-                              form.values.currency,
-                            ),
-                          );
-                        }}
                       />
                     </Grid.Col>
                     <Grid.Col span={chargeGridCols.localAmount}>
@@ -7709,32 +7673,8 @@ function InvoiceCreate({
                         groupThousands
                         decimalScale={localAmountDecimalScale}
                         withAsterisk
-                        // disabled={isReadOnly}
-                        readOnly={isReadOnly}
+                        readOnly
                         value={charge.amount_in_local || undefined}
-                        onChange={(value) => {
-                          const clampedLocal = clampLocalAmount(
-                            value as number | null,
-                          );
-                          const currentCharges = form.values.charges;
-                          const updatedCharges = currentCharges.map((c, i) => {
-                            if (i !== index) return c;
-                            const withLocal = {
-                              ...c,
-                              amount_in_local: clampedLocal,
-                            };
-                            return {
-                              ...withLocal,
-                              header_amount:
-                                calcChargeHeaderAmount(
-                                  withLocal,
-                                  form.values.currency,
-                                  form.values.roe,
-                                ) ?? c.header_amount,
-                            };
-                          });
-                          form.setFieldValue("charges", updatedCharges);
-                        }}
                       />
                     </Grid.Col>
                     {showSacColumn && (

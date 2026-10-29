@@ -25,7 +25,6 @@ export type PaymentApprovalAllocation = {
   adj_curr_amount?: number | string | null;
   adj_local_amount?: number | string | null;
   dr_cr?: string | null;
-  Dr_Cr?: string | null;
   documents?: PaymentApprovalDocument[];
   [key: string]: unknown;
 };
