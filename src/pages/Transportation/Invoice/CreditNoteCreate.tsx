@@ -1088,6 +1088,69 @@ function calcGstTotalsByDrCr(
   };
 }
 
+/** Empty amount-per-unit is treated as 0 for charge amount calculations. */
+function resolveAmountPerUnitForCalc(
+  amountPerUnit: number | null | undefined,
+): number {
+  if (amountPerUnit == null || !Number.isFinite(Number(amountPerUnit)))
+    return 0;
+  return Number(amountPerUnit);
+}
+
+/** Empty no-of-unit is treated as 0 for charge amount calculations. */
+function resolveNoOfUnitForCalc(
+  noOfUnit: number | null | undefined,
+): number {
+  if (noOfUnit == null || !Number.isFinite(Number(noOfUnit))) return 0;
+  return Number(noOfUnit);
+}
+
+/**
+ * Currency / local / billing amounts from units × amount-per-unit.
+ * Empty amount-per-unit or no-of-unit → 0 (no fallback to previous values).
+ */
+function calcChargeAmountsFromUnits(
+  charge: Pick<
+    ChargeItem,
+    "currency" | "roe" | "amount_per_unit" | "no_of_unit"
+  >,
+  billingCurrency: string | null | undefined,
+  billingRoe: number | null | undefined,
+  overrides?: {
+    amount_per_unit?: number | null;
+    no_of_unit?: number | null;
+    roe?: number | null;
+  },
+): {
+  amount: number;
+  amount_in_local: number;
+  header_amount: number;
+} {
+  const amountPerUnit = resolveAmountPerUnitForCalc(
+    overrides && "amount_per_unit" in overrides
+      ? overrides.amount_per_unit
+      : charge.amount_per_unit,
+  );
+  const noOfUnit = resolveNoOfUnitForCalc(
+    overrides && "no_of_unit" in overrides
+      ? overrides.no_of_unit
+      : charge.no_of_unit,
+  );
+  const amount =
+    clampCurrencyAmount(noOfUnit * amountPerUnit) ?? 0;
+  const roe =
+    overrides && "roe" in overrides ? overrides.roe : charge.roe;
+  const amount_in_local =
+    roe != null && roe > 0 ? (clampLocalAmount(amount * roe) ?? 0) : 0;
+  const header_amount =
+    calcChargeHeaderAmount(
+      { amount, amount_in_local, currency: charge.currency },
+      billingCurrency,
+      billingRoe,
+    ) ?? 0;
+  return { amount, amount_in_local, header_amount };
+}
+
 /** Amount in billing currency: same charge/billing currency → currency amount; else local ÷ billing ROE. */
 function calcChargeHeaderAmount(
   charge: Pick<ChargeItem, "amount" | "amount_in_local" | "currency">,
@@ -1100,12 +1163,12 @@ function calcChargeHeaderAmount(
 
   if (billCurr === chargeCurr) {
     const currencyAmount = charge.amount;
-    if (currencyAmount == null || currencyAmount <= 0) return null;
+    if (currencyAmount == null) return null;
     return clampHeaderAmount(currencyAmount, billingCurrency);
   }
 
   const local = charge.amount_in_local;
-  if (local == null || local <= 0) return null;
+  if (local == null) return null;
   if (billingRoe != null && billingRoe > 0) {
     return clampHeaderAmount(local / billingRoe, billingCurrency);
   }
@@ -3669,8 +3732,15 @@ function CreditNoteCreate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.values.charges]);
 
-  // Auto-calculate currency amount only when no_of_unit or amount_per_unit changes on a row
+  // Auto-calculate currency/local/billing amounts when no_of_unit or amount_per_unit changes.
+  // Empty amount-per-unit / no-of-unit are treated as 0 (no fallback to previous amounts).
   useEffect(() => {
+    const billingCurrency = (form.values.currency ?? "").trim().toUpperCase();
+    const topRoe =
+      form.values.roe != null && form.values.roe > 0
+        ? Number(form.values.roe)
+        : null;
+
     const updatedCharges = form.values.charges.map((charge, index) => {
       if (charge.is_tax_row === true) return charge;
 
@@ -3679,27 +3749,31 @@ function CreditNoteCreate() {
       if (prevUnitsKey === unitsKey) return charge;
       chargeUnitsByIndexRef.current[index] = unitsKey;
 
+      const derived = calcChargeAmountsFromUnits(
+        charge,
+        billingCurrency,
+        topRoe,
+      );
       if (
-        charge.amount_per_unit != null &&
-        charge.amount_per_unit > 0 &&
-        charge.no_of_unit != null &&
-        charge.no_of_unit > 0
+        derived.amount !== charge.amount ||
+        derived.amount_in_local !== charge.amount_in_local ||
+        derived.header_amount !== charge.header_amount
       ) {
-        const calculatedAmount = charge.no_of_unit * charge.amount_per_unit;
-        const clamped = clampCurrencyAmount(calculatedAmount);
-        if (clamped != null && clamped !== charge.amount) {
-          return {
-            ...charge,
-            amount: clamped,
-          };
-        }
+        return {
+          ...charge,
+          ...derived,
+        };
       }
 
       return charge;
     });
 
     const hasChanges = updatedCharges.some(
-      (charge, index) => charge.amount !== form.values.charges[index]?.amount,
+      (charge, index) =>
+        charge.amount !== form.values.charges[index]?.amount ||
+        charge.amount_in_local !==
+          form.values.charges[index]?.amount_in_local ||
+        charge.header_amount !== form.values.charges[index]?.header_amount,
     );
 
     if (hasChanges) {
@@ -3720,36 +3794,25 @@ function CreditNoteCreate() {
         : null;
 
     const updatedCharges = form.values.charges.map((charge) => {
-      if (
-        charge.amount !== null &&
-        charge.amount !== undefined &&
-        charge.amount > 0 &&
-        charge.roe !== null &&
-        charge.roe !== undefined &&
-        charge.roe > 0
-      ) {
-        const calculatedLocalAmount = charge.amount * charge.roe;
-        const clamped = clampLocalAmount(calculatedLocalAmount);
-        if (
-          clamped != null &&
-          clamped > 0 &&
-          clamped !== charge.amount_in_local
-        ) {
-          const newHeaderAmount = calcChargeHeaderAmount(
-            { ...charge, amount_in_local: clamped },
-            billingCurrency,
-            topRoe,
-          );
-          return {
-            ...charge,
-            amount_in_local: clamped,
-            header_amount:
-              newHeaderAmount != null ? newHeaderAmount : charge.header_amount,
-          };
-        }
-      }
+      if (charge.amount == null) return charge;
 
-      return charge;
+      const clamped =
+        charge.roe != null && charge.roe > 0
+          ? (clampLocalAmount(charge.amount * charge.roe) ?? 0)
+          : 0;
+      if (clamped === charge.amount_in_local) return charge;
+
+      const newHeaderAmount =
+        calcChargeHeaderAmount(
+          { ...charge, amount_in_local: clamped },
+          billingCurrency,
+          topRoe,
+        ) ?? 0;
+      return {
+        ...charge,
+        amount_in_local: clamped,
+        header_amount: newHeaderAmount,
+      };
     });
 
     const hasChanges = updatedCharges.some(
@@ -3791,7 +3854,6 @@ function CreditNoteCreate() {
       );
       if (
         clampedHeader !== null &&
-        clampedHeader > 0 &&
         clampedHeader !== charge.header_amount
       ) {
         return {
@@ -6718,40 +6780,12 @@ function CreditNoteCreate() {
                           }
                           const roe = value as number | null;
                           const currentCharge = form.values.charges[index];
-                          let amount = currentCharge.amount;
-                          let amountInLocal = currentCharge.amount_in_local;
-                          let headerAmt = currentCharge.header_amount;
-
-                          // Auto-calculate amount = amount_per_unit * no_of_unit
-                          if (
-                            currentCharge.amount_per_unit != null &&
-                            currentCharge.amount_per_unit > 0 &&
-                            currentCharge.no_of_unit != null &&
-                            currentCharge.no_of_unit > 0
-                          ) {
-                            amount = clampCurrencyAmount(
-                              currentCharge.no_of_unit *
-                                currentCharge.amount_per_unit,
-                            );
-                          }
-                          if (
-                            amount != null &&
-                            amount > 0 &&
-                            roe != null &&
-                            roe > 0
-                          ) {
-                            amountInLocal = clampLocalAmount(amount * roe);
-                          }
-                          headerAmt =
-                            calcChargeHeaderAmount(
-                              {
-                                ...currentCharge,
-                                amount,
-                                amount_in_local: amountInLocal,
-                              },
-                              form.values.currency,
-                              form.values.roe,
-                            ) ?? headerAmt;
+                          const derived = calcChargeAmountsFromUnits(
+                            currentCharge,
+                            form.values.currency,
+                            form.values.roe,
+                            { roe },
+                          );
 
                           const updatedCharges = form.values.charges.map(
                             (c, i) =>
@@ -6760,9 +6794,7 @@ function CreditNoteCreate() {
                                 : {
                                     ...c,
                                     roe,
-                                    amount,
-                                    amount_in_local: amountInLocal,
-                                    header_amount: headerAmt,
+                                    ...derived,
                                   },
                           );
                           form.setFieldValue("charges", updatedCharges);
@@ -6827,39 +6859,12 @@ function CreditNoteCreate() {
                             value as number | null,
                           );
                           const currentCharge = form.values.charges[index];
-                          let amount = currentCharge.amount;
-                          let amountInLocal = currentCharge.amount_in_local;
-                          let headerAmt = currentCharge.header_amount;
-
-                          if (
-                            currentCharge.amount_per_unit != null &&
-                            currentCharge.amount_per_unit > 0 &&
-                            noOfUnit != null &&
-                            noOfUnit > 0
-                          ) {
-                            amount = clampCurrencyAmount(
-                              noOfUnit * currentCharge.amount_per_unit,
-                            );
-                            const roeVal = currentCharge.roe;
-                            if (
-                              amount != null &&
-                              amount > 0 &&
-                              roeVal != null &&
-                              roeVal > 0
-                            ) {
-                              amountInLocal = clampLocalAmount(amount * roeVal);
-                            }
-                            headerAmt =
-                              calcChargeHeaderAmount(
-                                {
-                                  ...currentCharge,
-                                  amount,
-                                  amount_in_local: amountInLocal,
-                                },
-                                form.values.currency,
-                                form.values.roe,
-                              ) ?? headerAmt;
-                          }
+                          const derived = calcChargeAmountsFromUnits(
+                            currentCharge,
+                            form.values.currency,
+                            form.values.roe,
+                            { no_of_unit: noOfUnit },
+                          );
 
                           const updatedCharges = form.values.charges.map(
                             (c, i) =>
@@ -6868,18 +6873,12 @@ function CreditNoteCreate() {
                                 : {
                                     ...c,
                                     no_of_unit: noOfUnit,
-                                    amount,
-                                    amount_in_local: amountInLocal,
-                                    header_amount: headerAmt,
+                                    ...derived,
                                   },
                           );
                           form.setFieldValue("charges", updatedCharges);
 
-                          if (
-                            amount != null &&
-                            amount > 0 &&
-                            chargeErrors[index]?.amount
-                          ) {
+                          if (chargeErrors[index]?.amount) {
                             const newErrors = { ...chargeErrors };
                             if (newErrors[index]) {
                               delete newErrors[index].amount;
@@ -6899,45 +6898,18 @@ function CreditNoteCreate() {
                         decimalScale={currencyAmountDecimalScale}
                         // disabled={isReadOnly}
                         readOnly={isReadOnly}
-                        value={charge.amount_per_unit || undefined}
+                        value={charge.amount_per_unit ?? undefined}
                         onChange={(value) => {
                           const amountPerUnit = clampCurrencyAmount(
                             value as number | null,
                           );
                           const currentCharge = form.values.charges[index];
-                          let amount = currentCharge.amount;
-                          let amountInLocal = currentCharge.amount_in_local;
-                          let headerAmt = currentCharge.header_amount;
-
-                          if (
-                            amountPerUnit != null &&
-                            amountPerUnit > 0 &&
-                            currentCharge.no_of_unit != null &&
-                            currentCharge.no_of_unit > 0
-                          ) {
-                            amount = clampCurrencyAmount(
-                              currentCharge.no_of_unit * amountPerUnit,
-                            );
-                            const roeVal = currentCharge.roe;
-                            if (
-                              amount != null &&
-                              amount > 0 &&
-                              roeVal != null &&
-                              roeVal > 0
-                            ) {
-                              amountInLocal = clampLocalAmount(amount * roeVal);
-                            }
-                            headerAmt =
-                              calcChargeHeaderAmount(
-                                {
-                                  ...currentCharge,
-                                  amount,
-                                  amount_in_local: amountInLocal,
-                                },
-                                form.values.currency,
-                                form.values.roe,
-                              ) ?? headerAmt;
-                          }
+                          const derived = calcChargeAmountsFromUnits(
+                            currentCharge,
+                            form.values.currency,
+                            form.values.roe,
+                            { amount_per_unit: amountPerUnit },
+                          );
 
                           const updatedCharges = form.values.charges.map(
                             (c, i) =>
@@ -6946,18 +6918,12 @@ function CreditNoteCreate() {
                                 : {
                                     ...c,
                                     amount_per_unit: amountPerUnit,
-                                    amount,
-                                    amount_in_local: amountInLocal,
-                                    header_amount: headerAmt,
+                                    ...derived,
                                   },
                           );
                           form.setFieldValue("charges", updatedCharges);
 
-                          if (
-                            amount != null &&
-                            amount > 0 &&
-                            chargeErrors[index]?.amount
-                          ) {
+                          if (chargeErrors[index]?.amount) {
                             const newErrors = { ...chargeErrors };
                             if (newErrors[index]) {
                               delete newErrors[index].amount;
@@ -6977,7 +6943,7 @@ function CreditNoteCreate() {
                         decimalScale={currencyAmountDecimalScale}
                         withAsterisk
                         readOnly
-                        value={charge.amount || undefined}
+                        value={charge.amount ?? undefined}
                         error={chargeErrors[index]?.amount}
                       />
                     </Grid.Col>
@@ -6989,7 +6955,7 @@ function CreditNoteCreate() {
                         groupThousands
                         decimalScale={headerAmountDecimalScale}
                         readOnly
-                        value={charge.header_amount || undefined}
+                        value={charge.header_amount ?? undefined}
                       />
                     </Grid.Col>
                     <Grid.Col span={chargeGridCols.localAmount}>
@@ -7001,7 +6967,7 @@ function CreditNoteCreate() {
                         decimalScale={localAmountDecimalScale}
                         withAsterisk
                         readOnly
-                        value={charge.amount_in_local || undefined}
+                        value={charge.amount_in_local ?? undefined}
                       />
                     </Grid.Col>
                     {isGstInvoiceUser && (

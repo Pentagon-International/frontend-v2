@@ -48,6 +48,10 @@ import {
   canEditCustomerRelationshipMapping,
   CUSTOMER_RELATIONSHIP_MAPPING_EDIT_DENIED_MESSAGE,
 } from "../customer-relationship-mapping/customerRelationshipMappingAccess";
+import {
+  canEditPartyMaster,
+  PARTY_MASTER_EDIT_DENIED_MESSAGE,
+} from "../partyMasterAccess";
 import SupportingDocumentsModal from "../../../components/SupportingDocumentsModal";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
@@ -1881,9 +1885,12 @@ function CustomerCreate() {
   const [active, setActive] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const userCountry = useAuthStore((s) => s.user?.country);
-  const userBranches = useAuthStore((s) => s.user?.branches);
+  const user = useAuthStore((s) => s.user);
+  const userCountry = user?.country;
+  const userBranches = user?.branches;
   const isIndiaUser = isIndianUserFromProfile(userCountry);
+  const canEditMaster = canEditPartyMaster(user);
+  const editAccessDeniedNoticeShown = useRef(false);
   // Vietnam SEZ UI: gate on default branch from login (localStorage user)
   const isVietnamUser = isVietnameseBranch(userBranches);
   const isKenyaUser = useMemo(() => {
@@ -1983,9 +1990,42 @@ function CustomerCreate() {
         : "/master/customer";
 
   // Determine the mode based on route parameters
-  const isEditMode = Boolean(params.id && location.pathname.includes("/edit/"));
-  const isViewMode = Boolean(params.id && location.pathname.includes("/view/"));
+  const isEditRoute = Boolean(
+    params.id && location.pathname.includes("/edit/"),
+  );
+  const isViewRoute = Boolean(
+    params.id && location.pathname.includes("/view/"),
+  );
+  // India-only: non-Accounts users are treated as view-only even on /edit
+  const isEditMode = isEditRoute && canEditMaster;
+  const isViewMode = isViewRoute || (isEditRoute && !canEditMaster);
   const isCreateMode = !params.id;
+
+  // India-only: non-Accounts users who hit /edit are redirected to /view
+  useEffect(() => {
+    if (!isEditRoute || canEditMaster || !params.id) return;
+
+    if (!editAccessDeniedNoticeShown.current) {
+      editAccessDeniedNoticeShown.current = true;
+      ToastNotification({
+        type: "error",
+        message: PARTY_MASTER_EDIT_DENIED_MESSAGE,
+      });
+    }
+
+    navigate(`${baseMasterPath}/view/${params.id}`, {
+      replace: true,
+      state: location.state,
+    });
+  }, [
+    isEditRoute,
+    canEditMaster,
+    params.id,
+    baseMasterPath,
+    navigate,
+    location.state,
+  ]);
+
   // TDS is India-specific; overseas vendor create skips that step (Bank becomes step 2).
   const showVendorTdsStep = isVendorMasterRoute && isIndiaUser;
   const vendorBankStep = showVendorTdsStep ? 3 : 2;

@@ -54,6 +54,10 @@ import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerD
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import type { CustomerDocumentListItem } from "../../../utils/customerDocuments";
+import {
+  canEditPartyMaster,
+  PARTY_MASTER_EDIT_DENIED_MESSAGE,
+} from "../partyMasterAccess";
 
 type AddressData = {
   id?: number;
@@ -281,9 +285,12 @@ type CustomerDataResponse = {
 
 function CustomerMaster() {
   const isAdmin = useIsAdminUser();
-  const pulseId = useAuthStore((state) => state.user?.pulse_id);
+  const user = useAuthStore((state) => state.user);
+  const pulseId = user?.pulse_id;
   // Create New is admin-only, plus P2CCI users
   const showCreateButton = isAdmin || pulseId === "P2CCI";
+  // India-only: Accounts (and staff) may edit; others can view only
+  const canEditMaster = canEditPartyMaster(user);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -800,9 +807,16 @@ function CustomerMaster() {
 
   const handleEditCustomer = useCallback(
     (rowData: CustomerData) => {
+      if (!canEditMaster) {
+        ToastNotification({
+          type: "error",
+          message: PARTY_MASTER_EDIT_DENIED_MESSAGE,
+        });
+        return;
+      }
       navigate(`./edit/${rowData.id}`, { state: { customerData: rowData } });
     },
-    [navigate]
+    [navigate, canEditMaster]
   );
 
   // Delete functionality is commented out in the menu
@@ -1187,27 +1201,29 @@ function CustomerMaster() {
                     </Group>
                   </UnstyledButton>
                 </Box>
-                <Box px={10} py={5}>
-                  <UnstyledButton
-                    onClick={() => {
-                      handleEditCustomer(row.original);
-                    }}
-                  >
-                    <Group gap={"sm"}>
-                      <IconEdit size={16} style={{ color: "#105476" }} />
-                      <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
-                        Edit
-                      </Text>
-                    </Group>
-                  </UnstyledButton>
-                </Box>
+                {canEditMaster && (
+                  <Box px={10} py={5}>
+                    <UnstyledButton
+                      onClick={() => {
+                        handleEditCustomer(row.original);
+                      }}
+                    >
+                      <Group gap={"sm"}>
+                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <Text size="sm" style={{ fontFamily: "Inter, sans-serif" }}>
+                          Edit
+                        </Text>
+                      </Group>
+                    </UnstyledButton>
+                  </Box>
+                )}
               </Menu.Dropdown>
             </Menu>
           );
         },
       },
     ],
-    [handleViewCustomer, handleEditCustomer, handleCustomerNameClick]
+    [handleViewCustomer, handleEditCustomer, handleCustomerNameClick, canEditMaster]
   );
 
   const table = useMantineReactTable<CustomerData>({

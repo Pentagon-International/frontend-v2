@@ -46,6 +46,10 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
+import {
+  canEditPartyMaster,
+  PARTY_MASTER_EDIT_DENIED_MESSAGE,
+} from "../partyMasterAccess";
 
 const LIST_KEY = "AGENT_MASTER";
 
@@ -320,9 +324,12 @@ function buildAgentFilterPayload(
 
 export default function AgentMaster() {
   const isAdmin = useIsAdminUser();
-  const pulseId = useAuthStore((state) => state.user?.pulse_id);
+  const user = useAuthStore((state) => state.user);
+  const pulseId = user?.pulse_id;
   // Create New is admin-only, plus P2CCI users
   const showCreateButton = isAdmin || pulseId === "P2CCI";
+  // India-only: Accounts (and staff) may edit; others can view only
+  const canEditMaster = canEditPartyMaster(user);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -613,6 +620,13 @@ export default function AgentMaster() {
 
   const handleEditCustomer = useCallback(
     (rowData: CustomerData) => {
+      if (!canEditMaster) {
+        ToastNotification({
+          type: "error",
+          message: PARTY_MASTER_EDIT_DENIED_MESSAGE,
+        });
+        return;
+      }
       setStoreFilters(LIST_KEY, appliedFilters);
       setStoreSearch(LIST_KEY, search);
       setShouldRestore(LIST_KEY, true);
@@ -627,6 +641,7 @@ export default function AgentMaster() {
       setStoreFilters,
       setStoreSearch,
       setShouldRestore,
+      canEditMaster,
     ],
   );
 
@@ -905,28 +920,32 @@ export default function AgentMaster() {
                   </Group>
                 </UnstyledButton>
               </Box>
-              <Menu.Divider />
-              <Box px={10} py={5}>
-                <UnstyledButton
-                  onClick={() => handleEditCustomer(row.original)}
-                >
-                  <Group gap={"sm"}>
-                    <IconEdit size={16} style={{ color: "#105476" }} />
-                    <Text
-                      size="sm"
-                      style={{ fontFamily: "Inter, sans-serif" }}
+              {canEditMaster && (
+                <>
+                  <Menu.Divider />
+                  <Box px={10} py={5}>
+                    <UnstyledButton
+                      onClick={() => handleEditCustomer(row.original)}
                     >
-                      Edit
-                    </Text>
-                  </Group>
-                </UnstyledButton>
-              </Box>
+                      <Group gap={"sm"}>
+                        <IconEdit size={16} style={{ color: "#105476" }} />
+                        <Text
+                          size="sm"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          Edit
+                        </Text>
+                      </Group>
+                    </UnstyledButton>
+                  </Box>
+                </>
+              )}
             </Menu.Dropdown>
           </Menu>
         ),
       },
     ],
-    [handleViewCustomer, handleEditCustomer, handleCustomerNameClick],
+    [handleViewCustomer, handleEditCustomer, handleCustomerNameClick, canEditMaster],
   );
 
   const table = useMantineReactTable({
