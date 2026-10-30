@@ -355,7 +355,7 @@ function resolveChargeLocalAmount(charge: DrCrChargeLike): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Tax charge rows (IGST/CGST/SGST/VAT) ù no GST rate calc on reverse, same as invoice create. */
+/** Tax charge rows (IGST/CGST/SGST/VAT) ÔøΩ no GST rate calc on reverse, same as invoice create. */
 function isReverseTaxChargeRow(charge: {
   is_tax_row?: boolean;
   charge_code?: string | null;
@@ -538,7 +538,7 @@ function calcTaxAmountFromRate(
 /**
  * Header amount in billing currency (InvoiceCreate parity):
  * - Same charge/billing currency ? currency amount
- * - Different ? local amount ù invoice-level ROE
+ * - Different ? local amount ÔøΩ invoice-level ROE
  */
 function calcChargeHeaderAmount(
   charge: Pick<ChargeItem, "amount" | "amount_in_local" | "currency">,
@@ -701,7 +701,7 @@ const resolveVatTaxRate = (
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-/** Live VAT total from charges only (no tax-tab / breakup). Prefer rate ù
+/** Live VAT total from charges only (no tax-tab / breakup). Prefer rate ÔøΩ
  * amount on each row, else stored tax_amount, else VAT tax-row amounts.
  * Invoice reversal nets Dr ? Cr. Credit-note reversal nets Cr ? Dr. */
 const calcVatTotalFromCharges = (
@@ -983,7 +983,7 @@ type InvoiceFormData = {
 };
 
 /** Parse document/due date from API or form (DD-MM-YYYY or YYYY-MM-DD) to local Date.
- * Must match InvoiceCreate.parseInvoiceDate ù never use `new Date("DD-MM-YYYY")`
+ * Must match InvoiceCreate.parseInvoiceDate ÔøΩ never use `new Date("DD-MM-YYYY")`
  * (JS treats that as MM-DD-YYYY and swaps day/month for China YYYY-MM-DD display).
  */
 function normalizeDate(value: Date | string | null | undefined): Date | null {
@@ -1100,12 +1100,12 @@ type ReversableDataResponse = {
     dr_cr?: string;
     Dr_cr?: string;
     is_tax_row?: boolean;
-    /** ChargeMaster.tax ù true for GST/VAT tax charge rows appended on invoice post. */
+    /** ChargeMaster.tax ÔøΩ true for GST/VAT tax charge rows appended on invoice post. */
     charge_tax?: boolean | null;
   }>;
 };
 
-/** Source-invoice GST/VAT tax lines (ChargeMaster.tax) ù exclude when starting a reverse. */
+/** Source-invoice GST/VAT tax lines (ChargeMaster.tax) ÔøΩ exclude when starting a reverse. */
 function isSourceInvoiceChargeTaxRow(charge: {
   charge_tax?: boolean | null;
 }): boolean {
@@ -1123,7 +1123,7 @@ function applyReversableDataToReverseForm(
     /** When true (existing reverse), show IRN from API. New reverses leave blank until post. */
     includeSourceIrn?: boolean;
     /**
-     * When true (new reverse from agent/customer invoice), drop charge_tax rows ù
+     * When true (new reverse from agent/customer invoice), drop charge_tax rows ÔøΩ
      * those are GST tax lines appended on the source invoice post.
      */
     excludeChargeTaxRows?: boolean;
@@ -1266,7 +1266,7 @@ function resolveMasterChargeIdForPayload(
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** Tax row from calculate-gst-breakup: local = total; header = local ù billing ROE. */
+/** Tax row from calculate-gst-breakup: local = total; header = local ÔøΩ billing ROE. */
 function calcTaxRowAmountsFromBreakupTotal(
   totalAmount: number,
   billingRoe: number,
@@ -1752,7 +1752,7 @@ function InvoiceReverse() {
       document_date: (value) => (!value ? "Document Date is required" : null),
       due_date: (value) => (!value ? "Due Date is required" : null),
       currency: (value) => (!value ? "Currency is required" : null),
-      // Reverse keeps source invoice ROE as-is ù no ROE validation.
+      // Reverse keeps source invoice ROE as-is ÔøΩ no ROE validation.
     },
   });
 
@@ -2002,7 +2002,7 @@ function InvoiceReverse() {
     [activeBranchCountryCode, isBaseCurrency],
   );
 
-  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit (InvoiceCreate parity ù charge ROE is not multiplied here)
+  // Auto-calculate currency amount (amount) as: amount_per_unit * no_of_unit (InvoiceCreate parity ÔøΩ charge ROE is not multiplied here)
   const chargeAmountPerUnits = form.values.charges
     .map((c) => c.amount_per_unit)
     .join(",");
@@ -2044,7 +2044,7 @@ function InvoiceReverse() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chargeAmountPerUnits, chargeNoOfUnits]);
 
-  // Auto-calculate amount_in_local as: amount (currency_amount) * charge.roe ù and keep header_amount in sync (InvoiceCreate parity)
+  // Auto-calculate amount_in_local as: amount (currency_amount) * charge.roe ÔøΩ and keep header_amount in sync (InvoiceCreate parity)
   const chargeAmounts = form.values.charges.map((c) => c.amount).join(",");
   const chargeRoesForLocal = form.values.charges.map((c) => c.roe).join(",");
 
@@ -2149,7 +2149,7 @@ function InvoiceReverse() {
       return changed ? next : prev;
     });
 
-    // Rate lookup key must NOT include localAmount ù amount auto-calc would
+    // Rate lookup key must NOT include localAmount ÔøΩ amount auto-calc would
     // retrigger forever and leave loaders stuck after cancelled fetches.
     const fetchKey = JSON.stringify({
       agent: applyAgentGstRates,
@@ -2261,7 +2261,7 @@ function InvoiceReverse() {
 
   // Auto-calculate header_amount (billing currency column only):
   // - Same charge/billing currency ? currency amount
-  // - Different ? local amount ù invoice-level ROE
+  // - Different ? local amount ÔøΩ invoice-level ROE
   const headerBillingCurrency = form.values.currency;
   const headerRoe = form.values.roe;
   const chargeLocalAmounts = form.values.charges
@@ -2984,8 +2984,8 @@ function InvoiceReverse() {
       return;
     }
     // Validate charges: charge, currency, amount, amount_in_local.
-    // ROE is not validated ù reverse keeps source invoice ROE/amounts as-is.
-    // SAC is optional ù reverse keeps source invoice tax_code as-is (may be empty).
+    // ROE is not validated ÔøΩ reverse keeps source invoice ROE/amounts as-is.
+    // SAC is optional ÔøΩ reverse keeps source invoice tax_code as-is (may be empty).
     const chargeErrs: Record<number, Record<string, string>> = {};
     const invalidCharges = values.charges.some((charge, index) => {
       const err: Record<string, string> = {};
@@ -3565,7 +3565,7 @@ function InvoiceReverse() {
                   }
                   styles={{ root: { textTransform: "none" } }}
                 >
-                  {saveResponse.status?.toUpperCase() || "ù"}
+                  {saveResponse.status?.toUpperCase() || "ÔøΩ"}
                 </Badge>
               </Group>
             )}
@@ -4997,7 +4997,7 @@ function InvoiceReverse() {
                     </Grid>
                   ))}
                 </Box>
-                {/* Totals ù net local total; GST/VAT tax totals when applicable */}
+                {/* Totals ÔøΩ net local total; GST/VAT tax totals when applicable */}
                 {form.values.charges.length > 0 && (
                   <Box
                     mt="xl"
@@ -5138,7 +5138,7 @@ function InvoiceReverse() {
                               (row, idx) => (
                                 <Table.Tr key={idx}>
                                   <Table.Td style={{ fontSize: "13px" }}>
-                                    {row.rate_name ?? "ù"}
+                                    {row.rate_name ?? "ÔøΩ"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {(() => {
@@ -5148,7 +5148,7 @@ function InvoiceReverse() {
                                         rateVal == null ||
                                         String(rateVal).trim() === ""
                                       )
-                                        return "ù";
+                                        return "ÔøΩ";
                                       const rounded = clampGstRate(Number(rateVal));
                                       const displayRate =
                                         rounded != null
@@ -5168,7 +5168,7 @@ function InvoiceReverse() {
                                           Number(row.taxable_total),
                                           false,
                                         )
-                                      : "ù"}
+                                      : "ÔøΩ"}
                                   </Table.Td>
                                 </Table.Tr>
                               ),
@@ -5231,15 +5231,15 @@ function InvoiceReverse() {
                               (row, idx) => (
                                 <Table.Tr key={idx}>
                                   <Table.Td style={{ fontSize: "13px" }}>
-                                    {row.sac_code ?? "ù"}
+                                    {row.sac_code ?? "ÔøΩ"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
-                                    {row.charge_name ?? "ù"}
+                                    {row.charge_name ?? "ÔøΩ"}
                                   </Table.Td>
                                   <Table.Td style={{ fontSize: "13px" }}>
                                     {(() => {
                                       if (row.rate == null || row.rate_type == null)
-                                        return "ù";
+                                        return "ÔøΩ";
                                       const rounded = clampGstRate(Number(row.rate));
                                       return `${rounded ?? row.rate}${row.rate_type}`;
                                     })()}
@@ -5250,7 +5250,7 @@ function InvoiceReverse() {
                                           Number(row.total_amount),
                                           false,
                                         )
-                                      : "ù"}
+                                      : "ÔøΩ"}
                                   </Table.Td>
                                 </Table.Tr>
                               ),

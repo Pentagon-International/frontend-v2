@@ -3923,6 +3923,11 @@ export default function SupplierInvoiceCreate({
             : isCrnType
               ? "Cr"
               : "Dr";
+          // Job ledger scopes AT rows by shipment/job; inherit first operational shipment.
+          const defaultVatShipmentNo =
+            existingCharges
+              .map((c) => String(c.shipment_no ?? "").trim())
+              .find((s) => s.length > 0) ?? "";
           const vatRows: ChargeRow[] = percentageWiseTotals
             .filter((row) => Number(row.tax_rate ?? row.rate ?? 0) > 0)
             .map((row) => {
@@ -3946,7 +3951,7 @@ export default function SupplierInvoiceCreate({
                 subledger_code: String(row.subledger_code ?? ""),
                 CRN: "Neutral",
                 narration: String(row.narration ?? ""),
-                shipment_no: "",
+                shipment_no: defaultVatShipmentNo,
                 charge_id: chargeId,
                 charge_name:
                   row.vat_charge_name ?? row.rate_name ?? "VALUE ADDED TAX",
