@@ -81,7 +81,23 @@ type DocumentAllocationRow = {
   // fallbacks (older response)
   amount?: string | null;
   amount_in_local?: string | null;
+  /** Debit/credit from outstanding allocations list (`dr_cr`). */
+  dr_cr?: string | null;
+  /** Debit/credit on create/update payload and older saved responses (`Dr_Cr`). */
   Dr_Cr?: string | null;
+};
+
+/** Prefer `dr_cr` from outstanding allocations; fall back to legacy `Dr_Cr`. */
+const resolveRowDrCr = (
+  row: Pick<DocumentAllocationRow, "dr_cr" | "Dr_Cr"> | null | undefined,
+): string => {
+  const raw = row?.dr_cr ?? row?.Dr_Cr ?? "";
+  const v = String(raw).trim();
+  if (!v) return "";
+  const upper = v.toUpperCase();
+  if (upper === "DR" || upper === "DEBIT" || upper === "D") return "Dr";
+  if (upper === "CR" || upper === "CREDIT" || upper === "C") return "Cr";
+  return v;
 };
 
 type DocumentAllocationResponse = {
@@ -223,8 +239,9 @@ const sumCreditDebitNet = (
   let debit = 0;
   for (const row of source) {
     const amount = getAmount(row);
-    if (isCreditSide(row.Dr_Cr)) credit += amount;
-    else if (isDebitSide(row.Dr_Cr)) debit += amount;
+    const drCr = resolveRowDrCr(row);
+    if (isCreditSide(drCr)) credit += amount;
+    else if (isDebitSide(drCr)) debit += amount;
   }
   return {
     credit,
@@ -559,12 +576,15 @@ const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRo
   const outAmt = r.outstanding_amount ?? r.amount ?? "";
   const outLocal =
     r.outstanding_local_amount ?? r.amount_in_local ?? "";
+  const drCr = resolveRowDrCr(r);
   return {
     ...r,
     outstanding_amount: outAmt,
     outstanding_local_amount: outLocal,
     amount: r.amount ?? outAmt,
     amount_in_local: r.amount_in_local ?? outLocal,
+    dr_cr: drCr || null,
+    Dr_Cr: drCr || null,
   };
 };
 
@@ -989,7 +1009,8 @@ export default function DocumentAllocation() {
         day_book_id: match.day_book_id ?? r.day_book_id,
         currency_id: match.currency_id ?? r.currency_id,
         roe: match.roe ?? r.roe,
-        Dr_Cr: match.Dr_Cr ?? r.Dr_Cr,
+        dr_cr: resolveRowDrCr(match) || resolveRowDrCr(r) || null,
+        Dr_Cr: resolveRowDrCr(match) || resolveRowDrCr(r) || null,
         outstanding_amount: match.amount ?? r.outstanding_amount ?? r.amount,
         outstanding_local_amount:
           match.amount_in_local ??
@@ -1018,7 +1039,8 @@ export default function DocumentAllocation() {
           roe: formatFixed(roeNum, ROE_DECIMAL_PLACES),
           amount: formatMoneyAmount(amountNum, false),
           amount_in_local: formatLocalAmountFromNumber(localNum),
-          Dr_Cr: r.Dr_Cr ?? "",
+          // Create/update API expects PascalCase; outstanding list returns `dr_cr`.
+          Dr_Cr: resolveRowDrCr(r),
         };
 
         if (hasSavedId && r.id != null) {
@@ -1179,8 +1201,9 @@ export default function DocumentAllocation() {
 
       const res = await fetchDocumentAllocation(payload);
       const list = Array.isArray(res?.data) ? res.data : [];
+      const normalizedList = list.map(normalizeAllocationLine);
       setHasFetched(true);
-      if (list.length === 0) {
+      if (normalizedList.length === 0) {
         setRows([]);
         setFetchedRows([]);
         setSavedHeader(null);
@@ -1190,7 +1213,7 @@ export default function DocumentAllocation() {
         });
         return;
       }
-      setFetchedRows(list);
+      setFetchedRows(normalizedList);
       setSelectedRowIds(new Set());
       setIsModalOpen(true);
     } catch {
@@ -1514,7 +1537,7 @@ export default function DocumentAllocation() {
                 </Grid.Col>
                 <Grid.Col span={0.4}>
                   <FormTextInput
-                    value={row.Dr_Cr ?? ""}
+                    value={resolveRowDrCr(row)}
                     readOnly
                     styles={{ input: readOnlyInputStyles.input }}
                     format="normal"
@@ -2041,7 +2064,7 @@ export default function DocumentAllocation() {
                                   <Grid.Col span={0.5}>
                                     <FormTextInput
                                       placeholder="Dr/Cr"
-                                      value={row.Dr_Cr ?? ""}
+                                      value={resolveRowDrCr(row)}
                                       readOnly
                                       styles={{
                                         input: readOnlyInputStyles.input,
