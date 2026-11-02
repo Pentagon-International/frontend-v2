@@ -73,6 +73,8 @@ type DocumentAllocationListItem = {
   id: number;
   account_name?: string;
   account_code?: string;
+  second_account_code?: string | null;
+  second_account_name?: string | null;
   subledger_code?: string;
   allocation_no?: string;
   allocation_date?: string;
