@@ -45,6 +45,15 @@ import { apiCallProtected } from "../api/axios";
 import { API_HEADER } from "../store/storeKeys";
 import { useIsAdminUser } from "../hooks/useIsAdminUser";
 import { postAPICall } from "../service/postApiCall";
+import {
+  extractPartyAddressesFromRecord,
+  getPartyGstFromPrimaryAddress,
+} from "../utils/paymentRequestChargePrefill";
+import { AutomationPreviewErrorBanner } from "./AutomationPreviewErrorBanner";
+import {
+  collectAutomationPreviewErrors,
+  fieldErrorsToPreviewMessages,
+} from "../utils/automationPreviewErrors";
 
 const CRJ_DAYBOOK_TYPES = ["LOCAL CRJ", "OVERSEAS CRJ"] as const;
 
@@ -217,6 +226,7 @@ function ExtractedPayloadBreakdown({
   fieldErrors,
   clearHeaderError,
   clearChargeError,
+  actionError = "",
 }: {
   record: VendorInvoiceRecord;
   extracted: VendorInvoiceExtractedData;
@@ -229,11 +239,27 @@ function ExtractedPayloadBreakdown({
   fieldErrors: VendorInvoiceFieldErrors;
   clearHeaderError: (key: string) => void;
   clearChargeError: (index: number, key: string) => void;
+  actionError?: string;
 }) {
   const isAdmin = useIsAdminUser();
   const [tab, setTab] = useState<string | null>("form");
   const hasPayload = Object.keys(extracted).length > 0;
   const statusUpper = String(override.status || extracted.status || "").toUpperCase();
+  const previewErrorMessages = useMemo(
+    () =>
+      collectAutomationPreviewErrors([
+        actionError,
+        record.failer_message,
+        extracted.enrichment_error,
+        ...fieldErrorsToPreviewMessages(fieldErrors),
+      ]),
+    [
+      actionError,
+      record.failer_message,
+      extracted.enrichment_error,
+      fieldErrors,
+    ],
+  );
 
   const tabs = useMemo(() => {
     const items = [{ value: "form", label: "Form View" }];
@@ -404,6 +430,7 @@ function ExtractedPayloadBreakdown({
               }}
             >
               <Stack gap="sm" pr="xs">
+                <AutomationPreviewErrorBanner messages={previewErrorMessages} />
                 <PreviewSection
                   title="Invoice to create"
                   hint="These fields are sent when you start invoice creation. Names are shown; the matching id is stored."
@@ -447,6 +474,7 @@ function ExtractedPayloadBreakdown({
                           day_book_name: selected?.label ?? "",
                           agent_id: "",
                           agent_name: "",
+                          customer_gst_no: "",
                         });
                       }}
                       onDropdownOpen={() => setDaybookLookupRequested(true)}
@@ -497,13 +525,14 @@ function ExtractedPayloadBreakdown({
                       dropdownZIndex={400}
                       minSearchLength={1}
                       searchFields={["customer_name", "customer_code", "id"]}
+                      returnOriginalData
                       styles={fieldStyles}
                       error={fieldErrors.header.agent_id}
                       displayFormat={(item) => ({
                         value: String(item.id ?? ""),
                         label: String(item.customer_name ?? item.agent_name ?? ""),
                       })}
-                      onChange={(value, selected) => {
+                      onChange={(value, selected, original) => {
                         if (!isDaybookSelected) {
                           ToastNotification({
                             type: "error",
@@ -512,9 +541,22 @@ function ExtractedPayloadBreakdown({
                           return;
                         }
                         clearHeaderError("agent_id");
+                        if (!value) {
+                          patchOverride({
+                            agent_id: "",
+                            agent_name: "",
+                            customer_gst_no: "",
+                          });
+                          return;
+                        }
+                        // Same as Supplier Invoice: vendor GST from party primary address.
+                        const partyGst = getPartyGstFromPrimaryAddress(
+                          extractPartyAddressesFromRecord(original),
+                        );
                         patchOverride({
-                          agent_id: value ?? "",
+                          agent_id: value,
                           agent_name: selected?.label ?? "",
+                          customer_gst_no: partyGst,
                         });
                       }}
                       disabled={readOnly || !isDaybookSelected}
@@ -658,6 +700,26 @@ function ExtractedPayloadBreakdown({
                       disabled={readOnly}
                       dropdownZIndex={400}
                     />
+                    <TextInput
+                      label="Vendor GST No."
+                      placeholder="Vendor / supplier GSTIN"
+                      value={override.customer_gst_no}
+                      onChange={(e) =>
+                        patchOverride({ customer_gst_no: e.currentTarget.value })
+                      }
+                      styles={fieldStyles}
+                      disabled={readOnly}
+                    />
+                    <TextInput
+                      label="Location GST No."
+                      placeholder="Location / our GSTIN"
+                      value={override.location_gst_no}
+                      onChange={(e) =>
+                        patchOverride({ location_gst_no: e.currentTarget.value })
+                      }
+                      styles={fieldStyles}
+                      disabled={readOnly}
+                    />
                   </SimpleGrid>
                 </PreviewSection>
 
@@ -671,8 +733,6 @@ function ExtractedPayloadBreakdown({
                     <FieldKV label="Job No." value={extracted.job_no} />
                     <FieldKV label="Master No." value={extracted.master_bl} />
                     <FieldKV label="Type" value={extracted.type} />
-                    <FieldKV label="Customer GST No." value={extracted.customer_gst_no} mono />
-                    <FieldKV label="Location GST No." value={extracted.location_gst_no} mono />
                   </SimpleGrid>
                 </PreviewSection>
 
@@ -905,24 +965,6 @@ function ExtractedPayloadBreakdown({
                     </Table>
                   </Box>
                 </PreviewSection>
-
-                {record.failer_message && (
-                  <Box
-                    p="sm"
-                    style={{
-                      background: "#fff5f5",
-                      border: "1px solid #ffc9c9",
-                      borderRadius: 8,
-                    }}
-                  >
-                    <Text size="xs" fw={600} c="red" mb={4}>
-                      Error details
-                    </Text>
-                    <Text size="sm" c="red">
-                      {record.failer_message}
-                    </Text>
-                  </Box>
-                )}
               </Stack>
             </Box>
           )}
@@ -1016,6 +1058,7 @@ export function VendorInvoiceAutomationModal({
     header: {},
     charges: [],
   });
+  const [actionError, setActionError] = useState("");
 
   const clearHeaderError = (key: string) => {
     setFieldErrors((prev) => {
@@ -1050,6 +1093,7 @@ export function VendorInvoiceAutomationModal({
     setStartingJob(false);
     setActiveShipmentNo(shipmentNo);
     setFieldErrors({ header: {}, charges: [] });
+    setActionError("");
     // Keep isRedirecting so the full-screen loader stays visible after modal close
   }, [shipmentNo]);
 
@@ -1078,6 +1122,8 @@ export function VendorInvoiceAutomationModal({
     setOverride(
       buildVendorInvoiceOverrideDraft(reviewRecord.extracted_data, shipment),
     );
+    setActionError("");
+    setFieldErrors({ header: {}, charges: [] });
     setStep("review");
   }, [opened, reviewRecord, shipmentNo]);
 
@@ -1103,6 +1149,8 @@ export function VendorInvoiceAutomationModal({
       setActiveShipmentNo(resolvedShipment);
     }
     setUploading(true);
+    setActionError("");
+    setFieldErrors({ header: {}, charges: [] });
     setStep("extracting");
     try {
       const { recordId } = await uploadVendorInvoicePdf(files, resolvedShipment);
@@ -1126,12 +1174,14 @@ export function VendorInvoiceAutomationModal({
       setStep("review");
     } catch (error) {
       if (isVendorInvoiceAbortError(error)) return;
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to upload and extract vendor invoice.";
+      setActionError(message);
       ToastNotification({
         type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to upload and extract vendor invoice.",
+        message,
       });
       setStep("upload");
     } finally {
@@ -1167,13 +1217,16 @@ export function VendorInvoiceAutomationModal({
     const errors = getVendorInvoiceOverrideFieldErrors(activeShipmentNo, override);
     if (hasVendorInvoiceOverrideFieldErrors(errors)) {
       setFieldErrors(errors);
+      // Field errors render in the preview banner; clear stale action errors.
+      setActionError("");
       ToastNotification({
         type: "error",
-        message: "Fill the required invoice fields before starting.",
+        message: "Fill the required invoice fields before starting. See error details in the preview.",
       });
       return;
     }
     setFieldErrors({ header: {}, charges: [] });
+    setActionError("");
     let startPayload;
     try {
       startPayload = buildVendorInvoiceStartPayload(
@@ -1182,17 +1235,20 @@ export function VendorInvoiceAutomationModal({
         override,
       );
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Fill the required invoice fields before starting.";
+      setActionError(message);
       ToastNotification({
         type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Fill the required invoice fields before starting.",
+        message,
       });
       return;
     }
     setStartingJob(true);
     setStep("creating");
+    let failedRecord: VendorInvoiceRecord | null = null;
     try {
       const startResponse = await startVendorInvoiceCreation(startPayload);
       let invoiceId = extractSupplierInvoiceId(startResponse, record);
@@ -1203,6 +1259,7 @@ export function VendorInvoiceAutomationModal({
           (item) => isVendorInvoiceCreationSettled(item),
           { signal: beginPoll() },
         );
+        failedRecord = createdRecord;
         // Throws on INVOICE_FAILED
         const created = isVendorInvoiceCreated(createdRecord);
         invoiceId = extractSupplierInvoiceId(null, createdRecord);
@@ -1227,12 +1284,15 @@ export function VendorInvoiceAutomationModal({
     } catch (error) {
       if (isVendorInvoiceAbortError(error)) return;
       setIsRedirecting(false);
+      if (failedRecord) setRecord(failedRecord);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to start vendor invoice creation.";
+      setActionError(message);
       ToastNotification({
         type: "error",
-        message:
-          error instanceof Error
-            ? error.message
-            : "Failed to start vendor invoice creation.",
+        message,
       });
       setStep("review");
     } finally {
@@ -1398,6 +1458,7 @@ export function VendorInvoiceAutomationModal({
               fieldErrors={fieldErrors}
               clearHeaderError={clearHeaderError}
               clearChargeError={clearChargeError}
+              actionError={actionError}
             />
             
             <Group justify="flex-end" gap="sm" style={{ flexShrink: 0 }}>

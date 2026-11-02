@@ -81,6 +81,8 @@ export interface VendorInvoiceExtractedData {
   currency_code?: string;
   currency_name?: string;
   charges_data?: VendorInvoiceChargeRow[];
+  /** Master-match / enrich warnings from the backend (user-facing). */
+  enrichment_error?: string;
 }
 
 /** Editable preview values. Display names stay on the form; ids go in the payload. */
@@ -114,6 +116,8 @@ export interface VendorInvoiceOverrideDraft {
   agent_id: string;
   agent_name: string;
   Dr_Cr: string;
+  customer_gst_no: string;
+  location_gst_no: string;
   charges_data: VendorInvoiceOverrideCharge[];
 }
 
@@ -367,6 +371,8 @@ export interface VendorInvoiceStartPayload {
   agent_id: number;
   agent_name: string;
   Dr_Cr: string;
+  customer_gst_no: string;
+  location_gst_no: string;
   /** Overseas CRJ daybook — same as Supplier Invoice is_agent */
   is_agent: boolean;
   charges_data: VendorInvoiceStartCharge[];
@@ -474,6 +480,8 @@ export function buildVendorInvoiceOverrideDraft(
     // Unresolved master id → leave the name blank so the user picks the vendor.
     agent_name: idString(extracted?.agent_id) ? textValue(extracted?.agent_name) : "",
     Dr_Cr: headerDrCr,
+    customer_gst_no: textValue(extracted?.customer_gst_no),
+    location_gst_no: textValue(extracted?.location_gst_no),
     charges_data: charges,
   };
 }
@@ -609,6 +617,8 @@ export function buildVendorInvoiceStartPayload(
     agent_id: positiveId(draft.agent_id, "Vendor/Supplier"),
     agent_name: textValue(draft.agent_name),
     Dr_Cr: headerDrCr,
+    customer_gst_no: textValue(draft.customer_gst_no),
+    location_gst_no: textValue(draft.location_gst_no),
     is_agent: overseas,
     charges_data: draft.charges_data.map((row, index) => {
       const line = index + 1;
