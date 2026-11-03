@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Badge,
@@ -69,10 +69,14 @@ import {
 } from "../../../utils/nonDecimalMoneyAmount";
 import useAuthStore from "../../../store/authStore";
 import {
+  collectPartyStateOptions,
   extractPartyAddressesFromRecord,
+  findPartyAddressByStateId,
   findPrimaryPartyAddress,
+  getPartyGstForStateId,
   getPartyGstFromPrimaryAddress,
   resolveStateCodeFromPartyAddress,
+  type PartyAddressLike,
 } from "../../../utils/paymentRequestChargePrefill";
 import {
   isIndianOutstandingBranch,
@@ -503,6 +507,8 @@ export function DebitCreditNoteCreateBase({
     customer_name?: string;
     name?: string;
     address?: string;
+    addresses_data?: PartyAddressLike[];
+    addresses?: PartyAddressLike[];
   };
 
   const {
@@ -911,6 +917,28 @@ export function DebitCreditNoteCreateBase({
     // The `:id` in the URL is used for identification only.
     isPrefillingRef.current = true;
     applyCreateResponseToForm(candidate);
+
+    const header = (() => {
+      if (!candidate || typeof candidate !== "object") return null;
+      const obj = candidate as Record<string, unknown>;
+      const data = obj.data;
+      if (data && typeof data === "object") {
+        const inner = data as Record<string, unknown>;
+        if ("data" in inner && inner.data && typeof inner.data === "object") {
+          return inner.data as Record<string, unknown>;
+        }
+        return data as Record<string, unknown>;
+      }
+      return obj;
+    })();
+    const partyCode =
+      header?.party_code != null ? String(header.party_code).trim() : "";
+    if (partyCode) {
+      // Load address/state options for the saved party without overwriting
+      // already-prefilled state / GST / address.
+      void fetchPartyAddresses(partyCode, false);
+    }
+
     // Release lock after form state flushes, so other effects don't overwrite
     // the mapped lines with initial defaults.
     setTimeout(() => {
@@ -1010,6 +1038,158 @@ export function DebitCreditNoteCreateBase({
       }))
       .filter((o) => o.value && o.label);
   }, [stateData]);
+
+  const [partyAddresses, setPartyAddresses] = useState<PartyAddressLike[]>([]);
+
+  const partyStateOptions = useMemo(
+    () => collectPartyStateOptions(partyAddresses, stateOptions),
+    [partyAddresses, stateOptions],
+  );
+
+  const effectiveStateOptions = useMemo(() => {
+    const currentStateId = String(form.values.stateId ?? "").trim();
+    let options: Array<{ value: string; label: string }>;
+
+    if (partyStateOptions.length > 0) {
+      options = [...partyStateOptions];
+    } else {
+      options = stateOptions.map((option) => ({
+        value: option.value,
+        label: option.label ?? option.value,
+      }));
+    }
+
+    if (
+      currentStateId &&
+      !options.some((option) => option.value === currentStateId)
+    ) {
+      const masterLabel = stateOptions.find(
+        (option) => option.value === currentStateId,
+      )?.label;
+      options = [
+        { value: currentStateId, label: masterLabel ?? currentStateId },
+        ...options,
+      ];
+    }
+
+    return options;
+  }, [form.values.stateId, partyStateOptions, stateOptions]);
+
+  const resolvePartyAddressText = useCallback(
+    (address: PartyAddressLike | undefined) =>
+      String(
+        (address as { address?: string } | undefined)?.address ?? "",
+      ).trim(),
+    [],
+  );
+
+  const handlePartyStateChange = useCallback(
+    (stateId: string | null) => {
+      const nextStateId = stateId ?? null;
+      form.setFieldValue("stateId", nextStateId);
+      if (!nextStateId) {
+        form.setFieldValue("gstId", "");
+        return;
+      }
+
+      const matched = findPartyAddressByStateId(
+        partyAddresses,
+        nextStateId,
+        stateOptions,
+      );
+      const addressText = resolvePartyAddressText(matched);
+      if (addressText) {
+        form.setFieldValue("address", addressText);
+      }
+
+      if (!isIndiaUser) return;
+      form.setFieldValue(
+        "gstId",
+        getPartyGstForStateId(partyAddresses, nextStateId, stateOptions),
+      );
+    },
+    [form, isIndiaUser, partyAddresses, resolvePartyAddressText, stateOptions],
+  );
+
+  const applyPartyAddressFields = useCallback(
+    (addresses: PartyAddressLike[] | null | undefined) => {
+      const normalized = Array.isArray(addresses) ? addresses : [];
+      setPartyAddresses(normalized);
+
+      const primary = findPrimaryPartyAddress(normalized);
+      const addressText = resolvePartyAddressText(primary);
+      if (addressText) {
+        form.setFieldValue("address", addressText);
+      }
+
+      if (!isIndiaUser) return;
+
+      const stateCode = resolveStateCodeFromPartyAddress(primary, stateOptions);
+      form.setFieldValue("stateId", stateCode || null);
+      form.setFieldValue("gstId", getPartyGstFromPrimaryAddress(normalized));
+    },
+    [form, isIndiaUser, resolvePartyAddressText, stateOptions],
+  );
+
+  const fetchPartyAddresses = useCallback(
+    async (customerCode: string, applyPrimary = true) => {
+      const query = String(customerCode ?? "").trim();
+      if (!query) return;
+
+      try {
+        const response = await getAPICall(
+          `${URL.customer}?search=${encodeURIComponent(query)}`,
+          API_HEADER,
+        );
+        const first = Array.isArray(response)
+          ? response[0]
+          : Array.isArray((response as { data?: unknown[] })?.data)
+            ? (response as { data: unknown[] }).data[0]
+            : null;
+        const fetchedAddresses = extractPartyAddressesFromRecord(first);
+        if (fetchedAddresses.length === 0) return;
+
+        if (applyPrimary) {
+          applyPartyAddressFields(fetchedAddresses);
+        } else {
+          setPartyAddresses(fetchedAddresses);
+        }
+      } catch {
+        // State/GST can be set manually if fetch fails.
+      }
+    },
+    [applyPartyAddressFields],
+  );
+
+  const isPartySelected = !!String(form.values.partyAccount ?? "").trim();
+
+  useEffect(() => {
+    if (!isIndiaUser) return;
+    if (partyAddresses.length === 0 || stateOptions.length === 0) return;
+    if (!isPartySelected) return;
+
+    const primary = findPrimaryPartyAddress(partyAddresses);
+    const stateCode = resolveStateCodeFromPartyAddress(primary, stateOptions);
+    if (!stateCode) return;
+
+    const currentStateId = String(form.values.stateId ?? "").trim();
+    if (!currentStateId) {
+      form.setFieldValue("stateId", stateCode);
+    }
+
+    const stateForGst = currentStateId || stateCode;
+    if (!String(form.values.gstId ?? "").trim()) {
+      const gstForState = getPartyGstForStateId(
+        partyAddresses,
+        stateForGst,
+        stateOptions,
+      );
+      if (gstForState) {
+        form.setFieldValue("gstId", gstForState);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyAddresses, stateOptions, isIndiaUser, isPartySelected]);
 
   const { data: sacCodes = [] } = useQuery({
     queryKey: ["gstSacMasterFilter"],
@@ -1871,23 +2051,33 @@ export function DebitCreditNoteCreateBase({
               onChange={(val, selected, original) => {
                 form.setFieldValue("partyAccount", val || "");
                 form.setFieldValue("partyName", selected?.label ?? "");
-                const row = (original as CustomerRow | null) ?? null;
-                const addresses = extractPartyAddressesFromRecord(original);
-                const primary = findPrimaryPartyAddress(addresses);
-                const resolvedAddress = String(
-                  primary?.address ?? row?.address ?? "",
-                ).trim();
-                if (resolvedAddress) {
-                  form.setFieldValue("address", resolvedAddress);
+
+                const isCleared =
+                  val == null ||
+                  (typeof val === "string" && val.trim() === "");
+                if (isCleared) {
+                  setPartyAddresses([]);
+                  form.setFieldValue("address", "");
+                  form.setFieldValue("stateId", null);
+                  form.setFieldValue("gstId", "");
+                  return;
                 }
-                if (!isIndiaUser || !primary) return;
-                const stateId = resolveStateCodeFromPartyAddress(
-                  primary,
-                  stateOptions,
+
+                const row = (original as CustomerRow | null) ?? null;
+                const addresses = extractPartyAddressesFromRecord(row ?? original);
+                if (addresses.length > 0) {
+                  applyPartyAddressFields(addresses);
+                  return;
+                }
+
+                setPartyAddresses([]);
+                form.setFieldValue(
+                  "address",
+                  row?.address ? String(row.address) : "",
                 );
-                if (stateId) form.setFieldValue("stateId", stateId);
-                const gstId = getPartyGstFromPrimaryAddress(addresses);
-                if (gstId) form.setFieldValue("gstId", gstId);
+                form.setFieldValue("stateId", null);
+                form.setFieldValue("gstId", "");
+                void fetchPartyAddresses(String(val ?? ""), true);
               }}
               displayFormat={(item) => ({
                 value: String(item.customer_code ?? item.id ?? ""),
@@ -1915,20 +2105,13 @@ export function DebitCreditNoteCreateBase({
             <Dropdown
               label="State"
               placeholder="Select state"
-              data={stateOptions.map((o) => o.label)}
+              data={effectiveStateOptions}
               searchable
-              value={
-                stateOptions.find(
-                  (o) => o.value === String(form.values.stateId ?? ""),
-                )?.label ?? null
-              }
-              onChange={(label) => {
-                const found = stateOptions.find((o) => o.label === label);
-                form.setFieldValue("stateId", found?.value ?? null);
-              }}
+              value={form.values.stateId || null}
+              onChange={handlePartyStateChange}
               size="sm"
               styles={chargeFieldStyles}
-              disabled={isReadOnly}
+              disabled={isReadOnly || !isPartySelected}
             />
           </Grid.Col>
 
