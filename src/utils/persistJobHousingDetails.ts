@@ -512,8 +512,11 @@ export function buildFullJobUpdatePayloadFromHouseNav(
 
   const etdSrc = mbl.etd ?? job.etd;
   const etaSrc = mbl.eta ?? job.eta;
-  const jobDateSrc =
-    mbl.job_date ?? (isImport ? etaSrc : etdSrc) ?? job.job_date;
+  const jobDateSrc = firstFilled(
+    mbl.job_date,
+    isImport ? etaSrc : etdSrc,
+    job.job_date,
+  );
 
   const bookingIds = collectLinkedBookingIds(
     updatedHousingDetails as Array<{ booking_id?: unknown }>,

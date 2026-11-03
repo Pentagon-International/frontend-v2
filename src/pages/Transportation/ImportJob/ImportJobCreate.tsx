@@ -1342,9 +1342,17 @@ function ImportJobCreate() {
                 mode,
                 storedJobDate: (mblData as { job_date?: unknown }).job_date,
               })
-            : mblData.eta && dayjs(mblData.eta).isValid()
-              ? dayjs(mblData.eta).startOf("day").toDate()
-              : null,
+            : (() => {
+                const stored = (mblData as { job_date?: unknown }).job_date;
+                if (stored && dayjs(stored as string | Date).isValid()) {
+                  return dayjs(stored as string | Date)
+                    .startOf("day")
+                    .toDate();
+                }
+                return mblData.eta && dayjs(mblData.eta).isValid()
+                  ? dayjs(mblData.eta).startOf("day").toDate()
+                  : null;
+              })(),
           igm_no:
             mblData.igm_no != null
               ? String(mblData.igm_no)
@@ -2420,9 +2428,11 @@ function ImportJobCreate() {
                 mode,
                 storedJobDate: (mblDetails as { job_date?: unknown }).job_date,
               })
-            : toFormDate(mblDetails.eta)
-              ? dayjs(mblDetails.eta).startOf("day").toDate()
-              : toFormDate(mblDetails.job_date),
+            : toFormDate(mblDetails.job_date)
+              ? dayjs(mblDetails.job_date).startOf("day").toDate()
+              : toFormDate(mblDetails.eta)
+                ? dayjs(mblDetails.eta).startOf("day").toDate()
+                : null,
           igm_no:
             mblDetails.igm_no != null
               ? String(mblDetails.igm_no)

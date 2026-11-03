@@ -300,6 +300,7 @@ type HAWBDetail = HouseDocumentFields & {
   destination_name?: string;
   customer_service: string;
   trade: string;
+  agent_code?: string;
   agent_name: string;
   agent_address: string;
   agent_email: string;
@@ -311,17 +312,26 @@ type HAWBDetail = HouseDocumentFields & {
   billing_customer_name?: string;
   billing_customer_address?: string;
   billing_customer_email?: string;
+  shipper_id?: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
+  shipper_state_id?: number | null;
+  shipper_gst_id?: string;
+  consignee_id?: string;
   consignee_code: string;
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
+  consignee_state_id?: number | null;
+  consignee_gst_id?: string;
   notify_customer1_name: string;
   notify_customer1_address: string;
   notify_customer1_email: string;
+  notify2_customer_name?: string;
+  notify2_customer_address?: string;
+  notify2_customer_email?: string;
   commodity_description?: string;
   handling_information?: string;
   is_agreed_charges?: boolean;
@@ -330,6 +340,7 @@ type HAWBDetail = HouseDocumentFields & {
   sub_item_no?: string;
   ref_no?: string;
   shipment_terms_code?: string;
+  shipment_terms_name?: string;
   cargo_details?: Array<{
     id?: number;
     package_type?: string;
@@ -821,6 +832,14 @@ function AirExportJobCreate() {
               (jobData as { job_date?: unknown } | undefined)?.job_date,
           })
         : (() => {
+            const stored =
+              location.state?.mawbDetails?.job_date ??
+              (jobData as { job_date?: unknown } | undefined)?.job_date;
+            if (stored && dayjs(stored as string | Date).isValid()) {
+              return dayjs(stored as string | Date)
+                .startOf("day")
+                .toDate();
+            }
             const etdVal =
               parseLocalDateTime(jobData?.etd) ??
               (location.state?.mawbDetails?.etd || null);
@@ -830,7 +849,13 @@ function AirExportJobCreate() {
           })(),
       ...emptyChaMasterCustoms(),
       boe_no: readStoredBoeNumber(location.state?.mawbDetails, jobData),
-      shipper_id: location.state?.mawbDetails?.shipper_id || "",
+      shipper_id: String(
+        (jobData as { shipper_id?: string | number | null } | undefined)
+          ?.shipper_id ??
+          (location.state?.mawbDetails?.shipper_id || ""),
+      )
+        .replace(/^null$/i, "")
+        .replace(/^undefined$/i, ""),
       shipper_name:
         String(
           (jobData as Record<string, unknown> | undefined)?.shipper_name || "",
@@ -851,7 +876,13 @@ function AirExportJobCreate() {
         ) ||
         location.state?.mawbDetails?.shipper_address ||
         "",
-      consignee_id: location.state?.mawbDetails?.consignee_id || "",
+      consignee_id: String(
+        (jobData as { consignee_id?: string | number | null } | undefined)
+          ?.consignee_id ??
+          (location.state?.mawbDetails?.consignee_id || ""),
+      )
+        .replace(/^null$/i, "")
+        .replace(/^undefined$/i, ""),
       consignee_name:
         String(
           (jobData as Record<string, unknown> | undefined)?.consignee_name ||
@@ -1127,17 +1158,33 @@ function AirExportJobCreate() {
                 storedJobDate: (jobData as { job_date?: unknown }).job_date,
               })
             : (() => {
+                const stored = (jobData as { job_date?: unknown }).job_date;
+                if (stored && dayjs(stored as string | Date).isValid()) {
+                  return dayjs(stored as string | Date)
+                    .startOf("day")
+                    .toDate();
+                }
                 const etdVal = parseLocalDateTime(jobData.etd);
                 return etdVal && dayjs(etdVal).isValid()
                   ? dayjs(etdVal).startOf("day").toDate()
                   : null;
               })(),
-          shipper_id: "",
+          shipper_id: String(
+            (jobData as { shipper_id?: string | number | null }).shipper_id ??
+              "",
+          )
+            .replace(/^null$/i, "")
+            .replace(/^undefined$/i, ""),
           shipper_name: String(jobData.shipper_name || ""),
           shipper_email: String(jobData.shipper_email || ""),
           shipper_address_id: "",
           shipper_address: String(jobData.shipper_address || ""),
-          consignee_id: "",
+          consignee_id: String(
+            (jobData as { consignee_id?: string | number | null })
+              .consignee_id ?? "",
+          )
+            .replace(/^null$/i, "")
+            .replace(/^undefined$/i, ""),
           consignee_name: String(jobData.consignee_name || ""),
           consignee_email: String(jobData.consignee_email || ""),
           consignee_address_id: "",
@@ -1184,10 +1231,22 @@ function AirExportJobCreate() {
                     savedMawbDetailsFromState as { job_date?: unknown }
                   ).job_date,
                 })
-              : savedMawbDetailsFromState.etd &&
-                  dayjs(savedMawbDetailsFromState.etd).isValid()
-                ? dayjs(savedMawbDetailsFromState.etd).startOf("day").toDate()
-                : savedMawbDetailsFromState.etd || null,
+              : (() => {
+                  const stored = (
+                    savedMawbDetailsFromState as { job_date?: unknown }
+                  ).job_date;
+                  if (stored && dayjs(stored as string | Date).isValid()) {
+                    return dayjs(stored as string | Date)
+                      .startOf("day")
+                      .toDate();
+                  }
+                  return savedMawbDetailsFromState.etd &&
+                    dayjs(savedMawbDetailsFromState.etd).isValid()
+                    ? dayjs(savedMawbDetailsFromState.etd)
+                        .startOf("day")
+                        .toDate()
+                    : savedMawbDetailsFromState.etd || null;
+                })(),
             shipper_id: savedMawbDetailsFromState.shipper_id || "",
             shipper_name: savedMawbDetailsFromState.shipper_name || "",
             shipper_email: savedMawbDetailsFromState.shipper_email || "",
@@ -1320,6 +1379,7 @@ function AirExportJobCreate() {
                 ? String(house.customer_service)
                 : "",
               trade: house.trade ? String(house.trade) : "",
+              agent_code: house.agent_code ? String(house.agent_code) : "",
               agent_name: house.agent_name ? String(house.agent_name) : "",
               agent_address: house.agent_address
                 ? String(house.agent_address)
@@ -1354,6 +1414,10 @@ function AirExportJobCreate() {
                 : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
               cha_address: house.cha_address ? String(house.cha_address) : "",
+              shipper_id:
+                house.shipper_id != null && house.shipper_id !== undefined
+                  ? String(house.shipper_id)
+                  : "",
               shipper_code: house.shipper_code
                 ? String(house.shipper_code)
                 : "",
@@ -1366,6 +1430,19 @@ function AirExportJobCreate() {
               shipper_email: house.shipper_email
                 ? String(house.shipper_email)
                 : "",
+              shipper_state_id:
+                house.shipper_state_id != null
+                  ? Number(house.shipper_state_id)
+                  : null,
+              shipper_gst_id:
+                house.shipper_gst_id != null &&
+                house.shipper_gst_id !== undefined
+                  ? String(house.shipper_gst_id)
+                  : "",
+              consignee_id:
+                house.consignee_id != null && house.consignee_id !== undefined
+                  ? String(house.consignee_id)
+                  : "",
               consignee_code: house.consignee_code
                 ? String(house.consignee_code)
                 : "",
@@ -1378,6 +1455,15 @@ function AirExportJobCreate() {
               consignee_email: house.consignee_email
                 ? String(house.consignee_email)
                 : "",
+              consignee_state_id:
+                house.consignee_state_id != null
+                  ? Number(house.consignee_state_id)
+                  : null,
+              consignee_gst_id:
+                house.consignee_gst_id != null &&
+                house.consignee_gst_id !== undefined
+                  ? String(house.consignee_gst_id)
+                  : "",
               notify_customer1_name:
                 (house.notify1_customer_name ?? house.notify_customer1_name)
                   ? String(
@@ -1425,9 +1511,10 @@ function AirExportJobCreate() {
               ref_no: house.ref_no ? String(house.ref_no) : "",
               shipment_terms_code: house.shipment_terms_code
                 ? String(house.shipment_terms_code)
-                : house.shipment_terms_name
-                  ? String(house.shipment_terms_name)
-                  : "",
+                : "",
+              shipment_terms_name: house.shipment_terms_name
+                ? String(house.shipment_terms_name)
+                : "",
               cargo_details:
                 house.cargo_details && Array.isArray(house.cargo_details)
                   ? house.cargo_details.map(
@@ -2238,9 +2325,19 @@ function AirExportJobCreate() {
                   storedJobDate: (savedMawbDetails as { job_date?: unknown })
                     .job_date,
                 })
-              : savedMawbDetails.etd && dayjs(savedMawbDetails.etd).isValid()
-                ? dayjs(savedMawbDetails.etd).startOf("day").toDate()
-                : savedMawbDetails.etd || null,
+              : (() => {
+                  const stored = (savedMawbDetails as { job_date?: unknown })
+                    .job_date;
+                  if (stored && dayjs(stored as string | Date).isValid()) {
+                    return dayjs(stored as string | Date)
+                      .startOf("day")
+                      .toDate();
+                  }
+                  return savedMawbDetails.etd &&
+                    dayjs(savedMawbDetails.etd).isValid()
+                    ? dayjs(savedMawbDetails.etd).startOf("day").toDate()
+                    : savedMawbDetails.etd || null;
+                })(),
             shipper_id:
               (savedMawbDetails as { shipper_id?: string } | undefined)
                 ?.shipper_id || "",
@@ -3215,8 +3312,8 @@ function AirExportJobCreate() {
           : mawbDetailsForm.values.agent_code || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
-        etd: formatLocalDateTime(mawbDetailsForm.values.etd) ?? "",
-        eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
+        etd: formatLocalDateTime(mawbDetailsForm.values.etd),
+        eta: formatLocalDateTime(mawbDetailsForm.values.eta),
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
         job_date: isChaMode
@@ -3345,6 +3442,7 @@ function AirExportJobCreate() {
             destination_code: hawb.destination_code,
             customer_service: hawb.customer_service || "",
             trade: hawb.trade,
+            ...(hawb.agent_code ? { agent_code: hawb.agent_code } : {}),
             agent_name: hawb.agent_name,
             agent_address: hawb.agent_address || "",
             agent_email: hawb.agent_email || "",
@@ -3358,14 +3456,18 @@ function AirExportJobCreate() {
             billing_customer_email: hawb.billing_customer_email || "",
             cha_name: (hawb as { cha_name?: string }).cha_name || null,
             cha_address: (hawb as { cha_address?: string }).cha_address || null,
+            ...(hawb.shipper_id ? { shipper_id: hawb.shipper_id } : {}),
             shipper_code: hawb.shipper_code,
             shipper_name: hawb.shipper_name,
             shipper_address: hawb.shipper_address || "",
             shipper_email: hawb.shipper_email || "",
+            shipper_state_id: hawb.shipper_state_id ?? null,
+            ...(hawb.consignee_id ? { consignee_id: hawb.consignee_id } : {}),
             consignee_code: hawb.consignee_code,
             consignee_name: hawb.consignee_name,
             consignee_address: hawb.consignee_address || "",
             consignee_email: hawb.consignee_email || "",
+            consignee_state_id: hawb.consignee_state_id ?? null,
             notify1_customer_name:
               hawb.notify1_customer_name ?? hawb.notify_customer1_name ?? "",
             notify1_customer_address:

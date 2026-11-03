@@ -860,6 +860,14 @@ function AirImportJobCreate() {
               (jobData as { job_date?: unknown } | undefined)?.job_date,
           })
         : (() => {
+            const stored =
+              location.state?.mawbDetails?.job_date ??
+              (jobData as { job_date?: unknown } | undefined)?.job_date;
+            if (stored && dayjs(stored as string | Date).isValid()) {
+              return dayjs(stored as string | Date)
+                .startOf("day")
+                .toDate();
+            }
             const etaVal =
               parseLocalDateTime(jobData?.eta) ??
               (location.state?.mawbDetails?.eta || null);
@@ -1193,6 +1201,12 @@ function AirImportJobCreate() {
                 storedJobDate: (jobData as { job_date?: unknown }).job_date,
               })
             : (() => {
+                const stored = (jobData as { job_date?: unknown }).job_date;
+                if (stored && dayjs(stored as string | Date).isValid()) {
+                  return dayjs(stored as string | Date)
+                    .startOf("day")
+                    .toDate();
+                }
                 const etaVal = parseLocalDateTime(jobData.eta);
                 return etaVal && dayjs(etaVal).isValid()
                   ? dayjs(etaVal).startOf("day").toDate()

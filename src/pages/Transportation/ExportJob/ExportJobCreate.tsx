@@ -1235,9 +1235,17 @@ function ExportJobCreate() {
                 mode,
                 storedJobDate: (mblData as { job_date?: unknown }).job_date,
               })
-            : mblData.etd && dayjs(mblData.etd).isValid()
-              ? dayjs(mblData.etd).startOf("day").toDate()
-              : null,
+            : (() => {
+                const stored = (mblData as { job_date?: unknown }).job_date;
+                if (stored && dayjs(stored as string | Date).isValid()) {
+                  return dayjs(stored as string | Date)
+                    .startOf("day")
+                    .toDate();
+                }
+                return mblData.etd && dayjs(mblData.etd).isValid()
+                  ? dayjs(mblData.etd).startOf("day").toDate()
+                  : null;
+              })(),
           shipper_id: String(
             mblFlat.shipper_id ?? shipperNest?.id ?? stateMbl.shipper_id ?? "",
           ),
@@ -2039,9 +2047,17 @@ function ExportJobCreate() {
                 mode,
                 storedJobDate: (mblDetails as { job_date?: unknown }).job_date,
               })
-            : mblDetails.etd && dayjs(mblDetails.etd).isValid()
-              ? dayjs(mblDetails.etd).startOf("day").toDate()
-              : mblDetails.etd || null,
+            : (() => {
+                const stored = (mblDetails as { job_date?: unknown }).job_date;
+                if (stored && dayjs(stored as string | Date).isValid()) {
+                  return dayjs(stored as string | Date)
+                    .startOf("day")
+                    .toDate();
+                }
+                return mblDetails.etd && dayjs(mblDetails.etd).isValid()
+                  ? dayjs(mblDetails.etd).startOf("day").toDate()
+                  : mblDetails.etd || null;
+              })(),
           shipper_id:
             (mblDetails as { shipper_id?: string } | undefined)?.shipper_id ||
             "",

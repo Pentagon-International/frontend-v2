@@ -1366,12 +1366,16 @@ function buildOceanHousing(
       booking.notify1_customer_address || booking.notify_customer_address || "",
     notify1_customer_email:
       booking.notify1_customer_email || booking.notify_customer_email || "",
+    notify2_customer_name: booking.notify2_customer_name || "",
+    notify2_customer_address: booking.notify2_customer_address || "",
+    notify2_customer_email: booking.notify2_customer_email || "",
     cha_name: booking.cha || booking.cha_name || "",
     cha_address: booking.cha_address || "",
     commodity_description: booking.commodity_description || "",
     marks_no: booking.marks_no || "",
     shipment_terms_code:
       booking.shipment_terms_code || booking.shipment_terms_code_read || "",
+    shipment_terms_name: booking.shipment_terms_name || "",
     cargo_details: mapCargoDetails(booking),
     events: mapBookingEventsForJob(booking),
     ...mapBookingDocumentsForHousingPayload(booking, houseDocumentIds),
@@ -1527,7 +1531,9 @@ export function buildJobCreatePayloadFromBooking(
       flight_no: flightNo || null,
       is_direct: booking.is_direct ?? false,
       mawb_no: masterNo,
-      mawb_date: formatRoutingDate(booking.mawb_date),
+      mawb_date: formatRoutingDate(
+        booking.mawb_date || booking.mbl_date || booking.master_date,
+      ),
     };
   }
 
