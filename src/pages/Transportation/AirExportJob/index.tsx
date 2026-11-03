@@ -82,6 +82,11 @@ import useDateFormat from "../../../hooks/useDateFormat";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { buildChaListFilters } from "../chaJob/chaJobService";
 import { firstChaHouseConsigneeName } from "../chaJob/chaJobCustomsFields";
+import {
+  PROFIT_VERIFICATION_STATUS_FILTER_OPTIONS,
+  getProfitVerificationStatusLabel,
+} from "../../../utils/jobProfitVerificationStatus";
+import { JobProfitVerificationStatusCell } from "../../../components/JobList/JobProfitVerificationStatusCell";
 
 const LIST_KEY = "AIR_EXPORT_JOB_MASTER";
 
@@ -96,6 +101,7 @@ type VisibleColumnsState = {
   etd: boolean;
   eta: boolean;
   status: boolean;
+  profit_verification_status: boolean;
 };
 
 const AIR_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
@@ -109,6 +115,7 @@ const AIR_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = 
   etd: "ETD",
   eta: "ETA",
   status: "Status",
+  profit_verification_status: "Profit Verification Status",
 };
 
 type AirExportJobData = {
@@ -142,7 +149,9 @@ type AirExportJobData = {
   mawb_no: string | null;
   mawb_date: string | null;
   ocean_routings?: Array<Record<string, unknown>>;
-  housing_details?: Array<Record<string, unknown>>;
+  housing_details?: Array<{
+    consignee_name?: string | null;
+  }>;
   document_ids?: number[];
   documents?: Array<{
     id: number;
@@ -156,6 +165,8 @@ type AirExportJobData = {
   created_at?: string;
   updated_at?: string;
   status?: string;
+  verification_status?: string | null;
+  has_verified_profit?: boolean;
   job_id?: string;
   service_code?: string;
 };
@@ -211,6 +222,7 @@ type AirExportJobFilters = {
   etd: string;
   eta: string;
   status: string;
+  verification_status: string;
 };
 
 function AirExportJobMaster() {
@@ -246,6 +258,7 @@ function AirExportJobMaster() {
     etd: "",
     eta: "",
     status: "",
+    verification_status: "",
   };
   const [draftFilters, setDraftFilters] = useState<AirExportJobFilters>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] =
@@ -277,6 +290,7 @@ function AirExportJobMaster() {
     etd: true,
     eta: true,
     status: true,
+    profit_verification_status: true,
   });
 
   const dateFormat = useDateFormat();
@@ -427,6 +441,10 @@ function AirExportJobMaster() {
     push("etd", filters.etd);
     push("eta", filters.eta);
     push("status", filters.status, "upper");
+
+    if (filters.verification_status?.trim()) {
+      cleaned.verification_status = filters.verification_status.trim();
+    }
 
     if (filters.agent_name?.trim()) cleaned.agent = filters.agent_name.trim();
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
@@ -916,6 +934,32 @@ function AirExportJobMaster() {
                 </Grid.Col>
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      label="Profit Verification Status"
+                      placeholder="Select verification status"
+                      size="xs"
+                      searchable
+                      clearable
+                      data={[...PROFIT_VERIFICATION_STATUS_FILTER_OPTIONS]}
+                      value={draftFilters.verification_status || null}
+                      onChange={(value) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          verification_status: value || "",
+                        }))
+                      }
+                      styles={filterFieldStyles}
+                      classNames={{
+                        label: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        option: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
                       label="Job Date From"
                       size="xs"
@@ -1313,6 +1357,42 @@ function AirExportJobMaster() {
                           />
                         </th>
                       )}
+                      {visibleColumns.profit_verification_status && (
+                        <th style={mergeTh(220)}>
+                          <ERPListColumnHeaderFilter
+                            label="Profit Verification Status"
+                            value={appliedFilters.verification_status}
+                            displayValue={getProfitVerificationStatusLabel(
+                              appliedFilters.verification_status,
+                            )}
+                            theme={theme}
+                            isEditing={editingHeaderId === "verification_status"}
+                            onStartEdit={() => openHeaderEditor("verification_status")}
+                            onStopEdit={() => collapseHeaderEditor("verification_status")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <Select
+                                autoFocus={autoFocus}
+                                placeholder="Verification status"
+                                searchable
+                                clearable
+                                size="xs"
+                                data={[...PROFIT_VERIFICATION_STATUS_FILTER_OPTIONS]}
+                                value={appliedFilters.verification_status || null}
+                                onChange={(value) => {
+                                  commitHeaderFilters({
+                                    verification_status: value ?? "",
+                                  });
+                                  onClose();
+                                }}
+                                comboboxProps={{ zIndex: 1000 }}
+                                classNames={erpListGeistSelectClassNames}
+                                styles={filterFieldStyles}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
                       <th
                         style={{
                           ...erpListStickyActionThStyle(theme, 96),
@@ -1497,6 +1577,13 @@ function AirExportJobMaster() {
                             {visibleColumns.status && (
                               <td style={tdPad}>
                                 <ERPListJobStatusPill status={row.status} />
+                              </td>
+                            )}
+                            {visibleColumns.profit_verification_status && (
+                              <td style={tdPad}>
+                                <JobProfitVerificationStatusCell
+                                  verificationStatus={row.verification_status}
+                                />
                               </td>
                             )}
                             <td style={erpListStickyActionTdStyle(theme)}>
