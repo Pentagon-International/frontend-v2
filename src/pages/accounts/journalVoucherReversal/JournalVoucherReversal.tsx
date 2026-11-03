@@ -177,6 +177,37 @@ function toLocalAmount(value: number | string | null | undefined): number | null
   return rounded == null || !Number.isFinite(rounded) ? null : rounded;
 }
 
+/**
+ * Chart row label / API `account_name`: `gl_account_code - account_name - gl_name`.
+ * Third segment (gl_name) may itself contain ` - `.
+ */
+function formatJournalVoucherAccountLabel(
+  accountCode: string | null | undefined,
+  accountName: string | null | undefined,
+  glName: string | null | undefined,
+): string {
+  const code = String(accountCode ?? "").trim();
+  const name = String(accountName ?? "").trim();
+  const gl = String(glName ?? "").trim();
+  return [code, name, gl].filter(Boolean).join(" - ");
+}
+
+/** API `account_name`: same composite as the account field label. */
+function accountNameForPayload(row: JVChargeRow): string {
+  const composite = String(row.account_name ?? "").trim();
+  if (composite) return composite;
+  return formatJournalVoucherAccountLabel(row.account_code, "", "");
+}
+
+/** Flip Dr ↔ Cr for reversal lines (case-insensitive). */
+function reciprocalDrCr(drCr: string | null | undefined): string {
+  const v = String(drCr ?? "").trim().toLowerCase();
+  if (v === "dr") return "Cr";
+  if (v === "cr") return "Dr";
+  // Unknown / empty: default opposite of empty-row "Dr"
+  return "Cr";
+}
+
 const STATUS_OPTIONS = [
   { value: "UNPOSTED", label: "Unposted" },
   { value: "POSTED", label: "Posted" },
@@ -434,14 +465,19 @@ function JournalVoucherReversal() {
             roe: parseRoeForPayload(c.roe),
             amount: c.amount != null ? Number(c.amount) : null,
             local_amount: toLocalAmount(c.local_amount),
-            dr_cr: shouldFlipDrCr ? (c.dr_cr === "Dr" ? "Cr" : "Dr") : c.dr_cr,
+            // Create-from-JV only: reciprocate each original Dr/Cr once (edit/view keep stored values)
+            dr_cr: shouldFlipDrCr ? reciprocalDrCr(c.dr_cr) : c.dr_cr,
             narration: c.narration ?? "",
           }))
         : [emptyRow()];
 
     form.setValues({
       document_id: isReversalMode ? "" : d.id ? String(d.id) : "",
-      journal_no: isReversalMode ? "" : (d.document_no ?? ""),
+      // Create-from-JV: store original JV number so payload.document_no links to source.
+      // Edit/view reverse: document_no on the reverse row is that same original link.
+      journal_no: isReversalMode
+        ? (d.journal_no || d.document_no || "")
+        : (d.document_no ?? d.journal_no ?? ""),
       day_book_id: d.daybook_id != null ? String(d.daybook_id) : "",
       note: d.note ?? "",
       narration: d.narration ?? "",
@@ -523,9 +559,14 @@ function JournalVoucherReversal() {
     const creditTotal = Math.round(credit * 1000) / 1000;
     const difference = Math.round((debit - credit) * 1000) / 1000;
 
-    // Top-level account_name: first charge that has one
-    const firstAccountName =
-      values.charges.find((c) => c.account_name)?.account_name ?? "";
+    // Top-level account_name: first charge composite (same format as line account_name)
+    const firstAccountName = (() => {
+      for (const c of values.charges) {
+        const n = accountNameForPayload(c);
+        if (n) return n;
+      }
+      return "";
+    })();
 
     return {
       ...(isUpdate ? { id: saveResponse?.id ?? Number(recordId) } : {}),
@@ -543,7 +584,7 @@ function JournalVoucherReversal() {
         ...(c.id != null ? { id: c.id } : {}),
         charge_id: c.charge_id ?? null,
         currency_id: c.currency_id ? Number(c.currency_id) : null,
-        account_name: c.account_name ?? "",
+        account_name: accountNameForPayload(c),
         subledger: c.subledger_code ?? "",
         code: c.code ?? "",
         key: c.key ?? "",
@@ -1513,18 +1554,16 @@ function JournalVoucherReversal() {
                               ).trim();
                               return {
                                 value: id,
-                                label: [name, gl, glName]
-                                  .filter(Boolean)
-                                  .join(" - "),
+                                label: formatJournalVoucherAccountLabel(
+                                  gl,
+                                  name,
+                                  glName,
+                                ),
                               };
                             }}
                             displayValue={
-                              row.account_name
-                                ? `${row.account_name}${
-                                    row.account_code
-                                      ? ` - ${row.account_code}`
-                                      : ""
-                                  }`
+                              String(row.account_name ?? "").trim()
+                                ? row.account_name
                                 : row.account_code || undefined
                             }
                             returnOriginalData
@@ -1571,7 +1610,7 @@ function JournalVoucherReversal() {
                               );
                               form.setFieldValue(
                                 `charges.${index}.account_name`,
-                                [
+                                formatJournalVoucherAccountLabel(
                                   String(
                                     (originalData as any).gl_account_code ?? "",
                                   ).trim(),
@@ -1581,9 +1620,7 @@ function JournalVoucherReversal() {
                                   String(
                                     (originalData as any).gl_name ?? "",
                                   ).trim(),
-                                ]
-                                  .filter(Boolean)
-                                  .join(" - "),
+                                ),
                               );
                             }}
                             readOnly={isReadOnly}
