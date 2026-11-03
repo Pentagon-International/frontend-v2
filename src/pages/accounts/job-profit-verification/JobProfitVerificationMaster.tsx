@@ -17,7 +17,6 @@ import {
   Group,
   Loader,
   MantineProvider,
-  Menu,
   Select,
   Stack,
   Text,
@@ -27,9 +26,9 @@ import {
 import {
   IconArrowRight,
   IconChartBar,
+  IconCheck,
   IconCircleCheck,
   IconCircleX,
-  IconDotsVertical,
   IconFilter,
   IconRefresh,
   IconSearch,
@@ -61,6 +60,7 @@ import {
   erpListGeistRootTypography,
   erpListGeistSelectClassNames,
   erpToolbarOutlineButtonStyles,
+  erpToolbarPrimaryButtonStyles,
   erpListThStyle,
   erpListDataRowProps,
   erpListBookingMasterDateTd,
@@ -68,7 +68,6 @@ import {
   ERP_LIST_FILTER_FIELD_COL_SPAN,
   erpListStickyActionThStyle,
   erpListStickyActionTdStyle,
-  erpListGeistMenuDropdownStyles,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
 import { JobProfitStatusPill } from "../../../components/JobProfitStatusPill";
@@ -97,6 +96,14 @@ import {
 
 const LIST_KEY_VERIFICATION = "JOB_PROFIT_VERIFICATION_MASTER";
 const LIST_KEY_APPROVAL = "JOB_PROFIT_VERIFICATION_APPROVAL";
+/** Sticky right-pin widths for approval select + actions columns. */
+const APPROVAL_SELECT_COL_WIDTH = 44;
+const APPROVAL_ACTIONS_COL_WIDTH = 90;
+/** Uniform approval data-row height; action icons fill row minus 6px padding. */
+const APPROVAL_ROW_HEIGHT = 44;
+const APPROVAL_ACTION_PAD = 6;
+const APPROVAL_ACTION_INNER_HEIGHT = APPROVAL_ROW_HEIGHT - APPROVAL_ACTION_PAD * 2;
+const APPROVAL_ACTION_ICON_SIZE = Math.round(APPROVAL_ACTION_INNER_HEIGHT * 0.6);
 
 type JobProfitVerificationMode = "verification" | "approval";
 
@@ -498,6 +505,10 @@ export default function JobProfitVerificationMaster({
   >([]);
   const [branchLoading, setBranchLoading] = useState(false);
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  /** Approval-mode row selection (shipment ids). Cleared on page/filter/search change. */
+  const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   /** Visible width of the ERPListTableCard scrollport — keeps loader/empty centered while the table is wider. */
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const [scrollPortWidth, setScrollPortWidth] = useState<number | null>(null);
@@ -897,6 +908,10 @@ export default function JobProfitVerificationMaster({
     [mergeHouseProfitPatchIntoList, refreshProfitList],
   );
 
+  const clearApprovalSelection = useCallback(() => {
+    setSelectedShipmentIds(new Set());
+  }, []);
+
   const handleApproveHold = useCallback(
     (row: JobProfitRow) => {
       const shipmentId = row.subjob_no?.trim();
@@ -910,11 +925,27 @@ export default function JobProfitVerificationMaster({
       runJobProfitHoldDecision({
         shipmentId,
         decision: "approve",
-        onSuccess: refreshProfitList,
+        onSuccess: () => {
+          clearApprovalSelection();
+          refreshProfitList();
+        },
       });
     },
-    [refreshProfitList],
+    [clearApprovalSelection, refreshProfitList],
   );
+
+  const handleApproveSelectedHolds = useCallback(() => {
+    const shipmentIds = Array.from(selectedShipmentIds);
+    if (shipmentIds.length === 0) return;
+    runJobProfitHoldDecision({
+      shipmentIds,
+      decision: "approve",
+      onSuccess: () => {
+        clearApprovalSelection();
+        refreshProfitList();
+      },
+    });
+  }, [clearApprovalSelection, refreshProfitList, selectedShipmentIds]);
 
   const handleRejectHold = useCallback(
     (row: JobProfitRow) => {
@@ -929,11 +960,38 @@ export default function JobProfitVerificationMaster({
       runJobProfitHoldDecision({
         shipmentId,
         decision: "reject",
-        onSuccess: refreshProfitList,
+        onSuccess: () => {
+          clearApprovalSelection();
+          refreshProfitList();
+        },
       });
     },
-    [refreshProfitList],
+    [clearApprovalSelection, refreshProfitList],
   );
+
+  const handleRejectSelectedHolds = useCallback(() => {
+    const shipmentIds = Array.from(selectedShipmentIds);
+    if (shipmentIds.length === 0) return;
+    runJobProfitHoldDecision({
+      shipmentIds,
+      decision: "reject",
+      onSuccess: () => {
+        clearApprovalSelection();
+        refreshProfitList();
+      },
+    });
+  }, [clearApprovalSelection, refreshProfitList, selectedShipmentIds]);
+
+  const toggleApprovalRowSelected = useCallback((shipmentId: string) => {
+    const id = shipmentId.trim();
+    if (!id) return;
+    setSelectedShipmentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const {
     data: listResult,
@@ -980,7 +1038,63 @@ export default function JobProfitVerificationMaster({
 
   const rows = listResult?.data ?? [];
 
+  const pageShipmentIds = useMemo(() => {
+    if (!isApprovalMode) return [] as string[];
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const id = row.subjob_no?.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+    return ids;
+  }, [isApprovalMode, rows]);
+
+  const allPageSelected =
+    isApprovalMode &&
+    pageShipmentIds.length > 0 &&
+    pageShipmentIds.every((id) => selectedShipmentIds.has(id));
+  const somePageSelected =
+    isApprovalMode &&
+    pageShipmentIds.some((id) => selectedShipmentIds.has(id)) &&
+    !allPageSelected;
+  const selectedCount = selectedShipmentIds.size;
+
+  const appliedFiltersKey = useMemo(
+    () => JSON.stringify(appliedFilters),
+    [appliedFilters],
+  );
+
+  useEffect(() => {
+    if (!isApprovalMode) return;
+    clearApprovalSelection();
+  }, [
+    isApprovalMode,
+    pageIndex,
+    pageSize,
+    debouncedSearch,
+    appliedFiltersKey,
+    clearApprovalSelection,
+  ]);
+
+  const toggleSelectAllPage = useCallback(() => {
+    setSelectedShipmentIds((prev) => {
+      const next = new Set(prev);
+      const allSelected =
+        pageShipmentIds.length > 0 &&
+        pageShipmentIds.every((id) => next.has(id));
+      if (allSelected) {
+        pageShipmentIds.forEach((id) => next.delete(id));
+      } else {
+        pageShipmentIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, [pageShipmentIds]);
+
   const applyFilters = () => {
+    clearApprovalSelection();
     setAppliedFilters(draftFilters);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
     persistFiltersToStore(draftFilters, search);
@@ -988,6 +1102,7 @@ export default function JobProfitVerificationMaster({
   };
 
   const clearAllFilters = () => {
+    clearApprovalSelection();
     const reset = createDefaultFilters(mode);
     setDraftFilters(reset);
     setAppliedFilters(reset);
@@ -1016,8 +1131,18 @@ export default function JobProfitVerificationMaster({
 
   const loading = isLoading || isFetching || isRestoring;
   const tableColumnCount =
-    (isApprovalMode ? 19 : 21) + (showBrokerageColumn ? 2 : 0);
-  const tdPad = { padding: "10px 12px" as const };
+    (isApprovalMode ? 20 : 21) + (showBrokerageColumn ? 2 : 0);
+  /** Approval rows share one height + vertical pad so the first row matches the rest. */
+  const tdPad = isApprovalMode
+    ? {
+        padding: `${APPROVAL_ACTION_PAD}px 12px`,
+        height: APPROVAL_ROW_HEIGHT,
+        maxHeight: APPROVAL_ROW_HEIGHT,
+        overflow: "hidden" as const,
+        boxSizing: "border-box" as const,
+        verticalAlign: "middle" as const,
+      }
+    : { padding: "10px 12px" as const };
   const tdDate = erpListBookingMasterDateTd(theme);
   const mergeTh = (minW: number, widthPx: number) => ({
     ...erpListThStyle(theme),
@@ -1147,6 +1272,37 @@ export default function JobProfitVerificationMaster({
                 >
                   Refresh
                 </Button>
+                {isApprovalMode && selectedCount > 0 ? (
+                  <>
+                    <Button
+                      size="xs"
+                      styles={erpToolbarPrimaryButtonStyles(theme)}
+                      leftSection={<IconCircleCheck size={14} />}
+                      onClick={handleApproveSelectedHolds}
+                      disabled={loading}
+                    >
+                      Approve all
+                      {selectedCount > 1 ? ` (${selectedCount})` : ""}
+                    </Button>
+                    <Button
+                      size="xs"
+                      color="red"
+                      variant="filled"
+                      styles={{
+                        root: {
+                          fontFamily: theme.fontSans,
+                          fontWeight: 600,
+                        },
+                      }}
+                      leftSection={<IconCircleX size={14} />}
+                      onClick={handleRejectSelectedHolds}
+                      disabled={loading}
+                    >
+                      Reject all
+                      {selectedCount > 1 ? ` (${selectedCount})` : ""}
+                    </Button>
+                  </>
+                ) : null}
                 <Button
                   variant="default"
                   size="xs"
@@ -1733,7 +1889,50 @@ export default function JobProfitVerificationMaster({
                       {!isApprovalMode ? (
                         <th style={mergeTh(150, 150)}>Confirmed By</th>
                       ) : null}
-                      <th style={erpListStickyActionThStyle(theme, 96)}>
+                      {isApprovalMode ? (
+                        <th
+                          style={{
+                            ...erpListStickyActionThStyle(
+                              theme,
+                              APPROVAL_SELECT_COL_WIDTH,
+                            ),
+                            right: APPROVAL_ACTIONS_COL_WIDTH,
+                            width: APPROVAL_SELECT_COL_WIDTH,
+                            padding: APPROVAL_ACTION_PAD,
+                            boxSizing: "border-box",
+                            textAlign: "left",
+                            boxShadow:
+                              "-4px 0 8px -4px rgba(15, 23, 42, 0.08)",
+                          }}
+                        >
+                          <Checkbox
+                            aria-label="Select all on page"
+                            checked={allPageSelected}
+                            indeterminate={somePageSelected}
+                            disabled={loading || pageShipmentIds.length === 0}
+                            onChange={toggleSelectAllPage}
+                          />
+                        </th>
+                      ) : null}
+                      <th
+                        style={{
+                          ...erpListStickyActionThStyle(
+                            theme,
+                            isApprovalMode
+                              ? APPROVAL_ACTIONS_COL_WIDTH
+                              : 96,
+                          ),
+                          ...(isApprovalMode
+                            ? {
+                                padding: APPROVAL_ACTION_PAD,
+                                boxSizing: "border-box",
+                                boxShadow: "none",
+                                borderLeft: "none",
+                                textAlign: "left",
+                              }
+                            : {}),
+                        }}
+                      >
                         Actions
                       </th>
                     </tr>
@@ -1756,10 +1955,25 @@ export default function JobProfitVerificationMaster({
                         </td>
                       </tr>
                     ) : (
-                      rows.map((row, rowIndex) => (
+                      rows.map((row, rowIndex) => {
+                        const shipmentId = row.subjob_no?.trim() || "";
+                        const rowSelected =
+                          Boolean(shipmentId) &&
+                          selectedShipmentIds.has(shipmentId);
+                        const rowProps = erpListDataRowProps(theme);
+                        return (
                         <tr
                           key={`${row.housing_id ?? row.subjob_no ?? row.job_no ?? "row"}-${rowIndex}`}
-                          {...erpListDataRowProps(theme)}
+                          {...rowProps}
+                          style={{
+                            ...rowProps.style,
+                            ...(isApprovalMode
+                              ? {
+                                  height: APPROVAL_ROW_HEIGHT,
+                                  maxHeight: APPROVAL_ROW_HEIGHT,
+                                }
+                              : {}),
+                          }}
                         >
                           <td style={tdPad}>
                             <Text size="sm" c={fg}>
@@ -1945,9 +2159,9 @@ export default function JobProfitVerificationMaster({
                               <Text
                                 size="sm"
                                 c={row.hold_remark?.trim() ? fg : muted}
+                                lineClamp={1}
                                 style={{
                                   maxWidth: 280,
-                                  whiteSpace: "normal",
                                   wordBreak: "break-word",
                                 }}
                               >
@@ -2066,10 +2280,14 @@ export default function JobProfitVerificationMaster({
                             </>
                           ) : null}
                           <td style={tdPad}>
-                            <Text size="sm" c={fg}>
+                            <Text
+                              size="sm"
+                              c={fg}
+                              lineClamp={isApprovalMode ? 1 : undefined}
+                            >
                               {row.verified_by?.trim() || "—"}
                             </Text>
-                            {row.verified_at ? (
+                            {!isApprovalMode && row.verified_at ? (
                               <Text size="xs" c={muted} mt={2}>
                                 {fmtDateTime(row.verified_at)}
                               </Text>
@@ -2087,55 +2305,135 @@ export default function JobProfitVerificationMaster({
                               ) : null}
                             </td>
                           ) : null}
-                          <td style={erpListStickyActionTdStyle(theme)}>
-                            {(() => {
-                              if (isApprovalMode) {
-                                return (
-                                  <Menu
-                                    withinPortal
-                                    position="bottom-end"
-                                    shadow="md"
-                                    width={180}
-                                    styles={erpListGeistMenuDropdownStyles}
-                                    classNames={{
-                                      dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                          {isApprovalMode ? (
+                            <td
+                              style={{
+                                ...erpListStickyActionTdStyle(theme),
+                                right: APPROVAL_ACTIONS_COL_WIDTH,
+                                width: APPROVAL_SELECT_COL_WIDTH,
+                                minWidth: APPROVAL_SELECT_COL_WIDTH,
+                                height: APPROVAL_ROW_HEIGHT,
+                                maxHeight: APPROVAL_ROW_HEIGHT,
+                                padding: APPROVAL_ACTION_PAD,
+                                boxSizing: "border-box",
+                                textAlign: "left",
+                                verticalAlign: "middle",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <Checkbox
+                                aria-label={`Select shipment ${shipmentId || rowIndex + 1}`}
+                                checked={rowSelected}
+                                disabled={!shipmentId || loading}
+                                onChange={() =>
+                                  toggleApprovalRowSelected(shipmentId)
+                                }
+                              />
+                            </td>
+                          ) : null}
+                          <td
+                            style={{
+                              ...erpListStickyActionTdStyle(theme),
+                              ...(isApprovalMode
+                                ? {
+                                    width: APPROVAL_ACTIONS_COL_WIDTH,
+                                    minWidth: APPROVAL_ACTIONS_COL_WIDTH,
+                                    height: APPROVAL_ROW_HEIGHT,
+                                    maxHeight: APPROVAL_ROW_HEIGHT,
+                                    padding: APPROVAL_ACTION_PAD,
+                                    boxSizing: "border-box",
+                                    boxShadow: "none",
+                                    borderLeft: "none",
+                                    overflow: "hidden",
+                                    verticalAlign: "middle",
+                                    textAlign: "left",
+                                  }
+                                : {}),
+                            }}
+                          >
+                            {isApprovalMode && rowSelected ? (
+                              <Group
+                                gap={4}
+                                wrap="nowrap"
+                                grow
+                                preventGrowOverflow={false}
+                                align="stretch"
+                                justify="flex-start"
+                                style={{
+                                  width: "100%",
+                                  height: APPROVAL_ACTION_INNER_HEIGHT,
+                                }}
+                              >
+                                <Tooltip label="Approve" withArrow>
+                                  <Box
+                                    component="span"
+                                    style={{
+                                      display: "flex",
+                                      flex: 1,
+                                      height: "100%",
+                                      minWidth: 0,
                                     }}
                                   >
-                                    <Menu.Target>
-                                      <ActionIcon
-                                        variant="subtle"
-                                        color="gray"
-                                        size="sm"
-                                      >
-                                        <IconDotsVertical size={16} />
-                                      </ActionIcon>
-                                    </Menu.Target>
-                                    <Menu.Dropdown>
-                                      <Menu.Item
-                                        leftSection={
-                                          <IconCircleCheck size={14} />
-                                        }
-                                        onClick={() => handleApproveHold(row)}
-                                      >
-                                        Approve
-                                      </Menu.Item>
-                                      <Menu.Item
-                                        color="red"
-                                        leftSection={<IconCircleX size={14} />}
-                                        onClick={() => handleRejectHold(row)}
-                                      >
-                                        Reject
-                                      </Menu.Item>
-                                    </Menu.Dropdown>
-                                  </Menu>
-                                );
-                              }
-
-                              return null;
-                            })()}
+                                    <ActionIcon
+                                      variant="filled"
+                                      color="#105476"
+                                      aria-label="Approve"
+                                      radius={4}
+                                      styles={{
+                                        root: {
+                                          flex: 1,
+                                          width: "100%",
+                                          height: "100%",
+                                          minHeight:
+                                            APPROVAL_ACTION_INNER_HEIGHT,
+                                        },
+                                      }}
+                                      onClick={() => handleApproveHold(row)}
+                                    >
+                                      <IconCheck
+                                        size={APPROVAL_ACTION_ICON_SIZE}
+                                      />
+                                    </ActionIcon>
+                                  </Box>
+                                </Tooltip>
+                                <Tooltip label="Reject" withArrow>
+                                  <Box
+                                    component="span"
+                                    style={{
+                                      display: "flex",
+                                      flex: 1,
+                                      height: "100%",
+                                      minWidth: 0,
+                                    }}
+                                  >
+                                    <ActionIcon
+                                      variant="filled"
+                                      color="red"
+                                      aria-label="Reject"
+                                      radius={4}
+                                      styles={{
+                                        root: {
+                                          flex: 1,
+                                          width: "100%",
+                                          height: "100%",
+                                          minHeight:
+                                            APPROVAL_ACTION_INNER_HEIGHT,
+                                        },
+                                      }}
+                                      onClick={() => handleRejectHold(row)}
+                                    >
+                                      <IconX
+                                        size={APPROVAL_ACTION_ICON_SIZE}
+                                      />
+                                    </ActionIcon>
+                                  </Box>
+                                </Tooltip>
+                              </Group>
+                            ) : null}
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

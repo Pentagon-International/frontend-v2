@@ -268,14 +268,27 @@ export type JobProfitHoldDecisionPayload = {
 };
 
 export function buildHoldDecisionPayload(
-  shipmentId: string,
+  shipmentId: string | string[],
   decision: JobProfitHoldDecision,
 ): JobProfitHoldDecisionPayload {
-  const shipment_id = String(shipmentId ?? "").trim();
+  const shipmentIds = uniqueShipmentIds(
+    Array.isArray(shipmentId) ? undefined : shipmentId,
+    Array.isArray(shipmentId) ? shipmentId : undefined,
+  );
   if (decision === "approve") {
-    return { items: [{ shipment_id, hold_confirmed: true }] };
+    return {
+      items: shipmentIds.map((shipment_id) => ({
+        shipment_id,
+        hold_confirmed: true,
+      })),
+    };
   }
-  return { items: [{ shipment_id, hold_rejected: true }] };
+  return {
+    items: shipmentIds.map((shipment_id) => ({
+      shipment_id,
+      hold_rejected: true,
+    })),
+  };
 }
 
 export async function patchJobProfitHoldDecision(
@@ -544,12 +557,16 @@ export function runJobProfitSalespersonVerify(options: {
 
 /** Approve / Reject hold dialogs outside Menu trees so they survive dropdown unmount. */
 export function runJobProfitHoldDecision(options: {
-  shipmentId: string;
+  shipmentId?: string | null;
+  shipmentIds?: Array<string | null | undefined> | null;
   decision: JobProfitHoldDecision;
   onSuccess?: (response?: JobProfitHousePatchResult) => void;
 }) {
-  const shipmentId = String(options.shipmentId ?? "").trim();
-  if (!shipmentId) {
+  const shipmentIds = uniqueShipmentIds(
+    options.shipmentId,
+    options.shipmentIds,
+  );
+  if (shipmentIds.length === 0) {
     ToastNotification({
       type: "error",
       message: "Shipment number not found.",
@@ -558,6 +575,7 @@ export function runJobProfitHoldDecision(options: {
   }
 
   const isApprove = options.decision === "approve";
+  const scopeLabel = formatShipmentActionScope(shipmentIds);
   let loading = false;
   let error: string | null = null;
 
@@ -568,8 +586,8 @@ export function runJobProfitHoldDecision(options: {
           title={isApprove ? "Approve" : "Reject"}
           message={
             isApprove
-              ? `Approve for shipment ${shipmentId}?`
-              : `Reject for shipment ${shipmentId}?`
+              ? `Approve for ${scopeLabel}?`
+              : `Reject for ${scopeLabel}?`
           }
           confirmLabel={isApprove ? "Approve" : "Reject"}
           loading={loading}
@@ -586,7 +604,7 @@ export function runJobProfitHoldDecision(options: {
             void (async () => {
               try {
                 const response = await patchJobProfitHoldDecision(
-                  buildHoldDecisionPayload(shipmentId, options.decision),
+                  buildHoldDecisionPayload(shipmentIds, options.decision),
                 );
                 ToastNotification({
                   type: "success",

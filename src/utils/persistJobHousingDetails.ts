@@ -555,8 +555,9 @@ export function buildFullJobUpdatePayloadFromHouseNav(
     origin_code: firstFilled(mbl.origin_code, job.origin_code) ?? null,
     destination_code:
       firstFilled(mbl.destination_code, job.destination_code) ?? null,
-    etd: formatMasterDate(etdSrc, isAir) ?? (isAir ? "" : null),
-    eta: formatMasterDate(etaSrc, isAir) ?? (isAir ? "" : null),
+    // Use null when missing (same as Ocean) so house save does not wipe master dates.
+    etd: formatMasterDate(etdSrc, isAir),
+    eta: formatMasterDate(etaSrc, isAir),
     atd: formatMasterDate(firstFilled(mbl.atd, job.atd), isAir),
     ata: formatMasterDate(firstFilled(mbl.ata, job.ata), isAir),
     job_date: formatDateYmd(jobDateSrc),
