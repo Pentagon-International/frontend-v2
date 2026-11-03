@@ -302,6 +302,8 @@ type HAWBDetail = HouseDocumentFields & {
   destination_name?: string;
   customer_service: string;
   trade: string;
+  /** Agent code from API (`agent_code`); house form uses as `origin_agent`. */
+  origin_agent?: string;
   origin_agent_name: string;
   origin_agent_address: string;
   origin_agent_email: string;
@@ -313,17 +315,26 @@ type HAWBDetail = HouseDocumentFields & {
   billing_customer_name?: string;
   billing_customer_address?: string;
   billing_customer_email?: string;
+  cha_code?: string;
+  cha_name?: string;
+  cha_address?: string;
+  shipper_id?: string;
   shipper_code: string;
   shipper_name: string;
   shipper_address: string;
   shipper_email: string;
   shipper_state_id?: number | null;
+  shipper_gst_id?: string;
+  consignee_id?: string;
   consignee_code: string;
   consignee_name: string;
   consignee_address: string;
   consignee_email: string;
   /** State id from consignee customer master — used for Invoice Create (Bill To state). */
   consignee_state_id?: number | null;
+  consignee_gst_id?: string;
+  consignee_pan_no?: string;
+  consignee_state_code?: string;
   // Backward-compat fields used in submit payload mapping
   notify1_customer_name?: string;
   notify1_customer_address?: string;
@@ -331,12 +342,18 @@ type HAWBDetail = HouseDocumentFields & {
   notify_customer1_name: string;
   notify_customer1_address: string;
   notify_customer1_email: string;
+  notify2_customer_name?: string;
+  notify2_customer_address?: string;
+  notify2_customer_email?: string;
   commodity_description?: string;
   marks_no?: string;
   note?: string;
   sub_item_no?: string;
   ref_no?: string;
+  hscode?: string;
+  item_type?: string;
   shipment_terms_code?: string;
+  shipment_terms_name?: string;
   cargo_details?: Array<{
     id?: number;
     package_type?: string;
@@ -1530,6 +1547,11 @@ function AirImportJobCreate() {
                   ? String(house.customer_service)
                   : "",
                 trade: house.trade ? String(house.trade) : "",
+                origin_agent: house.agent_code
+                  ? String(house.agent_code)
+                  : house.origin_agent
+                    ? String(house.origin_agent)
+                    : "",
                 origin_agent_name:
                   (house.agent_name ?? house.origin_agent_name)
                     ? String(house.agent_name ?? house.origin_agent_name)
@@ -1569,8 +1591,13 @@ function AirImportJobCreate() {
               billing_customer_email: house.billing_customer_email
                 ? String(house.billing_customer_email)
                 : "",
+              cha_code: house.cha_code ? String(house.cha_code) : "",
               cha_name: house.cha_name ? String(house.cha_name) : "",
                 cha_address: house.cha_address ? String(house.cha_address) : "",
+                shipper_id:
+                  house.shipper_id != null && house.shipper_id !== undefined
+                    ? String(house.shipper_id)
+                    : "",
                 shipper_code: house.shipper_code
                   ? String(house.shipper_code)
                   : "",
@@ -1587,6 +1614,15 @@ function AirImportJobCreate() {
                   house.shipper_state_id != null
                     ? Number(house.shipper_state_id)
                     : null,
+                shipper_gst_id:
+                  house.shipper_gst_id != null &&
+                  house.shipper_gst_id !== undefined
+                    ? String(house.shipper_gst_id)
+                    : "",
+                consignee_id:
+                  house.consignee_id != null && house.consignee_id !== undefined
+                    ? String(house.consignee_id)
+                    : "",
                 consignee_code: house.consignee_code
                   ? String(house.consignee_code)
                   : "",
@@ -1603,6 +1639,48 @@ function AirImportJobCreate() {
                   house.consignee_state_id != null
                     ? Number(house.consignee_state_id)
                     : null,
+                consignee_gst_id:
+                  house.consignee_gst_id != null &&
+                  house.consignee_gst_id !== undefined
+                    ? String(house.consignee_gst_id)
+                    : "",
+                consignee_pan_no:
+                  house.consignee_pan_no != null &&
+                  house.consignee_pan_no !== undefined
+                    ? String(house.consignee_pan_no)
+                    : "",
+                consignee_state_code:
+                  house.consignee_state_code != null &&
+                  house.consignee_state_code !== undefined
+                    ? String(house.consignee_state_code)
+                    : (
+                          house.consignee_state_details as
+                            | { state_code?: string }
+                            | undefined
+                        )?.state_code != null
+                      ? String(
+                          (
+                            house.consignee_state_details as {
+                              state_code?: string;
+                            }
+                          ).state_code,
+                        )
+                      : "",
+                notify1_customer_name: house.notify1_customer_name
+                  ? String(house.notify1_customer_name)
+                  : house.notify_customer1_name
+                    ? String(house.notify_customer1_name)
+                    : "",
+                notify1_customer_address: house.notify1_customer_address
+                  ? String(house.notify1_customer_address)
+                  : house.notify_customer1_address
+                    ? String(house.notify_customer1_address)
+                    : "",
+                notify1_customer_email: house.notify1_customer_email
+                  ? String(house.notify1_customer_email)
+                  : house.notify_customer1_email
+                    ? String(house.notify_customer1_email)
+                    : "",
                 notify_customer1_name:
                   (house.notify1_customer_name ?? house.notify_customer1_name)
                     ? String(
@@ -1625,6 +1703,15 @@ function AirImportJobCreate() {
                           house.notify_customer1_email,
                       )
                     : "",
+                notify2_customer_name: house.notify2_customer_name
+                  ? String(house.notify2_customer_name)
+                  : "",
+                notify2_customer_address: house.notify2_customer_address
+                  ? String(house.notify2_customer_address)
+                  : "",
+                notify2_customer_email: house.notify2_customer_email
+                  ? String(house.notify2_customer_email)
+                  : "",
                 commodity_description: house.commodity_description
                   ? String(house.commodity_description)
                   : "",
@@ -1635,8 +1722,15 @@ function AirImportJobCreate() {
                   : "",
                 sub_item_no: house.sub_item_no ? String(house.sub_item_no) : "",
                 ref_no: house.ref_no ? String(house.ref_no) : "",
+                hscode: house.hscode ? String(house.hscode) : "",
+                item_type: house.item_type ? String(house.item_type) : "",
                 shipment_terms_code: house.shipment_terms_code
                   ? String(house.shipment_terms_code)
+                  : house.shipment_terms_name
+                    ? String(house.shipment_terms_name)
+                    : "",
+                shipment_terms_name: house.shipment_terms_name
+                  ? String(house.shipment_terms_name)
                   : "",
                 cargo_details:
                   house.cargo_details && Array.isArray(house.cargo_details)
@@ -3927,8 +4021,8 @@ function AirImportJobCreate() {
         agent: mawbDetailsForm.values.origin_agent || null,
         origin_code: mawbDetailsForm.values.origin_code,
         destination_code: mawbDetailsForm.values.destination_code,
-        etd: formatLocalDateTime(mawbDetailsForm.values.etd) ?? "",
-        eta: formatLocalDateTime(mawbDetailsForm.values.eta) ?? "",
+        etd: formatLocalDateTime(mawbDetailsForm.values.etd),
+        eta: formatLocalDateTime(mawbDetailsForm.values.eta),
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
         job_date: isChaMode
@@ -4051,11 +4145,12 @@ function AirImportJobCreate() {
           billing_customer_name: hawb.billing_customer_name || "",
           billing_customer_address: hawb.billing_customer_address || "",
           billing_customer_email: hawb.billing_customer_email || "",
-          cha_name: (hawb as { cha_name?: string }).cha_name || null,
-          cha_address: (hawb as { cha_address?: string }).cha_address || null,
+          cha_name: hawb.cha_name || null,
+          cha_address: hawb.cha_address || null,
           shipper_name: hawb.shipper_name,
           shipper_address: hawb.shipper_address || "",
           shipper_email: hawb.shipper_email || "",
+          shipper_state_id: hawb.shipper_state_id ?? null,
           consignee_name: hawb.consignee_name,
           consignee_address: hawb.consignee_address || "",
           consignee_email: hawb.consignee_email || "",
@@ -4067,23 +4162,25 @@ function AirImportJobCreate() {
             "",
           notify1_customer_email:
             hawb.notify1_customer_email ?? hawb.notify_customer1_email ?? "",
+          notify2_customer_name: hawb.notify2_customer_name || "",
+          notify2_customer_address: hawb.notify2_customer_address || "",
+          notify2_customer_email: hawb.notify2_customer_email || "",
           commodity_description: hawb.commodity_description || null,
           marks_no: hawb.marks_no || null,
           ...(houseHasPickupDeliveryFields(hawb)
             ? housePickupDeliveryPayload(hawb)
             : {}),
           note: hawb.note || "",
-          sub_item_no: (hawb as { sub_item_no?: string }).sub_item_no ?? "",
-          ref_no: (hawb as { ref_no?: string }).ref_no ?? "",
+          sub_item_no: hawb.sub_item_no ?? "",
+          ref_no: hawb.ref_no ?? "",
+          hscode: hawb.hscode || "",
+          item_type: hawb.item_type || "",
           ...(hawb.shipment_terms_code != null &&
             hawb.shipment_terms_code !== "" && {
               shipment_terms_code: hawb.shipment_terms_code,
-              ...((hawb as { shipment_terms_name?: string }).shipment_terms_name !=
-                null &&
-                (hawb as { shipment_terms_name?: string }).shipment_terms_name !==
-                  "" && {
-                  shipment_terms_name: (hawb as { shipment_terms_name?: string })
-                    .shipment_terms_name,
+              ...(hawb.shipment_terms_name != null &&
+                hawb.shipment_terms_name !== "" && {
+                  shipment_terms_name: hawb.shipment_terms_name,
                 }),
             }),
           ...buildDocumentIdsPayloadField(hawb.document_ids),

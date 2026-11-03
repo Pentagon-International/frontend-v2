@@ -72,6 +72,8 @@ type DocumentAllocationRow = {
   doc_id?: number | string | null;
   document_no?: string | null;
   document_date?: string | null;
+  obj_sno?: string | number | null;
+  account_code?: string | null;
   currency_id?: number | null;
   currency_code?: string | null;
   roe?: string | null;
@@ -81,23 +83,9 @@ type DocumentAllocationRow = {
   // fallbacks (older response)
   amount?: string | null;
   amount_in_local?: string | null;
-  /** Debit/credit from outstanding allocations list (`dr_cr`). */
-  dr_cr?: string | null;
-  /** Debit/credit on create/update payload and older saved responses (`Dr_Cr`). */
+  /** UI / save key. Outstanding fetch returns lowercase `dr_cr`. */
   Dr_Cr?: string | null;
-};
-
-/** Prefer `dr_cr` from outstanding allocations; fall back to legacy `Dr_Cr`. */
-const resolveRowDrCr = (
-  row: Pick<DocumentAllocationRow, "dr_cr" | "Dr_Cr"> | null | undefined,
-): string => {
-  const raw = row?.dr_cr ?? row?.Dr_Cr ?? "";
-  const v = String(raw).trim();
-  if (!v) return "";
-  const upper = v.toUpperCase();
-  if (upper === "DR" || upper === "DEBIT" || upper === "D") return "Dr";
-  if (upper === "CR" || upper === "CREDIT" || upper === "C") return "Cr";
-  return v;
+  dr_cr?: string | null;
 };
 
 type DocumentAllocationResponse = {
@@ -108,6 +96,8 @@ type AllocationDocumentsHeader = {
   id?: number;
   status?: string; // normalized from backend document_status
   account_code?: string;
+  second_account_code?: string | null;
+  second_account_name?: string | null;
   subledger_code?: string;
   allocation_date?: string;
   allocation_no?: string;
@@ -123,6 +113,8 @@ type AllocationDocumentsApiResponse = {
     id?: number;
     document_status?: string;
     account_code?: string;
+    second_account_code?: string | null;
+    second_account_name?: string | null;
     subledger_code?: string;
     allocation_date?: string;
     allocation_no?: string;
@@ -387,6 +379,8 @@ type AllocationDocumentNavRow = {
   id: number;
   account_name?: string;
   account_code?: string;
+  second_account_code?: string | null;
+  second_account_name?: string | null;
   subledger_code?: string;
   allocation_no?: string;
   allocation_date?: string;
@@ -576,15 +570,16 @@ const normalizeAllocationLine = (r: DocumentAllocationRow): DocumentAllocationRo
   const outAmt = r.outstanding_amount ?? r.amount ?? "";
   const outLocal =
     r.outstanding_local_amount ?? r.amount_in_local ?? "";
-  const drCr = resolveRowDrCr(r);
+  const drCr = String(r.Dr_Cr ?? r.dr_cr ?? "").trim();
   return {
     ...r,
     outstanding_amount: outAmt,
     outstanding_local_amount: outLocal,
     amount: r.amount ?? outAmt,
     amount_in_local: r.amount_in_local ?? outLocal,
-    dr_cr: drCr || null,
-    Dr_Cr: drCr || null,
+    Dr_Cr: drCr || undefined,
+    account_code: r.account_code != null ? String(r.account_code) : r.account_code,
+    obj_sno: r.obj_sno != null ? String(r.obj_sno) : r.obj_sno,
   };
 };
 
@@ -594,6 +589,8 @@ const fetchAllocationDocumentFromApi = async (
   id?: number;
   document_status?: string;
   account_code?: string;
+  second_account_code?: string | null;
+  second_account_name?: string | null;
   subledger_code?: string;
   account_name?: string;
   allocation_date?: string;
@@ -613,6 +610,8 @@ const fetchAllocationDocumentFromApi = async (
           id?: number;
           document_status?: string;
           account_code?: string;
+          second_account_code?: string | null;
+          second_account_name?: string | null;
           subledger_code?: string;
           account_name?: string;
           allocation_date?: string;
@@ -650,7 +649,8 @@ const fetchAllocationDocumentFromApi = async (
 };
 
 const fetchDocumentAllocation = async (payload: {
-  account_code: string;
+  account_code: string | string[];
+  second_account_code?: string;
   subledger_code?: string;
   /** Optional filter; omitted when user leaves date empty */
   document_date?: string;
@@ -683,6 +683,8 @@ const createAllocationDocuments = async (
       id: doc.id,
       status: doc.document_status,
       account_code: doc.account_code,
+      second_account_code: doc.second_account_code ?? null,
+      second_account_name: doc.second_account_name ?? null,
       subledger_code: doc.subledger_code,
       allocation_date: doc.allocation_date,
       allocation_no: doc.allocation_no,
@@ -711,6 +713,8 @@ const putAllocationDocuments = async (
       id: doc.id,
       status: doc.document_status,
       account_code: doc.account_code,
+      second_account_code: doc.second_account_code ?? null,
+      second_account_name: doc.second_account_name ?? null,
       subledger_code: doc.subledger_code,
       allocation_date: doc.allocation_date,
       allocation_no: doc.allocation_no,
@@ -740,6 +744,8 @@ export default function DocumentAllocation() {
   const [isViewMode, setIsViewMode] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<CoaItem | null>(null);
+  const [selectedSecondAccount, setSelectedSecondAccount] =
+    useState<CoaItem | null>(null);
   const [rows, setRows] = useState<DocumentAllocationRow[]>([]);
   const [fetchedRows, setFetchedRows] = useState<DocumentAllocationRow[]>([]);
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(
@@ -776,6 +782,11 @@ export default function DocumentAllocation() {
 
   const selectedGlAccountCode = selectedAccount?.gl_account_code ?? "";
   const selectedSlCode = selectedAccount?.sl_code ?? "";
+  const selectedSecondGlAccountCode =
+    selectedSecondAccount?.gl_account_code ?? "";
+  const isTwoAccount =
+    Boolean(selectedGlAccountCode.trim()) &&
+    Boolean(selectedSecondGlAccountCode.trim());
 
   const isLocked =
     String(savedHeader?.status ?? "").toUpperCase() === "POSTED" ||
@@ -836,6 +847,8 @@ export default function DocumentAllocation() {
             id: row.id,
             document_status: row.document_status,
             account_code: row.account_code,
+            second_account_code: row.second_account_code,
+            second_account_name: row.second_account_name,
             subledger_code: row.subledger_code,
             account_name: row.account_name,
             allocation_date: row.allocation_date,
@@ -866,6 +879,17 @@ export default function DocumentAllocation() {
           (row.subledger_code ?? doc.subledger_code ?? "").trim() || undefined;
         const resolvedAccountName =
           (row.account_name?.trim() || doc.account_name?.trim()) ?? "";
+        const resolvedSecondAccountCode = (
+          row.second_account_code ??
+          doc.second_account_code ??
+          ""
+        )
+          .toString()
+          .trim();
+        const resolvedSecondAccountName =
+          (row.second_account_name?.trim() ||
+            doc.second_account_name?.trim()) ??
+          "";
         const resolvedAllocationDate =
           row.allocation_date ?? doc.allocation_date;
 
@@ -875,6 +899,8 @@ export default function DocumentAllocation() {
           id: doc.id,
           status: doc.document_status,
           account_code: resolvedAccountCode || undefined,
+          second_account_code: resolvedSecondAccountCode || null,
+          second_account_name: resolvedSecondAccountName || null,
           subledger_code: resolvedSlCode,
           allocation_date: resolvedAllocationDate,
           allocation_no: doc.allocation_no ?? row.allocation_no,
@@ -887,6 +913,16 @@ export default function DocumentAllocation() {
           sl_code: resolvedSlCode,
           account_name: resolvedAccountName || undefined,
         });
+
+        setSelectedSecondAccount(
+          resolvedSecondAccountCode
+            ? {
+                gl_account_code: resolvedSecondAccountCode,
+                sl_code: resolvedSlCode,
+                account_name: resolvedSecondAccountName || undefined,
+              }
+            : null,
+        );
 
         setSelectedDate(parseAllocationDateString(resolvedAllocationDate ?? null));
 
@@ -967,10 +1003,12 @@ export default function DocumentAllocation() {
   };
 
   const applySelectedRows = () => {
-    const next = fetchedRows.filter((r) => {
-      const key = r.id != null ? String(r.id) : String(r.document_no ?? "");
-      return key ? selectedRowIds.has(key) : false;
-    });
+    const next = fetchedRows
+      .filter((r) => {
+        const key = r.id != null ? String(r.id) : String(r.document_no ?? "");
+        return key ? selectedRowIds.has(key) : false;
+      })
+      .map(normalizeAllocationLine);
     setRows(next);
     setSavedHeader(null);
     setIsModalOpen(false);
@@ -1009,8 +1047,9 @@ export default function DocumentAllocation() {
         day_book_id: match.day_book_id ?? r.day_book_id,
         currency_id: match.currency_id ?? r.currency_id,
         roe: match.roe ?? r.roe,
-        dr_cr: resolveRowDrCr(match) || resolveRowDrCr(r) || null,
-        Dr_Cr: resolveRowDrCr(match) || resolveRowDrCr(r) || null,
+        account_code: match.account_code ?? r.account_code,
+        obj_sno: match.obj_sno ?? r.obj_sno,
+        Dr_Cr: match.Dr_Cr ?? match.dr_cr ?? r.Dr_Cr ?? r.dr_cr,
         outstanding_amount: match.amount ?? r.outstanding_amount ?? r.amount,
         outstanding_local_amount:
           match.amount_in_local ??
@@ -1030,6 +1069,7 @@ export default function DocumentAllocation() {
         const amountNum = parseDecimal(String(amountStr)) ?? 0;
         const roeNum = parseDecimal(String(r.roe ?? "")) ?? 0;
         const localNum = roeNum * amountNum;
+        const drCr = String(r.Dr_Cr ?? r.dr_cr ?? "").trim();
 
         const payloadRow: Record<string, unknown> = {
           day_book_id: r.day_book_id ?? null,
@@ -1039,9 +1079,20 @@ export default function DocumentAllocation() {
           roe: formatFixed(roeNum, ROE_DECIMAL_PLACES),
           amount: formatMoneyAmount(amountNum, false),
           amount_in_local: formatLocalAmountFromNumber(localNum),
-          // Create/update API expects PascalCase; outstanding list returns `dr_cr`.
-          Dr_Cr: resolveRowDrCr(r),
+          Dr_Cr: drCr,
         };
+
+        const objSno = r.obj_sno != null ? String(r.obj_sno).trim() : "";
+        if (objSno !== "") {
+          payloadRow.obj_sno = objSno;
+        }
+
+        if (isTwoAccount) {
+          const lineAccount =
+            (r.account_code != null ? String(r.account_code).trim() : "") ||
+            selectedGlAccountCode;
+          payloadRow.account_code = lineAccount;
+        }
 
         if (hasSavedId && r.id != null) {
           payloadRow.id = r.id;
@@ -1056,6 +1107,16 @@ export default function DocumentAllocation() {
       ToastNotification({
         type: "error",
         message: "Please select an Account Name before saving.",
+      });
+      return;
+    }
+    if (
+      selectedSecondGlAccountCode &&
+      selectedSecondGlAccountCode === selectedGlAccountCode
+    ) {
+      ToastNotification({
+        type: "error",
+        message: "Primary and second Account Name must be different.",
       });
       return;
     }
@@ -1074,6 +1135,9 @@ export default function DocumentAllocation() {
 
     const payloadBase: Record<string, unknown> = {
       account_code: selectedGlAccountCode,
+      second_account_code: isTwoAccount
+        ? selectedSecondGlAccountCode
+        : null,
       subledger_code: selectedSlCode,
       allocation_date: allocationDate,
       allocation: buildAllocationPayloadRows(rows),
@@ -1144,6 +1208,9 @@ export default function DocumentAllocation() {
         id: Number(savedHeader.id),
         document_status: "POSTED",
         account_code: selectedGlAccountCode,
+        second_account_code: isTwoAccount
+          ? selectedSecondGlAccountCode
+          : null,
         subledger_code: selectedSlCode,
         allocation_date: allocationDate,
         allocation: buildAllocationPayloadRows(rows),
@@ -1179,20 +1246,53 @@ export default function DocumentAllocation() {
       });
       return;
     }
+    if (
+      selectedSecondGlAccountCode &&
+      selectedSecondGlAccountCode === selectedGlAccountCode
+    ) {
+      ToastNotification({
+        type: "error",
+        message: "Primary and second Account Name must be different.",
+      });
+      return;
+    }
+    const secondSl = String(selectedSecondAccount?.sl_code ?? "").trim();
+    const primarySl = String(selectedSlCode ?? "").trim();
+    if (
+      isTwoAccount &&
+      secondSl &&
+      primarySl &&
+      secondSl !== "0" &&
+      primarySl !== "0" &&
+      secondSl !== primarySl
+    ) {
+      ToastNotification({
+        type: "error",
+        message:
+          "Both Account Names must share the same SL Code for two-account allocation.",
+      });
+      return;
+    }
 
     setIsFetching(true);
     try {
       const slTrimmed = String(selectedSlCode ?? "").trim();
       const payload: {
-        account_code: string;
+        account_code: string | string[];
+        second_account_code?: string;
         subledger_code?: string;
         document_date?: string;
       } = {
-        account_code: selectedGlAccountCode,
+        account_code: isTwoAccount
+          ? [selectedGlAccountCode, selectedSecondGlAccountCode]
+          : selectedGlAccountCode,
         ...(selectedDate != null
           ? { document_date: formatDateForApi(selectedDate) }
           : {}),
       };
+      if (isTwoAccount) {
+        payload.second_account_code = selectedSecondGlAccountCode;
+      }
 
       // When SL code is 0, don't send subledger_code at all
       if (slTrimmed !== "" && slTrimmed !== "0") {
@@ -1200,8 +1300,9 @@ export default function DocumentAllocation() {
       }
 
       const res = await fetchDocumentAllocation(payload);
-      const list = Array.isArray(res?.data) ? res.data : [];
-      const normalizedList = list.map(normalizeAllocationLine);
+      const list = (Array.isArray(res?.data) ? res.data : []).map(
+        normalizeAllocationLine,
+      );
       setHasFetched(true);
       if (normalizedList.length === 0) {
         setRows([]);
@@ -1691,123 +1792,200 @@ export default function DocumentAllocation() {
                   </Group>
                 </Grid.Col>
 
-                <Grid.Col span={{ base: 12, sm: 6, md: 5 }}>
-                  <SearchableSelect
-                    label="Account Name"
-                    placeholder="Search by account name"
-                    apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
-                    postBody={(query) => ({
-                      filters: { account_name: query.trim() },
-                    })}
-                    value={
-                      selectedAccount?.id != null
-                        ? String(selectedAccount.id)
-                        : null
-                    }
-                    dropdownZIndex={1100}
-                    minSearchLength={1}
-                    searchFields={["account_name"]}
-                    disabled={isLocked}
-                    readOnly={isLocked}
-                    displayFormat={(item: Record<string, unknown>) => {
-                      const id = String(item.id ?? "").trim();
-                      const glName = String(item.gl_name ?? "").trim();
-                      const gl = String(item.gl_account_code ?? "").trim();
-                      const name = String(item.account_name ?? "").trim();
-                      return {
-                        value: id,
-                        label: [name, gl, glName].filter(Boolean).join(" - "),
-                      };
-                    }}
-                    displayValue={selectedAccount?.account_name ?? ""}
-                    returnOriginalData
-                    onChange={(value, _selectedData, originalData) => {
-                      if (!value || !originalData) {
-                        setSelectedAccount(null);
-                        return;
-                      }
+                <Grid.Col span={12}>
+                  <Grid gutter="sm" align="flex-end">
+                    <Grid.Col span={3.5}>
+                      <SearchableSelect
+                        label="Account Name"
+                        placeholder="Search by account name"
+                        apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
+                        postBody={(query) => ({
+                          filters: { account_name: query.trim() },
+                        })}
+                        value={
+                          selectedAccount?.id != null
+                            ? String(selectedAccount.id)
+                            : null
+                        }
+                        dropdownZIndex={1100}
+                        minSearchLength={1}
+                        searchFields={["account_name"]}
+                        disabled={isLocked}
+                        readOnly={isLocked}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const id = String(item.id ?? "").trim();
+                          const glName = String(item.gl_name ?? "").trim();
+                          const gl = String(item.gl_account_code ?? "").trim();
+                          const name = String(item.account_name ?? "").trim();
+                          return {
+                            value: id,
+                            label: [name, gl, glName]
+                              .filter(Boolean)
+                              .join(" - "),
+                          };
+                        }}
+                        displayValue={selectedAccount?.account_name ?? ""}
+                        returnOriginalData
+                        onChange={(value, _selectedData, originalData) => {
+                          if (!value || !originalData) {
+                            setSelectedAccount(null);
+                            return;
+                          }
 
-                      const nextGl = originalData.gl_account_code;
-                      const nextSl = originalData.sl_code;
-                      const nextName = originalData.account_name;
+                          const nextGl = originalData.gl_account_code;
+                          const nextSl = originalData.sl_code;
+                          const nextName = originalData.account_name;
 
-                      setSelectedAccount({
-                        id:
-                          originalData.id !== undefined &&
-                          originalData.id !== null
-                            ? Number(originalData.id)
-                            : undefined,
-                        gl_account_code:
-                          nextGl !== undefined && nextGl !== null
-                            ? String(nextGl)
-                            : undefined,
-                        sl_code:
-                          nextSl !== undefined && nextSl !== null
-                            ? String(nextSl)
-                            : undefined,
-                        account_name:
-                          nextName !== undefined && nextName !== null
-                            ? String(nextName)
-                            : undefined,
-                      });
-                    }}
-                    styles={{
-                      input: fieldInputStyles.input,
-                      label: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        marginBottom: "4px",
-                      },
-                    }}
-                  />
-                </Grid.Col>
+                          setSelectedAccount({
+                            id:
+                              originalData.id !== undefined &&
+                              originalData.id !== null
+                                ? Number(originalData.id)
+                                : undefined,
+                            gl_account_code:
+                              nextGl !== undefined && nextGl !== null
+                                ? String(nextGl)
+                                : undefined,
+                            sl_code:
+                              nextSl !== undefined && nextSl !== null
+                                ? String(nextSl)
+                                : undefined,
+                            account_name:
+                              nextName !== undefined && nextName !== null
+                                ? String(nextName)
+                                : undefined,
+                          });
+                        }}
+                        styles={{
+                          input: fieldInputStyles.input,
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            marginBottom: "4px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
 
-                <Grid.Col span={{ base: 12, sm: 4, md: 3 }}>
-                  <FormTextInput
-                    label="SL Code"
-                    placeholder="SL Code"
-                    value={selectedSlCode}
-                    readOnly
-                    disabled={isLocked}
-                    styles={{
-                      input: readOnlyInputStyles.input,
-                      label: {
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                        marginBottom: "4px",
-                      },
-                    }}
-                    format="normal"
-                  />
-                </Grid.Col>
+                    <Grid.Col span={3.5}>
+                      <SearchableSelect
+                        label="Account Name"
+                        placeholder="Search by account name"
+                        apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
+                        postBody={(query) => ({
+                          filters: { account_name: query.trim() },
+                        })}
+                        value={
+                          selectedSecondAccount?.id != null
+                            ? String(selectedSecondAccount.id)
+                            : null
+                        }
+                        dropdownZIndex={1100}
+                        minSearchLength={1}
+                        searchFields={["account_name"]}
+                        disabled={isLocked}
+                        readOnly={isLocked}
+                        displayFormat={(item: Record<string, unknown>) => {
+                          const id = String(item.id ?? "").trim();
+                          const glName = String(item.gl_name ?? "").trim();
+                          const gl = String(item.gl_account_code ?? "").trim();
+                          const name = String(item.account_name ?? "").trim();
+                          return {
+                            value: id,
+                            label: [name, gl, glName]
+                              .filter(Boolean)
+                              .join(" - "),
+                          };
+                        }}
+                        displayValue={selectedSecondAccount?.account_name ?? ""}
+                        returnOriginalData
+                        onChange={(value, _selectedData, originalData) => {
+                          if (!value || !originalData) {
+                            setSelectedSecondAccount(null);
+                            return;
+                          }
 
-                <Grid.Col span={{ base: 12, sm: 4, md: 3 }}>
-                  <SingleDateInput
-                    label="Date"
-                    placeholder="Select date"
-                    value={selectedDate}
-                    onChange={setSelectedDate}
-                    disabled={isLocked}
-                  />
-                </Grid.Col>
+                          const nextGl = originalData.gl_account_code;
+                          const nextSl = originalData.sl_code;
+                          const nextName = originalData.account_name;
 
-                <Grid.Col span={{ base: 1, sm: 1, md: 1 }}>
-                  <Box pt={22}>
-                    <Button
-                      fullWidth
-                      size="sm"
-                      leftSection={<IconSearch size={16} />}
-                      onClick={handleGet}
-                      disabled={isFetching || isLocked || isHydrating}
-                      style={{
-                        backgroundColor: "#105476",
-                        fontSize: "13px",
-                        fontFamily: "Inter",
-                      }}
-                    >
-                      Get
-                    </Button>
-                  </Box>
+                          setSelectedSecondAccount({
+                            id:
+                              originalData.id !== undefined &&
+                              originalData.id !== null
+                                ? Number(originalData.id)
+                                : undefined,
+                            gl_account_code:
+                              nextGl !== undefined && nextGl !== null
+                                ? String(nextGl)
+                                : undefined,
+                            sl_code:
+                              nextSl !== undefined && nextSl !== null
+                                ? String(nextSl)
+                                : undefined,
+                            account_name:
+                              nextName !== undefined && nextName !== null
+                                ? String(nextName)
+                                : undefined,
+                          });
+                        }}
+                        styles={{
+                          input: fieldInputStyles.input,
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            marginBottom: "4px",
+                          },
+                        }}
+                      />
+                    </Grid.Col>
+
+                    <Grid.Col span={2}>
+                      <FormTextInput
+                        label="SL Code"
+                        placeholder="SL Code"
+                        value={selectedSlCode}
+                        readOnly
+                        disabled={isLocked}
+                        styles={{
+                          input: readOnlyInputStyles.input,
+                          label: {
+                            fontSize: "13px",
+                            fontFamily: "Inter",
+                            marginBottom: "4px",
+                          },
+                        }}
+                        format="normal"
+                      />
+                    </Grid.Col>
+
+                    <Grid.Col span={2}>
+                      <SingleDateInput
+                        label="Date"
+                        placeholder="Select date"
+                        value={selectedDate}
+                        onChange={setSelectedDate}
+                        disabled={isLocked}
+                      />
+                    </Grid.Col>
+
+                    <Grid.Col span={1}>
+                      <Button
+                        fullWidth
+                        size="sm"
+                        leftSection={<IconSearch size={16} />}
+                        onClick={handleGet}
+                        disabled={isFetching || isLocked || isHydrating}
+                        style={{
+                          backgroundColor: "#105476",
+                          fontSize: "13px",
+                          fontFamily: "Inter",
+                        }}
+                      >
+                        Get
+                      </Button>
+                    </Grid.Col>
+                  </Grid>
                 </Grid.Col>
 
                 {hasFetched && rows.length === 0 ? (

@@ -40,6 +40,11 @@ import {
   resolveStateCodeFromPartyAddress,
   type PartyAddressLike,
 } from "../utils/paymentRequestChargePrefill";
+import { AutomationPreviewErrorBanner } from "./AutomationPreviewErrorBanner";
+import {
+  collectAutomationPreviewErrors,
+  fieldErrorsToPreviewMessages,
+} from "../utils/automationPreviewErrors";
 import {
   PAID_TO_TYPE_OPTIONS,
   PAYMENT_TYPE_OPTIONS,
@@ -579,6 +584,7 @@ export function PaymentRequestAutomationModal({
     header: {},
     charges: [],
   });
+  const [actionError, setActionError] = useState("");
 
   const clearHeaderError = (key: string) => {
     setFieldErrors((prev) => {
@@ -656,6 +662,7 @@ export function PaymentRequestAutomationModal({
     setStartingJob(false);
     setActiveShipmentNo(shipmentNo);
     setFieldErrors({ header: {}, charges: [] });
+    setActionError("");
   }, [shipmentNo]);
 
   useEffect(() => {
@@ -697,6 +704,8 @@ export function PaymentRequestAutomationModal({
       return;
     }
     setUploading(true);
+    setActionError("");
+    setFieldErrors({ header: {}, charges: [] });
     setStep("extracting");
     try {
       const { recordId } = await uploadPaymentRequestPdf(files, resolvedShipment, voucherType);
@@ -713,6 +722,7 @@ export function PaymentRequestAutomationModal({
         resolvedShipment,
         voucherType,
       );
+      // Same as PRQ form create default: branch GST only when location is empty.
       if (!draft.location_gst_no && branchLocationGstNo) {
         draft.location_gst_no = branchLocationGstNo;
       }
@@ -722,9 +732,11 @@ export function PaymentRequestAutomationModal({
       setStep("review");
     } catch (error) {
       if (isPaymentRequestAbortError(error)) return;
+      const message = readableError(error, "Failed to upload and extract the payment request.");
+      setActionError(message);
       ToastNotification({
         type: "error",
-        message: readableError(error, "Failed to upload and extract the payment request."),
+        message,
       });
       setStep("upload");
     } finally {
@@ -739,27 +751,37 @@ export function PaymentRequestAutomationModal({
     });
     if (hasPaymentRequestOverrideFieldErrors(errors)) {
       setFieldErrors(errors);
+      // Field errors render in the preview banner; clear stale action errors.
+      setActionError("");
       ToastNotification({
         type: "error",
-        message: "Fill the required payment request fields before creating.",
+        message:
+          "Fill the required payment request fields before creating. See error details in the preview.",
       });
       return;
     }
     setFieldErrors({ header: {}, charges: [] });
+    setActionError("");
     let startPayload;
     try {
       startPayload = buildPaymentRequestStartPayload(record.id, activeShipmentNo, override, {
         requireGst: isIndiaUser,
       });
     } catch (error) {
+      const message = readableError(
+        error,
+        "Fill the required payment request fields before creating.",
+      );
+      setActionError(message);
       ToastNotification({
         type: "error",
-        message: readableError(error, "Fill the required payment request fields before creating."),
+        message,
       });
       return;
     }
     setStartingJob(true);
     setStep("creating");
+    let failedRecord: PaymentRequestAutomationRecord | null = null;
     try {
       const startResponse = await startPaymentRequestCreation(startPayload);
       let paymentRequestId = extractPaymentRequestId(startResponse, record);
@@ -769,6 +791,7 @@ export function PaymentRequestAutomationModal({
           isPaymentRequestCreationSettled,
           { signal: beginPoll() },
         );
+        failedRecord = createdRecord;
         isPaymentRequestCreated(createdRecord);
         paymentRequestId = extractPaymentRequestId(null, createdRecord);
       }
@@ -789,9 +812,12 @@ export function PaymentRequestAutomationModal({
     } catch (error) {
       if (isPaymentRequestAbortError(error)) return;
       setIsRedirecting(false);
+      if (failedRecord) setRecord(failedRecord);
+      const message = readableError(error, "Failed to create the payment request.");
+      setActionError(message);
       ToastNotification({
         type: "error",
-        message: readableError(error, "Failed to create the payment request."),
+        message,
       });
       setStep("review");
     } finally {
@@ -800,6 +826,16 @@ export function PaymentRequestAutomationModal({
   };
 
   const extracted: PaymentRequestExtractedData = record?.extracted_data ?? {};
+  const previewErrorMessages = useMemo(
+    () =>
+      collectAutomationPreviewErrors([
+        actionError,
+        record?.failer_message,
+        extracted.enrichment_error,
+        ...fieldErrorsToPreviewMessages(fieldErrors),
+      ]),
+    [actionError, record?.failer_message, extracted.enrichment_error, fieldErrors],
+  );
   const patchOverride = (patch: Partial<PaymentRequestOverrideDraft>) => {
     if (!override) return;
     setOverride({ ...override, ...patch });
@@ -870,7 +906,9 @@ export function PaymentRequestAutomationModal({
       account_code: payload.account_code,
       paid_to: payload.paid_to,
       paid_to_type: payload.paid_to_type,
+      // Same as PRQ form: vendor GST from party primary address.
       customer_gst_no: getPartyGstFromPrimaryAddress(nextAddresses),
+      // Keep extracted location; only seed branch when still empty (no overwrite).
       location_gst_no: override.location_gst_no || branchLocationGstNo || "",
       tds_section_code: resolvePartyTdsSectionCode(
         extractPartyTdsSectionsFromRecord(payload.original),
@@ -1008,11 +1046,7 @@ export function PaymentRequestAutomationModal({
           <Stack gap="sm" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
             <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
               <Stack gap="sm" pr="xs">
-                {extracted.enrichment_error ? (
-                  <Text size="xs" c="orange.8">
-                    {extracted.enrichment_error}
-                  </Text>
-                ) : null}
+                <AutomationPreviewErrorBanner messages={previewErrorMessages} />
                 <PreviewSection
                   title="Payment request to create"
                   hint="These fields are sent when you create the payment request. Party search includes both suppliers and agents."

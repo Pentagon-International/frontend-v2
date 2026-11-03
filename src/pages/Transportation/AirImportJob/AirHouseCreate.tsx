@@ -780,9 +780,18 @@ function HouseCreate() {
       customer_service: editData?.customer_service || "",
       trade: editData?.trade || "",
       origin_agent: editData?.origin_agent || "",
-      origin_agent_name: editData?.origin_agent_name || "",
-      origin_agent_address: editData?.origin_agent_address || "",
-      origin_agent_email: editData?.origin_agent_email || "",
+      origin_agent_name:
+        editData?.origin_agent_name ||
+        (editData as { agent_name?: string } | undefined)?.agent_name ||
+        "",
+      origin_agent_address:
+        editData?.origin_agent_address ||
+        (editData as { agent_address?: string } | undefined)?.agent_address ||
+        "",
+      origin_agent_email:
+        editData?.origin_agent_email ||
+        (editData as { agent_email?: string } | undefined)?.agent_email ||
+        "",
       forwarder_id:
         (editData as { forwarder_id?: number | null } | undefined)
           ?.forwarder_id != null
@@ -1260,32 +1269,24 @@ function HouseCreate() {
       form.setFieldValue("routed_by", String(rb.routed_by));
     }
 
-    // Notify customer name / address / email (payload keys: notify1_customer_*)
-    if (rb.notify1_customer_name || rb.notify_customer) {
-      form.setFieldValue(
-        "notify1_customer_name",
-        String(rb.notify1_customer_name || rb.notify_customer || ""),
-      );
-    }
-    if (rb.notify1_customer_address || rb.notify_customer_address) {
-      form.setFieldValue(
-        "notify1_customer_address",
-        String(rb.notify1_customer_address || rb.notify_customer_address || ""),
-      );
-    }
-    if (rb.notify1_customer_email || rb.notify_customer_email) {
-      form.setFieldValue(
-        "notify1_customer_email",
-        String(rb.notify1_customer_email || rb.notify_customer_email || ""),
-      );
-    }
+    // Notify customer name / address / email (Ocean parity: always set)
+    form.setFieldValue(
+      "notify1_customer_name",
+      String(rb.notify1_customer_name || rb.notify_customer || ""),
+    );
+    form.setFieldValue(
+      "notify1_customer_address",
+      String(rb.notify1_customer_address || rb.notify_customer_address || ""),
+    );
+    form.setFieldValue(
+      "notify1_customer_email",
+      String(rb.notify1_customer_email || rb.notify_customer_email || ""),
+    );
 
-    // CHA (auto-fill)
-    if (rb.cha_code) form.setFieldValue("cha_code", String(rb.cha_code || ""));
-    if (rb.cha) form.setFieldValue("cha_name", String(rb.cha || ""));
-    if (rb.cha_address) {
-      form.setFieldValue("cha_address", String(rb.cha_address || ""));
-    }
+    // CHA (Ocean parity: always set)
+    form.setFieldValue("cha_code", String(rb.cha_code || ""));
+    form.setFieldValue("cha_name", String(rb.cha || rb.cha_name || ""));
+    form.setFieldValue("cha_address", String(rb.cha_address || ""));
 
     // Shipper/consignee addresses - try addresses from API if available
     const shipperAddr = rb.shipper_address;
@@ -1309,7 +1310,14 @@ function HouseCreate() {
     // Keep shipper search input in sync so UI shows the autofilled value
     if (shipperName) setShipperSearch(String(shipperName));
 
-    // Origin agent address and email (booking uses destination_agent_* for import)
+    // Origin agent (import booking maps via destination_agent_* keys) — Ocean parity
+    form.setFieldValue(
+      "origin_agent_name",
+      String(rb.destination_agent_name || rb.destination_agent || ""),
+    );
+    if (rb.destination_agent_code) {
+      form.setFieldValue("origin_agent", String(rb.destination_agent_code));
+    }
     if (rb.destination_agent_address) {
       form.setFieldValue(
         "origin_agent_address",
@@ -1568,9 +1576,18 @@ function HouseCreate() {
         customer_service: editData.customer_service || "",
         trade: editData.trade || "",
         origin_agent: editData.origin_agent || "",
-        origin_agent_name: editData.origin_agent_name || "",
-        origin_agent_address: editData.origin_agent_address || "",
-        origin_agent_email: editData.origin_agent_email || "",
+        origin_agent_name:
+          editData.origin_agent_name ||
+          (editData as { agent_name?: string }).agent_name ||
+          "",
+        origin_agent_address:
+          editData.origin_agent_address ||
+          (editData as { agent_address?: string }).agent_address ||
+          "",
+        origin_agent_email:
+          editData.origin_agent_email ||
+          (editData as { agent_email?: string }).agent_email ||
+          "",
         forwarder_id:
           (editData as { forwarder_id?: number | null }).forwarder_id != null
             ? Number(
@@ -1662,6 +1679,13 @@ function HouseCreate() {
       // Sync search display and address options from housing_details (like booking edit load)
       const shipperName = String(editData.shipper_name || "");
       if (shipperName) setShipperSearch(shipperName);
+      if (
+        shipperName &&
+        !editData.shipper_code &&
+        (editData as { shipper_id?: string | number | null }).shipper_id == null
+      ) {
+        setShipperManualMode(true);
+      }
       const shipperAddr = editData.shipper_address;
       if (shipperAddr) {
         const addrStr = toTitleCase(String(shipperAddr));
