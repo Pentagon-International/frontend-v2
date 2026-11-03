@@ -83,6 +83,11 @@ import { getClosedAwareJobNavigation } from "../../../utils/closeJob";
 import { useJobModulePaths } from "../chaJob/chaJobContext";
 import { buildChaListFilters } from "../chaJob/chaJobService";
 import { firstChaHouseConsigneeName } from "../chaJob/chaJobCustomsFields";
+import {
+  PROFIT_VERIFICATION_STATUS_FILTER_OPTIONS,
+  getProfitVerificationStatusLabel,
+} from "../../../utils/jobProfitVerificationStatus";
+import { JobProfitVerificationStatusCell } from "../../../components/JobList/JobProfitVerificationStatusCell";
 
 const LIST_KEY = "OCEAN_EXPORT_JOB_MASTER";
 
@@ -99,6 +104,7 @@ type VisibleColumnsState = {
   etd: boolean;
   eta: boolean;
   status: boolean;
+  profit_verification_status: boolean;
 };
 
 const OCEAN_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> = {
@@ -114,6 +120,7 @@ const OCEAN_EXPORT_JOB_COLUMN_LABELS: Record<keyof VisibleColumnsState, string> 
   etd: "ETD",
   eta: "ETA",
   status: "Status",
+  profit_verification_status: "Profit Verification Status",
 };
 
 type ExportJobData = {
@@ -145,6 +152,8 @@ type ExportJobData = {
   mbl_number: string | null;
   mbl_date: string | null;
   status: string;
+  verification_status?: string | null;
+  has_verified_profit?: boolean;
   job_id?: string;
   service_code?: string;
   summary?: {
@@ -153,7 +162,7 @@ type ExportJobData = {
     volume_total?: string | number | null;
   };
   housing_details?: Array<{
-    hbl_number: string;
+    consignee_name?: string | null;
   }>;
   document_ids?: number[];
   documents?: Array<{
@@ -216,6 +225,7 @@ type OceanExportJobFilters = {
   etd: string;
   eta: string;
   status: string;
+  verification_status: string;
 };
 
 function ExportJobMaster() {
@@ -255,6 +265,7 @@ function ExportJobMaster() {
     etd: "",
     eta: "",
     status: "",
+    verification_status: "",
   };
   const [draftFilters, setDraftFilters] =
     useState<OceanExportJobFilters>(DEFAULT_FILTERS);
@@ -315,6 +326,7 @@ function ExportJobMaster() {
     etd: true,
     eta: true,
     status: true,
+    profit_verification_status: true,
   });
 
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
@@ -447,6 +459,10 @@ function ExportJobMaster() {
 
     if (filters.status?.trim()) {
       cleaned.status = filters.status.trim().toUpperCase();
+    }
+
+    if (filters.verification_status?.trim()) {
+      cleaned.verification_status = filters.verification_status.trim();
     }
 
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
@@ -1069,6 +1085,32 @@ function ExportJobMaster() {
                     />
                   </Box>
                 </Grid.Col>
+                <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
+                  <Box style={erpListFilterFieldCellStyle}>
+                    <Dropdown
+                      label="Profit Verification Status"
+                      placeholder="Select verification status"
+                      size="xs"
+                      searchable
+                      clearable
+                      data={[...PROFIT_VERIFICATION_STATUS_FILTER_OPTIONS]}
+                      value={draftFilters.verification_status || null}
+                      onChange={(value) =>
+                        setDraftFilters((prev) => ({
+                          ...prev,
+                          verification_status: value || "",
+                        }))
+                      }
+                      styles={filterFieldStyles}
+                      classNames={{
+                        label: ERP_LIST_GEIST_ROOT_CLASS,
+                        input: ERP_LIST_GEIST_ROOT_CLASS,
+                        dropdown: ERP_LIST_GEIST_ROOT_CLASS,
+                        option: ERP_LIST_GEIST_ROOT_CLASS,
+                      }}
+                    />
+                  </Box>
+                </Grid.Col>
               </Grid>
             ),
           }}
@@ -1413,6 +1455,42 @@ function ExportJobMaster() {
                           />
                         </th>
                       )}
+                      {visibleColumns.profit_verification_status && (
+                        <th style={mergeTh(220, 220)}>
+                          <ERPListColumnHeaderFilter
+                            label="Profit Verification Status"
+                            value={appliedFilters.verification_status}
+                            displayValue={getProfitVerificationStatusLabel(
+                              appliedFilters.verification_status,
+                            )}
+                            theme={theme}
+                            isEditing={editingHeaderId === "verification_status"}
+                            onStartEdit={() => openHeaderEditor("verification_status")}
+                            onStopEdit={() => collapseHeaderEditor("verification_status")}
+                            onChange={() => {}}
+                            renderEditor={({ autoFocus, onClose }) => (
+                              <Select
+                                autoFocus={autoFocus}
+                                placeholder="Verification status"
+                                searchable
+                                clearable
+                                size="xs"
+                                data={[...PROFIT_VERIFICATION_STATUS_FILTER_OPTIONS]}
+                                value={appliedFilters.verification_status || null}
+                                onChange={(value) => {
+                                  commitHeaderFilters({
+                                    verification_status: value ?? "",
+                                  });
+                                  onClose();
+                                }}
+                                comboboxProps={{ zIndex: 1000 }}
+                                classNames={erpListGeistSelectClassNames}
+                                styles={filterFieldStyles}
+                              />
+                            )}
+                          />
+                        </th>
+                      )}
                       <th
                         style={{
                           ...erpListStickyActionThStyle(theme, 96),
@@ -1626,6 +1704,13 @@ function ExportJobMaster() {
                             {visibleColumns.status && (
                               <td style={tdPad}>
                                 <ERPListJobStatusPill status={row.status} />
+                              </td>
+                            )}
+                            {visibleColumns.profit_verification_status && (
+                              <td style={tdPad}>
+                                <JobProfitVerificationStatusCell
+                                  verificationStatus={row.verification_status}
+                                />
                               </td>
                             )}
                             <td style={erpListStickyActionTdStyle(theme)}>
