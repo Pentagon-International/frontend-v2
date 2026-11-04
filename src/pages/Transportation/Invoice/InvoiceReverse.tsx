@@ -2505,7 +2505,14 @@ function InvoiceReverse() {
     }
     setIsPosting(true);
     try {
+      // Persist latest form to DB before GST breakup / post (avoids stale tax rows).
+      const synced = await handleSubmit(form.values, { silentSuccess: true });
+      if (!synced) {
+        return;
+      }
+
       const values = form.values;
+      const reverseInvoiceId = saveResponse.id as number;
       const stateId = values.state ? Number(values.state) : null;
       const currencyItem = (
         currencyData as { id?: number; code?: string; currency_code?: string }[]
@@ -2529,7 +2536,6 @@ function InvoiceReverse() {
             : "Please ensure Currency is valid.",
           type: "error",
         });
-        setIsPosting(false);
         return;
       }
       /** Payload dates: same YYYY-MM-DD as invoice create (via formatDateYYYYMMDD).
@@ -2550,22 +2556,17 @@ function InvoiceReverse() {
       let percentageWiseTotals: NonNullable<
         InvoiceTaxBreakup["percentage_wise_totals"]
       > = [];
+      // Always refetch breakup after sync so tax rows match the latest saved charges.
       if (isVatPost) {
-        let vatBreakupData = gstBreakup;
-        if (!vatBreakupData?.percentage_wise_totals?.length) {
-          vatBreakupData = await fetchReverseInvoiceCalculateGstBreakup({
-            reverse_invoice_id: saveResponse.id as number,
-            vat: true,
-          });
-        }
+        const vatBreakupData = await fetchReverseInvoiceCalculateGstBreakup({
+          reverse_invoice_id: reverseInvoiceId,
+          vat: true,
+        });
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
       } else if (showGstTax) {
-        let breakupData = gstBreakup;
-        if (!breakupData?.sac_wise_totals?.length) {
-          breakupData = await fetchReverseInvoiceCalculateGstBreakup({
-            reverse_invoice_id: saveResponse.id as number,
-          });
-        }
+        const breakupData = await fetchReverseInvoiceCalculateGstBreakup({
+          reverse_invoice_id: reverseInvoiceId,
+        });
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
       }
 
@@ -2975,13 +2976,16 @@ function InvoiceReverse() {
     }
   };
 
-  const handleSubmit = async (values: InvoiceFormData) => {
+  const handleSubmit = async (
+    values: InvoiceFormData,
+    options?: { silentSuccess?: boolean },
+  ): Promise<boolean> => {
     if (!documentNo?.trim()) {
       ToastNotification({
         message: "Document number is missing.",
         type: "error",
       });
-      return;
+      return false;
     }
     // Validate charges: charge, currency, amount, amount_in_local.
     // ROE is not validated � reverse keeps source invoice ROE/amounts as-is.
@@ -3012,7 +3016,7 @@ function InvoiceReverse() {
           "Please fill all required fields in charges section (Charge, Currency, Currency Amount, Local Amount).",
         type: "error",
       });
-      return;
+      return false;
     }
     setChargeErrors({});
     setIsSubmitting(true);
@@ -3033,7 +3037,7 @@ function InvoiceReverse() {
           type: "error",
         });
         setIsSubmitting(false);
-        return;
+        return false;
       }
       if (currencyId == null || currencyId <= 0) {
         ToastNotification({
@@ -3041,7 +3045,7 @@ function InvoiceReverse() {
           type: "error",
         });
         setIsSubmitting(false);
-        return;
+        return false;
       }
       /** Payload dates: same YYYY-MM-DD as invoice create.
        * Same as InvoiceCreate: recalculate GST on base charges; strip tax rows (appended on post). */
@@ -3165,7 +3169,7 @@ function InvoiceReverse() {
             message: parsed.message,
             type: "error",
           });
-          return;
+          return false;
         }
         const res = parsed.data;
         if (res.is_agent === true) setIsAgentInvoice(true);
@@ -3197,10 +3201,13 @@ function InvoiceReverse() {
         if (res.fapiao_no != null) {
           form.setFieldValue("fapiao_no", String(res.fapiao_no));
         }
-        ToastNotification({
-          message: parsed.message,
-          type: "success",
-        });
+        if (!options?.silentSuccess) {
+          ToastNotification({
+            message: parsed.message,
+            type: "success",
+          });
+        }
+        return true;
       } else {
         const rawResponse = await postAPICall(
           URL.reverseInvoice,
@@ -3217,7 +3224,7 @@ function InvoiceReverse() {
             message: parsed.message,
             type: "error",
           });
-          return;
+          return false;
         }
         const res = parsed.data;
         if (res.is_agent === true) setIsAgentInvoice(true);
@@ -3249,10 +3256,13 @@ function InvoiceReverse() {
         }
         const statusUpper = (res.status ?? "").toUpperCase();
         setInvoiceIsPosted(statusUpper === "POSTED");
-        ToastNotification({
-          message: parsed.message,
-          type: "success",
-        });
+        if (!options?.silentSuccess) {
+          ToastNotification({
+            message: parsed.message,
+            type: "success",
+          });
+        }
+        return true;
       }
     } catch (error: unknown) {
       console.error("Error saving reverse invoice:", error);
@@ -3262,6 +3272,7 @@ function InvoiceReverse() {
           "Failed to save reverse invoice",
         type: "error",
       });
+      return false;
     } finally {
       setIsSubmitting(false);
     }

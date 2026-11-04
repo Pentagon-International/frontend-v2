@@ -298,15 +298,20 @@ const responseInterceptor = () =>
           }
 
           case 403: {
-            // Forbidden — permission denied; do not treat as session expiry / logout.
-            // Same as 400: reject with message; callers show the toast.
-            const forbiddenMessage = resolveBadRequestMessage(data);
-            const errorMessage =
-              forbiddenMessage !== "Bad Request! Please check your input."
-                ? forbiddenMessage
-                : "Access forbidden! You do not have permission to access this resource.";
+            // Forbidden - different from 401, user doesn't have permission
+            const { accessToken, resetAuth } = useAuthStore?.getState();
+
+            if (accessToken) {
+              ToastNotification({
+                type: "error",
+                message:
+                  "Your session got expired! Please Login again to continue.",
+              });
+              resetAuth();
+            }
             return Promise.reject({
-              message: errorMessage,
+              message:
+                "Access forbidden! You do not have permission to access this resource.",
             });
           }
 

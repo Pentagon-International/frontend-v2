@@ -4637,8 +4637,11 @@ function InvoiceCreate({
     }
   };
 
-  // Handle form submission
-  const handleSubmit = async (values: InvoiceFormData) => {
+  // Handle form submission. Returns true when create/update succeeds.
+  const handleSubmit = async (
+    values: InvoiceFormData,
+    options?: { silentSuccess?: boolean },
+  ): Promise<boolean> => {
     console.log("values---", values);
 
     setIsSubmitting(true);
@@ -4660,7 +4663,7 @@ function InvoiceCreate({
         );
         form.setFieldError("roe", headerRoeFieldError ?? headerRoeToastError);
         setIsSubmitting(false);
-        return;
+        return false;
       }
 
       const currencyRows =
@@ -4689,7 +4692,7 @@ function InvoiceCreate({
           type: "error",
         });
         setIsSubmitting(false);
-        return;
+        return false;
       }
 
       values.charges.forEach((charge, index) => {
@@ -4733,7 +4736,7 @@ function InvoiceCreate({
           type: "error",
         });
         setIsSubmitting(false);
-        return;
+        return false;
       }
 
       // Validate charges
@@ -4777,7 +4780,7 @@ function InvoiceCreate({
           type: "error",
         });
         setIsSubmitting(false);
-        return;
+        return false;
       }
       if (currencyId == null || currencyId <= 0) {
         ToastNotification({
@@ -4785,7 +4788,7 @@ function InvoiceCreate({
           type: "error",
         });
         setIsSubmitting(false);
-        return;
+        return false;
       }
 
       // Invoice: Cr − Dr. Credit note: Dr − Cr (same as invoice reversal).
@@ -5017,7 +5020,7 @@ function InvoiceCreate({
             message: parsed.message,
             type: "error",
           });
-          return;
+          return false;
         }
         const response = parsed.data;
         setSaveResponse((prev) => ({
@@ -5046,10 +5049,13 @@ function InvoiceCreate({
         if (irnNo != null) {
           form.setFieldValue("irn_no", irnNo);
         }
-        ToastNotification({
-          message: parsed.message,
-          type: "success",
-        });
+        if (!options?.silentSuccess) {
+          ToastNotification({
+            message: parsed.message,
+            type: "success",
+          });
+        }
+        return true;
       } else {
         const rawResponse = await postAPICall(URL.invoice, payload, API_HEADER);
         const parsed = parseInvoiceMutationResponse(
@@ -5062,7 +5068,7 @@ function InvoiceCreate({
             message: parsed.message,
             type: "error",
           });
-          return;
+          return false;
         }
         const response = parsed.data;
         setSaveResponse({
@@ -5090,10 +5096,13 @@ function InvoiceCreate({
         if (response.fapiao_no != null) {
           form.setFieldValue("fapiao_no", String(response.fapiao_no));
         }
-        ToastNotification({
-          message: parsed.message,
-          type: "success",
-        });
+        if (!options?.silentSuccess) {
+          ToastNotification({
+            message: parsed.message,
+            type: "success",
+          });
+        }
+        return true;
       }
     } catch (error: any) {
       console.error("Error creating invoice:", error);
@@ -5101,6 +5110,7 @@ function InvoiceCreate({
         message: error?.message || "Failed to create invoice",
         type: "error",
       });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -5117,7 +5127,14 @@ function InvoiceCreate({
     }
     setIsPosting(true);
     try {
+      // Persist latest form to DB before GST breakup / post (avoids stale tax rows).
+      const synced = await handleSubmit(form.values, { silentSuccess: true });
+      if (!synced) {
+        return;
+      }
+
       const values = form.values;
+      const invoiceId = saveResponse.id as number;
       const stateId = values.state ? Number(values.state) : null;
       const headerCur = (values.currency ?? "").toString().trim().toUpperCase();
       const currencyItem = (
@@ -5145,7 +5162,6 @@ function InvoiceCreate({
             : "Please ensure Currency is valid.",
           type: "error",
         });
-        setIsPosting(false);
         return;
       }
 
@@ -5160,24 +5176,20 @@ function InvoiceCreate({
       let percentageWiseTotals: NonNullable<
         InvoiceTaxBreakup["percentage_wise_totals"]
       > = [];
-      let vatBreakupData: InvoiceTaxBreakup | null = gstBreakup;
+      let vatBreakupData: InvoiceTaxBreakup | null = null;
+      // Always refetch breakup after sync so tax rows match the latest saved charges.
       if (applyVat) {
-        if (!vatBreakupData?.percentage_wise_totals?.length) {
-          vatBreakupData = await fetchInvoiceCalculateGstBreakup({
-            invoice_id: saveResponse.id as number,
-            vat: true,
-          });
-        }
+        vatBreakupData = await fetchInvoiceCalculateGstBreakup({
+          invoice_id: invoiceId,
+          vat: true,
+        });
         percentageWiseTotals = vatBreakupData?.percentage_wise_totals ?? [];
       } else if (isVatPost) {
         percentageWiseTotals = [];
       } else if (showGstTax) {
-        let breakupData = gstBreakup;
-        if (!breakupData?.sac_wise_totals?.length) {
-          breakupData = await fetchInvoiceCalculateGstBreakup({
-            invoice_id: saveResponse.id as number,
-          });
-        }
+        const breakupData = await fetchInvoiceCalculateGstBreakup({
+          invoice_id: invoiceId,
+        });
         sacWiseTotals = breakupData?.sac_wise_totals ?? [];
       }
 
