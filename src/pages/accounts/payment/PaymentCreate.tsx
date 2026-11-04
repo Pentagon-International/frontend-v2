@@ -271,11 +271,11 @@ function paymentAllocationNetSign(
   return drCr === "Dr" ? -1 : 1;
 }
 
-function sumPaymentAllocationNetLocal(adjustments: AdjustmentRow[]): number {
+function sumPaymentAllocationNetCurr(adjustments: AdjustmentRow[]): number {
   return adjustments.reduce((s, a) => {
     const amt =
-      a.adj_local_amount != null && Number.isFinite(a.adj_local_amount)
-        ? a.adj_local_amount
+      a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
+        ? a.adj_curr_amount
         : 0;
     return s + paymentAllocationNetSign(resolveAllocationDrCr(a)) * amt;
   }, 0);
@@ -1304,7 +1304,7 @@ export default function PaymentCreate({
     _isReversal,
   ]);
 
-  /** Skip one amount→local recalculation after allocation sync (adj local is the source). */
+  /** Skip one amount→local recalculation after allocation sync (adj curr is the source). */
   const skipPartyLocalFromAmountRef = useRef(false);
 
   const getMatchingAllocations = (
@@ -1318,28 +1318,24 @@ export default function PaymentCreate({
     allocationRows: AdjustmentRow[],
   ) => {
     if (allocationRows.length === 0) return;
-    // Party local from allocations: Cr − Dr when dr_cr is present.
-    const sum = sumPaymentAllocationNetLocal(allocationRows);
-    const local = clampLocalAmount(sum);
+    // Party amount from allocations (Cr − Dr of adj curr); local = amount × party ROE.
+    const amount = clampAmount(sumPaymentAllocationNetCurr(allocationRows));
     const roeVal =
       row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
-    const derivedAmount =
-      local != null && Number.isFinite(local)
-        ? clampAmount(local / roeVal)
+    const local =
+      amount != null && Number.isFinite(amount)
+        ? clampLocalAmount(amount * roeVal)
         : null;
     skipPartyLocalFromAmountRef.current = true;
+    if (form.values.details[idx].amount !== amount) {
+      form.setFieldValue(`details.${idx}.amount`, amount);
+    }
     if (form.values.details[idx].local_amount !== local) {
       form.setFieldValue(`details.${idx}.local_amount`, local);
     }
-    if (
-      derivedAmount != null &&
-      form.values.details[idx].amount !== derivedAmount
-    ) {
-      form.setFieldValue(`details.${idx}.amount`, derivedAmount);
-    }
   };
 
-  /** Sync party details from allocation totals: party local = net adj local (Cr − Dr); party amount = local / party ROE. */
+  /** Sync party details from allocation totals: party amount = net adj curr (Cr − Dr); party local = amount × party ROE. */
   const syncPartyDetailsFromAllocations = (
     adjustmentsToUse?: AdjustmentRow[],
     options?: { detailIndex?: number; allocationsForDetail?: AdjustmentRow[] },
@@ -1380,25 +1376,6 @@ export default function PaymentCreate({
         row.roe != null && Number.isFinite(row.roe) && row.roe !== 0
           ? row.roe
           : 1;
-      const matchingAllocations = getMatchingAllocations(
-        row,
-        form.values.adjustments ?? [],
-      );
-      if (matchingAllocations.length > 0) {
-        const local = row.local_amount;
-        const derivedAmount =
-          local != null && Number.isFinite(local)
-            ? clampAmount(local / roeVal)
-            : null;
-        if (
-          derivedAmount != null &&
-          form.values.details[idx].amount !== derivedAmount
-        ) {
-          skipPartyLocalFromAmountRef.current = true;
-          form.setFieldValue(`details.${idx}.amount`, derivedAmount);
-        }
-        return;
-      }
       const amt = row.amount;
       const local =
         amt != null && Number.isFinite(amt)
@@ -2060,32 +2037,26 @@ export default function PaymentCreate({
       const hasDocument = (a.document_no ?? "").trim() !== "";
       return hasAmounts || hasDocument;
     });
-    const partyLocalTotal =
+    const partyAmountTotal =
       (values.details ?? []).reduce(
         (sum, d) =>
-          sum +
-          (d.local_amount != null && Number.isFinite(d.local_amount)
-            ? d.local_amount
-            : 0),
+          sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
         0,
       ) ?? 0;
-    const adjLocalTotal = sumPaymentAllocationNetLocal(
-      values.adjustments ?? [],
-    );
-    // Validation aligned with Receipt: when adjustments exist, Party total
-    // should not be less than net allocation amount (Cr − Dr).
+    const adjCurrTotal = sumPaymentAllocationNetCurr(values.adjustments ?? []);
+    // Match currency Amount (not local): invoice ROE and payment ROE can differ.
     // Reversal skips this — the same payment is reversed and Dr/Cr is handled by the backend.
-    if (!_isReversal && hasAdjustments && partyLocalTotal < adjLocalTotal) {
+    if (!_isReversal && hasAdjustments && partyAmountTotal < adjCurrTotal) {
       ToastNotification({
         type: "error",
         message:
-          "The total Local Amount of Payment cannot be less than the total Local Amount of Invoice.",
+          "The total Amount of Payment cannot be less than the total Curr Amount of Invoice.",
       });
       return;
     }
     // Important: allow saving "open payment" (no adjustments),
     // same as Receipt. So we DO NOT restrict party totals when allocations are empty.
-    // Also, unlike the earlier logic, we don't block when partyLocalTotal > adjLocalTotal.
+    // Also, unlike the earlier logic, we don't block when partyAmountTotal > adjCurrTotal.
     setIsSubmitting(true);
     try {
       if (_isReversal) {
@@ -3220,39 +3191,17 @@ export default function PaymentCreate({
                                 form.clearFieldError,
                                 `details.${idx}.roe`,
                               );
-                              const matchingAllocations = getMatchingAllocations(
-                                form.values.details[idx],
-                                form.values.adjustments ?? [],
-                              );
-                              if (matchingAllocations.length > 0) {
-                                const local =
-                                  form.values.details[idx]?.local_amount;
-                                if (
-                                  local != null &&
-                                  Number.isFinite(local) &&
-                                  newRoe != null &&
-                                  Number.isFinite(newRoe) &&
-                                  newRoe !== 0
-                                ) {
-                                  skipPartyLocalFromAmountRef.current = true;
-                                  form.setFieldValue(
-                                    `details.${idx}.amount`,
-                                    clampAmount(local / newRoe),
-                                  );
-                                }
-                              } else {
-                                const amt = form.values.details[idx]?.amount;
-                                if (
-                                  amt != null &&
-                                  Number.isFinite(amt) &&
-                                  newRoe != null &&
-                                  Number.isFinite(newRoe)
-                                ) {
-                                  form.setFieldValue(
-                                    `details.${idx}.local_amount`,
-                                    clampLocalAmount(amt * newRoe),
-                                  );
-                                }
+                              const amt = form.values.details[idx]?.amount;
+                              if (
+                                amt != null &&
+                                Number.isFinite(amt) &&
+                                newRoe != null &&
+                                Number.isFinite(newRoe)
+                              ) {
+                                form.setFieldValue(
+                                  `details.${idx}.local_amount`,
+                                  clampLocalAmount(amt * newRoe),
+                                );
                               }
                             }}
                             decimalScale={ROE_DECIMAL_PLACES}

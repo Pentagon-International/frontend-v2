@@ -184,6 +184,19 @@ const isDebitSide = (drCr: string | null | undefined): boolean => {
   return v === "DR" || v === "DEBIT" || v === "D";
 };
 
+/** Prefer `dr_cr` from outstanding allocations; fall back to legacy `Dr_Cr`. */
+const resolveRowDrCr = (
+  row: Pick<DocumentAllocationRow, "dr_cr" | "Dr_Cr"> | null | undefined,
+): string => {
+  const raw = row?.dr_cr ?? row?.Dr_Cr ?? "";
+  const v = String(raw).trim();
+  if (!v) return "";
+  const upper = v.toUpperCase();
+  if (upper === "DR" || upper === "DEBIT" || upper === "D") return "Dr";
+  if (upper === "CR" || upper === "CREDIT" || upper === "C") return "Cr";
+  return v;
+};
+
 const getRowLocalAmount = (row: DocumentAllocationRow): number =>
   parseDecimal(
     String(row.outstanding_local_amount ?? row.amount_in_local ?? ""),
@@ -1304,7 +1317,7 @@ export default function DocumentAllocation() {
         normalizeAllocationLine,
       );
       setHasFetched(true);
-      if (normalizedList.length === 0) {
+      if (list.length === 0) {
         setRows([]);
         setFetchedRows([]);
         setSavedHeader(null);
@@ -1314,7 +1327,7 @@ export default function DocumentAllocation() {
         });
         return;
       }
-      setFetchedRows(normalizedList);
+      setFetchedRows(list);
       setSelectedRowIds(new Set());
       setIsModalOpen(true);
     } catch {
