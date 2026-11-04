@@ -7820,17 +7820,18 @@ const Dashboard = () => {
       //   trend: budgetTrend,
       //   spark: revenueSpark,
       // },
-      {
-        key: "overdue-ar",
-        label: "Overdue AR",
-        value: formatOutstandingAmountCompact(
-          overdueN,
-          branchCountryCode,
-          overdueDisplayCurrency,
-        ),
-        trend: undefined,
-        spark: "redUp" as DashLeadershipSparkKind,
-      },
+      // Hidden: Overdue AR KPI (kept for restore; Outstanding vs Overdue card still shows overdue)
+      // {
+      //   key: "overdue-ar",
+      //   label: "Overdue AR",
+      //   value: formatOutstandingAmountCompact(
+      //     overdueN,
+      //     branchCountryCode,
+      //     overdueDisplayCurrency,
+      //   ),
+      //   trend: undefined,
+      //   spark: "redUp" as DashLeadershipSparkKind,
+      // },
     ];
   }, [
     enquiryConversionAggregatedData,
