@@ -37,6 +37,9 @@ const MONEY_TOTAL_KEYS = new Set([
   "total_cost",
   "total_sell",
   "profit",
+  "actual_cost",
+  "actual_sell",
+  "actual_profit",
   "expected_profit",
   "potential_profit",
   "credit_amount",
@@ -86,6 +89,9 @@ const PIPELINE_REPORT_DRILL2_COL_WIDTH: Record<string, number> = {
   total_cost: 102,
   total_sell: 102,
   profit: 90,
+  actual_cost: 102,
+  actual_sell: 102,
+  actual_profit: 102,
   date: 150,
   call_date: 105,
   call_mode: 95,
@@ -454,6 +460,9 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       total_cost: "Total Cost",
       total_sell: "Total Sell",
       profit: "Profit",
+      actual_cost: "Actual Cost",
+      actual_sell: "Actual Sell",
+      actual_profit: "Actual Profit",
       call_date: "Call Date",
       call_mode: "Call Mode",
       call_summary: "Call Summary",
@@ -1326,7 +1335,10 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
             if (!order.includes("sno")) {
               order.unshift("sno");
             }
-            return <Text size="sm">{cellValue}</Text>;
+            const displayValue = MONEY_TOTAL_KEYS.has(key)
+              ? formatMoneyTotalCell(cellValue)
+              : cellValue;
+            return <Text size="sm">{displayValue}</Text>;
           },
           size: columnSize,
         });
@@ -1425,6 +1437,19 @@ const DetailedViewTable: React.FC<DetailedViewTableProps> = ({
       const qAfter = order.indexOf("quotation_id");
       order.splice(qAfter + 1, 0, "reject_remark");
     }
+
+    // Keep actual_* money columns next to their Total Cost / Total Sell / Profit peers
+    const placeAfter = (anchorKey: string, moveKey: string) => {
+      const moveIdx = order.indexOf(moveKey);
+      const anchorIdx = order.indexOf(anchorKey);
+      if (moveIdx === -1 || anchorIdx === -1) return;
+      order.splice(moveIdx, 1);
+      const insertAt = order.indexOf(anchorKey) + 1;
+      order.splice(insertAt, 0, moveKey);
+    };
+    placeAfter("total_cost", "actual_cost");
+    placeAfter("total_sell", "actual_sell");
+    placeAfter("profit", "actual_profit");
 
     return order;
   }, [columns]);

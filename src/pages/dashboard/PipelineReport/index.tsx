@@ -679,6 +679,9 @@ const PipelineReport: React.FC<PipelineReportProps> = ({
             "expected",
             "total",
             "profit",
+            "cost",
+            "sell",
+            "actual",
             "count",
             "id",
           ];
