@@ -87,6 +87,7 @@ import {
   getProfitStatusLabel,
   isAccountsProfitVerified,
   isSalespersonProfitVerified,
+  normalizeProfitStatus,
   pickProfitHouseRecord,
   PROFIT_STATUS_FILTER_OPTIONS,
   runJobProfitAccountsVerify,
@@ -177,6 +178,8 @@ type JobProfitRow = {
   accounts_verified?: boolean;
   accounts_by?: string | null;
   accounts_at?: string | null;
+  /** JPV row create time — shown under Sent to Accounts status. */
+  created_at?: string | null;
   salesperson_verified?: boolean;
   has_verified_profit?: boolean;
   verified?: boolean;
@@ -2149,10 +2152,18 @@ export default function JobProfitVerificationMaster({
                                 : {}),
                             }}
                           >
-                            <JobProfitStatusPill
-                              status={row.status}
-                              emptyAsDash
-                            />
+                              <Stack gap={4} align="left" style={{width: "fit-content"}}>
+                                <JobProfitStatusPill
+                                  status={row.status}
+                                  emptyAsDash
+                                />
+                                {normalizeProfitStatus(row.status) ===
+                                  "sent_to_accounts" && row.created_at ? (
+                                  <Text size="xs" ml={20} c={muted}>
+                                    {fmtDateTime(row.created_at)}
+                                  </Text>
+                                ) : null}
+                              </Stack>
                           </td>
                           {isApprovalMode ? (
                             <td style={tdPad}>
