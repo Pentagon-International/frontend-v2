@@ -103,6 +103,18 @@ export const fetchGlobalSearchModuleRecord = async (
   } else if (moduleLower === "payment" || moduleLower === "receipt") {
     filters.is_agent = false;
   }
+  // Supplier invoice list APIs scope RCM vs non-RCM with is_rcm.
+  if (
+    moduleLower === "supplier_invoice_rcm" ||
+    moduleLower === "reverse_supplier_invoice_rcm"
+  ) {
+    filters.is_rcm = true;
+  } else if (
+    moduleLower === "supplier_invoice" ||
+    moduleLower === "reverse_supplier_invoice"
+  ) {
+    filters.is_rcm = false;
+  }
 
   const payload = { filters };
 
@@ -228,8 +240,14 @@ export const globalSearchModuleToRoute = (
       return { path: "/overseas-receipt/edit", needsState: true };
     case "supplier_invoice":
       return { path: "/supplier-invoice/edit", needsState: true };
+    case "supplier_invoice_rcm":
+      return { path: "/supplier-invoice-rcm/edit", needsState: true };
     case "reverse_supplier_invoice":
       return { path: "/supplier-invoice/reversal/edit", needsState: true };
+    case "reverse_supplier_invoice_rcm":
+      return { path: "/supplier-invoice-rcm/reversal/edit", needsState: true };
+    case "payment_request":
+      return { path: `/payment-request/edit/${id}`, needsState: false };
     case "payment":
       return { path: "/payment/edit", needsState: true };
     case "overseas_payment":

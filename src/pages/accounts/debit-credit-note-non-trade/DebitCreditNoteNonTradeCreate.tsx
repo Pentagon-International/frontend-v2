@@ -193,6 +193,18 @@ function normalizeDrCr(value: unknown): "Dr" | "Cr" {
   return "Dr";
 }
 
+/** DNT: header Dr / charges Cr. CNT: header Cr / charges Dr. */
+function defaultsForDocumentType(
+  documentType: string | null | undefined,
+): { header: "Dr" | "Cr"; charge: "Dr" | "Cr" } | null {
+  const t = String(documentType ?? "")
+    .trim()
+    .toUpperCase();
+  if (t === "DNT") return { header: "Dr", charge: "Cr" };
+  if (t === "CNT") return { header: "Cr", charge: "Dr" };
+  return null;
+}
+
 function lineHasAccountSelection(line: LineItem): boolean {
   return (
     String(line.account_id ?? "").trim() !== "" ||
@@ -526,6 +538,7 @@ export function DebitCreditNoteCreateBase({
     initialValues: {
       daybookId: null as string | null,
       documentType: "",
+      dr_cr: "" as "Dr" | "Cr" | "",
       partyAccount: "",
       partyName: "",
       address: "",
@@ -639,6 +652,8 @@ export function DebitCreditNoteCreateBase({
       .trim()
       .toUpperCase();
     const row = newLineItem(latest.lines.length, currency);
+    const chargeDefault = defaultsForDocumentType(latest.documentType)?.charge;
+    if (chargeDefault) row.dr_cr = chargeDefault;
     const { currencyId } = resolveLineCurrencyContext(currency, currencyIdByCode);
     if (isLocalCurrency(currency, currencyId ?? latest.currencyId)) {
       row.roe = 1;
@@ -960,10 +975,14 @@ export function DebitCreditNoteCreateBase({
   });
 
   const { data: daybookData = [] } = useQuery({
-    queryKey: ["daybookMaster"],
+    queryKey: ["daybookMaster", "DNT", "CNT"],
     queryFn: async () => {
       try {
-        const res = await getAPICall(`${URL.daybookGet}`, API_HEADER);
+        const res = await postAPICall(
+          URL.daybook,
+          { filters: { document_type: ["DNT", "CNT"] } },
+          API_HEADER,
+        );
         return (res as { data?: unknown[] })?.data ?? res ?? [];
       } catch (e) {
         console.error("Error fetching daybook:", e);
@@ -1292,7 +1311,7 @@ export function DebitCreditNoteCreateBase({
       narration: form.values.narration,
       note: form.values.note,
       gst_id: form.values.gstId,
-      dr_cr: (form.values.lines[0]?.dr_cr as "Dr" | "Cr" | undefined) ?? "Dr",
+      dr_cr: (form.values.dr_cr as "Dr" | "Cr" | "") || "Dr",
       debit_credit_note_tem: form.values.lines.map((l) => {
         const includeChargeFields =
           showTradeFields ||
@@ -1379,6 +1398,15 @@ export function DebitCreditNoteCreateBase({
       form.setFieldValue("daybookId", String(header.daybook_id));
     if (header?.document_type != null)
       form.setFieldValue("documentType", String(header.document_type));
+    if (header?.dr_cr != null) {
+      const headerDrCr = String(header.dr_cr).trim();
+      form.setFieldValue(
+        "dr_cr",
+        headerDrCr === "Dr" || headerDrCr === "Cr"
+          ? headerDrCr
+          : normalizeDrCr(header.dr_cr),
+      );
+    }
     if (header?.party_code != null)
       form.setFieldValue("partyAccount", String(header.party_code));
     if (header?.party_name != null)
@@ -2016,7 +2044,21 @@ export function DebitCreditNoteCreateBase({
                 const docType = val
                   ? daybookDocumentTypeById.get(String(val))
                   : "";
-                if (docType) form.setFieldValue("documentType", docType);
+                if (docType) {
+                  form.setFieldValue("documentType", docType);
+                  const defaults = defaultsForDocumentType(docType);
+                  if (defaults) {
+                    form.setFieldValue("dr_cr", defaults.header);
+                    const lines = form.getValues().lines;
+                    form.setFieldValue(
+                      "lines",
+                      lines.map((line) => ({
+                        ...line,
+                        dr_cr: defaults.charge,
+                      })),
+                    );
+                  }
+                }
               }}
               size="sm"
               styles={chargeFieldStyles}
@@ -2033,6 +2075,25 @@ export function DebitCreditNoteCreateBase({
                 form.setFieldValue("documentType", e.currentTarget.value)
               }
               readOnly
+              disabled={isReadOnly}
+            />
+          </Grid.Col>
+
+          <Grid.Col span={1}>
+            <Dropdown
+              label="Dr/Cr"
+              placeholder="Dr/Cr"
+              data={["Dr", "Cr"]}
+              value={form.values.dr_cr || null}
+              onChange={(v) =>
+                form.setFieldValue(
+                  "dr_cr",
+                  (v as "Dr" | "Cr" | null) ?? "",
+                )
+              }
+              size="sm"
+              styles={chargeFieldStyles}
+              clearable
               disabled={isReadOnly}
             />
           </Grid.Col>
