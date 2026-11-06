@@ -103,9 +103,12 @@ import {
 } from "../../../utils/editPageAuditInfo";
 import {
   collectPartyGstOptions,
+  collectPartyStateOptions,
+  extractPartyAddressesFromRecord,
   extractPartyTdsSectionsFromRecord,
   findPartyAddressByGst,
   findPrimaryPartyAddress,
+  getPartyGstForStateId,
   getPartyGstFromPrimaryAddress,
   getPrqChargeRowCompletenessErrors,
   isPrqTdsChargeRow,
@@ -1674,10 +1677,57 @@ function PaymentRequest() {
     },
   });
 
+  const isPaidToSelected =
+    !!String(form.values.paid_to ?? "").trim() ||
+    !!String(form.values.account_id ?? "").trim() ||
+    !!String(accountNameDisplay ?? "").trim();
+
   const partyGstOptions = useMemo(
     () => collectPartyGstOptions(partyAddresses),
     [partyAddresses],
   );
+
+  const partyStateOptions = useMemo(
+    () => collectPartyStateOptions(partyAddresses, stateOptions),
+    [partyAddresses, stateOptions],
+  );
+
+  const effectiveStateOptions = useMemo(() => {
+    const currentStateId = String(form.values.state_code_1 ?? "").trim();
+    let options: Array<{ value: string; label: string }>;
+
+    if (partyStateOptions.length > 0) {
+      options = [...partyStateOptions];
+    } else if (isPaidToSelected) {
+      // Party selected but addresses not loaded yet — keep current value visible.
+      options = [];
+    } else {
+      options = stateOptions.map((option) => ({
+        value: option.value,
+        label: option.label ?? option.value,
+      }));
+    }
+
+    if (
+      currentStateId &&
+      !options.some((option) => option.value === currentStateId)
+    ) {
+      const masterLabel = stateOptions.find(
+        (option) => option.value === currentStateId,
+      )?.label;
+      options = [
+        { value: currentStateId, label: masterLabel ?? currentStateId },
+        ...options,
+      ];
+    }
+
+    return options;
+  }, [
+    form.values.state_code_1,
+    isPaidToSelected,
+    partyStateOptions,
+    stateOptions,
+  ]);
 
   const resolvedGstn = resolvePaymentRequestGstnFields(
     form.values.customer_gst_no,
@@ -1719,6 +1769,98 @@ function PaymentRequest() {
     },
     [form, stateOptions],
   );
+
+  const handlePartyStateChange = useCallback(
+    (stateId: string | null) => {
+      const nextStateId = stateId ?? "";
+      form.setFieldValue("state_code_1", nextStateId);
+      if (!nextStateId) {
+        form.setFieldValue("customer_gst_no", "");
+        return;
+      }
+
+      const gstForState = getPartyGstForStateId(
+        partyAddresses,
+        nextStateId,
+        stateOptions,
+      );
+      if (gstForState) {
+        form.setFieldValue("customer_gst_no", gstForState);
+        form.clearFieldError("customer_gst_no");
+      }
+    },
+    [form, partyAddresses, stateOptions],
+  );
+
+  const fetchPartyAddresses = useCallback(
+    async (query: string, applyPrimary = true) => {
+      const trimmed = String(query ?? "").trim();
+      if (!trimmed) return;
+
+      const endpoint = resolveAccountNameEndpointByPaidToType(
+        form.values.paid_to_type,
+        user?.pulse_id,
+      );
+      if (!endpoint) return;
+
+      const paidToType = form.values.paid_to_type?.trim().toLowerCase();
+      const usePostBody =
+        paidToType === "supplier" &&
+        String(user?.pulse_id ?? "")
+          .trim()
+          .toUpperCase() !== CCT_PULSE_ID;
+
+      try {
+        const response = usePostBody
+          ? await postAPICall(
+              endpoint,
+              supplierAccountNameSearchBody(trimmed),
+              API_HEADER,
+            )
+          : await getAPICall(
+              `${endpoint}?search=${encodeURIComponent(trimmed)}`,
+              API_HEADER,
+            );
+
+        const first = Array.isArray(response)
+          ? response[0]
+          : Array.isArray((response as { data?: unknown[] })?.data)
+            ? (response as { data: unknown[] }).data[0]
+            : null;
+
+        const fetchedAddresses = extractPartyAddressesFromRecord(first);
+        if (fetchedAddresses.length === 0) return;
+
+        setPartyAddresses(fetchedAddresses);
+
+        if (!applyPrimary) return;
+
+        form.setFieldValue(
+          "customer_gst_no",
+          getPartyGstFromPrimaryAddress(fetchedAddresses),
+        );
+        form.clearFieldError("customer_gst_no");
+        applyPartyAddressState(findPrimaryPartyAddress(fetchedAddresses));
+        form.setFieldValue(
+          "tds_section_code",
+          resolvePartyTdsSectionCode(
+            extractPartyTdsSectionsFromRecord(first),
+            tdsSectionOptions,
+          ),
+        );
+      } catch {
+        // State / Vendor GSTN can still be set manually if party fetch fails.
+      }
+    },
+    [
+      applyPartyAddressState,
+      form,
+      tdsSectionOptions,
+      user?.pulse_id,
+    ],
+  );
+
+  const partyAddressFetchKeyRef = useRef("");
 
   const sacCodeOptionsForForm = useMemo(() => {
     const uniq = new Set<string>(sacCodeOptions);
@@ -1795,11 +1937,6 @@ function PaymentRequest() {
     saveResponse.id > 0;
   const actualInvFieldReadOnly =
     isViewMode || (isApprovedStatus && !canEditActualInvAfterApproved);
-
-  const isPaidToSelected =
-    !!String(form.values.paid_to ?? "").trim() ||
-    !!String(form.values.account_id ?? "").trim() ||
-    !!String(accountNameDisplay ?? "").trim();
 
   const chargesDropdownZIndex = 200;
 
@@ -3460,6 +3597,34 @@ function PaymentRequest() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId, isEditOrViewMode, paymentRequestDataFromApi]);
 
+  // Edit/view: re-fetch party addresses so State / Vendor GSTN can be corrected
+  // without overwriting the saved state and GSTN values.
+  useEffect(() => {
+    if (!isEditOrViewMode) {
+      partyAddressFetchKeyRef.current = "";
+      return;
+    }
+
+    const paidToType = String(form.values.paid_to_type ?? "").trim();
+    const query =
+      String(form.values.account_code ?? "").trim() ||
+      String(form.values.account_id ?? "").trim();
+    if (!paidToType || !query) return;
+
+    const key = `${requestId}|${paidToType}|${query}`;
+    if (partyAddressFetchKeyRef.current === key) return;
+    partyAddressFetchKeyRef.current = key;
+
+    void fetchPartyAddresses(query, false);
+  }, [
+    fetchPartyAddresses,
+    form.values.account_code,
+    form.values.account_id,
+    form.values.paid_to_type,
+    isEditOrViewMode,
+    requestId,
+  ]);
+
   const showAuditInfo =
     isEditOrViewMode || Boolean(saveResponse?.id) || Boolean(auditPatch);
   const paymentRequestAuditSource = useMemo(
@@ -4055,9 +4220,6 @@ function PaymentRequest() {
                   // Auto-fill Paid To from selected account name; user can edit later.
                   form.setFieldValue("paid_to", selectedAccountName);
 
-                  const addresses = (originalData as any)?.addresses_data as
-                    PartyAddressLike[] | undefined;
-
                   if (!value) {
                     form.setFieldValue("customer_gst_no", "");
                     form.setFieldValue("state_code_1", "");
@@ -4070,13 +4232,29 @@ function PaymentRequest() {
                     return;
                   }
 
-                  setPartyAddresses(Array.isArray(addresses) ? addresses : []);
-
-                  form.setFieldValue(
-                    "customer_gst_no",
-                    getPartyGstFromPrimaryAddress(addresses),
+                  const normalizedAddresses = extractPartyAddressesFromRecord(
+                    originalData,
                   );
-                  form.clearFieldError("customer_gst_no");
+                  setPartyAddresses(normalizedAddresses);
+
+                  if (normalizedAddresses.length > 0) {
+                    form.setFieldValue(
+                      "customer_gst_no",
+                      getPartyGstFromPrimaryAddress(normalizedAddresses),
+                    );
+                    form.clearFieldError("customer_gst_no");
+                    applyPartyAddressState(
+                      findPrimaryPartyAddress(normalizedAddresses),
+                    );
+                  } else {
+                    form.setFieldValue("customer_gst_no", "");
+                    form.setFieldValue("state_code_1", "");
+                    void fetchPartyAddresses(
+                      nextAccountCode || String(value ?? ""),
+                      true,
+                    );
+                  }
+
                   // Do not replace a saved location GSTN with the approver's branch.
                   if (
                     !String(form.values.location_gst_no ?? "").trim() &&
@@ -4092,7 +4270,6 @@ function PaymentRequest() {
                     ),
                   );
 
-                  applyPartyAddressState(findPrimaryPartyAddress(addresses));
                   applyPrefillChargesForSelectedParty(
                     nextAccountCode,
                     selectedAccountName,
@@ -4110,11 +4287,15 @@ function PaymentRequest() {
               <Dropdown
                 label="State"
                 placeholder={isStateLoading ? "Loading..." : "Select state"}
-                data={stateOptions}
+                data={effectiveStateOptions}
                 value={form.values.state_code_1 || null}
-                onChange={(v) => form.setFieldValue("state_code_1", v ?? "")}
+                onChange={handlePartyStateChange}
                 searchable
-                disabled={isStateLoading || formFieldsReadOnly}
+                disabled={
+                  isStateLoading ||
+                  formFieldsReadOnly ||
+                  !isPaidToSelected
+                }
                 styles={inputStyles}
               />
             </Grid.Col>
@@ -4328,13 +4509,23 @@ function PaymentRequest() {
                   ) : null}
                   :
                 </Text>
-                {partyGstOptions.length > 1 ? (
+                {partyGstOptions.length > 0 ? (
                   <Dropdown
                     placeholder="Select GSTN"
-                    data={partyGstOptions.map((option) => ({
-                      value: option.value,
-                      label: option.value,
-                    }))}
+                    data={(() => {
+                      const options = partyGstOptions.map((option) => ({
+                        value: option.value,
+                        label: option.value,
+                      }));
+                      const current = String(resolvedVendorGstNo ?? "").trim();
+                      if (
+                        current &&
+                        !options.some((option) => option.value === current)
+                      ) {
+                        options.unshift({ value: current, label: current });
+                      }
+                      return options;
+                    })()}
                     value={resolvedVendorGstNo || null}
                     onChange={(gst) => {
                       if (!gst) return;
@@ -4354,7 +4545,7 @@ function PaymentRequest() {
                         findPartyAddressByGst(partyAddresses, gst),
                       );
                     }}
-                    disabled={formFieldsReadOnly}
+                    disabled={formFieldsReadOnly || !isPaidToSelected}
                     searchable
                     dropdownZIndex={chargesDropdownZIndex}
                     styles={{
@@ -4368,7 +4559,7 @@ function PaymentRequest() {
                     {formatReferenceDisplayValue(resolvedVendorGstNo)}
                   </Text>
                 )}
-                {partyGstOptions.length <= 1 && form.errors.customer_gst_no ? (
+                {partyGstOptions.length === 0 && form.errors.customer_gst_no ? (
                   <Text size="xs" c="red" style={{ whiteSpace: "nowrap" }}>
                     {form.errors.customer_gst_no}
                   </Text>
