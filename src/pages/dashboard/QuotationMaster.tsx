@@ -159,6 +159,10 @@ type QuotationData = {
   charges: any[];
   quotation: any[];
   status?: string;
+  quoted_currency?: string | null;
+  quoted_revenue?: number | null;
+  quoted_cost?: number | null;
+  quoted_profit?: number | null;
   remark?: string;
   revision?: string;
   origin_code_list?: string[];
@@ -425,6 +429,10 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
       volume: true,
       reference_no: true,
       status: true,
+      quoted_currency: true,
+      quoted_revenue: true,
+      quoted_cost: true,
+      quoted_profit: true,
       valid_upto_list: true,
       revision: true,
       reject_remark: true,
@@ -2009,6 +2017,30 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         header: "Status",
       },
       {
+        key: "quoted_currency",
+        header: "Quoted Currency",
+        transform: (_value: any, item: any) =>
+          item.quoted_currency?.trim() || "N/A",
+      },
+      {
+        key: "quoted_revenue",
+        header: "Quoted Revenue",
+        transform: (_value: any, item: any) =>
+          formatQuotationMoneyDisplay(item.quoted_revenue),
+      },
+      {
+        key: "quoted_cost",
+        header: "Quoted Cost",
+        transform: (_value: any, item: any) =>
+          formatQuotationMoneyDisplay(item.quoted_cost),
+      },
+      {
+        key: "quoted_profit",
+        header: "Quoted Profit",
+        transform: (_value: any, item: any) =>
+          formatQuotationMoneyDisplay(item.quoted_profit),
+      },
+      {
         key: "reject_remark",
         header: "Remark",
         transform: (_value: any, item: any) => {
@@ -2917,6 +2949,46 @@ function QuotationMaster({ mode = "master" }: QuotationMasterProps) {
         checked: quotationVisibleColumns.status !== false,
         onToggle: () =>
           setQuotationVisibleColumns((p) => ({ ...p, status: !p.status })),
+      },
+      {
+        id: "quoted_currency",
+        label: "Quoted Currency",
+        checked: quotationVisibleColumns.quoted_currency !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            quoted_currency: !p.quoted_currency,
+          })),
+      },
+      {
+        id: "quoted_revenue",
+        label: "Quoted Revenue",
+        checked: quotationVisibleColumns.quoted_revenue !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            quoted_revenue: !p.quoted_revenue,
+          })),
+      },
+      {
+        id: "quoted_cost",
+        label: "Quoted Cost",
+        checked: quotationVisibleColumns.quoted_cost !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            quoted_cost: !p.quoted_cost,
+          })),
+      },
+      {
+        id: "quoted_profit",
+        label: "Quoted Profit",
+        checked: quotationVisibleColumns.quoted_profit !== false,
+        onToggle: () =>
+          setQuotationVisibleColumns((p) => ({
+            ...p,
+            quoted_profit: !p.quoted_profit,
+          })),
       },
       {
         id: "valid_upto_list",

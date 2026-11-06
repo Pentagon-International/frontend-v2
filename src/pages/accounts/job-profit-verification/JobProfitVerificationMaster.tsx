@@ -29,6 +29,7 @@ import {
   IconCheck,
   IconCircleCheck,
   IconCircleX,
+  IconDownload,
   IconFilter,
   IconRefresh,
   IconSearch,
@@ -445,6 +446,34 @@ function stripJobIdServicePrefix(jobNo: string): string {
   return withoutPrefix || trimmed;
 }
 
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}
+
+async function blobErrorMessage(blob: Blob, fallback: string): Promise<string> {
+  try {
+    const text = await blob.text();
+    const parsed = JSON.parse(text) as {
+      detail?: unknown;
+      message?: unknown;
+      error?: unknown;
+    };
+    const raw = parsed.detail ?? parsed.message ?? parsed.error ?? text;
+    if (Array.isArray(raw)) return raw.map(String).join(", ");
+    if (typeof raw === "string") return raw || fallback;
+    return JSON.stringify(raw);
+  } catch {
+    return fallback;
+  }
+}
+
 export default function JobProfitVerificationMaster({
   mode = "verification",
 }: JobProfitVerificationListProps = {}) {
@@ -508,6 +537,7 @@ export default function JobProfitVerificationMaster({
   >([]);
   const [branchLoading, setBranchLoading] = useState(false);
   const [editingHeaderId, setEditingHeaderId] = useState<string | null>(null);
+  const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
   /** Approval-mode row selection (shipment ids). Cleared on page/filter/search change. */
   const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<string>>(
     () => new Set(),
@@ -794,6 +824,68 @@ export default function JobProfitVerificationMaster({
       refetchType: "active",
     });
   }, [listQueryKey, queryClient]);
+
+  const downloadCsv = useCallback(async () => {
+    if (!countryCode) {
+      ToastNotification({
+        type: "error",
+        message: "Country is required to download CSV",
+      });
+      return;
+    }
+
+    setIsDownloadingCsv(true);
+    try {
+      const filtersPayload = buildFiltersPayload(appliedFilters, search);
+      const response = (await apiCallProtected.post(
+        URL.jobProfitVerificationDownload,
+        { filters: filtersPayload },
+        { ...API_HEADER, responseType: "blob" },
+      )) as Blob | { data?: Blob };
+
+      const blob =
+        response instanceof Blob
+          ? response
+          : response?.data instanceof Blob
+            ? response.data
+            : null;
+
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("Empty response from server");
+      }
+
+      const head = await blob.slice(0, 256).text();
+      const headTrim = head.trimStart();
+      if (headTrim.startsWith("{") || headTrim.startsWith("[")) {
+        throw new Error(
+          await blobErrorMessage(blob, "CSV download failed"),
+        );
+      }
+
+      const stamp = dayjs().format("YYYYMMDD-HHmmss");
+      const filePrefix = isApprovalMode
+        ? "job-profit-verification-approval"
+        : "job-profit-verification";
+      downloadBlob(blob, `${filePrefix}-${stamp}.csv`);
+      ToastNotification({ type: "success", message: "CSV downloaded" });
+    } catch (e: unknown) {
+      const err = e as { message?: string; response?: { data?: Blob } };
+      let message = err?.message || "Failed to download CSV";
+      const data = err?.response?.data;
+      if (data instanceof Blob) {
+        message = await blobErrorMessage(data, message);
+      }
+      ToastNotification({ type: "error", message });
+    } finally {
+      setIsDownloadingCsv(false);
+    }
+  }, [
+    appliedFilters,
+    buildFiltersPayload,
+    countryCode,
+    isApprovalMode,
+    search,
+  ]);
 
   const mergeHouseProfitPatchIntoList = useCallback(
     (shipmentId: string, patchRow?: Record<string, unknown> | null) => {
@@ -1274,6 +1366,18 @@ export default function JobProfitVerificationMaster({
                   aria-label="Refresh list"
                 >
                   Refresh
+                </Button>
+                <Button
+                  variant="default"
+                  size="xs"
+                  styles={erpToolbarOutlineButtonStyles(theme)}
+                  leftSection={<IconDownload size={14} />}
+                  onClick={() => void downloadCsv()}
+                  loading={isDownloadingCsv}
+                  disabled={isRestoring || isDownloadingCsv || !countryCode}
+                  aria-label="Download CSV"
+                >
+                  Download
                 </Button>
                 {isApprovalMode && selectedCount > 0 ? (
                   <>

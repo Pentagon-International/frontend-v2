@@ -24,6 +24,7 @@ import {
   IconCircleCheck,
   IconClock,
   IconArrowRight,
+  IconCalendar,
 } from "@tabler/icons-react";
 import { useLocation } from "react-router-dom";
 import { apiCallProtected } from "../../../api/axios";
@@ -183,6 +184,11 @@ type OceanImportJobFilters = {
   service: string;
   etd: string;
   eta: string;
+  /** Exact job_date (reserved for column header filter; mutually exclusive with range). */
+  job_date: string;
+  /** Range job_date (filter panel); open-ended from/to. Mutually exclusive with job_date. */
+  job_date_from: string;
+  job_date_to: string;
   status: string;
 };
 
@@ -212,6 +218,9 @@ function JobOpen() {
     service: "",
     etd: "",
     eta: "",
+    job_date: "",
+    job_date_from: dayjs().startOf("month").format("YYYY-MM-DD"),
+    job_date_to: dayjs().format("YYYY-MM-DD"),
     status: "",
   };
   const [draftFilters, setDraftFilters] =
@@ -242,6 +251,23 @@ function JobOpen() {
     },
     [dateFormat],
   );
+  const appliedJobDateFilterLabel = useMemo(() => {
+    const exact = appliedFilters.job_date?.trim();
+    if (exact) return formatFilterDateLabel(exact);
+    const from = appliedFilters.job_date_from?.trim();
+    const to = appliedFilters.job_date_to?.trim();
+    if (!from && !to) return "";
+    if (from && to) {
+      return `${formatFilterDateLabel(from)} → ${formatFilterDateLabel(to)}`;
+    }
+    if (from) return `From ${formatFilterDateLabel(from)}`;
+    return `To ${formatFilterDateLabel(to)}`;
+  }, [
+    appliedFilters.job_date,
+    appliedFilters.job_date_from,
+    appliedFilters.job_date_to,
+    formatFilterDateLabel,
+  ]);
   const [isReopening, setIsReopening] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>({
     sno: true,
@@ -266,7 +292,11 @@ function JobOpen() {
   const commitHeaderFilters = useCallback(
     (partial: Partial<OceanImportJobFilters>) => {
       setDraftFilters((prev) => {
-        const next = { ...prev, ...partial };
+        let next = { ...prev, ...partial };
+        // Exact column job_date clears panel range (mutually exclusive).
+        if ("job_date" in partial) {
+          next = { ...next, job_date_from: "", job_date_to: "" };
+        }
         setAppliedFilters(next);
         setStoreFilters(LIST_KEY, next);
         return next;
@@ -330,9 +360,17 @@ function JobOpen() {
   };
 
   const applyFilters = () => {
-    setAppliedFilters(draftFilters);
+    const from = draftFilters.job_date_from?.trim();
+    const to = draftFilters.job_date_to?.trim();
+    // Range from filter panel clears exact job_date (mutually exclusive).
+    const next =
+      from || to
+        ? { ...draftFilters, job_date: "" }
+        : draftFilters;
+    setDraftFilters(next);
+    setAppliedFilters(next);
     setPagination((p) => ({ ...p, pageIndex: 0 }));
-    setStoreFilters(LIST_KEY, draftFilters);
+    setStoreFilters(LIST_KEY, next);
     setStoreSearch(LIST_KEY, search);
     setShowFilters(false);
   };
@@ -347,7 +385,7 @@ function JobOpen() {
   const buildFiltersPayload = (
     filters: OceanImportJobFilters,
     searchValue: string
-  ): Record<string, string | string[]> => {
+  ): Record<string, string | string[] | { from?: string; to?: string }> => {
     const cleaned: Record<string, string> = {};
 
     const entries: [keyof OceanImportJobFilters, string][] = [
@@ -376,7 +414,24 @@ function JobOpen() {
 
     if (searchValue?.trim()) cleaned.search = searchValue.trim();
 
-    return { status: "CLOSED", type: "All", ...cleaned };
+    const base: Record<
+      string,
+      string | string[] | { from?: string; to?: string }
+    > = { status: "CLOSED", type: "All", ...cleaned };
+
+    const exactJobDate = filters.job_date?.trim();
+    const jobDateFrom = filters.job_date_from?.trim();
+    const jobDateTo = filters.job_date_to?.trim();
+    if (exactJobDate) {
+      base.job_date = exactJobDate;
+    } else if (jobDateFrom || jobDateTo) {
+      const range: { from?: string; to?: string } = {};
+      if (jobDateFrom) range.from = jobDateFrom;
+      if (jobDateTo) range.to = jobDateTo;
+      base.job_date = range;
+    }
+
+    return base;
   };
 
   const {
@@ -568,6 +623,17 @@ function JobOpen() {
                 />
               </>
             ),
+            secondary: appliedJobDateFilterLabel ? (
+              <Group gap={8} wrap="nowrap" align="center">
+                <IconCalendar size={16} color={muted} style={{ flexShrink: 0 }} />
+                <Text size="xs" c={muted} component="span">
+                  Job Date
+                </Text>
+                <Text fw={600} size="xs" c={fg} component="span">
+                  {appliedJobDateFilterLabel}
+                </Text>
+              </Group>
+            ) : undefined,
             actions: (
               <>
                 <TextInput
@@ -776,14 +842,20 @@ function JobOpen() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="ETD"
-                      placeholder="YYYY-MM-DD"
+                      label="Job Date From"
                       size="xs"
-                      value={draftFilters.etd ? dayjs(draftFilters.etd).toDate() : null}
+                      value={
+                        draftFilters.job_date_from
+                          ? dayjs(draftFilters.job_date_from).toDate()
+                          : null
+                      }
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          etd: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          job_date_from: date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "",
+                          job_date: "",
                         }))
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}
@@ -794,14 +866,20 @@ function JobOpen() {
                 <Grid.Col span={ERP_LIST_FILTER_FIELD_COL_SPAN}>
                   <Box style={erpListFilterFieldCellStyle}>
                     <SingleDateInput
-                      label="ETA"
-                      placeholder="YYYY-MM-DD"
+                      label="Job Date To"
                       size="xs"
-                      value={draftFilters.eta ? dayjs(draftFilters.eta).toDate() : null}
+                      value={
+                        draftFilters.job_date_to
+                          ? dayjs(draftFilters.job_date_to).toDate()
+                          : null
+                      }
                       onChange={(date) =>
                         setDraftFilters((prev) => ({
                           ...prev,
-                          eta: date ? dayjs(date).format("YYYY-MM-DD") : "",
+                          job_date_to: date
+                            ? dayjs(date).format("YYYY-MM-DD")
+                            : "",
+                          job_date: "",
                         }))
                       }
                       classNames={{ dropdown: ERP_LIST_GEIST_ROOT_CLASS }}

@@ -49,6 +49,7 @@ import {
   erpListThStyle,
   getQuotationServiceVolume,
 } from "../../components";
+import { formatMoneyAmountForUi } from "../../utils/nonDecimalMoneyAmount";
 
 /** Row shape used by quotation list (aligned with QuotationMaster `QuotationData`). */
 export type QuotationTableRow = {
@@ -65,6 +66,10 @@ export type QuotationTableRow = {
   eta?: string | null;
   reject_remark?: string;
   status?: string;
+  quoted_currency?: string | null;
+  quoted_revenue?: number | null;
+  quoted_cost?: number | null;
+  quoted_profit?: number | null;
   temp_customer?: boolean;
   service?: string;
   quotation?: Array<{
@@ -96,10 +101,21 @@ export type QuotationVisibleColumns = {
   reference_no: boolean;
   /** Immediately after Reference No in the table. */
   status: boolean;
+  quoted_currency: boolean;
+  quoted_revenue: boolean;
+  quoted_cost: boolean;
+  quoted_profit: boolean;
   valid_upto_list: boolean;
   revision: boolean;
   reject_remark: boolean;
 };
+
+function formatQuotedAmount(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "—";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return String(raw);
+  return formatMoneyAmountForUi(n);
+}
 
 export type QuotationRowMenuContext = {
   location: Location;
@@ -658,6 +674,10 @@ export function QuotationListNativeTable({
       visible.volume,
       visible.reference_no,
       visible.status,
+      visible.quoted_currency,
+      visible.quoted_revenue,
+      visible.quoted_cost,
+      visible.quoted_profit,
       visible.valid_upto_list,
       visible.revision,
       visible.reject_remark,
@@ -901,6 +921,57 @@ export function QuotationListNativeTable({
               }}
             >
               {renderFilterableHeader("status", "Status", "Status")}
+            </th>
+          )}
+          {visible.quoted_currency && (
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                whiteSpace: "normal",
+                minWidth: 70,
+                width: 70,
+                maxWidth: 70,
+                lineHeight: 1.2,
+                textAlign: "center",
+              }}
+            >
+              Quoted Currency
+            </th>
+          )}
+          {visible.quoted_revenue && (
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                whiteSpace: "nowrap",
+                minWidth: 120,
+                textAlign: "right",
+              }}
+            >
+              Quoted Revenue
+            </th>
+          )}
+          {visible.quoted_cost && (
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                whiteSpace: "nowrap",
+                minWidth: 110,
+                textAlign: "right",
+              }}
+            >
+              Quoted Cost
+            </th>
+          )}
+          {visible.quoted_profit && (
+            <th
+              style={{
+                ...erpListThStyle(theme),
+                whiteSpace: "nowrap",
+                minWidth: 110,
+                textAlign: "right",
+              }}
+            >
+              Quoted Profit
             </th>
           )}
           {visible.valid_upto_list && (
@@ -1169,6 +1240,61 @@ export function QuotationListNativeTable({
                     }}
                   >
                     <StatusBadge status={row.status} fontSans={fontSans} />
+                  </td>
+                )}
+                {visible.quoted_currency && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      minWidth: 56,
+                      width: 56,
+                      maxWidth: 56,
+                      textAlign: "center",
+                    }}
+                  >
+                    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                      {row.quoted_currency?.trim() || "—"}
+                    </Text>
+                  </td>
+                )}
+                {visible.quoted_revenue && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      textAlign: "right",
+                    }}
+                  >
+                    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                      {formatQuotedAmount(row.quoted_revenue)}
+                    </Text>
+                  </td>
+                )}
+                {visible.quoted_cost && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      textAlign: "right",
+                    }}
+                  >
+                    <Text size="sm" c={fg} style={{ fontFamily: fontSans }}>
+                      {formatQuotedAmount(row.quoted_cost)}
+                    </Text>
+                  </td>
+                )}
+                {visible.quoted_profit && (
+                  <td
+                    style={{
+                      ...erpListTdPaddingStyle(),
+                      whiteSpace: "nowrap",
+                      textAlign: "right",
+                    }}
+                  >
+                    <Text size="sm" fw={600} c={fg} style={{ fontFamily: fontSans }}>
+                      {formatQuotedAmount(row.quoted_profit)}
+                    </Text>
                   </td>
                 )}
                 {visible.valid_upto_list && (

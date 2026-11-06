@@ -419,6 +419,8 @@ const buildDefaultSubledgerColumnVisibility = (): Record<
     boolean
   >;
 
+type DateOrdering = "date" | "-date";
+
 type FilterFormValues = {
   fromDate: Date | null;
   toDate: Date | null;
@@ -426,6 +428,7 @@ type FilterFormValues = {
   accountCode: string | null;
   location: string | null | undefined;
   currency_code: string | null;
+  ordering: DateOrdering;
 };
 
 type AppliedFilterSummary = {
@@ -437,7 +440,25 @@ type AppliedFilterSummary = {
   location?: string;
   currency_code?: string;
   account_name?: string;
+  ordering: DateOrdering;
 };
+
+const DATE_ORDERING_OPTIONS: Array<{ value: DateOrdering; label: string }> = [
+  { value: "date", label: "Older to Newer" },
+  { value: "-date", label: "Newer to Older" },
+];
+
+const DEFAULT_DATE_ORDERING: DateOrdering = "date";
+
+function isDateOrdering(value: unknown): value is DateOrdering {
+  return value === "date" || value === "-date";
+}
+
+function dateOrderingLabel(ordering: DateOrdering): string {
+  return (
+    DATE_ORDERING_OPTIONS.find((o) => o.value === ordering)?.label ?? ordering
+  );
+}
 
 type SubledgerEnquiryReturnState = {
   appliedFilters?: AppliedFilterSummary;
@@ -453,7 +474,11 @@ const filterSchema: yup.ObjectSchema<FilterFormValues> = yup.object({
   accountId: yup.string().nullable().required("Account is required"),
   accountCode: yup.string().nullable().required("Account is required"),
   location: yup.string().nullable().optional(),
-  currency_code: yup.string().nullable().optional(),
+  currency_code: yup.string().nullable().defined(),
+  ordering: yup
+    .mixed<DateOrdering>()
+    .oneOf(["date", "-date"] as const)
+    .required("Order is required"),
 });
 
 function subledgerColumnTone(
@@ -550,6 +575,7 @@ export default function SubledgerEnquiry() {
       accountCode: null,
       location: null,
       currency_code: null,
+      ordering: DEFAULT_DATE_ORDERING,
     },
     validate: yupResolver(filterSchema),
     validateInputOnBlur: true,
@@ -719,6 +745,7 @@ export default function SubledgerEnquiry() {
               ? { currency_code: filters.currency_code }
               : {}),
             ...(filters.location ? { location: filters.location } : {}),
+            ordering: filters.ordering ?? DEFAULT_DATE_ORDERING,
           },
         };
 
@@ -755,6 +782,9 @@ export default function SubledgerEnquiry() {
         const date_to = formatDateYYYYMMDD(values.toDate);
         const account_code = String(values.accountCode);
         const currency_code = String(values.currency_code ?? "").trim();
+        const ordering = isDateOrdering(values.ordering)
+          ? values.ordering
+          : DEFAULT_DATE_ORDERING;
         const payload = {
           filters: {
             date_from,
@@ -763,6 +793,7 @@ export default function SubledgerEnquiry() {
             ...(selectedSlCode ? { subledger_code: selectedSlCode } : {}),
             ...(currency_code ? { currency_code } : {}),
             ...(trimmedLocation ? { location: trimmedLocation } : {}),
+            ordering,
           },
         };
 
@@ -782,6 +813,7 @@ export default function SubledgerEnquiry() {
           ...(currency_code ? { currency_code } : {}),
           ...(trimmedLocation ? { location: trimmedLocation } : {}),
           ...(selectedAccountName ? { account_name: selectedAccountName } : {}),
+          ordering,
         });
         setPagination((p) => ({ ...p, pageIndex: 0 }));
       } catch {
@@ -811,6 +843,10 @@ export default function SubledgerEnquiry() {
     const fromDate = dayjs(filters.date_from);
     const toDate = dayjs(filters.date_to);
 
+    const ordering = isDateOrdering(filters.ordering)
+      ? filters.ordering
+      : DEFAULT_DATE_ORDERING;
+
     form.setValues({
       fromDate: fromDate.isValid() ? fromDate.toDate() : null,
       toDate: toDate.isValid() ? toDate.toDate() : null,
@@ -818,6 +854,7 @@ export default function SubledgerEnquiry() {
       accountCode: filters.account_code ?? null,
       location: filters.location ?? null,
       currency_code: filters.currency_code ?? null,
+      ordering,
     });
 
     if (state.selectedAccount) {
@@ -834,13 +871,17 @@ export default function SubledgerEnquiry() {
       });
     }
 
-    setAppliedFilters(filters);
+    const restoredFilters: AppliedFilterSummary = {
+      ...filters,
+      ordering,
+    };
+    setAppliedFilters(restoredFilters);
     if (state.showFilters === false) setShowFilters(false);
     if (typeof state.searchQuery === "string")
       setSearchQuery(state.searchQuery);
     if (state.pagination) setPagination(state.pagination);
 
-    void fetchWithAppliedFilters(filters, {
+    void fetchWithAppliedFilters(restoredFilters, {
       resetPage: !state.pagination,
     });
 
@@ -872,6 +913,7 @@ export default function SubledgerEnquiry() {
           ...(appliedFilters.location
             ? { location: appliedFilters.location }
             : {}),
+          ordering: appliedFilters.ordering ?? DEFAULT_DATE_ORDERING,
           csv: true,
         },
       };
@@ -1081,6 +1123,11 @@ export default function SubledgerEnquiry() {
       items.push({ key: "From", value: appliedFilters.date_from });
     if (appliedFilters.date_to)
       items.push({ key: "To", value: appliedFilters.date_to });
+    if (appliedFilters.ordering)
+      items.push({
+        key: "Order",
+        value: dateOrderingLabel(appliedFilters.ordering),
+      });
     return items;
   }, [appliedFilters]);
 
@@ -1227,7 +1274,6 @@ export default function SubledgerEnquiry() {
                     iconColor="#059669"
                     value={openingBalanceLabelDisplay}
                     label="Opening Balance"
-                    pillWidth={120}
                   />
                 ) : null}
               </>
@@ -1565,6 +1611,39 @@ export default function SubledgerEnquiry() {
                           form.setFieldValue("currency_code", value)
                         }
                         error={asStringError(form.errors.currency_code)}
+                        size="xs"
+                        classNames={erpListGeistSelectClassNames}
+                        styles={SUBLEDGER_FILTER_UNIFIED_STYLES}
+                      />
+                    </Box>
+                  </Grid.Col>
+
+                  <Grid.Col span={{ base: 12, sm: 6, md: 4, xl: 2 }}>
+                    <Box
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        width: "100%",
+                        minHeight: 0,
+                      }}
+                    >
+                      <Dropdown
+                        label="Order"
+                        placeholder="Select order"
+                        data={DATE_ORDERING_OPTIONS}
+                        value={form.values.ordering}
+                        dropdownZIndex={1100}
+                        searchable={false}
+                        clearable={false}
+                        onChange={(value) =>
+                          form.setFieldValue(
+                            "ordering",
+                            isDateOrdering(value)
+                              ? value
+                              : DEFAULT_DATE_ORDERING,
+                          )
+                        }
+                        error={asStringError(form.errors.ordering)}
                         size="xs"
                         classNames={erpListGeistSelectClassNames}
                         styles={SUBLEDGER_FILTER_UNIFIED_STYLES}

@@ -21,6 +21,7 @@ import { apiCallProtected } from "../../../api/axios";
 import { postAPICall } from "../../../service/postApiCall";
 import { getFilterBranchMasterOptions } from "../../../service/dashboard.service";
 import useAuthStore from "../../../store/authStore";
+import { PROFIT_STATUS_FILTER_OPTIONS } from "../../../utils/jobProfitHouseVerification";
 
 type JobProfitFormValues = {
   service: string | null;
@@ -33,7 +34,13 @@ type JobProfitFormValues = {
   report_format: string | null;
   branch_code: string | null;
   status: string | null;
+  profit_status: string | null;
 };
+
+const PROFIT_STATUS_OPTIONS = [
+  { value: "all", label: "All" },
+  ...PROFIT_STATUS_FILTER_OPTIONS,
+] as const;
 
 const SERVICE_OPTIONS = [
   { value: "AIR", label: "AIR" },
@@ -141,6 +148,7 @@ export default function JobProfit() {
       report_format: "pdf",
       branch_code: null,
       status: null,
+      profit_status: "all",
     },
   });
 
@@ -241,6 +249,12 @@ export default function JobProfit() {
     }
     if (form.values.status) {
       filters.status = form.values.status;
+    }
+    if (
+      form.values.profit_status &&
+      form.values.profit_status !== "all"
+    ) {
+      filters.profit_status = form.values.profit_status;
     }
 
     const format = form.values.report_format.toLowerCase();
@@ -441,6 +455,19 @@ export default function JobProfit() {
               value={form.values.status}
               onChange={(v) => form.setFieldValue("status", v)}
               clearable
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 3 }}>
+            <Dropdown
+              label="Profit Status"
+              placeholder="Select profit status"
+              data={[...PROFIT_STATUS_OPTIONS]}
+              value={form.values.profit_status}
+              onChange={(v) =>
+                form.setFieldValue("profit_status", v || "all")
+              }
+              clearable={false}
+              searchable
             />
           </Grid.Col>
 

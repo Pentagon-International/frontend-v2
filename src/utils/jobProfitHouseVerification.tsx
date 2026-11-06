@@ -201,7 +201,6 @@ export function isHousePendingForAccountsSend(status?: string | null): boolean {
 export const PROFIT_STATUS_FILTER_OPTIONS = [
   { value: "sent_to_accounts", label: PROFIT_STATUS_LABELS.sent_to_accounts },
   { value: "accounts_verified", label: PROFIT_STATUS_LABELS.accounts_verified },
-  { value: "sent_to_verify", label: PROFIT_STATUS_LABELS.sent_to_verify },
   { value: "verified", label: PROFIT_STATUS_LABELS.verified },
   { value: "confirmed", label: PROFIT_STATUS_LABELS.confirmed },
   { value: "hold", label: PROFIT_STATUS_LABELS.hold },

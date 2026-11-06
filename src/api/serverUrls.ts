@@ -66,6 +66,7 @@ export const URL = {
   enquiryWithoutQuote: "enquiry/enquiries-without-quotation/",
   jobProfit: "job-profit/",
   jobProfitVerification: "job-profit-verification/",
+  jobProfitVerificationDownload: "job-profit-verification/download/",
   verifyProfit: "verify-profit/",
   reportsGenerate: "reports/generate/",
   localOutstanding: "local-outstanding/",
