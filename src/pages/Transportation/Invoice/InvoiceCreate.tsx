@@ -3658,20 +3658,27 @@ function InvoiceCreate({
                     vat: true,
                     charge_id: charge.charge_id!,
                     service_id: jobServiceIdForSac,
-                  }).then((res) => ({
-                    rates: parseVatRatesPayload(res),
-                  })),
+                  })
+                    .then((res) => ({ rates: parseVatRatesPayload(res) }))
+                    // One charge 404 must not block VAT % on mapped charges.
+                    .catch(() => ({ rates: null as VatRates | null })),
                 ),
               ).then((results) => {
+                const rateByIdx = new Map<number, number>();
                 results.forEach(({ rates }, responseIdx) => {
                   const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
                   if (originalIdx !== undefined && rates?.vat_percent != null) {
-                    form.setFieldValue(
-                      `charges.${originalIdx}.tax_rate`,
-                      rates.vat_percent,
-                    );
+                    rateByIdx.set(originalIdx, rates.vat_percent);
                   }
                 });
+                if (rateByIdx.size === 0) return;
+
+                // Single charges replace so amount effects cannot wipe nested tax_rate.
+                const next = form.values.charges.map((c, idx) => {
+                  const rate = rateByIdx.get(idx);
+                  return rate != null ? { ...c, tax_rate: rate } : c;
+                });
+                form.setFieldValue("charges", next);
               });
             }
           })();
