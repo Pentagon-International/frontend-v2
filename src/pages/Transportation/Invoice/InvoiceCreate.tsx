@@ -3673,12 +3673,20 @@ function InvoiceCreate({
                 });
                 if (rateByIdx.size === 0) return;
 
-                // Single charges replace so amount effects cannot wipe nested tax_rate.
-                const next = form.values.charges.map((c, idx) => {
-                  const rate = rateByIdx.get(idx);
-                  return rate != null ? { ...c, tax_rate: rate } : c;
-                });
-                form.setFieldValue("charges", next);
+                // Prefer live form charges; fall back to mappedCharges if form
+                // has not committed prefill yet (avoids replacing with []).
+                const currentCharges =
+                  form.values.charges.length === mappedCharges.length
+                    ? form.values.charges
+                    : mappedCharges;
+
+                form.setFieldValue(
+                  "charges",
+                  currentCharges.map((c, idx) => {
+                    const rate = rateByIdx.get(idx);
+                    return rate != null ? { ...c, tax_rate: rate } : c;
+                  }),
+                );
               });
             }
           })();
