@@ -118,6 +118,9 @@ const Navbar = ({
   const showPaymentApprovalList = Boolean(
     user?.screen_permissions?.payment_approval_screen,
   );
+  const showSalaryJournalVoucherUpload = Boolean(
+    user?.screen_permissions?.salary_journal_voucher_upload,
+  );
   const showAccountsSubNav = useCanAccessAccountsSubNav();
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [isTariffOpen, setIsTariffOpen] = useState(false);
@@ -1389,6 +1392,21 @@ const Navbar = ({
                         setIsSeaExportOpen,
                       }}
                     />
+                    {showSalaryJournalVoucherUpload && (
+                      <SubNavLink
+                        parent="Accounts"
+                        label="Salary JV Upload"
+                        icon={IconBook2}
+                        path="/journal-voucher/salary-upload"
+                        collapsibles={{
+                          setIsSalesOpen,
+                          setIsTariffOpen,
+                          setIsCustomerServiceOpen,
+                          setIsAirOpen,
+                          setIsSeaExportOpen,
+                        }}
+                      />
+                    )}
                     <SubNavLink
                       parent="Accounts"
                       label="JournalVoucherReversal"

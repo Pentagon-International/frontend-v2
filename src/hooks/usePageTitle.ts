@@ -72,6 +72,7 @@ const pathTitleMap: Record<string, string> = {
   "/journal-voucher/view": "Journal Voucher",
   "/journal-voucher/edit": "Journal Voucher",
   "/journal-voucher/create": "Journal Voucher",
+  "/journal-voucher/salary-upload": "Salary JV Upload",
   "/journal-voucher": "Journal Voucher List",
   "/invoice-reverse": "Invoice Reverse",
   "/payment-request-approval": "Payment Request List",

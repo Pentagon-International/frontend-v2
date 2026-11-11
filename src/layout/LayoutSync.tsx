@@ -227,6 +227,9 @@ export const LayoutSync = () => {
     } else if (path.startsWith("/journal-voucher-reversal")) {
       setActiveNav("Desk");
       setActiveSubNav("JournalVoucherReversal");
+    } else if (path.startsWith("/journal-voucher/salary-upload")) {
+      setActiveNav("Desk");
+      setActiveSubNav("Salary JV Upload");
     } else if (path.startsWith("/journal-voucher")) {
       setActiveNav("Desk");
       setActiveSubNav("Journal Voucher");

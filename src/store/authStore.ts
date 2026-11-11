@@ -77,6 +77,7 @@ interface ScreenPermissions {
   job_profit_approval?: boolean;
   credit_override_approval?: boolean;
   payment_approval_screen?: boolean;
+  salary_journal_voucher_upload?: boolean;
   job_agent?: boolean;
   pricing_brokerage?: boolean;
 }

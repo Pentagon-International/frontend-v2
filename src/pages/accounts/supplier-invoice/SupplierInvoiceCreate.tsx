@@ -2498,8 +2498,10 @@ export default function SupplierInvoiceCreate({
 
   // Auto-calc Approved Amount = |sum(Dr) − sum(Cr)| of (local amount + VAT amount).
   // Difference Amount = Inv/Crn Amount − Approved Amount.
-  // When VAT ChargeMaster rows are already appended (post / reload), do not also
+  // When real VAT ChargeMaster rows are appended (post / reload), do not also
   // add per-charge igst — same as Invoice base + tax-row totals.
+  // Only isSupplierVatBreakupRow (not every is_gst_breakup) gates this, so
+  // Neutral/GST heuristic rows cannot drop charge VAT from approved.
   const chargesNetKey = form.values.charges_data
     .map(
       (c) =>
@@ -2509,12 +2511,8 @@ export default function SupplierInvoiceCreate({
   useEffect(() => {
     if (shouldSkipAmountAutoCalc()) return;
     const charges = form.values.charges_data ?? [];
-    // VAT rows after remap may only have is_gst_breakup / Neutral (not IGST/CGST/SGST).
-    const hasVatBreakupRows = charges.some(
-      (row) =>
-        isSupplierVatBreakupRow(row) ||
-        (row.is_gst_breakup === true &&
-          resolveSupplierGstKind(row.charge_name) == null),
+    const hasVatBreakupRows = charges.some((row) =>
+      isSupplierVatBreakupRow(row),
     );
     const netLocal = round2(
       charges.reduce((acc, row) => {
@@ -2560,11 +2558,8 @@ export default function SupplierInvoiceCreate({
     const netDirection: "drMinusCr" | "crMinusDr" =
       isReversal === isCrnType ? "drMinusCr" : "crMinusDr";
     const charges = form.values.charges_data ?? [];
-    const hasVatBreakupRows = charges.some(
-      (row) =>
-        isSupplierVatBreakupRow(row) ||
-        (row.is_gst_breakup === true &&
-          resolveSupplierGstKind(row.charge_name) == null),
+    const hasVatBreakupRows = charges.some((row) =>
+      isSupplierVatBreakupRow(row),
     );
     let local = 0;
     let igst = 0;
@@ -2592,7 +2587,7 @@ export default function SupplierInvoiceCreate({
       }
 
       // VAT ChargeMaster rows (appended on post): count local amount as VAT total.
-      if (isSupplierVatBreakupRow(row) || (hasVatBreakupRows && row.is_gst_breakup)) {
+      if (isSupplierVatBreakupRow(row)) {
         hasChargeVat = true;
         vat += signed;
         continue;

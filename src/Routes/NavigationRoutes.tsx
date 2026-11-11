@@ -219,6 +219,7 @@ import SupplierInvoiceRCMReversalMaster from "../pages/accounts/supplier-invoice
 import SupplierInvoiceRCMReversal from "../pages/accounts/supplier-invoice-RCM/SupplierInvoiceRCMReversal";
 import JournalVoucher from "../pages/accounts/journalVoucher/JournalVoucher";
 import JournalVoucherMaster from "../pages/accounts/journalVoucher/JournalVoucherMaster";
+import JournalVoucherSalaryUpload from "../pages/accounts/journalVoucher/JournalVoucherSalaryUpload";
 import JournalVoucherReversal from "../pages/accounts/journalVoucherReversal/JournalVoucherReversal";
 import JournalVoucherReversalMaster from "../pages/accounts/journalVoucherReversal/JournalVoucherReversalMaster";
 const QuotationMaster = lazy(
@@ -805,6 +806,10 @@ const NavigationRoutes = () => {
         <Route path="/journal-voucher/create" element={<JournalVoucher />} />
         <Route path="/journal-voucher/edit/:id" element={<JournalVoucher />} />
         <Route path="/journal-voucher/view/:id" element={<JournalVoucher />} />
+        <Route
+          path="/journal-voucher/salary-upload"
+          element={<JournalVoucherSalaryUpload />}
+        />
         <Route
           path="/journal-voucher-reversal"
           element={<JournalVoucherReversalMaster />}
