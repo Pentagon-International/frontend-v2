@@ -874,6 +874,10 @@ type ChargeItem = {
   igst_rate?: number | null;
   cgst_rate?: number | null;
   sgst_rate?: number | null;
+  /** Saved GST amounts from API (local/INR). Edit/view display uses these as-is. */
+  igst?: number | null;
+  cgst?: number | null;
+  sgst?: number | null;
   tax_rate?: number | null;
   tax_amount?: number | null;
 };
@@ -1169,21 +1173,86 @@ function resolveChargeLocalAmountForGst(charge: {
   return null;
 }
 
+/** Parse saved GST amount fields from API (igst/cgst/sgst). */
+function parseSavedGstAmount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n)) return null;
+  return clampAmount(n);
+}
+
+/**
+ * GST column amount for a charge row.
+ * - Create / new rows: always INR from local amount × rate (billing currency irrelevant).
+ * - Edit/view/posted: show saved API igst/cgst/sgst as-is (no recalculation).
+ */
+function resolveGstAmountForChargeDisplay(
+  charge: {
+    id?: number | null;
+    is_tax_row?: boolean;
+    charge_code?: string | null;
+    amount_in_local?: number | null;
+    amount?: number | null;
+    roe?: number | null;
+    igst_rate?: number | null;
+    cgst_rate?: number | null;
+    sgst_rate?: number | null;
+    igst?: number | null;
+    cgst?: number | null;
+    sgst?: number | null;
+  },
+  fetchedRates: GstRates | null | undefined,
+  key: "igst" | "cgst" | "sgst",
+  preferSaved: boolean,
+): number | null {
+  const code = String(charge.charge_code ?? "")
+    .trim()
+    .toUpperCase();
+  if (
+    charge.is_tax_row === true ||
+    code === "IGST" ||
+    code === "CGST" ||
+    code === "SGST" ||
+    code === "VAT"
+  ) {
+    return null;
+  }
+
+  if (preferSaved && charge.id != null) {
+    return parseSavedGstAmount(charge[key]);
+  }
+
+  const rate = resolveGstRateForChargeDisplay(fetchedRates, charge, key);
+  if (rate == null) return null;
+  const localAmount = resolveChargeLocalAmountForGst(charge);
+  if (localAmount == null) return null;
+  return clampAmount((localAmount * rate) / 100);
+}
+
+function formatGstAmountForChargeCell(amount: number | null): string {
+  return amount != null ? String(amount) : "";
+}
+
 /** Net GST totals: invoice is Cr − Dr; credit note is Dr − Cr. */
 function calcGstTotalsByDrCr(
   charges: Array<{
+    id?: number | null;
     dr_cr?: string | null;
     Dr_Cr?: string | null;
     amount_in_local?: number | null;
     amount?: number | null;
     roe?: number | null;
     is_tax_row?: boolean;
+    igst?: number | null;
+    cgst?: number | null;
+    sgst?: number | null;
   }>,
   gstRatesByChargeIndex: Record<
     number,
     { igst: number | null; cgst: number | null; sgst: number | null } | null
   >,
   netDirection: TotalsNetDirection = "crMinusDr",
+  preferSavedAmounts = false,
 ): { igst_total: number; cgst_total: number; sgst_total: number } {
   let crIgst = 0;
   let drIgst = 0;
@@ -1194,12 +1263,50 @@ function calcGstTotalsByDrCr(
 
   charges.forEach((charge, idx) => {
     if (charge.is_tax_row === true) return;
+
+    const isDr = resolveChargeDrCr(charge) === "Dr";
+    const addAmount = (
+      amount: number,
+      addCr: (n: number) => void,
+      addDr: (n: number) => void,
+    ) => {
+      if (isDr) addDr(amount);
+      else addCr(amount);
+    };
+
+    if (preferSavedAmounts && charge.id != null) {
+      const applySaved = (
+        raw: number | null | undefined,
+        addCr: (n: number) => void,
+        addDr: (n: number) => void,
+      ) => {
+        const amount = parseSavedGstAmount(raw);
+        if (amount == null) return;
+        addAmount(amount, addCr, addDr);
+      };
+      applySaved(charge.igst, (n) => {
+        crIgst += n;
+      }, (n) => {
+        drIgst += n;
+      });
+      applySaved(charge.cgst, (n) => {
+        crCgst += n;
+      }, (n) => {
+        drCgst += n;
+      });
+      applySaved(charge.sgst, (n) => {
+        crSgst += n;
+      }, (n) => {
+        drSgst += n;
+      });
+      return;
+    }
+
     const localAmount = resolveChargeLocalAmountForGst(charge);
     if (localAmount == null) return;
     const rates = gstRatesByChargeIndex[idx];
     if (!rates) return;
 
-    const isDr = resolveChargeDrCr(charge) === "Dr";
     const applyTax = (
       rate: number | null | undefined,
       addCr: (n: number) => void,
@@ -1207,8 +1314,7 @@ function calcGstTotalsByDrCr(
     ) => {
       if (rate == null) return;
       const amount = clampAmount((localAmount * rate) / 100) ?? 0;
-      if (isDr) addDr(amount);
-      else addCr(amount);
+      addAmount(amount, addCr, addDr);
     };
 
     applyTax(
@@ -3981,6 +4087,9 @@ function InvoiceCreate({
                 igst_rate: parseNullableNumber(c.igst_rate),
                 cgst_rate: parseNullableNumber(c.cgst_rate),
                 sgst_rate: parseNullableNumber(c.sgst_rate),
+                igst: isTaxRow ? null : parseSavedGstAmount(c.igst),
+                cgst: isTaxRow ? null : parseSavedGstAmount(c.cgst),
+                sgst: isTaxRow ? null : parseSavedGstAmount(c.sgst),
                 tax_rate: isTaxRow
                   ? null
                   : parseNullableNumber((c as { tax_rate?: unknown }).tax_rate),
@@ -5030,14 +5139,33 @@ function InvoiceCreate({
           document_no: response.document_no ?? prev?.document_no ?? "",
           status: response.status ?? prev?.status ?? "UNPOSTED",
         }));
-        // Merge returned charge ids into form (e.g. new charges created by this PUT)
+        // Merge returned charge ids + saved GST amounts into form
         if (response.charges && Array.isArray(response.charges)) {
           const updatedCharges = form.values.charges.map((c, i) => {
-            const chargeRes = response.charges?.[i];
+            const chargeRes = response.charges?.[i] as
+              | {
+                  id?: number | null;
+                  igst?: unknown;
+                  cgst?: unknown;
+                  sgst?: unknown;
+                }
+              | undefined;
             const id = chargeRes?.id;
             return {
               ...c,
               id: id != null ? Number(id) : c.id,
+              igst:
+                chargeRes != null
+                  ? parseSavedGstAmount(chargeRes.igst)
+                  : c.igst,
+              cgst:
+                chargeRes != null
+                  ? parseSavedGstAmount(chargeRes.cgst)
+                  : c.cgst,
+              sgst:
+                chargeRes != null
+                  ? parseSavedGstAmount(chargeRes.sgst)
+                  : c.sgst,
             };
           });
           form.setFieldValue("charges", updatedCharges);
@@ -5077,14 +5205,33 @@ function InvoiceCreate({
           document_no: response.document_no ?? "",
           status: response.status ?? "UNPOSTED",
         });
-        // Merge returned charge ids into form so Update (PUT) sends id for existing charges
+        // Merge returned charge ids + saved GST amounts into form
         if (response.charges && Array.isArray(response.charges)) {
           const updatedCharges = form.values.charges.map((c, i) => {
-            const chargeRes = response.charges?.[i];
+            const chargeRes = response.charges?.[i] as
+              | {
+                  id?: number | null;
+                  igst?: unknown;
+                  cgst?: unknown;
+                  sgst?: unknown;
+                }
+              | undefined;
             const id = chargeRes?.id;
             return {
               ...c,
               id: id != null ? Number(id) : c.id,
+              igst:
+                chargeRes != null
+                  ? parseSavedGstAmount(chargeRes.igst)
+                  : c.igst,
+              cgst:
+                chargeRes != null
+                  ? parseSavedGstAmount(chargeRes.cgst)
+                  : c.cgst,
+              sgst:
+                chargeRes != null
+                  ? parseSavedGstAmount(chargeRes.sgst)
+                  : c.sgst,
             };
           });
           form.setFieldValue("charges", updatedCharges);
@@ -5651,6 +5798,9 @@ function InvoiceCreate({
                 typeof raw === "number" ? raw : parseFloat(String(raw));
               return Number.isFinite(parsed) ? parsed : null;
             })(),
+            igst: isTaxRow ? null : parseSavedGstAmount((c as any).igst),
+            cgst: isTaxRow ? null : parseSavedGstAmount((c as any).cgst),
+            sgst: isTaxRow ? null : parseSavedGstAmount((c as any).sgst),
             tax_rate: isTaxRow
               ? null
               : (() => {
@@ -5847,6 +5997,9 @@ function InvoiceCreate({
     [form.values.currency],
   );
 
+  /** Edit/view/posted: show saved GST amounts; create: calc INR from local amount. */
+  const preferSavedGstAmounts = isEditOrViewMode || invoiceIsPosted;
+
   const gstSectionTotals = useMemo(() => {
     if (totalsNetDirection === "drMinusCr") {
       const hasTaxRows = form.values.charges.some((c) => {
@@ -5871,8 +6024,14 @@ function InvoiceCreate({
       form.values.charges,
       gstRatesByChargeIndex,
       totalsNetDirection,
+      preferSavedGstAmounts,
     );
-  }, [form.values.charges, gstRatesByChargeIndex, totalsNetDirection]);
+  }, [
+    form.values.charges,
+    gstRatesByChargeIndex,
+    totalsNetDirection,
+    preferSavedGstAmounts,
+  ]);
 
   // Distribute Mantine grid spans (12 cols); VAT rate/amount match no-of-unit width
   const chargeGridCols = useMemo(() => {
@@ -7794,47 +7953,26 @@ function InvoiceCreate({
                       <Grid.Col span={chargeGridCols.cgst}>
                         <FormTextInput
                           placeholder="CGST"
-                          value={(() => {
-                            const code = String(charge.charge_code ?? "")
-                              .trim()
-                              .toUpperCase();
-                            if (
-                              charge.is_tax_row === true ||
-                              code === "IGST" ||
-                              code === "CGST" ||
-                              code === "SGST" ||
-                              code === "VAT"
-                            )
-                              return "";
-                            const rate = resolveGstRateForChargeDisplay(
-                              gstRatesByChargeIndex[index],
+                          value={formatGstAmountForChargeCell(
+                            resolveGstAmountForChargeDisplay(
                               charge,
+                              gstRatesByChargeIndex[index],
                               "cgst",
-                            );
-                            const localAmount =
-                              resolveChargeLocalAmountForGst(charge);
-                            if (rate == null || localAmount == null) return "";
-                            const amount = clampAmount(
-                              (localAmount * rate) / 100,
-                            );
-                            return amount != null ? String(amount) : "";
-                          })()}
+                              preferSavedGstAmounts,
+                            ),
+                          )}
                           readOnly
-                          // disabled
                           rightSection={(() => {
-                            const rate = resolveGstRateForChargeDisplay(
-                              gstRatesByChargeIndex[index],
-                              charge,
-                              "cgst",
+                            if (preferSavedGstAmounts && charge.id != null)
+                              return null;
+                            const display = formatGstAmountForChargeCell(
+                              resolveGstAmountForChargeDisplay(
+                                charge,
+                                gstRatesByChargeIndex[index],
+                                "cgst",
+                                false,
+                              ),
                             );
-                            const localAmount =
-                              resolveChargeLocalAmountForGst(charge);
-                            const amount =
-                              rate == null || localAmount == null
-                                ? null
-                                : clampAmount((localAmount * rate) / 100);
-                            const display =
-                              amount != null ? String(amount) : "";
                             return gstRatesLoadingByIndex[index] &&
                               display === "" &&
                               gstRatesFromCharge(charge) == null ? (
@@ -7850,54 +7988,32 @@ function InvoiceCreate({
                             },
                           }}
                         />
-                        {/* )} */}
                       </Grid.Col>
                     )}
                     {showGstTax && effectiveHeaderSameState === true && (
                       <Grid.Col span={chargeGridCols.sgst}>
                         <FormTextInput
                           placeholder="SGST"
-                          value={(() => {
-                            const code = String(charge.charge_code ?? "")
-                              .trim()
-                              .toUpperCase();
-                            if (
-                              charge.is_tax_row === true ||
-                              code === "IGST" ||
-                              code === "CGST" ||
-                              code === "SGST" ||
-                              code === "VAT"
-                            )
-                              return "";
-                            const rate = resolveGstRateForChargeDisplay(
-                              gstRatesByChargeIndex[index],
+                          value={formatGstAmountForChargeCell(
+                            resolveGstAmountForChargeDisplay(
                               charge,
+                              gstRatesByChargeIndex[index],
                               "sgst",
-                            );
-                            const localAmount =
-                              resolveChargeLocalAmountForGst(charge);
-                            if (rate == null || localAmount == null) return "";
-                            const amount = clampAmount(
-                              (localAmount * rate) / 100,
-                            );
-                            return amount != null ? String(amount) : "";
-                          })()}
-                          // disabled
+                              preferSavedGstAmounts,
+                            ),
+                          )}
                           readOnly
                           rightSection={(() => {
-                            const rate = resolveGstRateForChargeDisplay(
-                              gstRatesByChargeIndex[index],
-                              charge,
-                              "sgst",
+                            if (preferSavedGstAmounts && charge.id != null)
+                              return null;
+                            const display = formatGstAmountForChargeCell(
+                              resolveGstAmountForChargeDisplay(
+                                charge,
+                                gstRatesByChargeIndex[index],
+                                "sgst",
+                                false,
+                              ),
                             );
-                            const localAmount =
-                              resolveChargeLocalAmountForGst(charge);
-                            const amount =
-                              rate == null || localAmount == null
-                                ? null
-                                : clampAmount((localAmount * rate) / 100);
-                            const display =
-                              amount != null ? String(amount) : "";
                             return gstRatesLoadingByIndex[index] &&
                               display === "" &&
                               gstRatesFromCharge(charge) == null ? (
@@ -7913,54 +8029,32 @@ function InvoiceCreate({
                             },
                           }}
                         />
-
-                        {/* )} */}
                       </Grid.Col>
                     )}
                     {showGstTax && effectiveHeaderSameState === false && (
                       <Grid.Col span={chargeGridCols.igst}>
                         <FormTextInput
                           placeholder="IGST"
-                          value={(() => {
-                            const code = String(charge.charge_code ?? "")
-                              .trim()
-                              .toUpperCase();
-                            if (
-                              charge.is_tax_row === true ||
-                              code === "IGST" ||
-                              code === "CGST" ||
-                              code === "SGST" ||
-                              code === "VAT"
-                            )
-                              return "";
-                            const rate = resolveGstRateForChargeDisplay(
-                              gstRatesByChargeIndex[index],
+                          value={formatGstAmountForChargeCell(
+                            resolveGstAmountForChargeDisplay(
                               charge,
+                              gstRatesByChargeIndex[index],
                               "igst",
-                            );
-                            const localAmount =
-                              resolveChargeLocalAmountForGst(charge);
-                            if (rate == null || localAmount == null) return "";
-                            const amount = clampAmount(
-                              (localAmount * rate) / 100,
-                            );
-                            return amount != null ? String(amount) : "";
-                          })()}
+                              preferSavedGstAmounts,
+                            ),
+                          )}
                           readOnly
                           rightSection={(() => {
-                            const rate = resolveGstRateForChargeDisplay(
-                              gstRatesByChargeIndex[index],
-                              charge,
-                              "igst",
+                            if (preferSavedGstAmounts && charge.id != null)
+                              return null;
+                            const display = formatGstAmountForChargeCell(
+                              resolveGstAmountForChargeDisplay(
+                                charge,
+                                gstRatesByChargeIndex[index],
+                                "igst",
+                                false,
+                              ),
                             );
-                            const localAmount =
-                              resolveChargeLocalAmountForGst(charge);
-                            const amount =
-                              rate == null || localAmount == null
-                                ? null
-                                : clampAmount((localAmount * rate) / 100);
-                            const display =
-                              amount != null ? String(amount) : "";
                             return gstRatesLoadingByIndex[index] &&
                               display === "" &&
                               gstRatesFromCharge(charge) == null ? (
@@ -7976,7 +8070,6 @@ function InvoiceCreate({
                             },
                           }}
                         />
-                        {/* )} */}
                       </Grid.Col>
                     )}
                     <Grid.Col span={chargeGridCols.actions}>
