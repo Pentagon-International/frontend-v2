@@ -102,6 +102,9 @@ export const URL = {
   customerServiceShipment: "customer-service-shipment/",
   customerServiceShipmentFilter: "customer-service-shipment/filter/",
   uploadDocument: "customer-service-shipment/upload-document/",
+  /** POST empty body to push booking to carrier (Maersk, etc.). */
+  carrierIntegrationBookingCreate: (bookingId: number | string) =>
+    `carrier-integration/bookings/${bookingId}/create/`,
   jobCreateUploadDocument: "job-create/upload-document/",
   documentTypeMasterFilter: "filter/document-type-master/",
   /** Maker & Checker mapping master */

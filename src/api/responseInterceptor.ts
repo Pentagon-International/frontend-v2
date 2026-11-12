@@ -58,14 +58,33 @@ const flattenValidationMessages = (
 };
 
 const resolveBadRequestMessage = (data: any): string => {
-  if (
+  const topMessage =
     data &&
     typeof data === "object" &&
     !Array.isArray(data) &&
-    typeof data.message === "string" &&
-    data.message.trim() !== ""
-  ) {
-    return data.message.trim();
+    typeof data.message === "string"
+      ? data.message.trim()
+      : "";
+
+  // Generic wrapper messages hide DRF `errors` / `non_field_errors` — prefer those.
+  const isGenericValidationMessage =
+    !topMessage || /^validation failed\.?$/i.test(topMessage);
+
+  if (isGenericValidationMessage && data?.errors) {
+    const nonField = data.errors?.non_field_errors;
+    if (Array.isArray(nonField) && nonField.length > 0) {
+      const joined = nonField
+        .map((item: unknown) => String(item ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+      if (joined) return joined;
+    }
+    const fromErrors = flattenValidationMessages(data.errors);
+    if (fromErrors.length > 0) return fromErrors.join(" ");
+  }
+
+  if (topMessage) {
+    return topMessage;
   }
   if (data?.error_message && typeof data.error_message === "string") {
     return data.error_message.trim();
@@ -287,12 +306,13 @@ const responseInterceptor = () =>
         switch (status) {
           case 400: {
             // Prefer backend message / DRF field errors over a generic Bad Request.
-            // `details` keeps field validation for screens that toast it; `message` is unchanged.
+            // Keep `errors` + `details` so toasts can read non_field_errors after reshape.
             const errorMessage = resolveBadRequestMessage(data);
             console.log("🔍 400 Error - Final message:", errorMessage);
             return Promise.reject({
               message: errorMessage,
-              details: data?.data,
+              errors: data?.errors,
+              details: data?.errors ?? data?.data,
               ...(data?.override === true ? { override: true } : {}),
             });
           }
@@ -359,6 +379,21 @@ const responseInterceptor = () =>
             "No response received from server! Please check your network connection.",
         });
       } else {
+        // Already-normalized rejects (e.g. chained interceptors) — do not drop errors/details.
+        const normalized = error as unknown as {
+          message?: unknown;
+          errors?: unknown;
+          details?: unknown;
+        };
+        if (
+          normalized &&
+          typeof normalized === "object" &&
+          (normalized.errors != null ||
+            normalized.details != null ||
+            typeof normalized.message === "string")
+        ) {
+          return Promise.reject(normalized);
+        }
         return Promise.reject({
           message: error.message || "An unexpected error occurred!",
         });

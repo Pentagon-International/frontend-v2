@@ -96,7 +96,38 @@ const GENERIC_API_MESSAGES = new Set([
   "Bad Request! Please check your input.",
   "An error occurred! Please try again later.",
   "Internal server error! Something went wrong on the server.",
+  "Validation failed.",
+  "Validation failed",
 ]);
+
+/** Pull DRF `non_field_errors` / field errors into toast text. */
+export function extractValidationErrorText(errors: unknown): string {
+  if (errors == null) return "";
+  if (typeof errors === "string") return errors.trim();
+  if (Array.isArray(errors)) {
+    return errors
+      .map((item) => extractValidationErrorText(item))
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (typeof errors === "object") {
+    const record = errors as Record<string, unknown>;
+    const nonField = record.non_field_errors;
+    if (nonField != null) {
+      const text = extractValidationErrorText(nonField);
+      if (text) return text;
+    }
+    return Object.entries(record)
+      .filter(([key]) => key !== "non_field_errors")
+      .map(([key, value]) => {
+        const text = extractValidationErrorText(value);
+        return text ? `${labelApiField(key)}: ${text}` : "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  return "";
+}
 
 function labelApiField(field: string): string {
   const known: Record<string, string> = {
@@ -162,7 +193,11 @@ export function formatApiFailureForToast(
   const message = getServerErrorMessage(error, fallback);
   const details =
     error && typeof error === "object"
-      ? humanizeApiErrorDetails(
+      ? extractValidationErrorText(
+          (error as { details?: unknown; errors?: unknown }).errors ??
+            (error as { details?: unknown }).details,
+        ) ||
+        humanizeApiErrorDetails(
           (error as { details?: unknown }).details,
         )
       : "";
@@ -182,11 +217,23 @@ export function getServerErrorMessage(
   if (typeof error === "object" && error !== null) {
     const record = error as Record<string, unknown>;
 
-    // Prefer API body message (e.g. axios error.response.data.message)
+    // Prefer DRF `errors` / `non_field_errors` over generic "Validation failed."
     const responseData =
       record.response && typeof record.response === "object"
         ? (record.response as Record<string, unknown>).data
-        : record.data;
+        : undefined;
+
+    if (responseData && typeof responseData === "object") {
+      const fromBodyErrors = extractValidationErrorText(
+        (responseData as Record<string, unknown>).errors,
+      );
+      if (fromBodyErrors) return fromBodyErrors;
+    }
+
+    const fromErrors = extractValidationErrorText(record.errors);
+    if (fromErrors) return fromErrors;
+    const fromDetails = extractValidationErrorText(record.details);
+    if (fromDetails) return fromDetails;
 
     if (responseData && typeof responseData === "object") {
       const message = getApiResponseMessage(responseData, "");

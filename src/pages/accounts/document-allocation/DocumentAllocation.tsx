@@ -51,6 +51,7 @@ import {
   ALLOC_DOC_OPEN_QUERY,
   stashOpenedDocumentState,
 } from "../../../utils/openAllocationDocumentTab";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 
 type CoaItem = {
   id?: number;
@@ -273,6 +274,21 @@ const computeAllocationTotals = (
     validationNet: validation.net,
   };
 };
+
+const allocationRowsMissingDrCr = (
+  source: DocumentAllocationRow[],
+): DocumentAllocationRow[] =>
+  source.filter((row) => {
+    if (String(row.document_no ?? "").trim() === "") return false;
+    const drCr = resolveRowDrCr(row);
+    return !isCreditSide(drCr) && !isDebitSide(drCr);
+  });
+
+/** Toast text from API `message` (backend now flattens validation into message). */
+const getAllocationApiErrorMessage = (
+  error: unknown,
+  fallback: string,
+): string => getServerErrorMessage(error, fallback);
 
 type AllocationTotals = ReturnType<typeof computeAllocationTotals>;
 
@@ -1140,6 +1156,13 @@ export default function DocumentAllocation() {
       });
       return;
     }
+    if (allocationRowsMissingDrCr(rows).length > 0) {
+      ToastNotification({
+        type: "error",
+        message: "Dr/Cr is required for every allocation row.",
+      });
+      return;
+    }
 
     const allocationDate =
       selectedDate != null
@@ -1179,12 +1202,15 @@ export default function DocumentAllocation() {
         type: "success",
         message: hasSavedId ? "Allocation updated." : "Allocation saved.",
       });
-    } catch {
+    } catch (error) {
       ToastNotification({
         type: "error",
-        message: hasSavedId
-          ? "Failed to update allocation."
-          : "Failed to save allocation.",
+        message: getAllocationApiErrorMessage(
+          error,
+          hasSavedId
+            ? "Failed to update allocation."
+            : "Failed to save allocation.",
+        ),
       });
     } finally {
       setIsSaving(false);
@@ -1200,7 +1226,18 @@ export default function DocumentAllocation() {
       return;
     }
 
-    if (Math.abs(allocationTotals.validationNet) > 0.005) {
+    if (allocationRowsMissingDrCr(rows).length > 0) {
+      ToastNotification({
+        type: "error",
+        message: "Dr/Cr is required for every allocation row.",
+      });
+      return;
+    }
+
+    if (
+      Math.abs(allocationTotals.net) > 0.005 ||
+      Math.abs(allocationTotals.validationNet) > 0.005
+    ) {
       ToastNotification({
         type: "error",
         message:
@@ -1241,10 +1278,13 @@ export default function DocumentAllocation() {
         type: "success",
         message: "Document posted.",
       });
-    } catch {
+    } catch (error) {
       ToastNotification({
         type: "error",
-        message: "Failed to post document.",
+        message: getAllocationApiErrorMessage(
+          error,
+          "Failed to post document.",
+        ),
       });
     } finally {
       setIsPosting(false);

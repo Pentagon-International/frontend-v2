@@ -11,6 +11,12 @@ import {
   parseCarrierNameFromLabel,
 } from "../../../utils/carrierSelect";
 import {
+  getMaerskBookingRequiredErrors,
+  isMaerskCarrier,
+  MAERSK_RECEIPT_DELIVERY_OPTIONS,
+} from "../../../utils/maerskBookingValidation";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
+import {
   Box,
   Button,
   Group,
@@ -270,6 +276,9 @@ interface FormValues {
   is_coload: boolean;
   houseno: string;
   master_no: string;
+  receipt_type_at_origin: string;
+  delivery_type_at_destination: string;
+  reference: string;
 
   // Ocean Schedule fields
   schedule_id: string;
@@ -405,6 +414,9 @@ const validationSchema = yup.object({
   is_coload: yup.boolean(),
   houseno: yup.string().optional(),
   master_no: yup.string().optional(),
+  receipt_type_at_origin: yup.string(),
+  delivery_type_at_destination: yup.string(),
+  reference: yup.string(),
 
   // Ocean Schedule fields
   schedule_id: yup.string(),
@@ -812,6 +824,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
 
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCarrierIntegrating, setIsCarrierIntegrating] = useState(false);
   const [charges, setCharges] = useState([
     {
       id: undefined as number | undefined,
@@ -1244,6 +1257,11 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_coload: Boolean(data.is_coload),
       houseno: String(data.houseno || ""),
       master_no: String(data.master_no || ""),
+      receipt_type_at_origin: String(data.receipt_type_at_origin || ""),
+      delivery_type_at_destination: String(
+        data.delivery_type_at_destination || "",
+      ),
+      reference: String(data.reference || ""),
 
       // Ocean Schedule fields
       schedule_id: String(data.schedule_id || ""),
@@ -1480,6 +1498,9 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       is_coload: false,
       houseno: "",
       master_no: "",
+      receipt_type_at_origin: "",
+      delivery_type_at_destination: "",
+      reference: "",
 
       // Ocean Schedule fields
       schedule_id: "",
@@ -1970,6 +1991,67 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
     }
     form.setFieldValue("trigger_updates", toAdd);
     setTriggerModalOpen(false);
+  };
+
+  const handleMakeCarrierIntegration = async () => {
+    const bookingId =
+      jobData?.id != null
+        ? typeof jobData.id === "number"
+          ? jobData.id
+          : Number(jobData.id)
+        : initialData?.id != null
+          ? typeof initialData.id === "number"
+            ? initialData.id
+            : Number(initialData.id)
+          : 0;
+    if (!bookingId) {
+      ToastNotification({
+        type: "error",
+        message: "Save the booking before making carrier integration.",
+      });
+      return;
+    }
+    try {
+      setIsCarrierIntegrating(true);
+      const response = (await postAPICall(
+        URL.carrierIntegrationBookingCreate(bookingId),
+        {},
+        API_HEADER,
+      )) as {
+        status?: boolean | string;
+        message?: string;
+        data?: {
+          carrier_booking_reference?: string | null;
+          booking_status?: string | null;
+        };
+      };
+      const ok = response?.status === true || response?.status === "true";
+      if (!ok) {
+        ToastNotification({
+          type: "error",
+          message:
+            response?.message || "Failed to create booking on carrier.",
+        });
+        return;
+      }
+      const ref = response?.data?.carrier_booking_reference;
+      ToastNotification({
+        type: "success",
+        message: ref
+          ? `Carrier booking created: ${ref}`
+          : response?.message || "Booking created on carrier.",
+      });
+    } catch (error) {
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(
+          error,
+          "Failed to create booking on carrier.",
+        ),
+      });
+    } finally {
+      setIsCarrierIntegrating(false);
+    }
   };
 
   // Freight Certificate PDF (edit mode only)
@@ -3107,6 +3189,40 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         return;
       }
 
+      if (
+        isMaerskCarrier(form.values.carrier_code, form.values.carrier_name)
+      ) {
+        const maerskErrors = getMaerskBookingRequiredErrors({
+          service: form.values.service,
+          service_type: "import",
+          origin_code: form.values.origin_code,
+          destination_code: form.values.destination_code,
+          etd: form.values.etd,
+          eta: form.values.eta,
+          receipt_type_at_origin: form.values.receipt_type_at_origin,
+          delivery_type_at_destination:
+            form.values.delivery_type_at_destination,
+          reference: form.values.reference,
+          commodity_description: form.values.commodity_description,
+          cargo_details: form.values.cargo_details,
+          shipper_name: form.values.shipper_name,
+          shipper_email: form.values.shipper_email,
+          consignee_name: form.values.consignee_name,
+          consignee_email: form.values.consignee_email,
+        });
+        if (Object.keys(maerskErrors).length > 0) {
+          form.setErrors(maerskErrors);
+          ToastNotification({
+            type: "error",
+            message:
+              Object.values(maerskErrors)[0] ||
+              "Please fill in all Maersk required fields before submitting.",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       if (!validateChargesRoe()) {
         setIsSubmitting(false);
         return;
@@ -3150,6 +3266,10 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         is_coload: form.values.is_coload,
         houseno: form.values.houseno,
         master_no: form.values.master_no,
+        receipt_type_at_origin: form.values.receipt_type_at_origin || null,
+        delivery_type_at_destination:
+          form.values.delivery_type_at_destination || null,
+        reference: form.values.reference || null,
 
         schedule_id: form.values.schedule_id || null,
         carrier_code: form.values.carrier_code,
@@ -3924,6 +4044,32 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     Freight Certificate
                   </Menu.Item>
                 )}
+                {isEditMode && jobData?.id != null && (
+                  <Menu.Item
+                    leftSection={
+                      isCarrierIntegrating ? (
+                        <Loader size={14} />
+                      ) : (
+                        <IconSend size={16} />
+                      )
+                    }
+                    disabled={isCarrierIntegrating}
+                    styles={{
+                      item: {
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        borderRadius: "6px",
+                        padding: "10px 12px",
+                        marginBottom: "4px",
+                        "&:hover": { backgroundColor: "#F8F9FA" },
+                      },
+                    }}
+                    onClick={handleMakeCarrierIntegration}
+                  >
+                    Make Carrier Integration
+                  </Menu.Item>
+                )}
               </Menu.Dropdown>
             </Menu>
           </Group>
@@ -4345,6 +4491,58 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       form.setFieldValue("eta", date ?? null);
                     }}
                     error={form.errors.eta}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Select
+                    label="Receipt Type at Origin"
+                    placeholder="CY / SD / CFS"
+                    clearable
+                    data={[...MAERSK_RECEIPT_DELIVERY_OPTIONS]}
+                    value={form.values.receipt_type_at_origin || null}
+                    onChange={(value) =>
+                      form.setFieldValue(
+                        "receipt_type_at_origin",
+                        value || "",
+                      )
+                    }
+                    error={form.errors.receipt_type_at_origin}
+                    withAsterisk={isMaerskCarrier(
+                      form.values.carrier_code,
+                      form.values.carrier_name,
+                    )}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <Select
+                    label="Delivery Type at Destination"
+                    placeholder="CY / SD / CFS"
+                    clearable
+                    data={[...MAERSK_RECEIPT_DELIVERY_OPTIONS]}
+                    value={form.values.delivery_type_at_destination || null}
+                    onChange={(value) =>
+                      form.setFieldValue(
+                        "delivery_type_at_destination",
+                        value || "",
+                      )
+                    }
+                    error={form.errors.delivery_type_at_destination}
+                    withAsterisk={isMaerskCarrier(
+                      form.values.carrier_code,
+                      form.values.carrier_name,
+                    )}
+                  />
+                </Grid.Col>
+                <Grid.Col span={4}>
+                  <FormTextInput
+                    label="Service Contract / Quotation"
+                    placeholder="Enter service contract or quotation reference"
+                    format="normal"
+                    withAsterisk={isMaerskCarrier(
+                      form.values.carrier_code,
+                      form.values.carrier_name,
+                    )}
+                    {...form.getInputProps("reference")}
                   />
                 </Grid.Col>
               </Grid>
