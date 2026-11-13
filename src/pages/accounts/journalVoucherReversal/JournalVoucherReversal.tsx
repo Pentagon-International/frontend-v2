@@ -445,30 +445,43 @@ function JournalVoucherReversal() {
 
     const chargesFromApi =
       Array.isArray(d.charges) && d.charges.length > 0
-        ? d.charges.map((c: any) => ({
-            id: isReversalMode ? null : (c.id ?? null),
-            segment: "",
-            job_no: c.job_id ?? "",
-            sub_job: "",
-            shipment_id: c.shipment_id ?? "",
-            cn_r: c.c_r_n ?? "",
-            charge_id: c.charge_id != null ? Number(c.charge_id) : null,
-            charge_name: "",
-            account_id: c.account_id != null ? Number(c.account_id) : null,
-            account_code: c.code ?? "",
-            account_name: c.account_name ?? "",
-            subledger_code: c.subledger ?? "",
-            code: c.code ?? "",
-            key: c.key ?? "",
-            currency_id: c.currency_id != null ? String(c.currency_id) : "",
-            currency_code: "",
-            roe: parseRoeForPayload(c.roe),
-            amount: c.amount != null ? Number(c.amount) : null,
-            local_amount: toLocalAmount(c.local_amount),
-            // Create-from-JV only: reciprocate each original Dr/Cr once (edit/view keep stored values)
-            dr_cr: shouldFlipDrCr ? reciprocalDrCr(c.dr_cr) : c.dr_cr,
-            narration: c.narration ?? "",
-          }))
+        ? d.charges.map((c: any) => {
+            const nestedCharge =
+              c.charge && typeof c.charge === "object"
+                ? (c.charge as { charge_name?: string; charge_code?: string })
+                : null;
+            const chargeLabel = String(
+              c.charge_name ??
+                nestedCharge?.charge_name ??
+                c.charge_code ??
+                nestedCharge?.charge_code ??
+                "",
+            ).trim();
+            return {
+              id: isReversalMode ? null : (c.id ?? null),
+              segment: "",
+              job_no: c.job_id ?? "",
+              sub_job: "",
+              shipment_id: c.shipment_id ?? "",
+              cn_r: c.c_r_n ?? "",
+              charge_id: c.charge_id != null ? Number(c.charge_id) : null,
+              charge_name: chargeLabel,
+              account_id: c.account_id != null ? Number(c.account_id) : null,
+              account_code: c.code ?? "",
+              account_name: c.account_name ?? "",
+              subledger_code: c.subledger ?? "",
+              code: c.code ?? "",
+              key: c.key ?? "",
+              currency_id: c.currency_id != null ? String(c.currency_id) : "",
+              currency_code: "",
+              roe: parseRoeForPayload(c.roe),
+              amount: c.amount != null ? Number(c.amount) : null,
+              local_amount: toLocalAmount(c.local_amount),
+              // Create-from-JV only: reciprocate each original Dr/Cr once (edit/view keep stored values)
+              dr_cr: shouldFlipDrCr ? reciprocalDrCr(c.dr_cr) : c.dr_cr,
+              narration: c.narration ?? "",
+            };
+          })
         : [emptyRow()];
 
     form.setValues({

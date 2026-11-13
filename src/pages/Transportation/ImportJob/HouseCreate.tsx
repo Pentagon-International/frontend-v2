@@ -165,6 +165,7 @@ import {
   resolveHouseJobIdFromLocationState,
   mergeMasterNavStateFromSavedJob,
 } from "../../../utils/persistJobHousingDetails";
+import { validateMasterSnapshotForHousePersist } from "../jobValidation/jobRequiredFields";
 import { getAPICall } from "../../../service/getApiCall";
 import { JobAccountsDocumentsTable } from "../../../components/JobAccountsDocumentsTable";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
@@ -3277,6 +3278,24 @@ function HouseCreate() {
 
     if (!jobId) {
       navigateToJobWithHousingList(updatedHousingDetails);
+      return;
+    }
+
+    const masterGate = validateMasterSnapshotForHousePersist(
+      { family: "ocean", direction: "import", isChaMode },
+      {
+        master: (location.state?.mblDetails ?? null) as Record<
+          string,
+          unknown
+        > | null,
+        carrier: (location.state?.carrierDetails ?? null) as Record<
+          string,
+          unknown
+        > | null,
+      },
+    );
+    if (!masterGate.ok) {
+      ToastNotification({ type: "error", message: masterGate.message });
       return;
     }
 

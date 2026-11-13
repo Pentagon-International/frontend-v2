@@ -24,8 +24,8 @@ import {
   type BookingCreateJobMode,
 } from "./bookingCreateJob";
 import {
-  bookingHasEtdAndEta,
   preferBookingScheduleDates,
+  validateBookingForJobCreate,
 } from "./bookingScheduleDates";
 
 export type BookingCreateChaJobMode = Extract<
@@ -121,10 +121,15 @@ export async function createChaJobFromBooking(
   const chaConfig = CHA_CONFIG_BY_BOOKING_MODE[mode];
   const jobEditPath = `${chaConfig.basePath}/edit`;
 
-  if (!bookingHasEtdAndEta(booking)) {
+  // Only booking-available fields (ETD/ETA). Job-page requireds are enforced later on job Update.
+  const bookingGate = validateBookingForJobCreate(booking);
+  if (!bookingGate.ok) {
     ToastNotification({
       type: "error",
-      message: "ETD and ETA are required to create a CHA job.",
+      message: bookingGate.message.replace(
+        "create a job",
+        "create a CHA job",
+      ),
     });
     return false;
   }

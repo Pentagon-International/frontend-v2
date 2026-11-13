@@ -31,8 +31,8 @@ import {
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 import { pickPackageTypeCodeFromCargo } from "./packageTypeOptions";
 import {
-  bookingHasEtdAndEta,
   preferBookingScheduleDates,
+  validateBookingForJobCreate,
 } from "./bookingScheduleDates";
 
 export type BookingCreateJobMode =
@@ -1612,10 +1612,12 @@ export async function createJobFromBooking(
   const { navigate, mode, onStart, onEnd, invalidateList } = options;
   const jobEditPath = JOB_EDIT_PATH[mode];
 
-  if (!bookingHasEtdAndEta(booking)) {
+  // Only booking-available fields (ETD/ETA). Job-page requireds are enforced later on job Update.
+  const bookingGate = validateBookingForJobCreate(booking);
+  if (!bookingGate.ok) {
     ToastNotification({
       type: "error",
-      message: "ETD and ETA are required to create a job.",
+      message: bookingGate.message,
     });
     return false;
   }

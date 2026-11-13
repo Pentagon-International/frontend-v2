@@ -165,6 +165,7 @@ import {
   resolveHouseJobIdFromLocationState,
   mergeMasterNavStateFromSavedJob,
 } from "../../../utils/persistJobHousingDetails";
+import { validateMasterSnapshotForHousePersist } from "../jobValidation/jobRequiredFields";
 import { JobAccountsDocumentsTable } from "../../../components/JobAccountsDocumentsTable";
 import { JobInvoiceDeleteConfirmModal } from "../../../components/JobInvoiceDeleteConfirmModal";
 import { HouseCreateAgentInvoiceMenuItem } from "../../../components/HouseCreateAgentInvoiceMenuItem";
@@ -3063,6 +3064,25 @@ function HouseCreate() {
     // Job not persisted yet — keep prior in-memory handoff to job create/edit
     if (!jobId) {
       navigateToJobWithHousingList(updatedHousingDetails);
+      return;
+    }
+
+    // House update must also satisfy master required fields from job snapshot
+    const masterGate = validateMasterSnapshotForHousePersist(
+      { family: "ocean", direction: "export", isChaMode },
+      {
+        master: (location.state?.mblDetails ?? null) as Record<
+          string,
+          unknown
+        > | null,
+        carrier: (location.state?.carrierDetails ?? null) as Record<
+          string,
+          unknown
+        > | null,
+      },
+    );
+    if (!masterGate.ok) {
+      ToastNotification({ type: "error", message: masterGate.message });
       return;
     }
 

@@ -222,6 +222,7 @@ import { readChaHouseBlFromApi } from "../chaJob/chaHouseBlFields";
 import { useChaJobEditHydration } from "../chaJob/useChaJobEditHydration";
 import { ChaMasterCustomsFields } from "../chaJob/ChaMasterCustomsFields";
 import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
+import { validateHouseListForJobPersist } from "../jobValidation/jobRequiredFields";
 import {
   dubaiBoeNumberPayload,
   emptyChaMasterCustoms,
@@ -4267,98 +4268,16 @@ function ImportJobCreate() {
     openSendEmail();
   };
 
-  // Validate HBL details - check mandatory fields (aligned with HouseCreate steps)
+  // Validate HBL details — shared policy (master update also knows house requireds)
   const validateHousingDetails = () => {
-    if (housingDetails.length === 0) {
-      ToastNotification({
-        type: "error",
-        message: "At least one HBL detail is required before creating MBL",
-      });
+    const result = validateHouseListForJobPersist(
+      { family: "ocean", direction: "import", isChaMode },
+      housingDetails,
+    );
+    if (!result.ok) {
+      ToastNotification({ type: "error", message: result.message });
       return false;
     }
-
-    for (let i = 0; i < housingDetails.length; i++) {
-      const house = housingDetails[i];
-      const missingFields: string[] = [];
-
-      if (!house.hbl_number?.trim()) {
-        missingFields.push("HBL No");
-      }
-      if (!house.origin_code?.trim()) {
-        missingFields.push("Origin");
-      }
-      if (!house.destination_code?.trim()) {
-        missingFields.push("Destination");
-      }
-      if (!house.trade?.trim()) {
-        missingFields.push("Trade");
-      }
-      if (!String(house.shipment_terms_code ?? "").trim()) {
-        missingFields.push("Shipment Terms");
-      }
-      if (!house.routed?.trim()) {
-        missingFields.push("Routed");
-      }
-      if (!String(house.routed_by ?? "").trim()) {
-        missingFields.push("Routed By");
-      }
-      if (!house.shipper_name?.trim()) {
-        missingFields.push("Shipper Name");
-      }
-      if (!house.consignee_name?.trim()) {
-        missingFields.push("Consignee Name");
-      }
-
-      const cargos = house.cargo_details ?? [];
-      if (cargos.length === 0) {
-        missingFields.push("At least one Cargo Detail");
-      } else {
-        for (let j = 0; j < cargos.length; j++) {
-          const cargo = cargos[j] as {
-            container_no?: unknown;
-            container_number?: unknown;
-            no_of_packages?: number | null;
-            gross_weight?: unknown;
-            volume?: unknown;
-          };
-          const containerNo = String(
-            cargo.container_no ?? cargo.container_number ?? "",
-          ).trim();
-          if (!containerNo) {
-            missingFields.push(`Cargo ${j + 1}: Container Number`);
-          }
-          if (
-            cargo.no_of_packages === null ||
-            cargo.no_of_packages === undefined
-          ) {
-            missingFields.push(`Cargo ${j + 1}: Number of Packages`);
-          }
-          if (
-            cargo.gross_weight === null ||
-            cargo.gross_weight === undefined ||
-            cargo.gross_weight === ""
-          ) {
-            missingFields.push(`Cargo ${j + 1}: Gross Weight`);
-          }
-          if (
-            cargo.volume === null ||
-            cargo.volume === undefined ||
-            cargo.volume === ""
-          ) {
-            missingFields.push(`Cargo ${j + 1}: Volume`);
-          }
-        }
-      }
-
-      if (missingFields.length > 0) {
-        ToastNotification({
-          type: "error",
-          message: `HBL ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
-        });
-        return false;
-      }
-    }
-
     return true;
   };
 

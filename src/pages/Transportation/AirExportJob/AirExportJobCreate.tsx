@@ -211,6 +211,7 @@ import {
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
 import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
+import { validateHouseListForJobPersist } from "../jobValidation/jobRequiredFields";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -3185,74 +3186,16 @@ function AirExportJobCreate() {
     hawbDetails.length,
   ]);
 
-  // Validate HAWB details - check mandatory fields
+  // Validate HAWB details — shared policy (master update also knows house requireds)
   const validateHawbDetails = () => {
-    if (hawbDetails.length === 0) {
-      ToastNotification({
-        type: "error",
-        message: "At least one HAWB detail is required before creating MAWB",
-      });
+    const result = validateHouseListForJobPersist(
+      { family: "air", direction: "export", isChaMode },
+      hawbDetails,
+    );
+    if (!result.ok) {
+      ToastNotification({ type: "error", message: result.message });
       return false;
     }
-
-    // Validate each HAWB detail has mandatory fields
-    for (let i = 0; i < hawbDetails.length; i++) {
-      const hawb = hawbDetails[i];
-      const missingFields: string[] = [];
-
-      // Step 1 validations
-      if (!hawb.hawb_no?.trim()) {
-        missingFields.push("HAWB No");
-      }
-      if (!hawb.origin_code?.trim()) {
-        missingFields.push("Origin");
-      }
-      if (!hawb.destination_code?.trim()) {
-        missingFields.push("Destination");
-      }
-      if (!hawb.trade?.trim()) {
-        missingFields.push("Trade");
-      }
-      if (!hawb.routed?.trim()) {
-        missingFields.push("Routed");
-      }
-      if (!hawb.routed_by?.trim()) {
-        missingFields.push("Routed By");
-      }
-
-      // Step 2 validations
-      if (!hawb.shipper_name?.trim()) {
-        missingFields.push("Shipper Name");
-      }
-      if (!hawb.consignee_name?.trim()) {
-        missingFields.push("Consignee Name");
-      }
-
-      // Step 3 validations - at least one cargo detail required
-      if (!hawb.cargo_details || hawb.cargo_details.length === 0) {
-        missingFields.push("At least one Cargo Detail");
-      } else {
-        // Validate each cargo detail has mandatory fields
-        for (let j = 0; j < hawb.cargo_details.length; j++) {
-          const cargo = hawb.cargo_details[j];
-          if (!cargo.no_of_packages || cargo.no_of_packages <= 0) {
-            missingFields.push(`Cargo ${j + 1}: Number of Packages`);
-          }
-          if (!cargo.gross_weight || cargo.gross_weight <= 0) {
-            missingFields.push(`Cargo ${j + 1}: Gross Weight`);
-          }
-        }
-      }
-
-      if (missingFields.length > 0) {
-        ToastNotification({
-          type: "error",
-          message: `HAWB ${i + 1} is missing required fields: ${missingFields.join(", ")}`,
-        });
-        return false;
-      }
-    }
-
     return true;
   };
 
