@@ -1223,50 +1223,29 @@ export default function PaymentCreate({
     syncRoeForCurrencyChange,
   ]);
 
-  // Payment: header amount = Σ(Dr) − Σ(Cr). Reversal: Σ(Cr) − Σ(Dr) so the header matches the source payment.
-  // This is important because backend may append extra party rows on save.
+  // Payment: header local = Σ(Dr local) − Σ(Cr local); header amount = header local / header ROE.
+  // Reversal keeps the source payment header as loaded — do not recompute.
   const partyLocalAmountsSnapshot = form.values.details
     .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
     .join(";");
-  const partyAmountsSnapshot = form.values.details
-    .map((d) => `${d.dr_cr}|${d.amount ?? ""}`)
-    .join(";");
-  const headerAmountRoeKey = `${form.values.amount ?? ""}|${form.values.roe ?? ""}`;
+  const headerRoeKey = `${form.values.roe ?? ""}`;
   const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
-  const prevPartyAmountsRef = useRef(partyAmountsSnapshot);
-  const prevHeaderAmountRoeRef = useRef(headerAmountRoeKey);
+  const prevHeaderRoeRef = useRef(headerRoeKey);
 
   useEffect(() => {
     const partyLocalChanged =
       prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
-    const partyAmountsChanged =
-      prevPartyAmountsRef.current !== partyAmountsSnapshot;
-    const headerAmountRoeChanged =
-      prevHeaderAmountRoeRef.current !== headerAmountRoeKey;
+    const headerRoeChanged = prevHeaderRoeRef.current !== headerRoeKey;
 
     // Reversal keeps the reversed payment header; backend handles Dr/Cr.
     if (_isReversal) {
       prevPartyLocalRef.current = partyLocalAmountsSnapshot;
-      prevPartyAmountsRef.current = partyAmountsSnapshot;
-      prevHeaderAmountRoeRef.current = headerAmountRoeKey;
+      prevHeaderRoeRef.current = headerRoeKey;
       return;
     }
 
     const details = form.values.details ?? [];
-    let amountForLocal = form.values.amount;
-
-    if (partyAmountsChanged) {
-      const netAmount = details.reduce((s, d) => {
-        const amt =
-          d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-        return s + paymentPartyHeaderNetSign(d.dr_cr, _isReversal) * amt;
-      }, 0);
-      const headerAmount = clampAmount(netAmount);
-      if (form.values.amount !== headerAmount) {
-        form.setFieldValue("amount", headerAmount);
-      }
-      amountForLocal = headerAmount;
-    }
+    let headerLocal = form.values.local_amount;
 
     if (partyLocalChanged) {
       const netLocal = details.reduce((s, d) => {
@@ -1274,35 +1253,32 @@ export default function PaymentCreate({
           d.local_amount != null && Number.isFinite(d.local_amount)
             ? d.local_amount
             : 0;
-        return s + paymentPartyHeaderNetSign(d.dr_cr, _isReversal) * local;
+        return s + paymentPartyHeaderNetSign(d.dr_cr, false) * local;
       }, 0);
-      const headerLocal = clampLocalAmount(netLocal);
+      headerLocal = clampLocalAmount(netLocal);
       if (form.values.local_amount !== headerLocal) {
         form.setFieldValue("local_amount", headerLocal);
       }
-    } else if (headerAmountRoeChanged || partyAmountsChanged) {
+    }
+
+    if (partyLocalChanged || headerRoeChanged) {
       const roeVal = form.values.roe;
-      const local =
-        amountForLocal != null &&
-        Number.isFinite(amountForLocal) &&
+      const headerAmount =
+        headerLocal != null &&
+        Number.isFinite(headerLocal) &&
         roeVal != null &&
-        Number.isFinite(roeVal)
-          ? clampLocalAmount(amountForLocal * roeVal)
+        Number.isFinite(roeVal) &&
+        roeVal !== 0
+          ? clampAmount(headerLocal / roeVal)
           : null;
-      if (form.values.local_amount !== local) {
-        form.setFieldValue("local_amount", local);
+      if (form.values.amount !== headerAmount) {
+        form.setFieldValue("amount", headerAmount);
       }
     }
 
     prevPartyLocalRef.current = partyLocalAmountsSnapshot;
-    prevPartyAmountsRef.current = partyAmountsSnapshot;
-    prevHeaderAmountRoeRef.current = headerAmountRoeKey;
-  }, [
-    partyLocalAmountsSnapshot,
-    partyAmountsSnapshot,
-    headerAmountRoeKey,
-    _isReversal,
-  ]);
+    prevHeaderRoeRef.current = headerRoeKey;
+  }, [partyLocalAmountsSnapshot, headerRoeKey, _isReversal]);
 
   /** Skip one amount→local recalculation after allocation sync (adj curr is the source). */
   const skipPartyLocalFromAmountRef = useRef(false);
