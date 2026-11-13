@@ -1331,7 +1331,7 @@ export default function OverseasPaymentCreate({
 
   // Create only: auto-fetch ROE from exchange-rate master when currency is set.
   // Document selection applies document currency/ROE and skips this fetch once.
-  // User currency changes (header/party dropdowns) clear the skip and fetch again.
+  // Party currencies stay independent (same as normal payment) — only header ROE is synced.
   useEffect(() => {
     const curr = form.values.currency?.trim();
     if (!curr || !localCurrency || loadedFromListState) return;
@@ -1339,14 +1339,7 @@ export default function OverseasPaymentCreate({
       skipNextCurrencyRoeSyncRef.current = false;
       return;
     }
-    syncRoeForCurrencyChange(curr, (roe) => {
-      form.setFieldValue("roe", roe);
-      form.values.details.forEach((row, idx) => {
-        if ((row.currency ?? "").toString().trim() === curr) {
-          form.setFieldValue(`details.${idx}.roe`, roe);
-        }
-      });
-    });
+    syncRoeForCurrencyChange(curr, (roe) => form.setFieldValue("roe", roe));
   }, [
     form.values.currency,
     localCurrency,
@@ -1354,7 +1347,8 @@ export default function OverseasPaymentCreate({
     syncRoeForCurrencyChange,
   ]);
 
-  // Payment: header amount = Σ(Dr) − Σ(Cr). Reversal: Σ(Cr) − Σ(Dr) so the header matches the source payment.
+  // Payment: header local = Σ(Dr local) − Σ(Cr local); header amount = header local / header ROE.
+  // Reversal keeps the source payment header as loaded — do not recompute.
   const partyNetSnapshot = form.values.details
     .map(
       (d) =>
@@ -1367,25 +1361,29 @@ export default function OverseasPaymentCreate({
     if (_isReversal) return;
 
     const details = form.values.details ?? [];
-    const netAmount = details.reduce((s, d) => {
-      const amt = d.amount != null && Number.isFinite(d.amount) ? d.amount : 0;
-      return s + paymentPartyHeaderNetSign(d.dr_cr, _isReversal) * amt;
+    const netLocal = details.reduce((s, d) => {
+      const local =
+        d.local_amount != null && Number.isFinite(d.local_amount)
+          ? d.local_amount
+          : 0;
+      return s + paymentPartyHeaderNetSign(d.dr_cr, false) * local;
     }, 0);
-    const headerAmount = clampAmount(netAmount);
+    const headerLocal = clampLocalAmount(netLocal);
     const roeVal = form.values.roe;
-    const headerLocal =
-      headerAmount != null &&
+    const headerAmount =
+      headerLocal != null &&
+      Number.isFinite(headerLocal) &&
       roeVal != null &&
       Number.isFinite(roeVal) &&
       roeVal !== 0
-        ? clampLocalAmount(headerAmount * roeVal)
+        ? clampAmount(headerLocal / roeVal)
         : null;
 
-    if (form.values.amount !== headerAmount) {
-      form.setFieldValue("amount", headerAmount);
-    }
     if (form.values.local_amount !== headerLocal) {
       form.setFieldValue("local_amount", headerLocal);
+    }
+    if (form.values.amount !== headerAmount) {
+      form.setFieldValue("amount", headerAmount);
     }
   }, [partyNetSnapshot, form.values.roe, _isReversal]);
 
@@ -2998,13 +2996,10 @@ export default function OverseasPaymentCreate({
                   form.setFieldValue("currency", v ?? "");
                   form.clearFieldError("roe");
                   if (v) {
-                    syncRoeForCurrencyChange(v, (roe) => {
-                      form.setFieldValue("roe", roe);
-                      form.values.details.forEach((_, idx) => {
-                        form.setFieldValue(`details.${idx}.currency`, v);
-                        form.setFieldValue(`details.${idx}.roe`, roe);
-                      });
-                    });
+                    // Header currency/ROE only — do not overwrite party currencies.
+                    syncRoeForCurrencyChange(v, (roe) =>
+                      form.setFieldValue("roe", roe),
+                    );
                   }
                 }}
                 searchable
@@ -3288,11 +3283,6 @@ export default function OverseasPaymentCreate({
                                 OVERSEAS_DEFAULT_CURRENCY,
                                 (roe) => {
                                   form.setFieldValue(`details.${idx}.roe`, roe);
-                                  form.setFieldValue(
-                                    "currency",
-                                    OVERSEAS_DEFAULT_CURRENCY,
-                                  );
-                                  form.setFieldValue("roe", roe);
                                 },
                               );
                             }}
@@ -3353,23 +3343,19 @@ export default function OverseasPaymentCreate({
                                 v ?? "",
                               );
                               form.clearFieldError(`details.${idx}.roe`);
-                              form.clearFieldError("roe");
                               if (v) {
-                                form.setFieldValue("currency", v);
-                                syncRoeForCurrencyChange(v, (roe) => {
-                                  form.setFieldValue(`details.${idx}.roe`, roe);
-                                  form.setFieldValue("roe", roe);
-                                });
+                                // Party currency/ROE only — keep header currency independent.
+                                syncRoeForCurrencyChange(v, (roe) =>
+                                  form.setFieldValue(`details.${idx}.roe`, roe),
+                                );
                               }
                             }}
                             searchable
                             withAsterisk
-                            error={form.errors.currency}
-                            styles={headerFieldStyles}
+                            error={form.errors[`details.${idx}.currency`]}
+                            styles={partyFieldStyles}
                             disabled={
-                              useNonEditableStyleOnly
-                                ? false
-                                : headerOtherDisabled
+                              useNonEditableStyleOnly ? false : isReadOnly
                             }
                           />
                         </Grid.Col>
