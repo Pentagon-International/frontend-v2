@@ -9,7 +9,13 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:e2e": "playwright test",
+    "test:e2e:invoice": "playwright test e2e/transportation/invoice",
+    "test:e2e:invoice:headed": "playwright test e2e/transportation/invoice --config=playwright.visual.config.ts",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:invoice:ui": "playwright test e2e/transportation/invoice --ui",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.19.0",
@@ -48,6 +54,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
+    "@playwright/test": "^1.65.1",
     "@types/plotly.js": "^3.0.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
