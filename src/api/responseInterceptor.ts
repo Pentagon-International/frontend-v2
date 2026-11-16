@@ -314,6 +314,14 @@ const responseInterceptor = () =>
               errors: data?.errors,
               details: data?.errors ?? data?.data,
               ...(data?.override === true ? { override: true } : {}),
+              ...(data?.data?.requires_confirmation === true ||
+              data?.requires_confirmation === true
+                ? {
+                    status: false,
+                    requires_confirmation: true,
+                    data: data?.data ?? data,
+                  }
+                : {}),
             });
           }
 

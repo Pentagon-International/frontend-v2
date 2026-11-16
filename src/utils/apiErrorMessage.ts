@@ -66,6 +66,35 @@ export function isCreditLimitOverrideMessage(message: string): boolean {
   );
 }
 
+function hasRequiresConfirmationTrue(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const flag = (value as { requires_confirmation?: unknown })
+    .requires_confirmation;
+  return flag === true || flag === "true";
+}
+
+/**
+ * True when API body includes `requires_confirmation: true`
+ * (duplicate invoice confirmation flow), typically with `status: false`.
+ */
+export function isApiRequiresConfirmationResponse(response: unknown): boolean {
+  if (!response || typeof response !== "object") return false;
+
+  const record = response as Record<string, unknown>;
+  const body = unwrapApiStatusBody(response);
+
+  if (hasRequiresConfirmationTrue(record)) return true;
+  if (hasRequiresConfirmationTrue(record.data)) return true;
+
+  if (body && typeof body === "object") {
+    const nested = body as Record<string, unknown>;
+    if (hasRequiresConfirmationTrue(nested)) return true;
+    if (hasRequiresConfirmationTrue(nested.data)) return true;
+  }
+
+  return false;
+}
+
 /** Read `message` from `{ status, message, data }` style API payloads. */
 export function getApiResponseMessage(
   response: unknown,

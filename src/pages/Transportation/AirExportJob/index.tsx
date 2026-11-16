@@ -87,6 +87,7 @@ import {
   getProfitVerificationStatusLabel,
 } from "../../../utils/jobProfitVerificationStatus";
 import { JobProfitVerificationStatusCell } from "../../../components/JobList/JobProfitVerificationStatusCell";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 
 const LIST_KEY = "AIR_EXPORT_JOB_MASTER";
 
@@ -571,7 +572,11 @@ function AirExportJobMaster() {
         API_HEADER
       )) as { status?: boolean; message?: string };
       if (response?.status === false) {
-        throw new Error(response?.message || "Failed to cancel job");
+        ToastNotification({
+          type: "error",
+          message: getServerErrorMessage(response, "Failed to cancel job"),
+        });
+        return;
       }
       setCancelConfirmRow(null);
       ToastNotification({
@@ -582,7 +587,7 @@ function AirExportJobMaster() {
     } catch (err: unknown) {
       ToastNotification({
         type: "error",
-        message: err instanceof Error ? err.message : "Failed to cancel job",
+        message: getServerErrorMessage(err, "Failed to cancel job"),
       });
     } finally {
       setIsCancelling(false);
