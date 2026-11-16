@@ -109,6 +109,7 @@ export interface VendorInvoiceOverrideDraft {
   currency_code: string;
   currency_name: string;
   date: string;
+  due_date: string;
   Inv_Crn_no: string;
   taxable_amount: string;
   Inv_crn_amount: string;
@@ -364,6 +365,7 @@ export interface VendorInvoiceStartPayload {
   state_id: number | null;
   currency_id: number;
   date: string;
+  due_date?: string;
   Inv_Crn_no: string;
   taxable_amount: string;
   Inv_crn_amount: string;
@@ -472,6 +474,7 @@ export function buildVendorInvoiceOverrideDraft(
     currency_code: textValue(extracted?.currency_code),
     currency_name: textValue(extracted?.currency_name),
     date: toIsoDateString(extracted?.date),
+    due_date: toIsoDateString(extracted?.due_date) || toIsoDateString(extracted?.date),
     Inv_Crn_no: textValue(extracted?.Inv_Crn_no),
     taxable_amount: toAmountString(extracted?.taxable_amount),
     Inv_crn_amount: toAmountString(extracted?.Inv_crn_amount),
@@ -589,6 +592,7 @@ export function buildVendorInvoiceStartPayload(
 
   const date = toIsoDateString(draft.date);
   if (!date) throw new Error("Date is required.");
+  const dueDate = toIsoDateString(draft.due_date) || date;
   if (!textValue(draft.Inv_Crn_no)) throw new Error("Inv / CRN No. is required.");
   if (!textValue(draft.taxable_amount)) throw new Error("Taxable amount is required.");
   if (!textValue(draft.Inv_crn_amount)) throw new Error("Inv / CRN amount is required.");
@@ -610,6 +614,7 @@ export function buildVendorInvoiceStartPayload(
       : positiveId(draft.state_id, "State"),
     currency_id: positiveId(draft.currency_id, "Currency"),
     date,
+    due_date: dueDate,
     Inv_Crn_no: textValue(draft.Inv_Crn_no),
     taxable_amount: toAmountString(draft.taxable_amount),
     Inv_crn_amount: toAmountString(draft.Inv_crn_amount),

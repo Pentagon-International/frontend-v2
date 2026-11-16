@@ -339,12 +339,36 @@ function mapOceanRoutings(booking: Record<string, unknown>, transportType: strin
   });
 }
 
+/** Cargo measure placeholders (0 / "0.00") — treat as empty so extract can fill. */
+function isEmptyCargoScalar(v: unknown): boolean {
+  if (v == null) return true;
+  if (typeof v === "boolean") return false;
+  if (typeof v === "string" && !v.trim()) return true;
+  if (typeof v === "number") return Number.isNaN(v) || v === 0;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return true;
+    const n = Number(s);
+    return Number.isFinite(n) && n === 0;
+  }
+  return false;
+}
+
+const CARGO_PLACEHOLDER_KEYS = new Set([
+  "gross_weight",
+  "gross_weight_kgs",
+  "volume",
+  "volume_cbm",
+  "chargeable_weight",
+  "no_of_packages",
+  "packages",
+  "no_of_containers",
+]);
+
 /** Prefer first non-empty cargo scalar (booking/extract alias-safe). */
 function firstCargoScalar(...vals: unknown[]): string | number | null {
   for (const v of vals) {
-    if (v == null) continue;
-    if (typeof v === "string" && !v.trim()) continue;
-    if (typeof v === "number" && Number.isNaN(v)) continue;
+    if (isEmptyCargoScalar(v)) continue;
     return v as string | number;
   }
   return null;
@@ -451,7 +475,10 @@ function mergeAutomationCargoDetails(
     const eRow = eIdx >= 0 ? extract[eIdx] : {};
     const merged: Record<string, unknown> = { ...eRow };
     for (const [k, v] of Object.entries(bRow)) {
-      if (!isEmptyMergeValue(v)) merged[k] = v;
+      const empty = CARGO_PLACEHOLDER_KEYS.has(k)
+        ? isEmptyCargoScalar(v)
+        : isEmptyMergeValue(v);
+      if (!empty) merged[k] = v;
     }
     return normalizeHouseCargoRow(merged);
   });
