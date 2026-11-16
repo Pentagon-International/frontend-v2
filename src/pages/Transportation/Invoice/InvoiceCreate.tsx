@@ -18,7 +18,9 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
+  IconAlertTriangle,
   IconArrowLeft,
+  IconCheck,
   IconChevronRight,
   IconPlus,
   IconTrash,
@@ -84,7 +86,13 @@ import {
 import {
   parseInvoiceMutationResponse,
   readIrnNoFromInvoiceData,
+  type InvoiceMutationResponse,
 } from "../../../utils/parseInvoiceMutationResponse";
+import {
+  getApiResponseMessage,
+  getServerErrorMessage,
+  isApiRequiresConfirmationResponse,
+} from "../../../utils/apiErrorMessage";
 import {
   isIndianOutstandingBranch,
   isIndianUserCountry,
@@ -1859,6 +1867,13 @@ function InvoiceCreate({
   const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [duplicateConfirmOpened, setDuplicateConfirmOpened] = useState(false);
+  const [duplicateConfirmMessage, setDuplicateConfirmMessage] = useState("");
+  const [pendingCreatePayload, setPendingCreatePayload] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const pendingCreateSilentSuccessRef = useRef(false);
   const [invoiceDataFromApi, setInvoiceDataFromApi] =
     useState<InvoiceDataFromApi | null>(null);
   const [saveResponse, setSaveResponse] = useState<{
@@ -4769,6 +4784,7 @@ function InvoiceCreate({
     console.log("values---", values);
 
     setIsSubmitting(true);
+    let createPayloadForConfirm: Record<string, unknown> | null = null;
     try {
       const headerRoeToastError = validateRoeForCurrency(
         values.currency,
@@ -5200,6 +5216,7 @@ function InvoiceCreate({
         }
         return true;
       } else {
+        createPayloadForConfirm = payload as Record<string, unknown>;
         const rawResponse = await postAPICall(URL.invoice, payload, API_HEADER);
         const parsed = parseInvoiceMutationResponse(
           rawResponse,
@@ -5207,72 +5224,154 @@ function InvoiceCreate({
           `${documentLabel} created successfully`,
         );
         if (!parsed.success) {
+          if (isApiRequiresConfirmationResponse(rawResponse)) {
+            pendingCreateSilentSuccessRef.current = Boolean(
+              options?.silentSuccess,
+            );
+            setPendingCreatePayload(createPayloadForConfirm);
+            setDuplicateConfirmMessage(
+              getApiResponseMessage(
+                rawResponse,
+                parsed.message || "Failed to create invoice",
+              ),
+            );
+            setDuplicateConfirmOpened(true);
+            return false;
+          }
           ToastNotification({
             message: parsed.message,
             type: "error",
           });
           return false;
         }
-        const response = parsed.data;
-        setSaveResponse({
-          id: response.id,
-          customer_id: response.customer_id,
-          document_no: response.document_no ?? "",
-          status: response.status ?? "UNPOSTED",
-        });
-        // Merge returned charge ids + saved GST amounts into form
-        if (response.charges && Array.isArray(response.charges)) {
-          const updatedCharges = form.values.charges.map((c, i) => {
-            const chargeRes = response.charges?.[i] as
-              | {
-                  id?: number | null;
-                  igst?: unknown;
-                  cgst?: unknown;
-                  sgst?: unknown;
-                }
-              | undefined;
-            const id = chargeRes?.id;
-            return {
-              ...c,
-              id: id != null ? Number(id) : c.id,
-              igst:
-                chargeRes != null
-                  ? parseSavedGstAmount(chargeRes.igst)
-                  : c.igst,
-              cgst:
-                chargeRes != null
-                  ? parseSavedGstAmount(chargeRes.cgst)
-                  : c.cgst,
-              sgst:
-                chargeRes != null
-                  ? parseSavedGstAmount(chargeRes.sgst)
-                  : c.sgst,
-            };
-          });
-          form.setFieldValue("charges", updatedCharges);
-        }
-        const createdIrnNo = readIrnNoFromInvoiceData(response);
-        if (createdIrnNo != null) {
-          form.setFieldValue("irn_no", createdIrnNo);
-        }
-        if (response.fapiao_no != null) {
-          form.setFieldValue("fapiao_no", String(response.fapiao_no));
-        }
-        if (!options?.silentSuccess) {
-          ToastNotification({
-            message: parsed.message,
-            type: "success",
-          });
-        }
+        applyCreatedInvoiceResponse(parsed.data, parsed.message, options);
         return true;
       }
     } catch (error: any) {
       console.error("Error creating invoice:", error);
+      if (
+        createPayloadForConfirm &&
+        isApiRequiresConfirmationResponse(error)
+      ) {
+        pendingCreateSilentSuccessRef.current = Boolean(options?.silentSuccess);
+        setPendingCreatePayload(createPayloadForConfirm);
+        setDuplicateConfirmMessage(
+          getApiResponseMessage(
+            error,
+            getServerErrorMessage(error, "Failed to create invoice"),
+          ),
+        );
+        setDuplicateConfirmOpened(true);
+        return false;
+      }
       ToastNotification({
         message: error?.message || "Failed to create invoice",
         type: "error",
       });
       return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const applyCreatedInvoiceResponse = (
+    response: InvoiceMutationResponse,
+    successMessage: string,
+    options?: { silentSuccess?: boolean },
+  ) => {
+    setSaveResponse({
+      id: response.id,
+      customer_id: response.customer_id,
+      document_no: response.document_no ?? "",
+      status: response.status ?? "UNPOSTED",
+    });
+    if (response.charges && Array.isArray(response.charges)) {
+      const updatedCharges = form.values.charges.map((c, i) => {
+        const chargeRes = response.charges?.[i] as
+          | {
+              id?: number | null;
+              igst?: unknown;
+              cgst?: unknown;
+              sgst?: unknown;
+            }
+          | undefined;
+        const id = chargeRes?.id;
+        return {
+          ...c,
+          id: id != null ? Number(id) : c.id,
+          igst:
+            chargeRes != null ? parseSavedGstAmount(chargeRes.igst) : c.igst,
+          cgst:
+            chargeRes != null ? parseSavedGstAmount(chargeRes.cgst) : c.cgst,
+          sgst:
+            chargeRes != null ? parseSavedGstAmount(chargeRes.sgst) : c.sgst,
+        };
+      });
+      form.setFieldValue("charges", updatedCharges);
+    }
+    const createdIrnNo = readIrnNoFromInvoiceData(response);
+    if (createdIrnNo != null) {
+      form.setFieldValue("irn_no", createdIrnNo);
+    }
+    if (response.fapiao_no != null) {
+      form.setFieldValue("fapiao_no", String(response.fapiao_no));
+    }
+    if (!options?.silentSuccess) {
+      ToastNotification({
+        message: successMessage,
+        type: "success",
+      });
+    }
+  };
+
+  const closeDuplicateConfirmModal = () => {
+    setDuplicateConfirmOpened(false);
+    setDuplicateConfirmMessage("");
+    setPendingCreatePayload(null);
+    pendingCreateSilentSuccessRef.current = false;
+  };
+
+  const handleConfirmDuplicateInvoice = async () => {
+    if (!pendingCreatePayload) {
+      closeDuplicateConfirmModal();
+      return;
+    }
+
+    const confirmPayload = {
+      ...pendingCreatePayload,
+      status: "UNPOSTED",
+      requires_confirmation: true,
+    };
+
+    setIsSubmitting(true);
+    try {
+      const rawResponse = await postAPICall(
+        URL.invoice,
+        confirmPayload,
+        API_HEADER,
+      );
+      const parsed = parseInvoiceMutationResponse(
+        rawResponse,
+        "Failed to create invoice",
+        `${documentLabel} created successfully`,
+      );
+      if (!parsed.success) {
+        ToastNotification({
+          message: parsed.message,
+          type: "error",
+        });
+        return;
+      }
+      applyCreatedInvoiceResponse(parsed.data, parsed.message, {
+        silentSuccess: pendingCreateSilentSuccessRef.current,
+      });
+      closeDuplicateConfirmModal();
+    } catch (error: unknown) {
+      console.error("Error confirming duplicate invoice:", error);
+      ToastNotification({
+        message: getServerErrorMessage(error, "Failed to create invoice"),
+        type: "error",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -8562,6 +8661,44 @@ function InvoiceCreate({
           </Group>
         </Box>
       </Stack>
+
+      {/* Duplicate invoice confirmation modal — body text is API `message` */}
+      <Modal
+        opened={duplicateConfirmOpened}
+        onClose={closeDuplicateConfirmModal}
+        title={
+          <Group gap="sm" wrap="nowrap">
+            <IconAlertTriangle size={20} color="#c2410c" />
+            <Text fw={600} size="md" c="#0f172a">
+              Confirmation
+            </Text>
+          </Group>
+        }
+        size="md"
+        centered
+        radius="md"
+        padding="lg"
+      >
+        <Stack gap="lg">
+          <Text size="sm" c="#0f172a" lh={1.6} style={{ whiteSpace: "pre-wrap" }}>
+            {duplicateConfirmMessage}
+          </Text>
+
+          <Group justify="flex-end" gap="sm">
+            <Button variant="default" onClick={closeDuplicateConfirmModal}>
+              No
+            </Button>
+            <Button
+              color="#105476"
+              leftSection={<IconCheck size={16} />}
+              onClick={() => void handleConfirmDuplicateInvoice()}
+              loading={isSubmitting}
+            >
+              Yes
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* PDF Preview Modal */}
       <Modal
