@@ -28,10 +28,7 @@ import {
   ToastNotification,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
-import {
-  getDefaultBranchCurrencyFromUser,
-  ROE_DECIMAL_PLACES,
-} from "../../../utils/exchangeRateRoe";
+import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
   formatMoneyAmount,
@@ -203,40 +200,6 @@ const getRowLocalAmount = (row: DocumentAllocationRow): number =>
     String(row.outstanding_local_amount ?? row.amount_in_local ?? ""),
   ) ?? 0;
 
-const getRowOutstandingAmount = (row: DocumentAllocationRow): number =>
-  parseDecimal(String(row.outstanding_amount ?? row.amount ?? "")) ?? 0;
-
-/** Local-currency docs → outstanding local; foreign → outstanding amount. */
-const isRowBranchLocalCurrency = (
-  row: DocumentAllocationRow,
-  branchCurrencyCode: string,
-  branchCurrencyId: string,
-): boolean => {
-  const localCode = String(branchCurrencyCode ?? "")
-    .trim()
-    .toUpperCase();
-  const rowCode = String(row.currency_code ?? "")
-    .trim()
-    .toUpperCase();
-  if (localCode && rowCode) return rowCode === localCode;
-
-  const localId = String(branchCurrencyId ?? "").trim();
-  const rowId = row.currency_id != null ? String(row.currency_id) : "";
-  if (localId && rowId) return localId === rowId;
-
-  // Incomplete currency metadata: keep prior local-amount behaviour.
-  return true;
-};
-
-const getRowAmountForValidation = (
-  row: DocumentAllocationRow,
-  branchCurrencyCode: string,
-  branchCurrencyId: string,
-): number =>
-  isRowBranchLocalCurrency(row, branchCurrencyCode, branchCurrencyId)
-    ? getRowLocalAmount(row)
-    : getRowOutstandingAmount(row);
-
 const sumCreditDebitNet = (
   source: DocumentAllocationRow[],
   getAmount: (row: DocumentAllocationRow) => number,
@@ -256,24 +219,9 @@ const sumCreditDebitNet = (
   };
 };
 
-const computeAllocationTotals = (
-  source: DocumentAllocationRow[],
-  branchCurrencyCode: string,
-  branchCurrencyId: string,
-) => {
-  // UI totals always use outstanding local amount.
-  const display = sumCreditDebitNet(source, getRowLocalAmount);
-  // Post validation follows document vs branch currency.
-  const validation = sumCreditDebitNet(source, (row) =>
-    getRowAmountForValidation(row, branchCurrencyCode, branchCurrencyId),
-  );
-  return {
-    credit: display.credit,
-    debit: display.debit,
-    net: display.net,
-    validationNet: validation.net,
-  };
-};
+/** UI totals always use outstanding local amount. */
+const computeAllocationTotals = (source: DocumentAllocationRow[]) =>
+  sumCreditDebitNet(source, getRowLocalAmount);
 
 const allocationRowsMissingDrCr = (
   source: DocumentAllocationRow[],
@@ -765,10 +713,6 @@ export default function DocumentAllocation() {
   const dateFormat = useDateFormat();
   const isVietnamBranch = useMemo(() => isVietnamBranchFromUser(user), [user]);
   bindMoneyWholeNumberMode(isVietnamBranch);
-  const { branchCurrencyCode, branchCurrencyId } = useMemo(
-    () => getDefaultBranchCurrencyFromUser(user?.branches),
-    [user?.branches],
-  );
   const hydratedDocumentIdRef = useRef<number | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [isHydrating, setIsHydrating] = useState(false);
@@ -825,17 +769,12 @@ export default function DocumentAllocation() {
   const showForeignExchangeGainLossButton = Boolean(foreignExchangeJvNo);
 
   const allocationTotals = useMemo(
-    () => computeAllocationTotals(rows, branchCurrencyCode, branchCurrencyId),
-    [rows, branchCurrencyCode, branchCurrencyId],
+    () => computeAllocationTotals(rows),
+    [rows],
   );
   const fetchedAllocationTotals = useMemo(
-    () =>
-      computeAllocationTotals(
-        fetchedRows,
-        branchCurrencyCode,
-        branchCurrencyId,
-      ),
-    [fetchedRows, branchCurrencyCode, branchCurrencyId],
+    () => computeAllocationTotals(fetchedRows),
+    [fetchedRows],
   );
 
   const allocationAuditSource = useMemo(() => {
@@ -1230,18 +1169,6 @@ export default function DocumentAllocation() {
       ToastNotification({
         type: "error",
         message: "Dr/Cr is required for every allocation row.",
-      });
-      return;
-    }
-
-    if (
-      Math.abs(allocationTotals.net) > 0.005 ||
-      Math.abs(allocationTotals.validationNet) > 0.005
-    ) {
-      ToastNotification({
-        type: "error",
-        message:
-          "Cannot post: the net total of allocated documents must be zero.",
       });
       return;
     }
