@@ -18,7 +18,9 @@ import {
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import {
+  IconAlertTriangle,
   IconArrowLeft,
+  IconCheck,
   IconChevronRight,
   IconPlus,
   IconTrash,
@@ -85,7 +87,13 @@ import {
 import {
   parseInvoiceMutationResponse,
   readIrnNoFromInvoiceData,
+  type InvoiceMutationResponse,
 } from "../../../utils/parseInvoiceMutationResponse";
+import {
+  getApiResponseMessage,
+  getServerErrorMessage,
+  isApiRequiresConfirmationResponse,
+} from "../../../utils/apiErrorMessage";
 import {
   isIndianOutstandingBranch,
   isIndianUserCountry,
@@ -1487,6 +1495,12 @@ function CreditNoteCreate() {
   const activeBranchCountryCode = defaultBranch?.country?.country_code ?? "";
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [duplicateConfirmOpened, setDuplicateConfirmOpened] = useState(false);
+  const [duplicateConfirmMessage, setDuplicateConfirmMessage] = useState("");
+  const [pendingCreatePayload, setPendingCreatePayload] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [invoiceDataFromApi, setInvoiceDataFromApi] =
     useState<InvoiceDataFromApi | null>(null);
   const [saveResponse, setSaveResponse] = useState<{
@@ -4147,6 +4161,7 @@ function CreditNoteCreate() {
     console.log("values---", values);
 
     setIsSubmitting(true);
+    let createPayloadForConfirm: Record<string, unknown> | null = null;
     try {
       const headerRoeToastError = validateRoeForCurrency(
         values.currency,
@@ -4543,6 +4558,7 @@ function CreditNoteCreate() {
           type: "success",
         });
       } else {
+        createPayloadForConfirm = payload as Record<string, unknown>;
         const rawResponse = await postAPICall(URL.invoice, payload, API_HEADER);
         const parsed = parseInvoiceMutationResponse(
           rawResponse,
@@ -4550,47 +4566,128 @@ function CreditNoteCreate() {
           `${documentLabel} created successfully`,
         );
         if (!parsed.success) {
+          if (isApiRequiresConfirmationResponse(rawResponse)) {
+            setPendingCreatePayload(createPayloadForConfirm);
+            setDuplicateConfirmMessage(
+              getApiResponseMessage(
+                rawResponse,
+                parsed.message || "Failed to create invoice",
+              ),
+            );
+            setDuplicateConfirmOpened(true);
+            return;
+          }
           ToastNotification({
             message: parsed.message,
             type: "error",
           });
           return;
         }
-        const response = parsed.data;
-        setSaveResponse({
-          id: response.id,
-          customer_id: response.customer_id,
-          document_no: response.document_no ?? "",
-          status: response.status ?? "UNPOSTED",
-        });
-        // Merge returned charge ids into form so Update (PUT) sends id for existing charges
-        if (response.charges && Array.isArray(response.charges)) {
-          const updatedCharges = form.values.charges.map((c, i) => {
-            const chargeRes = response.charges?.[i];
-            const id = chargeRes?.id;
-            return {
-              ...c,
-              id: id != null ? Number(id) : c.id,
-            };
-          });
-          form.setFieldValue("charges", updatedCharges);
-        }
-        const createdIrnNo = readIrnNoFromInvoiceData(response);
-        if (createdIrnNo != null) {
-          form.setFieldValue("irn_no", createdIrnNo);
-        }
-        if (response.fapiao_no != null) {
-          form.setFieldValue("fapiao_no", String(response.fapiao_no));
-        }
-        ToastNotification({
-          message: parsed.message,
-          type: "success",
-        });
+        applyCreatedCreditNoteResponse(parsed.data, parsed.message);
       }
     } catch (error: any) {
       console.error("Error creating invoice:", error);
+      if (
+        createPayloadForConfirm &&
+        isApiRequiresConfirmationResponse(error)
+      ) {
+        setPendingCreatePayload(createPayloadForConfirm);
+        setDuplicateConfirmMessage(
+          getApiResponseMessage(
+            error,
+            getServerErrorMessage(error, "Failed to create invoice"),
+          ),
+        );
+        setDuplicateConfirmOpened(true);
+        return;
+      }
       ToastNotification({
         message: error?.message || "Failed to create invoice",
+        type: "error",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const applyCreatedCreditNoteResponse = (
+    response: InvoiceMutationResponse,
+    successMessage: string,
+  ) => {
+    setSaveResponse({
+      id: response.id,
+      customer_id: response.customer_id,
+      document_no: response.document_no ?? "",
+      status: response.status ?? "UNPOSTED",
+    });
+    // Merge returned charge ids into form so Update (PUT) sends id for existing charges
+    if (response.charges && Array.isArray(response.charges)) {
+      const updatedCharges = form.values.charges.map((c, i) => {
+        const chargeRes = response.charges?.[i];
+        const id = chargeRes?.id;
+        return {
+          ...c,
+          id: id != null ? Number(id) : c.id,
+        };
+      });
+      form.setFieldValue("charges", updatedCharges);
+    }
+    const createdIrnNo = readIrnNoFromInvoiceData(response);
+    if (createdIrnNo != null) {
+      form.setFieldValue("irn_no", createdIrnNo);
+    }
+    if (response.fapiao_no != null) {
+      form.setFieldValue("fapiao_no", String(response.fapiao_no));
+    }
+    ToastNotification({
+      message: successMessage,
+      type: "success",
+    });
+  };
+
+  const closeDuplicateConfirmModal = () => {
+    setDuplicateConfirmOpened(false);
+    setDuplicateConfirmMessage("");
+    setPendingCreatePayload(null);
+  };
+
+  const handleConfirmDuplicateCreditNote = async () => {
+    if (!pendingCreatePayload) {
+      closeDuplicateConfirmModal();
+      return;
+    }
+
+    const confirmPayload = {
+      ...pendingCreatePayload,
+      status: "UNPOSTED",
+      requires_confirmation: true,
+    };
+
+    setIsSubmitting(true);
+    try {
+      const rawResponse = await postAPICall(
+        URL.invoice,
+        confirmPayload,
+        API_HEADER,
+      );
+      const parsed = parseInvoiceMutationResponse(
+        rawResponse,
+        "Failed to create invoice",
+        `${documentLabel} created successfully`,
+      );
+      if (!parsed.success) {
+        ToastNotification({
+          message: parsed.message,
+          type: "error",
+        });
+        return;
+      }
+      applyCreatedCreditNoteResponse(parsed.data, parsed.message);
+      closeDuplicateConfirmModal();
+    } catch (error: unknown) {
+      console.error("Error confirming duplicate credit note:", error);
+      ToastNotification({
+        message: getServerErrorMessage(error, "Failed to create invoice"),
         type: "error",
       });
     } finally {
@@ -7745,6 +7842,44 @@ function CreditNoteCreate() {
           </Group>
         </Box>
       </Stack>
+
+      {/* Duplicate credit note confirmation modal — body text is API `message` */}
+      <Modal
+        opened={duplicateConfirmOpened}
+        onClose={closeDuplicateConfirmModal}
+        title={
+          <Group gap="sm" wrap="nowrap">
+            <IconAlertTriangle size={20} color="#c2410c" />
+            <Text fw={600} size="md" c="#0f172a">
+              Confirmation
+            </Text>
+          </Group>
+        }
+        size="md"
+        centered
+        radius="md"
+        padding="lg"
+      >
+        <Stack gap="lg">
+          <Text size="sm" c="#0f172a" lh={1.6} style={{ whiteSpace: "pre-wrap" }}>
+            {duplicateConfirmMessage}
+          </Text>
+
+          <Group justify="flex-end" gap="sm">
+            <Button variant="default" onClick={closeDuplicateConfirmModal}>
+              No
+            </Button>
+            <Button
+              color="#105476"
+              leftSection={<IconCheck size={16} />}
+              onClick={() => void handleConfirmDuplicateCreditNote()}
+              loading={isSubmitting}
+            >
+              Yes
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {/* PDF Preview Modal */}
       <Modal
