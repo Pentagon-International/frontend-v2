@@ -343,6 +343,14 @@ function clampLocalAmount(value: number | null | undefined): number | null {
   return rounded;
 }
 
+/** Operational charge local amount: amount × ROE. */
+function computeChargeLocalAmount(
+  amount: number | null | undefined,
+  roe: number | null | undefined,
+): number | null {
+  return clampLocalAmount((amount ?? 0) * (roe ?? 0));
+}
+
 function toLocalAmount(
   value: number | string | null | undefined,
 ): number | null {
@@ -767,6 +775,27 @@ function isSupplierGstChargeRow(row: {
   );
 }
 
+/** GST/VAT breakup rows keep API/breakup locals; all other rows sync from amount × ROE. */
+function shouldPreserveChargeLocalAmount(row: {
+  charge_id?: number | null;
+  charge_name?: string;
+  charge_code?: string;
+  is_gst_breakup?: boolean;
+  CRN?: string;
+  shipment_no?: string;
+  account_code?: string;
+  account_name?: string;
+}): boolean {
+  return isSupplierVatBreakupRow(row) || isSupplierGstChargeRow(row);
+}
+
+function withSyncedChargeLocalAmount<T extends ChargeRow>(row: T): T {
+  if (shouldPreserveChargeLocalAmount(row)) return row;
+  const local = computeChargeLocalAmount(row.amount, row.roe);
+  if (local === (row.amount_in_local ?? null)) return row;
+  return { ...row, amount_in_local: local };
+}
+
 /**
  * India only: fetch GST rates by state+SAC and write cgst/sgst/igst onto
  * operational charge rows (Invoice pattern). Skips GST/VAT/TDS breakup rows.
@@ -796,14 +825,17 @@ async function enrichChargesWithSameRowGst(
       if (isSupplierGstChargeRow(c)) {
         return { ...c, ...EMPTY_SAME_ROW_GST };
       }
+      // Always derive local from amount × ROE so async GST enrich cannot
+      // re-apply a stale amount_in_local=0 snapshot over a corrected row.
+      const synced = withSyncedChargeLocalAmount(c);
       // TDS / non-charge ledger rows: no SAC → leave GST columns empty.
       const sac = String(c.tax_code ?? "").trim();
       if (!sac || c.charge_id == null) {
-        return c;
+        return synced;
       }
-      const local = clampLocalAmount(c.amount_in_local ?? 0) ?? 0;
+      const local = clampLocalAmount(synced.amount_in_local ?? 0) ?? 0;
       if (hasSez) {
-        return { ...c, ...computeSameRowGstAmounts(local, zeroRates) };
+        return { ...synced, ...computeSameRowGstAmounts(local, zeroRates) };
       }
       let rates = cache.get(sac);
       if (rates === undefined) {
@@ -818,7 +850,7 @@ async function enrichChargesWithSameRowGst(
         }
         cache.set(sac, rates);
       }
-      return { ...c, ...computeSameRowGstAmounts(local, rates) };
+      return { ...synced, ...computeSameRowGstAmounts(local, rates) };
     }),
   );
 }
@@ -853,6 +885,18 @@ function mapPaymentRequestChargeToSupplierRow(
     (c.charge_id == null || c.charge_id === "") && accountCode !== "";
   const rawDrCr =
     c.Dr_Cr ?? c.Dr_cr ?? c.dr_cr ?? c.cn_r ?? c.cr_dr ?? c.Cr_Dr;
+  const roe =
+    parseRoeForPayload(
+      c.roe as string | number | null | undefined,
+    ) ?? null;
+  const amount =
+    c.amount != null && c.amount !== ""
+      ? parseFloat(String(c.amount)) || null
+      : null;
+  const apiLocal =
+    c.local_amount != null && c.local_amount !== ""
+      ? parseFloat(String(c.local_amount)) || null
+      : null;
 
   return {
     CRN: isGstRow ? "Neutral" : isTdsRow ? "" : "Cost",
@@ -872,18 +916,11 @@ function mapPaymentRequestChargeToSupplierRow(
     charge_name: chargeName,
     is_gst_breakup: isGstRow,
     currency_id: c.currency_id != null ? Number(c.currency_id) : null,
-    roe:
-      parseRoeForPayload(
-        c.roe as string | number | null | undefined,
-      ) ?? null,
-    amount:
-      c.amount != null && c.amount !== ""
-        ? parseFloat(String(c.amount)) || null
-        : null,
-    amount_in_local:
-      c.local_amount != null && c.local_amount !== ""
-        ? parseFloat(String(c.local_amount)) || null
-        : null,
+    roe,
+    amount,
+    amount_in_local: isGstRow
+      ? apiLocal
+      : computeChargeLocalAmount(amount, roe),
     tax_code: String(c.sac_code ?? ""),
     igst_rate: parseOptionalNumber(
       c.igst_rate as string | number | null | undefined,
@@ -1121,6 +1158,26 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     const accountName = c.account_name ?? "";
     const chargeId = c.charge_id ?? null;
     const crn = c.CRN ?? "";
+    const isBreakup = isSupplierGstChargeRow({
+      charge_id: chargeId,
+      charge_name: chargeName,
+      charge_code: chargeCode,
+      CRN: crn,
+      shipment_no: shipmentNo,
+      account_code: accountCode,
+      account_name: accountName,
+    });
+    const roe =
+      typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null);
+    const amount =
+      typeof c.amount === "string"
+        ? parseFloat(c.amount) || null
+        : (c.amount ?? null);
+    const apiLocal = toLocalAmount(c.amount_in_local);
+    // Operational rows: prefer amount × ROE so a bad/zero API local cannot stick.
+    const amount_in_local = isBreakup
+      ? apiLocal
+      : computeChargeLocalAmount(amount, roe);
     return {
     id: c.id,
     account_id: c.account_id != null ? Number(c.account_id) : null,
@@ -1133,23 +1190,11 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     charge_id: chargeId,
     charge_name: chargeName,
     charge_code: chargeCode || undefined,
-    is_gst_breakup: isSupplierGstChargeRow({
-      charge_id: chargeId,
-      charge_name: chargeName,
-      charge_code: chargeCode,
-      CRN: crn,
-      shipment_no: shipmentNo,
-      account_code: accountCode,
-      account_name: accountName,
-    }),
+    is_gst_breakup: isBreakup,
     currency_id: c.currency_id ?? null,
-    roe:
-      typeof c.roe === "string" ? parseFloat(c.roe) || null : (c.roe ?? null),
-    amount:
-      typeof c.amount === "string"
-        ? parseFloat(c.amount) || null
-        : (c.amount ?? null),
-    amount_in_local: toLocalAmount(c.amount_in_local),
+    roe,
+    amount,
+    amount_in_local,
     tax_code: c.tax_code ?? "",
     igst_rate: parseOptionalNumber(c.igst_rate),
     igst: toLocalAmount(c.igst),
@@ -2572,10 +2617,12 @@ export default function SupplierInvoiceCreate({
 
   // Auto-calc amount_in_local = ROE * Amount, and VAT/GST amounts = local × rate / 100
   // (not for supplier reversal — preserve API figures)
+  // Include amount_in_local in the key so a later write that resets local to 0
+  // (e.g. stale GST enrich snapshot) re-triggers sync instead of sticking.
   const chargesAmountRoeKey = form.values.charges_data
     .map(
       (c) =>
-        `${c.amount}-${c.roe}-${c.igst_rate}-${c.cgst_rate}-${c.sgst_rate}`,
+        `${c.amount}-${c.roe}-${c.amount_in_local}-${c.igst_rate}-${c.cgst_rate}-${c.sgst_rate}`,
     )
     .join(",");
   useEffect(() => {
@@ -2591,12 +2638,10 @@ export default function SupplierInvoiceCreate({
     let changed = false;
     const next = charges.map((c) => {
       // Appended VAT/GST tax rows keep their breakup amounts as-is.
-      if (isSupplierVatBreakupRow(c) || isSupplierGstChargeRow(c)) {
+      if (shouldPreserveChargeLocalAmount(c)) {
         return c;
       }
-      const amount = c.amount ?? 0;
-      const roe = c.roe ?? 0;
-      const local = clampLocalAmount(amount * roe);
+      const local = computeChargeLocalAmount(c.amount, c.roe);
       if (!isIndiaUser) {
         const vat = calcChargeVatAmount(local, c.igst_rate);
         if (local !== (c.amount_in_local ?? null) || vat !== (c.igst ?? null)) {
@@ -2676,19 +2721,52 @@ export default function SupplierInvoiceCreate({
         hasSez,
       });
       if (cancelled) return;
-      const changed = enriched.some((c, i) => {
-        const prev = chargesSnapshot[i];
-        if (!prev) return true;
-        return (
-          c.igst_rate !== prev.igst_rate ||
-          c.cgst_rate !== prev.cgst_rate ||
-          c.sgst_rate !== prev.sgst_rate ||
-          c.igst !== prev.igst ||
-          c.cgst !== prev.cgst ||
-          c.sgst !== prev.sgst
-        );
+      // Merge onto the latest form rows so a slow GST response cannot wipe a
+      // newer amount / amount_in_local the user (or auto-calc) already set.
+      const latest = form.values.charges_data ?? [];
+      let changed = false;
+      const merged = latest.map((live, i) => {
+        const e = enriched[i];
+        if (!e) return live;
+        if (shouldPreserveChargeLocalAmount(live)) {
+          if (
+            e.igst_rate !== live.igst_rate ||
+            e.cgst_rate !== live.cgst_rate ||
+            e.sgst_rate !== live.sgst_rate ||
+            e.igst !== live.igst ||
+            e.cgst !== live.cgst ||
+            e.sgst !== live.sgst
+          ) {
+            changed = true;
+            return { ...live, ...EMPTY_SAME_ROW_GST };
+          }
+          return live;
+        }
+        const local = computeChargeLocalAmount(live.amount, live.roe);
+        const next = {
+          ...live,
+          amount_in_local: local,
+          ...computeSameRowGstAmounts(local ?? 0, {
+            igst: e.igst_rate,
+            cgst: e.cgst_rate,
+            sgst: e.sgst_rate,
+            same_state: (e.cgst_rate ?? 0) > 0 || (e.sgst_rate ?? 0) > 0,
+          }),
+        };
+        if (
+          next.amount_in_local !== (live.amount_in_local ?? null) ||
+          next.igst_rate !== live.igst_rate ||
+          next.cgst_rate !== live.cgst_rate ||
+          next.sgst_rate !== live.sgst_rate ||
+          next.igst !== live.igst ||
+          next.cgst !== live.cgst ||
+          next.sgst !== live.sgst
+        ) {
+          changed = true;
+        }
+        return next;
       });
-      if (changed) form.setFieldValue("charges_data", enriched);
+      if (changed) form.setFieldValue("charges_data", merged);
     })();
     return () => {
       cancelled = true;
@@ -3460,7 +3538,7 @@ export default function SupplierInvoiceCreate({
               : null,
             roe: roeNum,
             amount: amountNum,
-            amount_in_local: null,
+            amount_in_local: computeChargeLocalAmount(amountNum, roeNum),
             tax_code: "",
             ...EMPTY_SAME_ROW_GST,
             Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
@@ -3528,6 +3606,10 @@ export default function SupplierInvoiceCreate({
     const isCreate = savedId == null;
     const chargesPayload = values.charges_data.map((c) => {
       const taxCode = String(c.tax_code ?? "").trim();
+      // Last-line defense: never submit a stale zero local when amount × ROE is non-zero.
+      const syncedLocal = shouldPreserveChargeLocalAmount(c)
+        ? c.amount_in_local
+        : computeChargeLocalAmount(c.amount, c.roe);
       const base = {
         account_code: c.account_code || "",
         account_name: c.account_name || "",
@@ -3539,7 +3621,7 @@ export default function SupplierInvoiceCreate({
         currency_id: c.currency_id ?? null,
         roe: formatRoeForAccountsPayload(c.roe),
         amount: formatAmountToTwoDecimals(c.amount ?? 0),
-        amount_in_local: formatLocalAmount(c.amount_in_local ?? 0),
+        amount_in_local: formatLocalAmount(syncedLocal ?? 0),
         tax_code: taxCode,
         Dr_Cr: c.Dr_Cr,
         igst_rate: formatAmountToTwoDecimals(c.igst_rate ?? 0),
@@ -3880,16 +3962,29 @@ export default function SupplierInvoiceCreate({
         }
       }
 
+      // Sync locals from amount × ROE before persist (closes stale-zero loophole).
+      const syncedCharges = isReversal
+        ? (values.charges_data ?? [])
+        : (values.charges_data ?? []).map(withSyncedChargeLocalAmount);
+      let valuesToSave: SupplierInvoiceFormValues = {
+        ...values,
+        charges_data: syncedCharges,
+      };
+      if (syncedCharges !== values.charges_data) {
+        form.setFieldValue("charges_data", syncedCharges);
+      }
+
       // India: compute same-row cgst/sgst/igst like Invoice before persist.
-      let valuesToSave = values;
       if (isIndiaUser) {
-        const stateId = values.state_id ? Number(values.state_id) : null;
+        const stateId = valuesToSave.state_id
+          ? Number(valuesToSave.state_id)
+          : null;
         const enriched = await enrichChargesWithSameRowGst(
-          values.charges_data ?? [],
+          valuesToSave.charges_data ?? [],
           stateId,
           { hasSez },
         );
-        valuesToSave = { ...values, charges_data: enriched };
+        valuesToSave = { ...valuesToSave, charges_data: enriched };
         form.setFieldValue("charges_data", enriched);
       }
 
@@ -4193,7 +4288,10 @@ export default function SupplierInvoiceCreate({
             currency_id: currencyId != null ? Number(currencyId) : null,
             roe: parseRoeForPayload(roe),
             amount: Number(amount),
-            amount_in_local: clampLocalAmount(Number(amount)),
+            amount_in_local: computeChargeLocalAmount(
+              Number(amount),
+              parseRoeForPayload(roe),
+            ),
             tax_code: "",
             ...EMPTY_SAME_ROW_GST,
             Dr_Cr: normalizeDrCr(
@@ -6704,11 +6802,18 @@ export default function SupplierInvoiceCreate({
                             onRoeValueChange(
                               chargeCode,
                               typeof v === "number" ? v : null,
-                              (roe) =>
+                              (roe) => {
                                 form.setFieldValue(
                                   `charges_data.${index}.roe`,
                                   roe,
-                                ),
+                                );
+                                if (!shouldPreserveChargeLocalAmount(row)) {
+                                  form.setFieldValue(
+                                    `charges_data.${index}.amount_in_local`,
+                                    computeChargeLocalAmount(row.amount, roe),
+                                  );
+                                }
+                              },
                               form.setFieldError,
                               form.clearFieldError,
                               `charges_data.${index}.roe`,
@@ -6758,12 +6863,20 @@ export default function SupplierInvoiceCreate({
                       <NumberInput
                         placeholder="0"
                         value={row.amount ?? undefined}
-                        onChange={(v) =>
+                        onChange={(v) => {
+                          const amount =
+                            typeof v === "number" ? clampAmount(v) : null;
                           form.setFieldValue(
                             `charges_data.${index}.amount`,
-                            typeof v === "number" ? clampAmount(v) : null,
-                          )
-                        }
+                            amount,
+                          );
+                          if (!shouldPreserveChargeLocalAmount(row)) {
+                            form.setFieldValue(
+                              `charges_data.${index}.amount_in_local`,
+                              computeChargeLocalAmount(amount, row.roe),
+                            );
+                          }
+                        }}
                         min={0}
                         decimalScale={currencyAmountDecimalScale}
                         hideControls
