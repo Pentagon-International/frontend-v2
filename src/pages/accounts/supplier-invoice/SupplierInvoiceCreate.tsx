@@ -828,10 +828,10 @@ async function enrichChargesWithSameRowGst(
       // Always derive local from amount × ROE so async GST enrich cannot
       // re-apply a stale amount_in_local=0 snapshot over a corrected row.
       const synced = withSyncedChargeLocalAmount(c);
-      // TDS / non-charge ledger rows: no SAC → leave GST columns empty.
+      // No SAC (or TDS / non-charge ledger): clear same-row GST columns.
       const sac = String(c.tax_code ?? "").trim();
       if (!sac || c.charge_id == null) {
-        return synced;
+        return { ...synced, ...EMPTY_SAME_ROW_GST };
       }
       const local = clampLocalAmount(synced.amount_in_local ?? 0) ?? 0;
       if (hasSez) {
@@ -2622,7 +2622,7 @@ export default function SupplierInvoiceCreate({
   const chargesAmountRoeKey = form.values.charges_data
     .map(
       (c) =>
-        `${c.amount}-${c.roe}-${c.amount_in_local}-${c.igst_rate}-${c.cgst_rate}-${c.sgst_rate}`,
+        `${c.amount}-${c.roe}-${c.amount_in_local}-${String(c.tax_code ?? "").trim()}-${c.igst_rate}-${c.cgst_rate}-${c.sgst_rate}`,
     )
     .join(",");
   useEffect(() => {
@@ -2650,6 +2650,22 @@ export default function SupplierInvoiceCreate({
         return { ...c, amount_in_local: local, igst: vat };
       }
       // India: recompute same-row GST from rates already on the charge (Invoice parity).
+      // No SAC → clear CGST/SGST/IGST so stale values cannot linger.
+      const sac = String(c.tax_code ?? "").trim();
+      if (!sac) {
+        if (
+          local !== (c.amount_in_local ?? null) ||
+          c.igst_rate != null ||
+          c.cgst_rate != null ||
+          c.sgst_rate != null ||
+          c.igst != null ||
+          c.cgst != null ||
+          c.sgst != null
+        ) {
+          changed = true;
+        }
+        return { ...c, amount_in_local: local, ...EMPTY_SAME_ROW_GST };
+      }
       // SEZ → zero GST like Invoice.
       if (hasSez) {
         const computed = computeSameRowGstAmounts(local ?? 0, {
@@ -2743,16 +2759,19 @@ export default function SupplierInvoiceCreate({
           return live;
         }
         const local = computeChargeLocalAmount(live.amount, live.roe);
-        const next = {
-          ...live,
-          amount_in_local: local,
-          ...computeSameRowGstAmounts(local ?? 0, {
-            igst: e.igst_rate,
-            cgst: e.cgst_rate,
-            sgst: e.sgst_rate,
-            same_state: (e.cgst_rate ?? 0) > 0 || (e.sgst_rate ?? 0) > 0,
-          }),
-        };
+        const liveSac = String(live.tax_code ?? "").trim();
+        const next = !liveSac
+          ? { ...live, amount_in_local: local, ...EMPTY_SAME_ROW_GST }
+          : {
+              ...live,
+              amount_in_local: local,
+              ...computeSameRowGstAmounts(local ?? 0, {
+                igst: e.igst_rate,
+                cgst: e.cgst_rate,
+                sgst: e.sgst_rate,
+                same_state: (e.cgst_rate ?? 0) > 0 || (e.sgst_rate ?? 0) > 0,
+              }),
+            };
         if (
           next.amount_in_local !== (live.amount_in_local ?? null) ||
           next.igst_rate !== live.igst_rate ||
@@ -3610,6 +3629,10 @@ export default function SupplierInvoiceCreate({
       const syncedLocal = shouldPreserveChargeLocalAmount(c)
         ? c.amount_in_local
         : computeChargeLocalAmount(c.amount, c.roe);
+      const isBreakup = shouldPreserveChargeLocalAmount(c);
+      // India operational rows without SAC: omit same-row GST fields entirely.
+      const includeIndiaSameRowGst = isIndiaUser && (isBreakup || taxCode !== "");
+      const includeOverseasVat = !isIndiaUser;
       const base = {
         account_code: c.account_code || "",
         account_name: c.account_name || "",
@@ -3624,10 +3647,14 @@ export default function SupplierInvoiceCreate({
         amount_in_local: formatLocalAmount(syncedLocal ?? 0),
         tax_code: taxCode,
         Dr_Cr: c.Dr_Cr,
-        igst_rate: formatAmountToTwoDecimals(c.igst_rate ?? 0),
-        igst: formatLocalAmount(c.igst ?? 0),
-        // India only: same-row CGST/SGST (Invoice parity). Overseas keeps igst* VAT only.
-        ...(isIndiaUser
+        ...(includeOverseasVat || includeIndiaSameRowGst
+          ? {
+              igst_rate: formatAmountToTwoDecimals(c.igst_rate ?? 0),
+              igst: formatLocalAmount(c.igst ?? 0),
+            }
+          : {}),
+        // India only: same-row CGST/SGST when SAC present (or GST breakup rows).
+        ...(includeIndiaSameRowGst
           ? {
               cgst_rate: formatAmountToTwoDecimals(c.cgst_rate ?? 0),
               cgst: formatLocalAmount(c.cgst ?? 0),
@@ -6910,12 +6937,40 @@ export default function SupplierInvoiceCreate({
                           placeholder="SAC Code"
                           data={sacCodeOptionsForForm}
                           value={String(row.tax_code ?? "").trim() || null}
-                          onChange={(val) =>
+                          onChange={(val) => {
+                            const nextSac = String(val ?? "").trim();
                             form.setFieldValue(
                               `charges_data.${index}.tax_code`,
-                              String(val ?? "").trim(),
-                            )
-                          }
+                              nextSac,
+                            );
+                            // Clearing SAC must wipe same-row CGST/SGST/IGST immediately.
+                            if (!nextSac && !shouldPreserveChargeLocalAmount(row)) {
+                              form.setFieldValue(
+                                `charges_data.${index}.igst_rate`,
+                                null,
+                              );
+                              form.setFieldValue(
+                                `charges_data.${index}.igst`,
+                                null,
+                              );
+                              form.setFieldValue(
+                                `charges_data.${index}.cgst_rate`,
+                                null,
+                              );
+                              form.setFieldValue(
+                                `charges_data.${index}.cgst`,
+                                null,
+                              );
+                              form.setFieldValue(
+                                `charges_data.${index}.sgst_rate`,
+                                null,
+                              );
+                              form.setFieldValue(
+                                `charges_data.${index}.sgst`,
+                                null,
+                              );
+                            }
+                          }}
                           disabled={isReadOnly || reversalFormDisabled}
                           styles={{
                             input: {
