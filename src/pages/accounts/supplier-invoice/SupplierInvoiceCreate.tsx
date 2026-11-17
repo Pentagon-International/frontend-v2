@@ -238,8 +238,13 @@ type ChargeRow = {
   amount_in_local: number | null;
   tax_code: string;
   Dr_Cr: "Cr" | "Dr";
+  /** Same-row GST (India) / VAT (overseas uses igst* only). */
   igst_rate: number | null;
   igst: number | null;
+  cgst_rate: number | null;
+  cgst: number | null;
+  sgst_rate: number | null;
+  sgst: number | null;
 };
 
 type SupportingDocument = {
@@ -367,6 +372,118 @@ function calcChargeVatAmount(
     return null;
   }
   return clampLocalAmount((localAmount * vatRate) / 100);
+}
+
+/** Empty same-row GST fields for new / tax / TDS charge rows. */
+const EMPTY_SAME_ROW_GST = {
+  igst_rate: null as number | null,
+  igst: null as number | null,
+  cgst_rate: null as number | null,
+  cgst: null as number | null,
+  sgst_rate: null as number | null,
+  sgst: null as number | null,
+};
+
+type GstRatesBySacResponse = {
+  igst_percent?: number | string | null;
+  cgst_percent?: number | string | null;
+  sgst_percent?: number | string | null;
+  same_state?: boolean | string | null;
+};
+
+type GstRates = {
+  igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
+  same_state: boolean;
+};
+
+const fetchGstRatesByStateSac = async (payload: {
+  state_id: number;
+  sac_code: string;
+}) => {
+  return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
+};
+
+function parseGstRatesPayload(res: unknown): GstRates | null {
+  const resObj = res as {
+    data?: { data?: GstRatesBySacResponse; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  const payload = resObj?.data?.data ?? resObj?.data ?? res;
+  const data = payload as GstRatesBySacResponse | null | undefined;
+  if (!data || typeof data !== "object") return null;
+  const igstRaw = data.igst_percent;
+  const cgstRaw = data.cgst_percent;
+  const sgstRaw = data.sgst_percent;
+  const igst = igstRaw == null || igstRaw === "" ? null : Number(igstRaw);
+  const cgst = cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw);
+  const sgst = sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw);
+  const rawSame = data.same_state;
+  let same_state = false;
+  if (rawSame === true || rawSame === "true" || rawSame === "True") {
+    same_state = true;
+  } else if (rawSame === false || rawSame === "false" || rawSame === "False") {
+    same_state = false;
+  } else if ((cgst ?? 0) > 0 || (sgst ?? 0) > 0) {
+    same_state = true;
+  } else if ((igst ?? 0) > 0) {
+    same_state = false;
+  }
+  return {
+    igst: Number.isFinite(igst as number) ? igst : null,
+    cgst: Number.isFinite(cgst as number) ? cgst : null,
+    sgst: Number.isFinite(sgst as number) ? sgst : null,
+    same_state,
+  };
+}
+
+/** Invoice-parity: local × rate / 100 onto the same operational charge. */
+function computeSameRowGstAmounts(
+  localAmount: number,
+  rates: GstRates | null,
+): {
+  igst_rate: number;
+  cgst_rate: number;
+  sgst_rate: number;
+  igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
+} {
+  if (!rates) {
+    return {
+      igst_rate: 0,
+      cgst_rate: 0,
+      sgst_rate: 0,
+      igst: 0,
+      cgst: 0,
+      sgst: 0,
+    };
+  }
+  const igstRate = rates.igst ?? 0;
+  const cgstRate = rates.cgst ?? 0;
+  const sgstRate = rates.sgst ?? 0;
+  const sameState = rates.same_state;
+  const igstAmt =
+    sameState || igstRate <= 0
+      ? 0
+      : clampLocalAmount((localAmount * Number(igstRate)) / 100);
+  const cgstAmt =
+    !sameState || cgstRate <= 0
+      ? 0
+      : clampLocalAmount((localAmount * Number(cgstRate)) / 100);
+  const sgstAmt =
+    !sameState || sgstRate <= 0
+      ? 0
+      : clampLocalAmount((localAmount * Number(sgstRate)) / 100);
+  return {
+    igst_rate: igstRate,
+    cgst_rate: cgstRate,
+    sgst_rate: sgstRate,
+    igst: igstAmt,
+    cgst: cgstAmt,
+    sgst: sgstAmt,
+  };
 }
 
 /** VAT breakup from calculate-gst-breakup (vat: true) — Invoice Tax-tab shape. */
@@ -650,6 +767,62 @@ function isSupplierGstChargeRow(row: {
   );
 }
 
+/**
+ * India only: fetch GST rates by state+SAC and write cgst/sgst/igst onto
+ * operational charge rows (Invoice pattern). Skips GST/VAT/TDS breakup rows.
+ * SEZ → zero rates/amounts (Invoice parity).
+ */
+async function enrichChargesWithSameRowGst(
+  charges: ChargeRow[],
+  stateId: number | null,
+  options?: { hasSez?: boolean },
+): Promise<ChargeRow[]> {
+  const hasSez = options?.hasSez === true;
+  if (
+    !hasSez &&
+    (stateId == null || !Number.isFinite(stateId) || stateId <= 0)
+  ) {
+    return charges;
+  }
+  const cache = new Map<string, GstRates | null>();
+  const zeroRates: GstRates = {
+    igst: 0,
+    cgst: 0,
+    sgst: 0,
+    same_state: false,
+  };
+  return Promise.all(
+    charges.map(async (c) => {
+      if (isSupplierGstChargeRow(c)) {
+        return { ...c, ...EMPTY_SAME_ROW_GST };
+      }
+      // TDS / non-charge ledger rows: no SAC → leave GST columns empty.
+      const sac = String(c.tax_code ?? "").trim();
+      if (!sac || c.charge_id == null) {
+        return c;
+      }
+      const local = clampLocalAmount(c.amount_in_local ?? 0) ?? 0;
+      if (hasSez) {
+        return { ...c, ...computeSameRowGstAmounts(local, zeroRates) };
+      }
+      let rates = cache.get(sac);
+      if (rates === undefined) {
+        try {
+          const res = await fetchGstRatesByStateSac({
+            state_id: stateId as number,
+            sac_code: sac,
+          });
+          rates = parseGstRatesPayload(res);
+        } catch {
+          rates = null;
+        }
+        cache.set(sac, rates);
+      }
+      return { ...c, ...computeSameRowGstAmounts(local, rates) };
+    }),
+  );
+}
+
 function signedByDrCr(
   amount: number,
   drCr: "Dr" | "Cr" | null | undefined,
@@ -716,6 +889,14 @@ function mapPaymentRequestChargeToSupplierRow(
       c.igst_rate as string | number | null | undefined,
     ),
     igst: toLocalAmount(c.igst as string | number | null | undefined),
+    cgst_rate: parseOptionalNumber(
+      c.cgst_rate as string | number | null | undefined,
+    ),
+    cgst: toLocalAmount(c.cgst as string | number | null | undefined),
+    sgst_rate: parseOptionalNumber(
+      c.sgst_rate as string | number | null | undefined,
+    ),
+    sgst: toLocalAmount(c.sgst as string | number | null | undefined),
     // Preserve Dr/Cr exactly as returned by the payment request.
     Dr_Cr: normalizeDrCr(rawDrCr),
   };
@@ -783,6 +964,10 @@ type ApiCharge = {
   Dr_Cr?: string;
   igst_rate?: number | string;
   igst?: number | string;
+  cgst_rate?: number | string;
+  cgst?: number | string;
+  sgst_rate?: number | string;
+  sgst?: number | string;
 };
 
 /** Map account/subledger from charge-master selection response (frontend-only). */
@@ -968,6 +1153,10 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
     tax_code: c.tax_code ?? "",
     igst_rate: parseOptionalNumber(c.igst_rate),
     igst: toLocalAmount(c.igst),
+    cgst_rate: parseOptionalNumber(c.cgst_rate),
+    cgst: toLocalAmount(c.cgst),
+    sgst_rate: parseOptionalNumber(c.sgst_rate),
+    sgst: toLocalAmount(c.sgst),
     Dr_Cr: (() => {
       const v = (c.Dr_Cr ?? "").toString().toUpperCase();
       return (v === "CR" || v === "DR" ? (v === "CR" ? "Cr" : "Dr") : "Dr") as
@@ -1428,47 +1617,6 @@ export default function SupplierInvoiceCreate({
     [isIndiaUser],
   );
 
-  /** Spans must total 12 so Charges header + rows stay on one line. */
-  const chargeColSpans = useMemo(
-    () =>
-      isIndiaUser
-        ? {
-            shipment: 1.25,
-            charge: 1.25,
-            crn: 0.8,
-            account: 1,
-            subledger: 1,
-            narration: 1.5,
-            currency: 0.75,
-            roe: 0.65,
-            amount: 0.8,
-            localAmount: 0.8,
-            sac: 0.75,
-            vatRate: 0,
-            vatAmount: 0,
-            drCr: 0.75,
-            actions: 0.7,
-          }
-        : {
-            shipment: 1.2,
-            charge: 1.2,
-            crn: 0.7,
-            account: 0.95,
-            subledger: 0.95,
-            narration: 1.3,
-            currency: 0.7,
-            roe: 0.6,
-            amount: 0.75,
-            localAmount: 0.75,
-            sac: 0,
-            vatRate: 0.7,
-            vatAmount: 0.8,
-            drCr: 0.7,
-            actions: 0.7,
-          },
-    [isIndiaUser],
-  );
-
   const form = useForm<SupplierInvoiceFormValues>({
     initialValues: {
       cbp_number: "",
@@ -1519,8 +1667,7 @@ export default function SupplierInvoiceCreate({
           amount: null,
           amount_in_local: null,
           tax_code: "",
-          igst_rate: null,
-          igst: null,
+          ...EMPTY_SAME_ROW_GST,
           Dr_Cr: isReversal ? "Cr" : "Dr", // Charges: Supplier default="Dr", Reverse default="Cr"
         },
       ],
@@ -1591,6 +1738,70 @@ export default function SupplierInvoiceCreate({
       },
     },
   });
+
+  /** Invoice parity: same-state → CGST+SGST columns; inter-state → IGST. */
+  const indiaGstSameState = useMemo((): boolean | undefined => {
+    if (!isIndiaUser) return undefined;
+    const ops = (form.values.charges_data ?? []).filter(
+      (c) => !isSupplierGstChargeRow(c),
+    );
+    if (ops.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0)) {
+      return true;
+    }
+    if (ops.some((c) => (c.igst_rate ?? 0) > 0)) return false;
+    return undefined;
+  }, [isIndiaUser, form.values.charges_data]);
+
+  /** Spans must total 12 so Charges header + rows stay on one line. */
+  const chargeColSpans = useMemo(() => {
+    const showCgstSgst = isIndiaUser && indiaGstSameState === true;
+    const showIgst = isIndiaUser && indiaGstSameState === false;
+    if (isIndiaUser) {
+      const cols = {
+        shipment: 1.1,
+        charge: 1.1,
+        crn: 0.7,
+        account: 0.9,
+        subledger: 0.9,
+        narration: 1.2,
+        currency: 0.65,
+        roe: 0.55,
+        amount: 0.7,
+        localAmount: 0.7,
+        sac: 0.7,
+        cgst: showCgstSgst ? 0.55 : 0,
+        sgst: showCgstSgst ? 0.55 : 0,
+        igst: showIgst ? 0.7 : 0,
+        vatRate: 0,
+        vatAmount: 0,
+        drCr: 0.65,
+        actions: 0.65,
+      };
+      const used = Object.values(cols).reduce((a, b) => a + b, 0);
+      if (used < 12) cols.narration += 12 - used;
+      return cols;
+    }
+    return {
+      shipment: 1.2,
+      charge: 1.2,
+      crn: 0.7,
+      account: 0.95,
+      subledger: 0.95,
+      narration: 1.3,
+      currency: 0.7,
+      roe: 0.6,
+      amount: 0.75,
+      localAmount: 0.75,
+      sac: 0,
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+      vatRate: 0.7,
+      vatAmount: 0.8,
+      drCr: 0.7,
+      actions: 0.7,
+    };
+  }, [isIndiaUser, indiaGstSameState]);
 
   const getDrCrDefaultsByType = useCallback(
     (type: "INV" | "CRN") =>
@@ -1984,7 +2195,10 @@ export default function SupplierInvoiceCreate({
     agentDisplayNameRef.current = agentDisplayName;
   }, [agentDisplayName]);
   const [vendorAddress, setVendorAddress] = useState("");
+  const [hasSez, setHasSez] = useState(false);
   const partyCreditDayRef = useRef<number | null>(null);
+  /** Skip duplicate check-sez-status when vendor/address/date/shipment unchanged. */
+  const lastSezFetchKeyRef = useRef("");
   /**
    * Apply due date from credit_day only when vendor is selected/changed
    * (or on create when vendor is first resolved). Manual due-date edits are kept
@@ -2091,7 +2305,14 @@ export default function SupplierInvoiceCreate({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyAddresses, stateOptions, isIndiaUser, isVendorSelected]);
 
-  // Vendor/Supplier + address + document date → credit_day for due date
+  // First shipment only (Invoice uses header shipment_no) — avoid re-hitting
+  // check-sez-status on every charge amount/GST edit.
+  const firstShipmentForSez =
+    (form.values.charges_data ?? [])
+      .map((c) => String(c.shipment_no ?? "").trim())
+      .find((s) => s.length > 0) ?? "";
+
+  // Vendor/Supplier + address + document date → credit_day for due date + SEZ.
   // Pass service_id (job/shipment) + active branch_id so CRM credit resolves correctly.
   useEffect(() => {
     if (isViewMode || isReversal) return;
@@ -2100,6 +2321,8 @@ export default function SupplierInvoiceCreate({
     const addressLabel = String(vendorAddress ?? "").trim();
     if (!customerCode || !addressLabel) {
       partyCreditDayRef.current = null;
+      lastSezFetchKeyRef.current = "";
+      setHasSez(false);
       return;
     }
 
@@ -2126,14 +2349,21 @@ export default function SupplierInvoiceCreate({
     let cancelled = false;
     void (async () => {
       let serviceIdForCredit = fallbackServiceIdFromState;
-      // Form stores rows on charges_data (not charges) — required to resolve service_id from shipment.
-      const firstShipment = (form.values.charges_data ?? [])
-        .map((c: { shipment_no?: string }) => String(c.shipment_no ?? "").trim())
-        .find((s: string) => s.length > 0);
-      if (serviceIdForCredit == null && firstShipment) {
+      if (serviceIdForCredit == null && firstShipmentForSez) {
         serviceIdForCredit =
-          (await getServiceIdByShipmentIdAsync(firstShipment)) ?? null;
+          (await getServiceIdByShipmentIdAsync(firstShipmentForSez)) ?? null;
       }
+      if (cancelled) return;
+
+      const fetchKey = [
+        customerCode,
+        addressLabel,
+        documentDateStr,
+        String(serviceIdForCredit ?? ""),
+        String(activeBranchId ?? ""),
+        String(activeCountryId ?? ""),
+      ].join("|");
+      if (lastSezFetchKeyRef.current === fetchKey) return;
 
       const result = await fetchCheckSezStatus({
         customer_code: customerCode,
@@ -2144,6 +2374,8 @@ export default function SupplierInvoiceCreate({
         country_id: activeCountryId,
       });
       if (cancelled) return;
+      lastSezFetchKeyRef.current = fetchKey;
+      setHasSez(isIndiaUser ? Boolean(result.sez) : false);
       partyCreditDayRef.current = result.credit_day;
       if (
         pendingApplyDueDateFromCreditRef.current &&
@@ -2165,10 +2397,11 @@ export default function SupplierInvoiceCreate({
   }, [
     form.values.agent_code,
     form.values.date,
-    form.values.charges_data,
+    firstShipmentForSez,
     vendorAddress,
     isViewMode,
     isReversal,
+    isIndiaUser,
     user?.branches,
     fallbackServiceIdFromState,
     getServiceIdByShipmentIdAsync,
@@ -2337,10 +2570,13 @@ export default function SupplierInvoiceCreate({
     isLocalCurrency,
   ]);
 
-  // Auto-calc amount_in_local = ROE * Amount, and VAT amount = local × rate / 100
+  // Auto-calc amount_in_local = ROE * Amount, and VAT/GST amounts = local × rate / 100
   // (not for supplier reversal — preserve API figures)
   const chargesAmountRoeKey = form.values.charges_data
-    .map((c) => `${c.amount}-${c.roe}-${c.igst_rate}`)
+    .map(
+      (c) =>
+        `${c.amount}-${c.roe}-${c.igst_rate}-${c.cgst_rate}-${c.sgst_rate}`,
+    )
     .join(",");
   useEffect(() => {
     if (isReversal) return;
@@ -2361,16 +2597,104 @@ export default function SupplierInvoiceCreate({
       const amount = c.amount ?? 0;
       const roe = c.roe ?? 0;
       const local = clampLocalAmount(amount * roe);
-      const vat = isIndiaUser
-        ? (c.igst ?? null)
-        : calcChargeVatAmount(local, c.igst_rate);
-      if (local !== (c.amount_in_local ?? null) || vat !== (c.igst ?? null)) {
+      if (!isIndiaUser) {
+        const vat = calcChargeVatAmount(local, c.igst_rate);
+        if (local !== (c.amount_in_local ?? null) || vat !== (c.igst ?? null)) {
+          changed = true;
+        }
+        return { ...c, amount_in_local: local, igst: vat };
+      }
+      // India: recompute same-row GST from rates already on the charge (Invoice parity).
+      // SEZ → zero GST like Invoice.
+      if (hasSez) {
+        const computed = computeSameRowGstAmounts(local ?? 0, {
+          igst: 0,
+          cgst: 0,
+          sgst: 0,
+          same_state: false,
+        });
+        if (
+          local !== (c.amount_in_local ?? null) ||
+          computed.igst !== (c.igst ?? null) ||
+          computed.cgst !== (c.cgst ?? null) ||
+          computed.sgst !== (c.sgst ?? null)
+        ) {
+          changed = true;
+        }
+        return { ...c, amount_in_local: local, ...computed };
+      }
+      const hasRates =
+        c.igst_rate != null || c.cgst_rate != null || c.sgst_rate != null;
+      if (!hasRates) {
+        if (local !== (c.amount_in_local ?? null)) changed = true;
+        return { ...c, amount_in_local: local };
+      }
+      const rates: GstRates = {
+        igst: c.igst_rate,
+        cgst: c.cgst_rate,
+        sgst: c.sgst_rate,
+        same_state: (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0,
+      };
+      const computed = computeSameRowGstAmounts(local ?? 0, rates);
+      if (
+        local !== (c.amount_in_local ?? null) ||
+        computed.igst !== (c.igst ?? null) ||
+        computed.cgst !== (c.cgst ?? null) ||
+        computed.sgst !== (c.sgst ?? null)
+      ) {
         changed = true;
       }
-      return { ...c, amount_in_local: local, igst: vat };
+      return { ...c, amount_in_local: local, ...computed };
     });
     if (changed) form.setFieldValue("charges_data", next);
-  }, [chargesAmountRoeKey, isReversal, isIndiaUser]);
+  }, [chargesAmountRoeKey, isReversal, isIndiaUser, hasSez]);
+
+  // India: fetch GST rates when state / SAC / SEZ changes so charge columns can show live.
+  const sameRowGstFetchKey = `${form.values.state_id}|${hasSez ? 1 : 0}|${(form.values.charges_data ?? [])
+    .map((c) => `${c.charge_id ?? ""}:${String(c.tax_code ?? "").trim()}`)
+    .join(";")}`;
+  useEffect(() => {
+    if (!isIndiaUser || isViewMode || isReversal) return;
+    const statusUpper = String(
+      saveResponse?.status ?? form.values.status ?? "",
+    )
+      .trim()
+      .toUpperCase();
+    if (statusUpper === "POSTED") return;
+    const stateId = form.values.state_id ? Number(form.values.state_id) : null;
+    if (
+      !hasSez &&
+      (stateId == null || !Number.isFinite(stateId) || stateId <= 0)
+    ) {
+      return;
+    }
+
+    const chargesSnapshot = form.values.charges_data ?? [];
+    let cancelled = false;
+    void (async () => {
+      const enriched = await enrichChargesWithSameRowGst(chargesSnapshot, stateId, {
+        hasSez,
+      });
+      if (cancelled) return;
+      const changed = enriched.some((c, i) => {
+        const prev = chargesSnapshot[i];
+        if (!prev) return true;
+        return (
+          c.igst_rate !== prev.igst_rate ||
+          c.cgst_rate !== prev.cgst_rate ||
+          c.sgst_rate !== prev.sgst_rate ||
+          c.igst !== prev.igst ||
+          c.cgst !== prev.cgst ||
+          c.sgst !== prev.sgst
+        );
+      });
+      if (changed) form.setFieldValue("charges_data", enriched);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sameRowGstFetchKey, isIndiaUser, isViewMode, isReversal, hasSez]);
 
   // Overseas Tax tab: fetch VAT breakup after save (Invoice pattern).
   useEffect(() => {
@@ -2603,16 +2927,37 @@ export default function SupplierInvoiceCreate({
     }
 
     if (isIndiaUser && !hasGstRows) {
-      igst = parseNum(form.values.igst_amount) ?? 0;
-      cgst = parseNum(form.values.cgst_amount) ?? 0;
-      sgst = parseNum(form.values.sgst_amount) ?? 0;
-      // INV reversal copies positive header GST; flip the sign so it follows
-      // the reversed charge direction. CRN already uses the inverted net, so
-      // its header GST stays positive like INV.
-      if (isReversal && !isCrnType) {
-        igst = -igst;
-        cgst = -cgst;
-        sgst = -sgst;
+      // Invoice parity: prefer same-row GST on operational charges; else header.
+      let rowIgst = 0;
+      let rowCgst = 0;
+      let rowSgst = 0;
+      let hasSameRowGst = false;
+      for (const row of charges) {
+        if (isSupplierGstChargeRow(row)) continue;
+        const iAmt = parseNum(row.igst) ?? 0;
+        const cAmt = parseNum(row.cgst) ?? 0;
+        const sAmt = parseNum(row.sgst) ?? 0;
+        if (iAmt || cAmt || sAmt) hasSameRowGst = true;
+        rowIgst += signedByDrCr(iAmt, row.Dr_Cr, netDirection);
+        rowCgst += signedByDrCr(cAmt, row.Dr_Cr, netDirection);
+        rowSgst += signedByDrCr(sAmt, row.Dr_Cr, netDirection);
+      }
+      if (hasSameRowGst) {
+        igst = rowIgst;
+        cgst = rowCgst;
+        sgst = rowSgst;
+      } else {
+        igst = parseNum(form.values.igst_amount) ?? 0;
+        cgst = parseNum(form.values.cgst_amount) ?? 0;
+        sgst = parseNum(form.values.sgst_amount) ?? 0;
+        // INV reversal copies positive header GST; flip the sign so it follows
+        // the reversed charge direction. CRN already uses the inverted net, so
+        // its header GST stays positive like INV.
+        if (isReversal && !isCrnType) {
+          igst = -igst;
+          cgst = -cgst;
+          sgst = -sgst;
+        }
       }
       local += igst + cgst + sgst;
     }
@@ -3117,8 +3462,7 @@ export default function SupplierInvoiceCreate({
             amount: amountNum,
             amount_in_local: null,
             tax_code: "",
-            igst_rate: null,
-            igst: null,
+            ...EMPTY_SAME_ROW_GST,
             Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
           };
         })
@@ -3146,8 +3490,7 @@ export default function SupplierInvoiceCreate({
             amount: null,
             amount_in_local: null,
             tax_code: "",
-            igst_rate: null,
-            igst: null,
+            ...EMPTY_SAME_ROW_GST,
             Dr_Cr: getDrCrDefaultsByType(form.values.type).charge,
           },
         ]);
@@ -3201,6 +3544,15 @@ export default function SupplierInvoiceCreate({
         Dr_Cr: c.Dr_Cr,
         igst_rate: formatAmountToTwoDecimals(c.igst_rate ?? 0),
         igst: formatLocalAmount(c.igst ?? 0),
+        // India only: same-row CGST/SGST (Invoice parity). Overseas keeps igst* VAT only.
+        ...(isIndiaUser
+          ? {
+              cgst_rate: formatAmountToTwoDecimals(c.cgst_rate ?? 0),
+              cgst: formatLocalAmount(c.cgst ?? 0),
+              sgst_rate: formatAmountToTwoDecimals(c.sgst_rate ?? 0),
+              sgst: formatLocalAmount(c.sgst ?? 0),
+            }
+          : {}),
       };
       // Create: do not include id in charges; Update: include id when charge exists
       if (!isCreate && c.id != null) return { ...base, id: c.id };
@@ -3528,7 +3880,20 @@ export default function SupplierInvoiceCreate({
         }
       }
 
-      const payload = buildPayload(values);
+      // India: compute same-row cgst/sgst/igst like Invoice before persist.
+      let valuesToSave = values;
+      if (isIndiaUser) {
+        const stateId = values.state_id ? Number(values.state_id) : null;
+        const enriched = await enrichChargesWithSameRowGst(
+          values.charges_data ?? [],
+          stateId,
+          { hasSez },
+        );
+        valuesToSave = { ...values, charges_data: enriched };
+        form.setFieldValue("charges_data", enriched);
+      }
+
+      const payload = buildPayload(valuesToSave);
       (payload as Record<string, unknown>).is_agent =
         resolveIsAgentForPayload();
       const savedId = saveResponseRef.current?.id ?? saveResponse?.id;
@@ -3830,8 +4195,7 @@ export default function SupplierInvoiceCreate({
             amount: Number(amount),
             amount_in_local: clampLocalAmount(Number(amount)),
             tax_code: "",
-            igst_rate: null,
-            igst: null,
+            ...EMPTY_SAME_ROW_GST,
             Dr_Cr: normalizeDrCr(
               (r.Dr_cr as unknown) ??
                 (r.Dr_Cr as unknown) ??
@@ -3957,8 +4321,7 @@ export default function SupplierInvoiceCreate({
                 amount: taxableTotal,
                 amount_in_local: taxableTotal,
                 tax_code: "",
-                igst_rate: null,
-                igst: null,
+                ...EMPTY_SAME_ROW_GST,
                 Dr_Cr: normalizeDrCr(row.Dr_Cr ?? taxRowDrCr),
               };
             })
@@ -3985,6 +4348,20 @@ export default function SupplierInvoiceCreate({
             form.setFieldValue("charges_data", mergedCharges);
           }
         }
+      }
+
+      // India: ensure same-row GST is persisted on post (Invoice parity).
+      if (isIndiaUser) {
+        const stateId = valuesForPost.state_id
+          ? Number(valuesForPost.state_id)
+          : null;
+        const enriched = await enrichChargesWithSameRowGst(
+          valuesForPost.charges_data ?? [],
+          stateId,
+          { hasSez },
+        );
+        valuesForPost = { ...valuesForPost, charges_data: enriched };
+        form.setFieldValue("charges_data", enriched);
       }
 
       const payload = buildPayload(valuesForPost, "POSTED");
@@ -4454,8 +4831,7 @@ export default function SupplierInvoiceCreate({
       amount: null,
       amount_in_local: null,
       tax_code: "",
-      igst_rate: null,
-      igst: null,
+      ...EMPTY_SAME_ROW_GST,
       Dr_Cr: isReversal
         ? getReversalDrCrDefaultsByType(form.values.type).charge
         : getDrCrDefaultsByType(form.values.type).charge,
@@ -4680,6 +5056,8 @@ export default function SupplierInvoiceCreate({
                     setVendorAddress("");
                     setPartyAddresses([]);
                     partyCreditDayRef.current = null;
+                    lastSezFetchKeyRef.current = "";
+                    setHasSez(false);
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
                       form.setFieldValue("customer_gst_no", "");
@@ -4806,6 +5184,8 @@ export default function SupplierInvoiceCreate({
                     setVendorAddress("");
                     setPartyAddresses([]);
                     partyCreditDayRef.current = null;
+                    lastSezFetchKeyRef.current = "";
+                    setHasSez(false);
                     form.setFieldValue("creditor_agent", "");
                     if (isIndiaUser) {
                       form.setFieldValue("state_id", "");
@@ -5467,8 +5847,18 @@ export default function SupplierInvoiceCreate({
                                 // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
                               };
                             });
-                            form.setFieldValue("charges_data", chargesAfterGst);
                           }
+
+                          // Invoice parity: write cgst/sgst/igst onto operational charge rows.
+                          const stateId = form.values.state_id
+                            ? Number(form.values.state_id)
+                            : null;
+                          chargesAfterGst = await enrichChargesWithSameRowGst(
+                            chargesAfterGst,
+                            stateId,
+                            { hasSez },
+                          );
+                          form.setFieldValue("charges_data", chargesAfterGst);
 
                           if (
                             Array.isArray(sacWiseTotals) &&
@@ -5515,8 +5905,7 @@ export default function SupplierInvoiceCreate({
                                       : null,
                                   // Intentionally DO NOT map SAC/tax_code from calculate-gst-breakup.
                                   tax_code: "",
-                                  igst_rate: null,
-                                  igst: null,
+                                  ...EMPTY_SAME_ROW_GST,
                                   Dr_Cr,
                                 };
                                 return row;
@@ -5745,6 +6134,30 @@ export default function SupplierInvoiceCreate({
                       style={{ fontSize: "13px" }}
                     >
                       SAC Code
+                    </Grid.Col>
+                  )}
+                  {isIndiaUser && indiaGstSameState === true && (
+                    <Grid.Col
+                      span={chargeColSpans.cgst}
+                      style={{ fontSize: "13px" }}
+                    >
+                      CGST
+                    </Grid.Col>
+                  )}
+                  {isIndiaUser && indiaGstSameState === true && (
+                    <Grid.Col
+                      span={chargeColSpans.sgst}
+                      style={{ fontSize: "13px" }}
+                    >
+                      SGST
+                    </Grid.Col>
+                  )}
+                  {isIndiaUser && indiaGstSameState === false && (
+                    <Grid.Col
+                      span={chargeColSpans.igst}
+                      style={{ fontSize: "13px" }}
+                    >
+                      IGST
                     </Grid.Col>
                   )}
                   {!isIndiaUser && (
@@ -6398,6 +6811,57 @@ export default function SupplierInvoiceCreate({
                               height: "36px",
                             },
                           }}
+                        />
+                      </Grid.Col>
+                    )}
+                    {isIndiaUser && indiaGstSameState === true && (
+                      <Grid.Col span={chargeColSpans.cgst}>
+                        <NumberInput
+                          placeholder="0"
+                          value={
+                            isSupplierGstChargeRow(row)
+                              ? undefined
+                              : (row.cgst ?? undefined)
+                          }
+                          readOnly
+                          min={0}
+                          decimalScale={localAmountDecimalScale}
+                          hideControls
+                          styles={readOnlyFieldStyles}
+                        />
+                      </Grid.Col>
+                    )}
+                    {isIndiaUser && indiaGstSameState === true && (
+                      <Grid.Col span={chargeColSpans.sgst}>
+                        <NumberInput
+                          placeholder="0"
+                          value={
+                            isSupplierGstChargeRow(row)
+                              ? undefined
+                              : (row.sgst ?? undefined)
+                          }
+                          readOnly
+                          min={0}
+                          decimalScale={localAmountDecimalScale}
+                          hideControls
+                          styles={readOnlyFieldStyles}
+                        />
+                      </Grid.Col>
+                    )}
+                    {isIndiaUser && indiaGstSameState === false && (
+                      <Grid.Col span={chargeColSpans.igst}>
+                        <NumberInput
+                          placeholder="0"
+                          value={
+                            isSupplierGstChargeRow(row)
+                              ? undefined
+                              : (row.igst ?? undefined)
+                          }
+                          readOnly
+                          min={0}
+                          decimalScale={localAmountDecimalScale}
+                          hideControls
+                          styles={readOnlyFieldStyles}
                         />
                       </Grid.Col>
                     )}

@@ -15,9 +15,69 @@ import {
   extractCustomerServiceShipmentFilterRows,
   mergeImportAutomationHousingFromBooking,
 } from "../../../utils/bookingCreateJob";
+import {
+  getCarrierMissingFields,
+  getHouseMissingFields,
+  getMasterHeaderMissingFields,
+} from "../../Transportation/jobValidation/jobRequiredFields";
 import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
+import {
+  Dropdown,
+  SearchableSelect,
+  SingleDateInput,
+} from "../../../components";
 import { FilePreviewModal } from "./automationFilePreview";
 import { IconPencil, IconPencilFilled } from "@tabler/icons-react";
+
+const MASTER_DATE_FIELDS = new Set([
+  "etd",
+  "eta",
+  "date_of_issue",
+  "on_board_date",
+]);
+const HOUSE_DATE_FIELDS = new Set([
+  "date_of_issue",
+  "invoice_date",
+  "on_board_date",
+]);
+
+function parseFormDate(value: unknown): Date | null {
+  const s = String(value ?? "").trim();
+  if (!s) return null;
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const dmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+  if (dmy) {
+    const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const t = Date.parse(s);
+  if (Number.isNaN(t)) return null;
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function dateToIso(value: Date | string | null | undefined): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") {
+    const parsed = parseFormDate(value);
+    if (!parsed) return "";
+    value = parsed;
+  }
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return "";
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${value.getFullYear()}-${month}-${day}`;
+}
+
+const OCEAN_IMPORT_JOB_CTX = {
+  family: "ocean" as const,
+  direction: "import" as const,
+};
 
 const hblApi = axios.create({
   baseURL: `${import.meta.env.VITE_API_BASE_URL}workflow`,
@@ -122,6 +182,9 @@ interface HousingDetail {
   booking_shipment_code?: string;
   trade?: string;
   routed?: string;
+  routed_by?: string;
+  billing_customer_id?: number | null;
+  billing_customer_name?: string;
   cargo_mode?: string;
   hs_code?: string;
   marks_no?: string;
@@ -220,9 +283,13 @@ interface PayloadData {
   vessel_name?: string;
   voyage_number?: string;
   carrier_code?: string;
+  carrier_name?: string;
   carrier_full_name?: string;
   carrier_head_office?: string;
   agent?: string;
+  /** Master schedule dates (Import Job required) */
+  etd?: string;
+  eta?: string;
   signed_by?: string;
   date_of_issue?: string;
   on_board_date?: string;
@@ -730,6 +797,75 @@ type FormFieldIssue = {
   reason: string;
 };
 
+function masterRequiredFieldKey(label: string): string {
+  switch (label) {
+    case "Service":
+      return "service";
+    case "Origin Agent":
+      return "agent";
+    case "Origin":
+      return "origin_code";
+    case "Destination":
+      return "destination_code";
+    case "ETD":
+      return "etd";
+    case "ETA":
+      return "eta";
+    default:
+      return label.toLowerCase().replace(/\s+/g, "_");
+  }
+}
+
+function carrierRequiredFieldKey(label: string): string {
+  switch (label) {
+    case "Carrier":
+      return "carrier_code";
+    case "Vessel Name":
+      return "vessel_name";
+    case "Voyage Number":
+      return "voyage_number";
+    case "MBL No":
+      return "mbl_number";
+    default:
+      return label.toLowerCase().replace(/\s+/g, "_");
+  }
+}
+
+function houseRequiredFieldKey(houseIdx: number, label: string): string {
+  const cargoMatch = label.match(/^Cargo (\d+): (.+)$/);
+  if (cargoMatch) {
+    const cargoIdx = Number(cargoMatch[1]) - 1;
+    const part = cargoMatch[2];
+    const field =
+      part === "Container Number"
+        ? "container_no"
+        : part === "Number of Packages"
+          ? "no_of_packages"
+          : part === "Gross Weight"
+            ? "gross_weight"
+            : part === "Volume"
+              ? "volume"
+              : part.toLowerCase().replace(/\s+/g, "_");
+    return `housing_${houseIdx}_cargo_${cargoIdx}_${field}`;
+  }
+  if (label === "At least one Cargo Detail") {
+    return `housing_${houseIdx}_cargo`;
+  }
+  const map: Record<string, string> = {
+    "HBL No": "hbl_number",
+    Origin: "origin",
+    Destination: "dest",
+    Trade: "trade",
+    "Shipment Terms": "shipment_terms",
+    Routed: "routed",
+    "Routed By": "routed_by",
+    "Shipper Name": "shipper_name",
+    "Consignee Name": "consignee_name",
+    "Billing Customer Name": "billing_customer_name",
+  };
+  return `housing_${houseIdx}_${map[label] ?? label.toLowerCase().replace(/\s+/g, "_")}`;
+}
+
 function collectPayloadFormIssues(
   p: PayloadData,
   ports: PortOption[],
@@ -737,6 +873,13 @@ function collectPayloadFormIssues(
   containerTypes: ContainerTypeOption[],
 ): FormFieldIssue[] {
   const issues: FormFieldIssue[] = [];
+  const seen = new Set<string>();
+  const pushIssue = (issue: FormFieldIssue) => {
+    if (seen.has(issue.fieldKey)) return;
+    seen.add(issue.fieldKey);
+    issues.push(issue);
+  };
+
   const portOk = (code?: string) =>
     !!code &&
     ports.some((x) => x.alias_code === code || x.port_code === code);
@@ -749,46 +892,52 @@ function collectPayloadFormIssues(
       (x) => x.alias_code === code || x.container_code === code,
     );
 
+  // Align with Import Job create required policy (master + carrier + house + cargo)
+  for (const label of getMasterHeaderMissingFields(OCEAN_IMPORT_JOB_CTX, {
+    ...(p as Record<string, unknown>),
+    origin_agent: p.agent,
+    agent: p.agent,
+  })) {
+    pushIssue({
+      fieldKey: masterRequiredFieldKey(label),
+      label,
+      reason: "required",
+    });
+  }
+  for (const label of getCarrierMissingFields(OCEAN_IMPORT_JOB_CTX, {
+    carrier_code: p.carrier_code,
+    carrier_name: p.carrier_name ?? p.carrier_full_name,
+    vessel_name: p.vessel_name,
+    voyage_number: p.voyage_number,
+    mbl_number: p.mbl_number ?? p.bl_number,
+  })) {
+    pushIssue({
+      fieldKey: carrierRequiredFieldKey(label),
+      label,
+      reason: "required",
+    });
+  }
+
   const origin = String(p.origin_code ?? "").trim();
   const dest = String(p.destination_code ?? "").trim();
   const carrier = String(p.carrier_code ?? "").trim();
 
-  if (!origin) {
-    issues.push({
-      fieldKey: "origin_code",
-      label: "Origin Code",
-      reason: "required",
-    });
-  } else if (!portOk(origin)) {
-    issues.push({
+  if (origin && !portOk(origin)) {
+    pushIssue({
       fieldKey: "origin_code",
       label: "Origin Code",
       reason: "not found in port master — use Fix Alias",
     });
   }
-
-  if (!dest) {
-    issues.push({
-      fieldKey: "destination_code",
-      label: "Destination Code",
-      reason: "required",
-    });
-  } else if (!portOk(dest)) {
-    issues.push({
+  if (dest && !portOk(dest)) {
+    pushIssue({
       fieldKey: "destination_code",
       label: "Destination Code",
       reason: "not found in port master — use Fix Alias",
     });
   }
-
-  if (!carrier) {
-    issues.push({
-      fieldKey: "carrier_code",
-      label: "Carrier Code",
-      reason: "required",
-    });
-  } else if (!carrierOk(carrier)) {
-    issues.push({
+  if (carrier && !carrierOk(carrier)) {
+    pushIssue({
       fieldKey: "carrier_code",
       label: "Carrier Code",
       reason: "not found in carrier master — use Fix Alias",
@@ -799,13 +948,13 @@ function collectPayloadFormIssues(
     (p.container_details as ContainerDetail[]).forEach((c, i) => {
       const code = String(c.container_type_input ?? c.container_type ?? "").trim();
       if (!code) {
-        issues.push({
+        pushIssue({
           fieldKey: `container_${i}`,
           label: `Container ${i + 1} Type`,
           reason: "required",
         });
       } else if (!containerOk(code)) {
-        issues.push({
+        pushIssue({
           fieldKey: `container_${i}`,
           label: `Container ${i + 1} Type`,
           reason: "not found in container type master — use Fix Alias",
@@ -814,26 +963,44 @@ function collectPayloadFormIssues(
     });
   }
 
-  if (Array.isArray(p.housing_details)) {
-    (p.housing_details as HousingDetail[]).forEach((hd, i) => {
-      const hOrigin = String(hd.origin_code ?? "").trim();
-      const hDest = String(hd.destination_code ?? "").trim();
-      if (hOrigin && !portOk(hOrigin)) {
-        issues.push({
-          fieldKey: `housing_${i}_origin`,
-          label: `HBL ${i + 1} Origin Code`,
-          reason: "not found in port master — use Fix Alias",
-        });
-      }
-      if (hDest && !portOk(hDest)) {
-        issues.push({
-          fieldKey: `housing_${i}_dest`,
-          label: `HBL ${i + 1} Destination Code`,
-          reason: "not found in port master — use Fix Alias",
-        });
-      }
+  const housing = Array.isArray(p.housing_details)
+    ? (p.housing_details as HousingDetail[])
+    : [];
+  if (!housing.length) {
+    pushIssue({
+      fieldKey: "housing",
+      label: "HBL",
+      reason: "required",
     });
   }
+  housing.forEach((hd, i) => {
+    for (const label of getHouseMissingFields(
+      OCEAN_IMPORT_JOB_CTX,
+      hd as Record<string, unknown>,
+    )) {
+      pushIssue({
+        fieldKey: houseRequiredFieldKey(i, label),
+        label: `HBL ${i + 1}: ${label}`,
+        reason: "required",
+      });
+    }
+    const hOrigin = String(hd.origin_code ?? "").trim();
+    const hDest = String(hd.destination_code ?? "").trim();
+    if (hOrigin && !portOk(hOrigin)) {
+      pushIssue({
+        fieldKey: `housing_${i}_origin`,
+        label: `HBL ${i + 1} Origin Code`,
+        reason: "not found in port master — use Fix Alias",
+      });
+    }
+    if (hDest && !portOk(hDest)) {
+      pushIssue({
+        fieldKey: `housing_${i}_dest`,
+        label: `HBL ${i + 1} Destination Code`,
+        reason: "not found in port master — use Fix Alias",
+      });
+    }
+  });
 
   return issues;
 }
@@ -853,14 +1020,27 @@ interface FFProps {
   val?: unknown;
   cls?: string;
   span?: 1 | 2 | 3 | 4;
+  required?: boolean;
+  need?: string | null;
 }
 
-const FF: FC<FFProps> = ({ label, val, cls = "", span = 1 }) => {
+const FF: FC<FFProps> = ({
+  label,
+  val,
+  cls = "",
+  span = 1,
+  required,
+  need,
+}) => {
   const v = fv(val);
   return (
-    <div className={`ff${span > 1 ? ` s${span}` : ""}`}>
-      <label>{label}</label>
+    <div className={`ff${span > 1 ? ` s${span}` : ""}${need ? " ff-need" : ""}`}>
+      <label>
+        {label}
+        {required ? " *" : ""}
+      </label>
       <div className={`fval ${v ? cls : "empty"}`}>{v ?? "—"}</div>
+      {need ? <div className="ff-need-hint">{need}</div> : null}
     </div>
   );
 };
@@ -1414,16 +1594,21 @@ const EF: FC<{
   value?: unknown;
   cls?: string;
   span?: 1 | 2 | 3 | 4;
+  required?: boolean;
+  need?: string | null;
   onChange: (val: string) => void;
-}> = ({ label, value, cls = "", span = 1, onChange }) => {
+}> = ({ label, value, cls = "", span = 1, required, need, onChange }) => {
   const v = Array.isArray(value)
     ? value.join(", ")
     : value != null
       ? String(value)
       : "";
   return (
-    <div className={`ff${span > 1 ? ` s${span}` : ""}`}>
-      <label>{label}</label>
+    <div className={`ff${span > 1 ? ` s${span}` : ""}${need ? " ff-need" : ""}`}>
+      <label>
+        {label}
+        {required ? " *" : ""}
+      </label>
       <input
         value={v}
         onChange={(e) => onChange(e.target.value)}
@@ -1444,9 +1629,47 @@ const EF: FC<{
         onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
         onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border2)")}
       />
+      {need ? <div className="ff-need-hint">{need}</div> : null}
     </div>
   );
 };
+
+const DateEF: FC<{
+  label: string;
+  value?: unknown;
+  span?: 1 | 2 | 3 | 4;
+  required?: boolean;
+  need?: string | null;
+  onChange: (val: string) => void;
+}> = ({ label, value, span = 1, required, need, onChange }) => (
+  <div
+    className={`ff${span > 1 ? ` s${span}` : ""}${need ? " ff-need" : ""}`}
+    style={{ overflow: "visible", position: "relative", zIndex: 1 }}
+  >
+    <label>
+      {label}
+      {required ? " *" : ""}
+    </label>
+    <SingleDateInput
+      placeholder="YYYY-MM-DD"
+      size="sm"
+      value={parseFormDate(value)}
+      onChange={(date) => onChange(dateToIso(date))}
+      // Form View sits in a custom overlay (z-index 100); portal above it so dates are clickable
+      popoverProps={{ withinPortal: true, zIndex: 10000 }}
+      styles={{
+        input: {
+          minHeight: 30,
+          fontSize: ".8rem",
+          fontFamily: "var(--mono)",
+          background: "var(--surface)",
+          border: "1px solid var(--border2)",
+        },
+      }}
+    />
+    {need ? <div className="ff-need-hint">{need}</div> : null}
+  </div>
+);
 
 // ─── Payload Form Body ────────────────────────────────────────────────────────
 
@@ -1494,6 +1717,12 @@ const PayloadFormBody: FC<{
   containerTypes?: ContainerTypeOption[];
   onContainerDetailChange?: (idx: number, code: string) => void;
   onFixContainerType?: () => void;
+  onHousingCargoChange?: (
+    houseIdx: number,
+    cargoIdx: number,
+    field: string,
+    val: string,
+  ) => void;
   formIssues?: FormFieldIssue[];
 }> = ({
   p,
@@ -1511,8 +1740,10 @@ const PayloadFormBody: FC<{
   onFixCarrier,
   onContainerDetailChange,
   onFixContainerType,
+  onHousingCargoChange,
   formIssues = [],
 }) => {
+  const packageTypeOptions = usePackageTypeOptions();
   const needMap = useMemo(() => {
     const m = new Map<string, string>();
     for (const issue of formIssues) m.set(issue.fieldKey, issue.reason);
@@ -1524,6 +1755,7 @@ const PayloadFormBody: FC<{
     return <div className="ff-need-hint">{reason}</div>;
   };
   const needClass = (key: string) => (needMap.has(key) ? " ff-need" : "");
+  const needReason = (key: string) => needMap.get(key) ?? null;
 
   if (!p || !Object.keys(p).length)
     return (
@@ -1541,18 +1773,43 @@ const PayloadFormBody: FC<{
     field: keyof PayloadData,
     cls?: string,
     span?: 1 | 2 | 3 | 4,
-  ) =>
-    onFieldChange ? (
+    required?: boolean,
+  ) => {
+    const key = String(field);
+    const need = needReason(key);
+    if (onFieldChange && MASTER_DATE_FIELDS.has(key)) {
+      return (
+        <DateEF
+          label={label}
+          value={val}
+          span={span}
+          required={required}
+          need={need}
+          onChange={(v) => onFieldChange(field, v)}
+        />
+      );
+    }
+    return onFieldChange ? (
       <EF
         label={label}
         value={val}
         cls={cls}
         span={span}
+        required={required}
+        need={need}
         onChange={(v) => onFieldChange(field, v)}
       />
     ) : (
-      <FF label={label} val={val} cls={cls} span={span} />
+      <FF
+        label={label}
+        val={val}
+        cls={cls}
+        span={span}
+        required={required}
+        need={need}
+      />
     );
+  };
 
   const HF = (
     idx: number,
@@ -1561,18 +1818,93 @@ const PayloadFormBody: FC<{
     field: keyof HousingDetail,
     cls?: string,
     span?: 1 | 2 | 3 | 4,
-  ) =>
-    onHousingFieldChange ? (
+    required?: boolean,
+    fieldKey?: string,
+  ) => {
+    const key =
+      fieldKey ??
+      (field === "origin_code"
+        ? `housing_${idx}_origin`
+        : field === "destination_code"
+          ? `housing_${idx}_dest`
+          : field === "shipment_terms_code"
+            ? `housing_${idx}_shipment_terms`
+            : `housing_${idx}_${String(field)}`);
+    const need = needReason(key);
+    if (onHousingFieldChange && HOUSE_DATE_FIELDS.has(String(field))) {
+      return (
+        <DateEF
+          label={label}
+          value={val}
+          span={span}
+          required={required}
+          need={need}
+          onChange={(v) => onHousingFieldChange(idx, field, v)}
+        />
+      );
+    }
+    return onHousingFieldChange ? (
       <EF
         label={label}
         value={val}
         cls={cls}
         span={span}
+        required={required}
+        need={need}
         onChange={(v) => onHousingFieldChange(idx, field, v)}
       />
     ) : (
-      <FF label={label} val={val} cls={cls} span={span} />
+      <FF
+        label={label}
+        val={val}
+        cls={cls}
+        span={span}
+        required={required}
+        need={need}
+      />
     );
+  };
+
+  // Mantine Select crashes OptionsDropdown on duplicate/empty option values.
+  const carrierSelectData = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const c of carriers) {
+      const value = String(c.carrier_code ?? "").trim();
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      out.push({
+        value,
+        label: `${c.carrier_code} – ${c.carrier_name}`,
+      });
+    }
+    return out;
+  }, [carriers]);
+
+  const carrierDropdownValue = useMemo(() => {
+    const raw = String(p.carrier_code ?? "").trim();
+    if (!raw) return null;
+    if (carrierSelectData.some((d) => d.value === raw)) return raw;
+    const hit = carriers.find(
+      (c) => c.alias_code === raw || c.carrier_code === raw,
+    );
+    const code = String(hit?.carrier_code ?? "").trim();
+    return code && carrierSelectData.some((d) => d.value === code)
+      ? code
+      : null;
+  }, [p.carrier_code, carrierSelectData, carriers]);
+
+  const packageTypeSelectData = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const opt of packageTypeOptions) {
+      const value = String(opt.value ?? "").trim();
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      out.push({ value, label: String(opt.label || value) });
+    }
+    return out;
+  }, [packageTypeOptions]);
 
   const resolvePort = (code?: string) =>
     ports.find((pt) => pt.alias_code === code || pt.port_code === code);
@@ -1791,18 +2123,81 @@ const PayloadFormBody: FC<{
       )}
       <Sec icon="📄" title="Document Header">
         <div className="fgrid c4">
-          {F("MBL Number", p.mbl_number ?? p.bl_number, "mbl_number", "mono")}
-          <div className={`ff${needClass("carrier_code")}`}>
-            <CarrierCodeView
-              label="Carrier Code"
-              code={p.carrier_code as string | undefined}
-            />
-            {needHint("carrier_code")}
-          </div>
-          {F("Carrier Name", p.carrier_name, "carrier_name")}
-          {F("Service", p.service, "service")}
+          {F(
+            "MBL Number",
+            p.mbl_number ?? p.bl_number,
+            "mbl_number",
+            "mono",
+            1,
+            true,
+          )}
+          {onFieldChange ? (
+            <div
+              className={`ff${needClass("carrier_code")}`}
+              style={{ overflow: "visible" }}
+            >
+              <label>Carrier *</label>
+              <Dropdown
+                placeholder="Search carrier…"
+                searchable
+                clearable
+                data={carrierSelectData}
+                value={carrierDropdownValue}
+                onChange={(code) => {
+                  const next = code || "";
+                  const hit = carriers.find(
+                    (c) => c.carrier_code === next || c.alias_code === next,
+                  );
+                  onFieldChange("carrier_code", next);
+                  onFieldChange(
+                    "carrier_name",
+                    hit?.carrier_name ?? String(p.carrier_name ?? ""),
+                  );
+                }}
+              />
+              {needHint("carrier_code")}
+              {!resolveCarrier(p.carrier_code as string | undefined) &&
+                String(p.carrier_code ?? "").trim() &&
+                onFixCarrier && (
+                  <button
+                    type="button"
+                    onClick={onFixCarrier}
+                    style={{
+                      alignSelf: "flex-start",
+                      marginTop: 4,
+                      padding: "2px 8px",
+                      fontSize: ".6rem",
+                      fontWeight: 700,
+                      fontFamily: "var(--sans)",
+                      background: "rgba(220,38,38,.08)",
+                      border: "1px solid rgba(220,38,38,.35)",
+                      borderRadius: 4,
+                      color: "var(--red)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔧 Fix Alias
+                  </button>
+                )}
+            </div>
+          ) : (
+            <div className={`ff${needClass("carrier_code")}`}>
+              <CarrierCodeView
+                label="Carrier Code *"
+                code={p.carrier_code as string | undefined}
+              />
+              {needHint("carrier_code")}
+            </div>
+          )}
+          {F(
+            "Carrier Name",
+            p.carrier_name ?? p.carrier_full_name,
+            "carrier_name",
+          )}
+          {F("Service", p.service, "service", undefined, 1, true)}
           {F("Service Type", p.service_type, "service_type")}
           {F("Freight Terms", p.freight_terms, "freight_terms")}
+          {F("Origin Agent", p.agent, "agent", undefined, 1, true)}
         </div>
       </Sec>
 
@@ -1818,7 +2213,7 @@ const PayloadFormBody: FC<{
                 style={{ overflow: "visible" }}
               >
                 <PortSearch
-                  label="Origin Code"
+                  label="Origin Code *"
                   value={editPorts.originCode}
                   inputText={editPorts.originText}
                   ports={editPorts.ports}
@@ -1833,7 +2228,7 @@ const PayloadFormBody: FC<{
                 style={{ overflow: "visible" }}
               >
                 <PortSearch
-                  label="Destination Code"
+                  label="Destination Code *"
                   value={editPorts.destCode}
                   inputText={editPorts.destText}
                   ports={editPorts.ports}
@@ -1848,7 +2243,7 @@ const PayloadFormBody: FC<{
             <>
               <div className={`ff${needClass("origin_code")}`}>
                 <PortCodeView
-                  label="Origin Code"
+                  label="Origin Code *"
                   code={p.origin_code as string | undefined}
                   onFix={onFixCode}
                 />
@@ -1856,7 +2251,7 @@ const PayloadFormBody: FC<{
               </div>
               <div className={`ff${needClass("destination_code")}`}>
                 <PortCodeView
-                  label="Destination Code"
+                  label="Destination Code *"
                   code={p.destination_code as string | undefined}
                   onFix={onFixCode}
                 />
@@ -1888,8 +2283,17 @@ const PayloadFormBody: FC<{
 
       <Sec icon="🚢" title="Vessel & Voyage">
         <div className="fgrid c4">
-          {F("Vessel Name", p.vessel_name, "vessel_name")}
-          {F("Voyage Number", p.voyage_number, "voyage_number", "mono")}
+          {F("Vessel Name", p.vessel_name, "vessel_name", undefined, 1, true)}
+          {F(
+            "Voyage Number",
+            p.voyage_number,
+            "voyage_number",
+            "mono",
+            1,
+            true,
+          )}
+          {F("ETD", p.etd, "etd", "mono", 1, true)}
+          {F("ETA", p.eta, "eta", "mono", 1, true)}
           {F("Date of Issue", p.date_of_issue, "date_of_issue")}
           {F(
             "On Board Date",
@@ -1897,7 +2301,6 @@ const PayloadFormBody: FC<{
             "on_board_date",
           )}
           {F("Place of Issue", p.place_of_issue, "place_of_issue")}
-          {F("Agent", p.agent, "agent")}
         </div>
       </Sec>
 
@@ -1976,7 +2379,15 @@ const PayloadFormBody: FC<{
               </div>
               <div className="hcard-body">
                 <div className="fgrid c4" style={{ marginBottom: 12 }}>
-                  {HF(idx, "HBL Number", hd.hbl_number, "hbl_number", "mono")}
+                  {HF(
+                    idx,
+                    "HBL Number",
+                    hd.hbl_number,
+                    "hbl_number",
+                    "mono",
+                    1,
+                    true,
+                  )}
                   {onHousingBookingChange ? (
                     <BookingSearch
                       label="Booking ID"
@@ -1995,8 +2406,93 @@ const PayloadFormBody: FC<{
                       cls="mono"
                     />
                   )}
-                  {HF(idx, "Trade", hd.trade, "trade")}
-                  {HF(idx, "Routed", hd.routed, "routed")}
+                  {HF(idx, "Trade", hd.trade, "trade", undefined, 1, true)}
+                  {HF(idx, "Routed", hd.routed, "routed", undefined, 1, true)}
+                  {HF(
+                    idx,
+                    "Routed By",
+                    hd.routed_by,
+                    "routed_by",
+                    undefined,
+                    1,
+                    true,
+                  )}
+                  {HF(
+                    idx,
+                    "Shipment Terms",
+                    hd.shipment_terms_code,
+                    "shipment_terms_code",
+                    "mono",
+                    1,
+                    true,
+                  )}
+                  {onHousingFieldChange ? (
+                    <div
+                      className={`ff s2${needClass(`housing_${idx}_billing_customer_name`)}`}
+                      style={{ overflow: "visible" }}
+                    >
+                      <label>Billing Customer *</label>
+                      <SearchableSelect
+                        placeholder="Type billing customer name"
+                        apiEndpoint={URL.customer}
+                        searchFields={["customer_name", "customer_code"]}
+                        dropdownZIndex={400}
+                        minSearchLength={1}
+                        returnOriginalData
+                        value={
+                          hd.billing_customer_id != null
+                            ? String(hd.billing_customer_id)
+                            : null
+                        }
+                        displayValue={hd.billing_customer_name || undefined}
+                        displayFormat={(item: Record<string, unknown>) => ({
+                          value: String(item.id ?? ""),
+                          label: String(item.customer_name ?? ""),
+                        })}
+                        onChange={(value, selected, original) => {
+                          const id =
+                            original &&
+                            (original as Record<string, unknown>).id != null
+                              ? Number(
+                                  (original as Record<string, unknown>).id,
+                                )
+                              : value
+                                ? Number(value)
+                                : null;
+                          const name =
+                            selected?.label ||
+                            String(
+                              (original as Record<string, unknown> | undefined)
+                                ?.customer_name || "",
+                            ) ||
+                            "";
+                          onHousingFieldChange(
+                            idx,
+                            "billing_customer_id" as keyof HousingDetail,
+                            id != null && Number.isFinite(id)
+                              ? String(id)
+                              : "",
+                          );
+                          onHousingFieldChange(
+                            idx,
+                            "billing_customer_name",
+                            value ? name : "",
+                          );
+                        }}
+                      />
+                      {needHint(`housing_${idx}_billing_customer_name`)}
+                    </div>
+                  ) : (
+                    HF(
+                      idx,
+                      "Billing Customer",
+                      hd.billing_customer_name,
+                      "billing_customer_name",
+                      undefined,
+                      2,
+                      true,
+                    )
+                  )}
                   {HF(idx, "Freight Terms", hd.freight_terms, "freight_terms")}
                   {HF(idx, "Marks No", hd.marks_no, "marks_no")}
                 </div>
@@ -2074,7 +2570,7 @@ const PayloadFormBody: FC<{
                         style={{ overflow: "visible" }}
                       >
                         <PortSearch
-                          label="Origin Code"
+                          label="Origin Code *"
                           value={editHousingPorts[idx].originCode}
                           inputText={editHousingPorts[idx].originText}
                           ports={editHousingPorts[idx].ports}
@@ -2093,7 +2589,7 @@ const PayloadFormBody: FC<{
                         style={{ overflow: "visible" }}
                       >
                         <PortSearch
-                          label="Destination Code"
+                          label="Destination Code *"
                           value={editHousingPorts[idx].destCode}
                           inputText={editHousingPorts[idx].destText}
                           ports={editHousingPorts[idx].ports}
@@ -2114,7 +2610,7 @@ const PayloadFormBody: FC<{
                         className={`ff${needClass(`housing_${idx}_origin`)}`}
                       >
                         <PortCodeView
-                          label="Origin Code"
+                          label="Origin Code *"
                           code={hd.origin_code as string | undefined}
                           onFix={
                             onFixHousingCode
@@ -2126,7 +2622,7 @@ const PayloadFormBody: FC<{
                       </div>
                       <div className={`ff${needClass(`housing_${idx}_dest`)}`}>
                         <PortCodeView
-                          label="Destination Code"
+                          label="Destination Code *"
                           code={hd.destination_code as string | undefined}
                           onFix={
                             onFixHousingCode
@@ -2175,7 +2671,15 @@ const PayloadFormBody: FC<{
 
                 <SubSec icon="🏭" title="Shipper">
                   <div className="fgrid c4">
-                    {HF(idx, "Name", hd.shipper_name, "shipper_name", "", 3)}
+                    {HF(
+                      idx,
+                      "Name",
+                      hd.shipper_name,
+                      "shipper_name",
+                      "",
+                      3,
+                      true,
+                    )}
                     {HF(idx, "Email", hd.shipper_email, "shipper_email")}
                     {HF(
                       idx,
@@ -2206,6 +2710,7 @@ const PayloadFormBody: FC<{
                       "consignee_name",
                       "",
                       4,
+                      true,
                     )}
                     {HF(
                       idx,
@@ -2371,44 +2876,186 @@ const PayloadFormBody: FC<{
                   </SubSec>
                 )}
 
-                {Array.isArray(hd.cargo_details) &&
-                  hd.cargo_details.length > 0 && (
+                {(() => {
+                  const cargoRows =
+                    Array.isArray(hd.cargo_details) && hd.cargo_details.length > 0
+                      ? hd.cargo_details
+                      : onHousingCargoChange
+                        ? [{} as ContainerDetail]
+                        : [];
+                  if (!cargoRows.length && !needMap.has(`housing_${idx}_cargo`)) {
+                    return null;
+                  }
+                  return (
                     <SubSec
                       icon="📫"
-                      title={`Cargo / Container Details (${hd.cargo_details.length})`}
+                      title={`Cargo / Container Details (${
+                        Array.isArray(hd.cargo_details)
+                          ? hd.cargo_details.length
+                          : cargoRows.length
+                      })`}
                     >
+                      {needHint(`housing_${idx}_cargo`)}
                       <div className="ctable-wrap">
                         <table className="ctable">
                           <thead>
                             <tr>
-                              <th>Container No.</th>
-                              <th>Pkgs</th>
-                              <th>Gross Wt (KG)</th>
-                              <th>Volume (CBM)</th>
+                              <th>Container No. *</th>
+                              <th>Pkgs *</th>
+                              <th>Gross Wt (KG) *</th>
+                              <th>Volume (CBM) *</th>
+                              <th>Package Type</th>
                               <th>Charg. Wt</th>
                               <th>HAZ</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {hd.cargo_details.map((c, ci) => (
-                              <tr key={ci}>
-                                <td>
-                                  {c.container_no ?? c.container_number ?? "—"}
-                                </td>
-                                <td>{c.no_of_packages ?? c.packages ?? "—"}</td>
-                                <td>
-                                  {c.gross_weight_kgs ?? c.gross_weight ?? "—"}
-                                </td>
-                                <td>{c.volume_cbm ?? c.volume ?? "—"}</td>
-                                <td>{c.chargeable_weight ?? "—"}</td>
-                                <td>{c.haz ? "⚠️" : "No"}</td>
-                              </tr>
-                            ))}
+                            {cargoRows.map((c, ci) => {
+                              const cell = (
+                                field: string,
+                                value: unknown,
+                                mono = false,
+                              ) => {
+                                const key = `housing_${idx}_cargo_${ci}_${field}`;
+                                if (onHousingCargoChange) {
+                                  return (
+                                    <td
+                                      className={
+                                        needMap.has(key) ? "td-need" : undefined
+                                      }
+                                    >
+                                      <input
+                                        value={
+                                          value != null ? String(value) : ""
+                                        }
+                                        onChange={(e) =>
+                                          onHousingCargoChange(
+                                            idx,
+                                            ci,
+                                            field,
+                                            e.target.value,
+                                          )
+                                        }
+                                        style={{
+                                          width: "100%",
+                                          minWidth: 72,
+                                          background: "var(--surface)",
+                                          border: "1px solid var(--border2)",
+                                          borderRadius: 4,
+                                          padding: "3px 6px",
+                                          fontFamily: mono
+                                            ? "var(--mono)"
+                                            : "var(--sans)",
+                                          fontSize: ".75rem",
+                                          color: "var(--text)",
+                                          boxSizing: "border-box",
+                                        }}
+                                      />
+                                      {needHint(key)}
+                                    </td>
+                                  );
+                                }
+                                return (
+                                  <td
+                                    className={
+                                      needMap.has(key) ? "td-need" : undefined
+                                    }
+                                  >
+                                    {value != null && String(value).trim()
+                                      ? String(value)
+                                      : "—"}
+                                    {needHint(key)}
+                                  </td>
+                                );
+                              };
+                              return (
+                                <tr key={ci}>
+                                  {cell(
+                                    "container_no",
+                                    c.container_no ?? c.container_number,
+                                    true,
+                                  )}
+                                  {cell(
+                                    "no_of_packages",
+                                    c.no_of_packages ?? c.packages,
+                                  )}
+                                  {cell(
+                                    "gross_weight",
+                                    c.gross_weight_kgs ?? c.gross_weight,
+                                  )}
+                                  {cell(
+                                    "volume",
+                                    c.volume_cbm ?? c.volume,
+                                  )}
+                                  {onHousingCargoChange ? (
+                                    <td
+                                      className={
+                                        needMap.has(
+                                          `housing_${idx}_cargo_${ci}_package_type`,
+                                        )
+                                          ? "td-need"
+                                          : undefined
+                                      }
+                                      style={{ overflow: "visible", minWidth: 140 }}
+                                    >
+                                      <Dropdown
+                                        placeholder="Package Type"
+                                        searchable
+                                        clearable
+                                        data={(() => {
+                                          const current = String(
+                                            c.package_type ?? "",
+                                          ).trim();
+                                          if (
+                                            current &&
+                                            !packageTypeSelectData.some(
+                                              (d) => d.value === current,
+                                            )
+                                          ) {
+                                            return [
+                                              ...packageTypeSelectData,
+                                              {
+                                                value: current,
+                                                label: current,
+                                              },
+                                            ];
+                                          }
+                                          return packageTypeSelectData;
+                                        })()}
+                                        value={
+                                          String(c.package_type ?? "").trim() ||
+                                          null
+                                        }
+                                        onChange={(code) =>
+                                          onHousingCargoChange(
+                                            idx,
+                                            ci,
+                                            "package_type",
+                                            code || "",
+                                          )
+                                        }
+                                      />
+                                      {needHint(
+                                        `housing_${idx}_cargo_${ci}_package_type`,
+                                      )}
+                                    </td>
+                                  ) : (
+                                    cell("package_type", c.package_type, true)
+                                  )}
+                                  {cell(
+                                    "chargeable_weight",
+                                    c.chargeable_weight,
+                                  )}
+                                  <td>{c.haz ? "⚠️" : "No"}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
                     </SubSec>
-                  )}
+                  );
+                })()}
               </div>
             </div>
           ))
@@ -2614,7 +3261,16 @@ const PayloadModal: FC<PayloadModalProps> = ({
         const housing = Array.isArray(prev.housing_details)
           ? [...(prev.housing_details as HousingDetail[])]
           : [];
-        housing[idx] = { ...housing[idx], [field]: val };
+        if (field === "billing_customer_id") {
+          const id = val.trim() ? Number(val) : null;
+          housing[idx] = {
+            ...housing[idx],
+            billing_customer_id:
+              id != null && Number.isFinite(id) ? id : null,
+          };
+        } else {
+          housing[idx] = { ...housing[idx], [field]: val };
+        }
         return { ...prev, housing_details: housing };
       });
     },
@@ -2817,6 +3473,39 @@ const PayloadModal: FC<PayloadModalProps> = ({
       return { ...prev, container_details: containers };
     });
   }, []);
+
+  const onHousingCargoChange = useCallback(
+    (houseIdx: number, cargoIdx: number, field: string, val: string) => {
+      setIsDirty(true);
+      setEditData((prev) => {
+        const housing = Array.isArray(prev.housing_details)
+          ? [...(prev.housing_details as HousingDetail[])]
+          : [];
+        const house = { ...(housing[houseIdx] ?? {}) };
+        const cargo = Array.isArray(house.cargo_details)
+          ? [...house.cargo_details]
+          : [];
+        while (cargo.length <= cargoIdx) {
+          cargo.push({});
+        }
+        const row: ContainerDetail = { ...cargo[cargoIdx], [field]: val };
+        if (field === "gross_weight") row.gross_weight_kgs = val as unknown as number;
+        if (field === "volume") row.volume_cbm = val as unknown as number;
+        if (field === "no_of_packages") {
+          const n = Number(val);
+          row.no_of_packages = Number.isFinite(n) ? n : (val as unknown as number);
+          row.packages = row.no_of_packages;
+        }
+        if (field === "container_no") row.container_number = val;
+        if (field === "package_type") row.package_type = val;
+        cargo[cargoIdx] = row;
+        house.cargo_details = cargo;
+        housing[houseIdx] = house;
+        return { ...prev, housing_details: housing };
+      });
+    },
+    [],
+  );
 
   // ── FIX 3: Safe housing array — no unsafe cast, no crash on undefined ──
   const editHousingPortsArr = (() => {
@@ -3024,6 +3713,7 @@ const PayloadModal: FC<PayloadModalProps> = ({
                 containerTypes={containerTypes}
                 formIssues={formIssues}
                 onContainerDetailChange={onContainerDetailChange}
+                onHousingCargoChange={onHousingCargoChange}
                 onFixContainerType={() =>
                   rec && setContainerTypeFixTarget({ record: rec })
                 }
@@ -4560,34 +5250,13 @@ const HBLDocumentManager: FC = () => {
     loadContainerTypes();
   }, [loadContainerTypes]);
 
-  const hasCodeValidationError = (f: FileRecord): boolean => {
+  /** Blocks Start Jobs when required Import Job fields are missing or codes are invalid. */
+  const hasPayloadValidationError = (f: FileRecord): boolean => {
     const payload = f.api_payload ?? f.extracted_data;
-    if (!payload) return false;
-    const origin = payload.origin_code as string | undefined;
-    const dest = payload.destination_code as string | undefined;
-    const carrier = payload.carrier_code as string | undefined;
-    const invalidPort = (code?: string) =>
-      !!code &&
-      !ports.some((p) => p.alias_code === code || p.port_code === code);
-    const invalidCarrier = (code?: string) =>
-      !!code &&
-      !carriers.some((c) => c.alias_code === code || c.carrier_code === code);
-    const invalidContainerType = (code?: string) =>
-      !!code &&
-      !containerTypes.some(
-        (ct) => ct.alias_code === code || ct.container_code === code,
-      );
-    const containerIssue =
-      Array.isArray(payload.container_details) &&
-      (payload.container_details as ContainerDetail[]).some((c) => {
-        const code = c.container_type_input ?? c.container_type;
-        return invalidContainerType(code);
-      });
+    if (!payload) return true;
     return (
-      invalidPort(origin) ||
-      invalidPort(dest) ||
-      invalidCarrier(carrier) ||
-      containerIssue
+      collectPayloadFormIssues(payload, ports, carriers, containerTypes)
+        .length > 0
     );
   };
 
@@ -4698,11 +5367,11 @@ const HBLDocumentManager: FC = () => {
   const startJobs = async (ids: string[]) => {
     const invalid = ids.filter((id) => {
       const f = allFiles.find((x) => x.txn_id === id);
-      return f ? hasCodeValidationError(f) : false;
+      return f ? hasPayloadValidationError(f) : false;
     });
     if (invalid.length) {
       showToast(
-        `❌ ${invalid.length} record(s) have invalid port/carrier/container type codes. Fix them before creating jobs.`,
+        `❌ ${invalid.length} record(s) have missing required fields or invalid codes. Open Form View, fill/fix them, Save, then start jobs.`,
         "error",
       );
       return;
@@ -4730,7 +5399,7 @@ const HBLDocumentManager: FC = () => {
 
   const selectedHasValidationError = Array.from(selected).some((id) => {
     const f = allFiles.find((x) => x.txn_id === id);
-    return f ? hasCodeValidationError(f) : false;
+    return f ? hasPayloadValidationError(f) : false;
   });
 
   const selectedValidationHint = (() => {
@@ -4738,22 +5407,24 @@ const HBLDocumentManager: FC = () => {
     const labels: string[] = [];
     for (const id of selected) {
       const f = allFiles.find((x) => x.txn_id === id);
-      if (!f || !hasCodeValidationError(f)) continue;
+      if (!f || !hasPayloadValidationError(f)) continue;
       const payload = f.api_payload ?? f.extracted_data;
-      if (!payload) continue;
+      if (!payload) {
+        labels.push("Payload missing");
+        continue;
+      }
       for (const issue of collectPayloadFormIssues(
         payload,
         ports,
         carriers,
         containerTypes,
       )) {
-        if (issue.reason === "required") continue; // Start Jobs only blocks invalid codes
         if (!labels.includes(issue.label)) labels.push(issue.label);
       }
     }
     return labels.length
-      ? `Fix invalid codes before creating jobs: ${labels.slice(0, 6).join(", ")}${labels.length > 6 ? "…" : ""}`
-      : "Fix invalid port/carrier/container type codes before creating jobs";
+      ? `Fix required/invalid fields before creating jobs: ${labels.slice(0, 6).join(", ")}${labels.length > 6 ? "…" : ""}`
+      : "Fix required fields and invalid codes before creating jobs";
   })();
 
   const statuses: Array<FileStatus | ""> = [
@@ -5003,7 +5674,7 @@ const HBLDocumentManager: FC = () => {
                           })
                         }
                         style={
-                          hasCodeValidationError(f)
+                          hasPayloadValidationError(f)
                             ? {
                                 color: "var(--red)",
                                 borderColor: "var(--red)",

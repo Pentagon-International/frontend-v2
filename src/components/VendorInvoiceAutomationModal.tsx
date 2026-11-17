@@ -492,7 +492,27 @@ function ExtractedPayloadBreakdown({
                       error={fieldErrors.header.date}
                       onChange={(date) => {
                         clearHeaderError("date");
-                        patchOverride({ date: dateToIso(date) });
+                        const next = dateToIso(date);
+                        patchOverride({
+                          date: next,
+                          // Keep due date in sync when it was empty / same as invoice date
+                          due_date:
+                            !override.due_date ||
+                            override.due_date === override.date
+                              ? next
+                              : override.due_date,
+                        });
+                      }}
+                      styles={fieldStyles}
+                      disabled={readOnly}
+                    />
+                    <SingleDateInput
+                      label="Due Date"
+                      placeholder="Select due date"
+                      size="sm"
+                      value={isoDateToDate(override.due_date || override.date)}
+                      onChange={(date) => {
+                        patchOverride({ due_date: dateToIso(date) });
                       }}
                       styles={fieldStyles}
                       disabled={readOnly}
@@ -728,7 +748,6 @@ function ExtractedPayloadBreakdown({
                   hint="Read-only values from the document. They are not sent in the override."
                 >
                   <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
-                    <FieldKV label="Due Date" value={extracted.due_date} />
                     <FieldKV label="PRQ Reference No." value={extracted.prq_reference_no} mono />
                     <FieldKV label="Job No." value={extracted.job_no} />
                     <FieldKV label="Master No." value={extracted.master_bl} />
