@@ -494,10 +494,12 @@ function computeSameRowGstAmounts(
     !sameState || sgstRate <= 0
       ? 0
       : clampLocalAmount((taxBase * Number(sgstRate)) / 100);
+  // Keep only situation-relevant rates so UI same-state detection cannot
+  // see leftover CGST/SGST/IGST percents from the rates API at once.
   return {
-    igst_rate: igstRate,
-    cgst_rate: cgstRate,
-    sgst_rate: sgstRate,
+    igst_rate: sameState ? 0 : igstRate,
+    cgst_rate: sameState ? cgstRate : 0,
+    sgst_rate: sameState ? sgstRate : 0,
     igst: igstAmt,
     cgst: cgstAmt,
     sgst: sgstAmt,
@@ -2223,14 +2225,32 @@ export default function SupplierInvoiceCreate({
     const ops = (form.values.charges_data ?? []).filter(
       (c) => !isSupplierGstChargeRow(c),
     );
+    // Prefer amounts (correct for situation) over rates.
+    if (ops.some((c) => (c.cgst ?? 0) > 0 || (c.sgst ?? 0) > 0)) return true;
+    if (ops.some((c) => (c.igst ?? 0) > 0)) return false;
     if (ops.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0)) {
       return true;
     }
     if (ops.some((c) => (c.igst_rate ?? 0) > 0)) return false;
+    // Edit/view: header amounts when charge same-row GST not present yet.
+    if ((form.values.cgst_amount ?? 0) > 0 || (form.values.sgst_amount ?? 0) > 0) {
+      return true;
+    }
+    if ((form.values.igst_amount ?? 0) > 0) return false;
     return undefined;
-  }, [showHeaderGst, form.values.charges_data]);
+  }, [
+    showHeaderGst,
+    form.values.charges_data,
+    form.values.cgst_amount,
+    form.values.sgst_amount,
+    form.values.igst_amount,
+  ]);
 
-  /** Header: only relevant GST cols (default same-state until rates say otherwise). */
+  /**
+   * Only situation-relevant GST cols (never CGST+SGST and IGST together).
+   * Unknown → CGST+SGST (job manual header entry / Unregistered disabled default).
+   * Inter-state rates/amounts → IGST only.
+   */
   const headerShowCgstSgst =
     showHeaderGst && indiaGstSameState !== false;
   const headerShowIgst = showHeaderGst && indiaGstSameState === false;
@@ -2793,7 +2813,13 @@ export default function SupplierInvoiceCreate({
         igst: c.igst_rate,
         cgst: c.cgst_rate,
         sgst: c.sgst_rate,
-        same_state: (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0,
+        // After computeSameRowGstAmounts zeros unused rates, only one side is > 0.
+        same_state:
+          (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0
+            ? true
+            : (c.igst_rate ?? 0) > 0
+              ? false
+              : (c.cgst ?? 0) > 0 || (c.sgst ?? 0) > 0,
       };
       const computed = computeSameRowGstAmounts(local ?? 0, rates);
       if (
@@ -2868,7 +2894,13 @@ export default function SupplierInvoiceCreate({
                 igst: e.igst_rate,
                 cgst: e.cgst_rate,
                 sgst: e.sgst_rate,
-                same_state: (e.cgst_rate ?? 0) > 0 || (e.sgst_rate ?? 0) > 0,
+                // Prefer enriched rates (already situation-zeroed) + amounts.
+                same_state:
+                  (e.cgst_rate ?? 0) > 0 || (e.sgst_rate ?? 0) > 0
+                    ? true
+                    : (e.igst_rate ?? 0) > 0
+                      ? false
+                      : (e.cgst ?? 0) > 0 || (e.sgst ?? 0) > 0,
               }),
             };
         if (
@@ -7260,7 +7292,15 @@ export default function SupplierInvoiceCreate({
                   >
                     <Grid gutter="md">
                       <Grid.Col
-                        span={showGstTax ? 3 : applyVat ? 6 : 12}
+                        span={
+                          showGstTax
+                            ? headerShowIgst
+                              ? 6
+                              : 4
+                            : applyVat
+                              ? 6
+                              : 12
+                        }
                       >
                         <Box>
                           <Text size="sm" fw={500} c="dimmed" mb={4}>
@@ -7275,42 +7315,48 @@ export default function SupplierInvoiceCreate({
                       </Grid.Col>
                       {showGstTax ? (
                         <>
-                          <Grid.Col span={3}>
-                            <Box>
-                              <Text size="sm" fw={500} c="dimmed" mb={4}>
-                                IGST Total
-                              </Text>
-                              <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountForUi(
-                                  chargesSectionTotals.igst_total,
-                                )}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                          <Grid.Col span={3}>
-                            <Box>
-                              <Text size="sm" fw={500} c="dimmed" mb={4}>
-                                CGST Total
-                              </Text>
-                              <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountForUi(
-                                  chargesSectionTotals.cgst_total,
-                                )}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
-                          <Grid.Col span={3}>
-                            <Box>
-                              <Text size="sm" fw={500} c="dimmed" mb={4}>
-                                SGST Total
-                              </Text>
-                              <Text size="lg" fw={600} c="#105476">
-                                {formatMoneyAmountForUi(
-                                  chargesSectionTotals.sgst_total,
-                                )}
-                              </Text>
-                            </Box>
-                          </Grid.Col>
+                          {headerShowIgst && (
+                            <Grid.Col span={6}>
+                              <Box>
+                                <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                  IGST Total
+                                </Text>
+                                <Text size="lg" fw={600} c="#105476">
+                                  {formatMoneyAmountForUi(
+                                    chargesSectionTotals.igst_total,
+                                  )}
+                                </Text>
+                              </Box>
+                            </Grid.Col>
+                          )}
+                          {headerShowCgstSgst && (
+                            <Grid.Col span={4}>
+                              <Box>
+                                <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                  CGST Total
+                                </Text>
+                                <Text size="lg" fw={600} c="#105476">
+                                  {formatMoneyAmountForUi(
+                                    chargesSectionTotals.cgst_total,
+                                  )}
+                                </Text>
+                              </Box>
+                            </Grid.Col>
+                          )}
+                          {headerShowCgstSgst && (
+                            <Grid.Col span={4}>
+                              <Box>
+                                <Text size="sm" fw={500} c="dimmed" mb={4}>
+                                  SGST Total
+                                </Text>
+                                <Text size="lg" fw={600} c="#105476">
+                                  {formatMoneyAmountForUi(
+                                    chargesSectionTotals.sgst_total,
+                                  )}
+                                </Text>
+                              </Box>
+                            </Grid.Col>
+                          )}
                         </>
                       ) : applyVat ? (
                         <Grid.Col span={6}>
