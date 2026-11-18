@@ -1594,6 +1594,7 @@ type BillToAddressRow = {
   address_type?: string | null;
   gst_id?: string | null;
   pan_no?: string | null;
+  gst_registration_status?: string | null;
 };
 
 function normalizeAddressText(value: string): string {
@@ -1924,6 +1925,8 @@ function InvoiceCreate({
     Array<{ value: string; label: string }>
   >([]);
   const [hasSez, setHasSez] = useState(false);
+  /** Explicit Unregistered on selected bill-to address; blank keeps GST. */
+  const [billToGstUnregistered, setBillToGstUnregistered] = useState(false);
   const partyCreditDayRef = useRef<number | null>(null);
   /**
    * Apply due date from credit_day only when party is selected/changed
@@ -2222,11 +2225,13 @@ function InvoiceCreate({
     [isIndiaUser, isAgentInvoice, isVatInvoiceUser, isUsInvoiceUser],
   );
 
-  // SEZ customers: SAC still applies; GST columns/totals/tax tab are hidden
-  const applyGst = isGstInvoiceUser && !hasSez;
+  // SEZ / GST-Unregistered: SAC may still apply; GST columns/totals/tax tab are hidden
+  const applyGst =
+    isGstInvoiceUser && !hasSez && !billToGstUnregistered;
   // India agent invoice: same tax UI as customer; SAC/GST rates use agent:true payloads.
   const isIndiaAgentInvoice = isIndiaUser && isAgentInvoice;
-  const applyAgentGstRates = isIndiaAgentInvoice && !hasSez;
+  const applyAgentGstRates =
+    isIndiaAgentInvoice && !hasSez && !billToGstUnregistered;
   const needsEffectiveSac = isGstInvoiceUser || isIndiaAgentInvoice;
   const showSacColumn = needsEffectiveSac;
   const showGstTax = applyGst || applyAgentGstRates;
@@ -3060,6 +3065,12 @@ function InvoiceCreate({
         addressesData.find((a) => String(a.id) === selectedAddressId) ??
         primaryAddress ??
         addressesData.find((a) => a.state_id != null || a.gst_id != null);
+
+      setBillToGstUnregistered(
+        String(selectedAddress?.gst_registration_status ?? "")
+          .trim()
+          .toLowerCase() === "unregistered",
+      );
 
       if (isGstInvoiceUser || isKenyaUser) {
         if (isGstInvoiceUser) {
@@ -4686,6 +4697,7 @@ function InvoiceCreate({
       setAddressOptions([]);
       billToAddressesRef.current = [];
       billToAddressesLoadedForRef.current = "";
+      setBillToGstUnregistered(false);
       form.setFieldValue("address", "");
       setHasSez(false);
       partyCreditDayRef.current = null;
@@ -4718,6 +4730,7 @@ function InvoiceCreate({
       setAddressOptions([]);
       billToAddressesRef.current = [];
       billToAddressesLoadedForRef.current = "";
+      setBillToGstUnregistered(false);
       form.setFieldValue("address", "");
       // Clear house/stale state/GSTN; Bill To effect will refill from conditional-list.
       if (isGstInvoiceUser) form.setFieldValue("state", "");
@@ -6943,6 +6956,11 @@ function InvoiceCreate({
                       (a) => String(a.id) === String(value),
                     );
                     if (!selected) return;
+                    setBillToGstUnregistered(
+                      String(selected.gst_registration_status ?? "")
+                        .trim()
+                        .toLowerCase() === "unregistered",
+                    );
                     if (isGstInvoiceUser && selected.state_id != null) {
                       form.setFieldValue("state", String(selected.state_id));
                     }

@@ -43,9 +43,19 @@ export type PaymentRequestPrefillSource = "estimate" | "house";
 export type PartyAddressLike = {
   address_type?: string;
   gst_id?: string | null;
+  gst_registration_status?: string | null;
   state_id?: number | null;
   state?: unknown;
 };
+
+/** True when party address GST registration status is Registered. */
+export function isGstRegistrationRegistered(status: unknown): boolean {
+  return (
+    String(status ?? "")
+      .trim()
+      .toLowerCase() === "registered"
+  );
+}
 
 function toNumOrNull(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -146,6 +156,31 @@ export function findPrimaryPartyAddress(
       (address) =>
         String(address.address_type ?? "").trim().toUpperCase() === "PRIMARY",
     ) ?? addresses[0]
+  );
+}
+
+/** Resolve GST registration from primary (or first) party address. */
+export function isPartyGstRegistered(
+  addresses: PartyAddressLike[] | undefined | null,
+): boolean {
+  const primary = findPrimaryPartyAddress(addresses);
+  if (!primary) return false;
+  return isGstRegistrationRegistered(primary.gst_registration_status);
+}
+
+/**
+ * True only when status is explicitly Unregistered.
+ * Blank/missing status keeps existing GST behaviour (backward compatible).
+ */
+export function isPartyGstUnregistered(
+  addresses: PartyAddressLike[] | undefined | null,
+): boolean {
+  const primary = findPrimaryPartyAddress(addresses);
+  if (!primary) return false;
+  return (
+    String(primary.gst_registration_status ?? "")
+      .trim()
+      .toLowerCase() === "unregistered"
   );
 }
 

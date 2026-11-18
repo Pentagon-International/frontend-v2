@@ -1600,7 +1600,9 @@ export default function SupplierInvoiceCreate({
     const next = charges.map((c) => {
       const amount = c.amount ?? 0;
       const roe = c.roe ?? 0;
-      const local = clampLocalAmount(amount * roe);
+      // Keep full-precision local for sums; round only in UI / payload.
+      const raw = amount * roe;
+      const local = Number.isFinite(raw) ? raw : null;
       if (local !== (c.amount_in_local ?? null)) changed = true;
       return { ...c, amount_in_local: local };
     });
