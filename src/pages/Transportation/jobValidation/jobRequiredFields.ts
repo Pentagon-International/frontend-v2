@@ -134,6 +134,11 @@ function getCargoMissingFields(
   cargos.forEach((raw, j) => {
     const cargo = (raw ?? {}) as Record<string, unknown>;
     const prefix = `Cargo ${j + 1}`;
+    const isHaz =
+      cargo.haz === true ||
+      cargo.haz === "Yes" ||
+      cargo.haz === "true" ||
+      cargo.haz === "1";
 
     if (ctx.family === "ocean") {
       const containerNo = str(cargo.container_no ?? cargo.container_number);
@@ -146,6 +151,11 @@ function getCargoMissingFields(
       }
       if (!hasNumberOrZero(cargo.volume)) {
         missing.push(`${prefix}: Volume`);
+      }
+      if (isHaz) {
+        if (!str(cargo.un_no)) missing.push(`${prefix}: UN No`);
+        if (!str(cargo.class_name)) missing.push(`${prefix}: Class`);
+        if (!str(cargo.pkg_group)) missing.push(`${prefix}: PKG Group`);
       }
       return;
     }
@@ -160,6 +170,11 @@ function getCargoMissingFields(
     const volume = cargo.volume ?? cargo.volume_weight;
     if (!hasNumberOrZero(volume)) {
       missing.push(`${prefix}: Volume Weight`);
+    }
+    if (isHaz) {
+      if (!str(cargo.un_no)) missing.push(`${prefix}: UN No`);
+      if (!str(cargo.class_name)) missing.push(`${prefix}: Class`);
+      if (!str(cargo.pkg_group)) missing.push(`${prefix}: PKG Group`);
     }
   });
 
