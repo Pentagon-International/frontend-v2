@@ -417,16 +417,58 @@ function normalizeHouseCargoRow(
     volume_cbm: firstCargoScalar(row.volume_cbm, vol) ?? "",
     chargeable_weight: firstCargoScalar(row.chargeable_weight) ?? "",
     haz: Boolean(row.haz),
-    ...(row.un_no != null && String(row.un_no).trim()
-      ? { un_no: row.un_no }
-      : {}),
-    ...(row.class_name != null && String(row.class_name).trim()
-      ? { class_name: row.class_name }
-      : {}),
-    ...(row.pkg_group != null && String(row.pkg_group).trim()
-      ? { pkg_group: row.pkg_group }
-      : {}),
+    ...(() => {
+      const un_no = String(row.un_no ?? "").trim();
+      const class_name = String(row.class_name ?? "").trim();
+      const pkg_group = String(row.pkg_group ?? "").trim();
+      return {
+        ...(un_no ? { un_no } : {}),
+        ...(class_name ? { class_name } : {}),
+        ...(pkg_group ? { pkg_group } : {}),
+      };
+    })(),
   };
+}
+
+/** Complete haz classification from a cargo row (BE requires all three when haz=true). */
+function pickCompleteHazDetails(
+  rows: Record<string, unknown>[],
+): { un_no: string; class_name: string; pkg_group: string } | null {
+  for (const row of rows) {
+    if (!row.haz) continue;
+    const un_no = String(row.un_no ?? "").trim();
+    const class_name = String(row.class_name ?? "").trim();
+    const pkg_group = String(row.pkg_group ?? "").trim();
+    if (un_no && class_name && pkg_group) {
+      return { un_no, class_name, pkg_group };
+    }
+  }
+  return null;
+}
+
+/**
+ * When haz=true but UN/Class/PKG missing, fill from booking cargo that already
+ * has a complete classification (covers leftover extract rows after merge).
+ */
+function enrichIncompleteHazCargoRows(
+  rows: Record<string, unknown>[],
+  hazSource: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const details = pickCompleteHazDetails(hazSource);
+  if (!details) return rows;
+  return rows.map((row) => {
+    if (!row.haz) return row;
+    const un_no = String(row.un_no ?? "").trim();
+    const class_name = String(row.class_name ?? "").trim();
+    const pkg_group = String(row.pkg_group ?? "").trim();
+    if (un_no && class_name && pkg_group) return row;
+    return normalizeHouseCargoRow({
+      ...row,
+      un_no: un_no || details.un_no,
+      class_name: class_name || details.class_name,
+      pkg_group: pkg_group || details.pkg_group,
+    });
+  });
 }
 
 /**
@@ -485,7 +527,8 @@ function mergeAutomationCargoDetails(
   extract.forEach((e, idx) => {
     if (!used.has(idx)) result.push(e);
   });
-  return result;
+  // Leftover extract haz rows may lack UN/Class/PKG — fill from booking when complete
+  return enrichIncompleteHazCargoRows(result, booking);
 }
 
 function mapCargoDetails(

@@ -163,6 +163,9 @@ interface ContainerDetail {
   tare_weight_kgs?: number;
   chargeable_weight?: string;
   haz?: boolean;
+  un_no?: string;
+  class_name?: string;
+  pkg_group?: string;
   description?: string;
 }
 
@@ -845,7 +848,13 @@ function houseRequiredFieldKey(houseIdx: number, label: string): string {
             ? "gross_weight"
             : part === "Volume"
               ? "volume"
-              : part.toLowerCase().replace(/\s+/g, "_");
+              : part === "UN No"
+                ? "un_no"
+                : part === "Class"
+                  ? "class_name"
+                  : part === "PKG Group"
+                    ? "pkg_group"
+                    : part.toLowerCase().replace(/\s+/g, "_");
     return `housing_${houseIdx}_cargo_${cargoIdx}_${field}`;
   }
   if (label === "At least one Cargo Detail") {
@@ -2886,6 +2895,12 @@ const PayloadFormBody: FC<{
                   if (!cargoRows.length && !needMap.has(`housing_${idx}_cargo`)) {
                     return null;
                   }
+                  const showHazDetails = cargoRows.some(
+                    (c) =>
+                      c.haz === true ||
+                      (c as { haz?: unknown }).haz === "Yes" ||
+                      (c as { haz?: unknown }).haz === "true",
+                  );
                   return (
                     <SubSec
                       icon="📫"
@@ -2907,10 +2922,21 @@ const PayloadFormBody: FC<{
                               <th>Package Type</th>
                               <th>Charg. Wt</th>
                               <th>HAZ</th>
+                              {showHazDetails ? (
+                                <>
+                                  <th>UN No *</th>
+                                  <th>Class *</th>
+                                  <th>PKG Group *</th>
+                                </>
+                              ) : null}
                             </tr>
                           </thead>
                           <tbody>
                             {cargoRows.map((c, ci) => {
+                              const isHazRow =
+                                c.haz === true ||
+                                (c as { haz?: unknown }).haz === "Yes" ||
+                                (c as { haz?: unknown }).haz === "true";
                               const cell = (
                                 field: string,
                                 value: unknown,
@@ -3046,7 +3072,22 @@ const PayloadFormBody: FC<{
                                     "chargeable_weight",
                                     c.chargeable_weight,
                                   )}
-                                  <td>{c.haz ? "⚠️" : "No"}</td>
+                                  <td>{isHazRow ? "⚠️" : "No"}</td>
+                                  {showHazDetails ? (
+                                    isHazRow ? (
+                                      <>
+                                        {cell("un_no", c.un_no, true)}
+                                        {cell("class_name", c.class_name, true)}
+                                        {cell("pkg_group", c.pkg_group, true)}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <td>—</td>
+                                        <td>—</td>
+                                        <td>—</td>
+                                      </>
+                                    )
+                                  ) : null}
                                 </tr>
                               );
                             })}
