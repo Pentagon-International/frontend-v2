@@ -33,9 +33,12 @@ type OutstandingDocumentsSelectModalProps<T extends SelectableModalDocument> = {
   searchPlaceholder: string;
   emptyListMessage: string;
   loadingMessage?: string;
+  title?: string;
   size?: string | number;
   /** Overlay shown above modal body (e.g. opening source document). */
   overlay?: ReactNode;
+  /** Shown above Cancel/Select (e.g. allocation totals). */
+  footerPrefix?: ReactNode;
   tableHeader: ReactNode;
   renderCells: (inv: T, idx: number) => ReactNode;
   /** Restore checkboxes for docs already on Adjustments. */
@@ -124,8 +127,10 @@ export default function OutstandingDocumentsSelectModal<
   searchPlaceholder,
   emptyListMessage,
   loadingMessage = "Loading documents...",
+  title = "Select Document",
   size = "lg",
   overlay,
+  footerPrefix,
   tableHeader,
   renderCells,
   getInitialSelectedIndices,
@@ -255,29 +260,44 @@ export default function OutstandingDocumentsSelectModal<
 
   const footer = useMemo(
     () => (
-      <Group justify="flex-end">
-        <Button variant="outline" color="#105476" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          color="#105476"
-          onClick={handleApply}
-          disabled={selectedCount === 0}
-        >
-          Select
-        </Button>
-      </Group>
+      <>
+        {footerPrefix}
+        <Group justify="flex-end" mt={footerPrefix ? "sm" : undefined}>
+          <Button variant="outline" color="#105476" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            color="#105476"
+            onClick={handleApply}
+            disabled={selectedCount === 0}
+          >
+            Select
+          </Button>
+        </Group>
+      </>
     ),
-    [onClose, handleApply, selectedCount],
+    [onClose, handleApply, selectedCount, footerPrefix],
   );
+
+  const modalStyles = useMemo(() => {
+    const wide = size === "100%" || size === "95vw";
+    return {
+      ...selectDocumentModalStyles,
+      content: {
+        ...selectDocumentModalStyles.content,
+        ...(wide ? { maxWidth: "95vw" } : null),
+      },
+    };
+  }, [size]);
 
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Select Document"
+      title={title}
       size={size}
-      styles={selectDocumentModalStyles}
+      centered
+      styles={modalStyles}
     >
       {overlay}
       {loading ? (
@@ -302,12 +322,17 @@ export default function OutstandingDocumentsSelectModal<
           footer={footer}
         >
           <DocumentsTable
-            visibleRows={visibleRows}
+            visibleRows={visibleRows as { inv: SelectableModalDocument; idx: number }[]}
             selectedRef={selectedRef}
             onCountChange={onCountChange}
             tableTick={tableTick}
             tableHeader={tableHeader}
-            renderCells={renderCells}
+            renderCells={
+              renderCells as (
+                inv: SelectableModalDocument,
+                idx: number,
+              ) => ReactNode
+            }
           />
           {documents.length === 0 && (
             <Text size="sm" c="dimmed" mt="sm">
