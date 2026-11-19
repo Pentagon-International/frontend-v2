@@ -6,7 +6,6 @@ import {
   Center,
   Button,
   Card,
-  Checkbox,
   Grid,
   Group,
   Loader,
@@ -31,7 +30,7 @@ import {
   IconListDetails,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -84,6 +83,7 @@ import {
   useGlobalSearchDocumentNavigation,
 } from "../../../hooks/useGlobalSearchDocumentNavigation";
 import { useViewAllocationDocs } from "../../../hooks/useViewAllocationDocs";
+import OutstandingDocumentsSelectModal from "../../../components/OutstandingDocumentsSelectModal";
 
 const RECEIPT_TYPE_OPTIONS = [
   { value: "CHEQUE", label: "CHEQUE" },
@@ -901,9 +901,6 @@ export default function ReceiptCreate({
   const [invoiceModalAllocationFilter, setInvoiceModalAllocationFilter] =
     useState<{ account_code: string; subledger_code: string } | null>(null);
   const [invoiceList, setInvoiceList] = useState<InvoiceCombinedItem[]>([]);
-  const [selectedInvoiceIndices, setSelectedInvoiceIndices] = useState<
-    Set<number>
-  >(new Set());
   const [isOpeningInvoiceFromModal, setIsOpeningInvoiceFromModal] =
     useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1577,7 +1574,6 @@ export default function ReceiptCreate({
     if (!accountCode || !subledgerCode) return;
     setInvoiceModalDetailRowIndex(detailRowIndex);
     setInvoiceList([]);
-    setSelectedInvoiceIndices(new Set());
     // Drop any cached list so the modal never shows memoized documents
     queryClient.removeQueries({
       queryKey: [
@@ -1595,21 +1591,7 @@ export default function ReceiptCreate({
 
   useEffect(() => {
     if (!invoiceModalOpen || !filterInvoiceData) return;
-    const list = filterInvoiceData;
-    setInvoiceList(list);
-    const existingDocKeys = new Set(
-      form.values.adjustments
-        .map((a) => allocationDocumentKey(a.document_no, a.obj_sno))
-        .filter((key) => !key.startsWith("|")),
-    );
-    const alreadySelected = new Set<number>();
-    existingDocKeys.forEach((key) => {
-      const idx = list.findIndex(
-        (inv) => allocationDocumentKey(inv.document_no, inv.obj_sno) === key,
-      );
-      if (idx >= 0) alreadySelected.add(idx);
-    });
-    setSelectedInvoiceIndices(alreadySelected);
+    setInvoiceList(filterInvoiceData);
   }, [invoiceModalOpen, filterInvoiceData]);
 
   useEffect(() => {
@@ -1622,14 +1604,32 @@ export default function ReceiptCreate({
     }
   }, [invoiceModalOpen, filterInvoiceError]);
 
-  const toggleInvoiceSelection = (idx: number) => {
-    setSelectedInvoiceIndices((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
-  };
+  const getInitialSelectedInvoiceIndices = useCallback(
+    (list: InvoiceCombinedItem[]) => {
+      const existingDocKeys = new Set(
+        form.values.adjustments
+          .map((a) => allocationDocumentKey(a.document_no, a.obj_sno))
+          .filter((key) => !key.startsWith("|")),
+      );
+      const alreadySelected = new Set<number>();
+      existingDocKeys.forEach((key) => {
+        const idx = list.findIndex(
+          (inv) => allocationDocumentKey(inv.document_no, inv.obj_sno) === key,
+        );
+        if (idx >= 0) alreadySelected.add(idx);
+      });
+      return alreadySelected;
+    },
+    [form.values.adjustments],
+  );
+
+  const closeInvoiceModal = useCallback(() => {
+    setInvoiceModalOpen(false);
+    setInvoiceModalDetailRowIndex(null);
+    setInvoiceModalAllocationFilter(null);
+    setInvoiceList([]);
+    setIsOpeningInvoiceFromModal(false);
+  }, []);
 
   const openInvoiceFromAllocationRow = async (inv: InvoiceCombinedItem) => {
     const docType = String(
@@ -1713,9 +1713,11 @@ export default function ReceiptCreate({
     }
   };
 
-  const handleSelectInvoice = () => {
+  const handleSelectInvoice = (
+    sorted: number[],
+    selectedList: InvoiceCombinedItem[],
+  ) => {
     if (invoiceModalDetailRowIndex == null) return;
-    const sorted = Array.from(selectedInvoiceIndices).sort((a, b) => a - b);
     if (sorted.length === 0) {
       ToastNotification({
         type: "warning",
@@ -1732,14 +1734,14 @@ export default function ReceiptCreate({
       (partyDisplay &&
         (a.subledger_display ?? "").toString().trim() === partyDisplay);
     const managedDocKeys = new Set(
-      invoiceList
+      selectedList
         .map((inv) => allocationDocumentKey(inv.document_no, inv.obj_sno))
         .filter((key) => !key.startsWith("|")),
     );
     const isManagedRow = (a: AdjustmentRow) =>
       managedDocKeys.has(allocationDocumentKey(a.document_no, a.obj_sno));
     const newRows: AdjustmentRow[] = sorted.map((listIdx) => {
-      const inv = invoiceList[listIdx];
+      const inv = selectedList[listIdx];
       const docDate =
         inv.document_date != null
           ? parseDocumentDate(inv.document_date as string)
@@ -1840,18 +1842,7 @@ export default function ReceiptCreate({
       allocationsForDetail:
         partyAllocations.length > 0 ? partyAllocations : newRows,
     });
-    setInvoiceModalOpen(false);
-    setInvoiceModalDetailRowIndex(null);
-    setInvoiceModalAllocationFilter(null);
-    setInvoiceList([]);
-    setSelectedInvoiceIndices(new Set());
-    // ToastNotification({
-    //   type: "success",
-    //   message:
-    //     newRows.length === 1
-    //       ? "Adjustments updated (1 invoice)"
-    //       : `Adjustments updated (${newRows.length} invoices)`,
-    // });
+    closeInvoiceModal();
   };
 
   const buildReceiptPayload = (
@@ -4005,164 +3996,95 @@ export default function ReceiptCreate({
           </Grid>
 
           {/* Invoice selection modal - not used in Receipt Reversal */}
-          <Modal
+          <OutstandingDocumentsSelectModal<InvoiceCombinedItem>
             opened={invoiceModalOpen}
-            onClose={() => {
-              setInvoiceModalOpen(false);
-              setInvoiceModalDetailRowIndex(null);
-              setInvoiceModalAllocationFilter(null);
-              setInvoiceList([]);
-              setSelectedInvoiceIndices(new Set());
-              setIsOpeningInvoiceFromModal(false);
-            }}
-            title="Select Document"
+            onClose={closeInvoiceModal}
+            loading={filterInvoiceLoading || filterInvoiceFetching}
+            documents={invoiceList}
+            includeInvCrn={false}
+            searchPlaceholder="Search document no / amount"
+            emptyListMessage="No posted documents found for this customer."
             size="lg"
-            styles={{
-              title: { fontWeight: 600, color: "#105476" },
-              body: { position: "relative" },
-            }}
-          >
-            {isOpeningInvoiceFromModal && (
-              <Box
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  backgroundColor: "rgba(255,255,255,0.75)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  zIndex: 10,
-                }}
-              >
-                <Group gap="sm">
-                  <Loader size="sm" color="#105476" />
-                  <Text size="sm" c="#105476" fw={600}>
-                    Opening invoice…
-                  </Text>
-                </Group>
-              </Box>
-            )}
-            {filterInvoiceLoading || filterInvoiceFetching ? (
-              <Text size="sm" c="dimmed">
-                Loading documents...
-              </Text>
-            ) : (
-              <>
-                <Table
-                  withTableBorder
-                  withColumnBorders
-                  striped
-                  highlightOnHover
-                  style={{ fontSize: "13px" }}
+            getInitialSelectedIndices={getInitialSelectedInvoiceIndices}
+            onApply={handleSelectInvoice}
+            overlay={
+              isOpeningInvoiceFromModal ? (
+                <Box
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundColor: "rgba(255,255,255,0.75)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 10,
+                  }}
                 >
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th style={{ width: 40 }}></Table.Th>
-                      <Table.Th>Document Number</Table.Th>
-                      <Table.Th>Document Type</Table.Th>
-                      <Table.Th>Document Date</Table.Th>
-                      <Table.Th>Document Amount</Table.Th>
-                      <Table.Th>Outstanding Amount</Table.Th>
-                      <Table.Th>Dr/Cr</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {invoiceList.map((inv, idx) => (
-                      <Table.Tr key={idx}>
-                        <Table.Td>
-                          <Checkbox
-                            checked={selectedInvoiceIndices.has(idx)}
-                            onChange={() => toggleInvoiceSelection(idx)}
-                          />
-                        </Table.Td>
-                        <Table.Td>
-                          {String(
-                            inv.day_book_document_type ??
-                              inv.day_book_type ??
-                              "",
-                          )
-                            .trim()
-                            .toUpperCase() === "INV" ? (
-                            <Text
-                              component="span"
-                              style={{
-                                color: "#105476",
-                                textDecoration: "underline",
-                                cursor: "pointer",
-                              }}
-                              onClick={() =>
-                                void openInvoiceFromAllocationRow(inv)
-                              }
-                              title="Open invoice"
-                            >
-                              {inv.document_no ?? "—"}
-                            </Text>
-                          ) : (
-                            <Text component="span">
-                              {inv.document_no ?? "—"}
-                            </Text>
-                          )}
-                        </Table.Td>
-                        <Table.Td>
-                          {String(
-                            inv.day_book_document_type ??
-                              inv.day_book_type ??
-                              "—",
-                          )}
-                        </Table.Td>
-                        <Table.Td>
-                          {formatDocumentDateDisplay(
-                            inv.document_date as string,
-                            dateFormat,
-                          )}
-                        </Table.Td>
-                        <Table.Td>
-                          {formatOutstandingDocumentAmountInLocal(
-                            inv.document_amount,
-                          )}
-                        </Table.Td>
-                        <Table.Td>
-                          {formatOutstandingDocumentAmountInLocal(inv.amount)}
-                        </Table.Td>
-                        <Table.Td>
-                          {normalizeAllocationDrCr(inv.dr_cr) ?? "—"}
-                        </Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-                {invoiceList.length === 0 &&
-                  !filterInvoiceLoading &&
-                  !filterInvoiceFetching && (
-                    <Text size="sm" c="dimmed" mt="sm">
-                      No posted documents found for this customer.
+                  <Group gap="sm">
+                    <Loader size="sm" color="#105476" />
+                    <Text size="sm" c="#105476" fw={600}>
+                      Opening invoice…
                     </Text>
+                  </Group>
+                </Box>
+              ) : null
+            }
+            tableHeader={
+              <Table.Tr>
+                <Table.Th style={{ width: 40 }}></Table.Th>
+                <Table.Th>Document Number</Table.Th>
+                <Table.Th>Document Type</Table.Th>
+                <Table.Th>Document Date</Table.Th>
+                <Table.Th>Document Amount</Table.Th>
+                <Table.Th>Outstanding Amount</Table.Th>
+                <Table.Th>Dr/Cr</Table.Th>
+              </Table.Tr>
+            }
+            renderCells={(inv) => (
+              <>
+                <Table.Td>
+                  {String(
+                    inv.day_book_document_type ?? inv.day_book_type ?? "",
+                  )
+                    .trim()
+                    .toUpperCase() === "INV" ? (
+                    <Text
+                      component="span"
+                      style={{
+                        color: "#105476",
+                        textDecoration: "underline",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => void openInvoiceFromAllocationRow(inv)}
+                      title="Open invoice"
+                    >
+                      {inv.document_no ?? "—"}
+                    </Text>
+                  ) : (
+                    <Text component="span">{inv.document_no ?? "—"}</Text>
                   )}
-                <Group justify="flex-end" mt="md">
-                  <Button
-                    variant="outline"
-                    color="#105476"
-                    onClick={() => {
-                      setInvoiceModalOpen(false);
-                      setInvoiceModalDetailRowIndex(null);
-                      setInvoiceModalAllocationFilter(null);
-                      setInvoiceList([]);
-                      setSelectedInvoiceIndices(new Set());
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    color="#105476"
-                    onClick={handleSelectInvoice}
-                    disabled={selectedInvoiceIndices.size === 0}
-                  >
-                    Select
-                  </Button>
-                </Group>
+                </Table.Td>
+                <Table.Td>
+                  {String(
+                    inv.day_book_document_type ?? inv.day_book_type ?? "—",
+                  )}
+                </Table.Td>
+                <Table.Td>
+                  {formatDocumentDateDisplay(
+                    inv.document_date as string,
+                    dateFormat,
+                  )}
+                </Table.Td>
+                <Table.Td>
+                  {formatOutstandingDocumentAmountInLocal(inv.document_amount)}
+                </Table.Td>
+                <Table.Td>
+                  {formatOutstandingDocumentAmountInLocal(inv.amount)}
+                </Table.Td>
+                <Table.Td>{normalizeAllocationDrCr(inv.dr_cr) ?? "—"}</Table.Td>
               </>
             )}
-          </Modal>
+          />
 
           {/* Supporting Documents Modal */}
           <Modal
