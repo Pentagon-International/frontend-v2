@@ -825,6 +825,7 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCarrierIntegrating, setIsCarrierIntegrating] = useState(false);
+  const maerskSaveReminderShownRef = useRef(false);
   const [charges, setCharges] = useState([
     {
       id: undefined as number | undefined,
@@ -2011,6 +2012,49 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
       });
       return;
     }
+    if (
+      isMaerskCarrier(form.values.carrier_code, form.values.carrier_name)
+    ) {
+      const maerskErrors = getMaerskBookingRequiredErrors({
+        service: form.values.service,
+        service_type: "import",
+        origin_code: form.values.origin_code,
+        destination_code: form.values.destination_code,
+        etd: form.values.etd,
+        eta: form.values.eta,
+        receipt_type_at_origin: form.values.receipt_type_at_origin,
+        delivery_type_at_destination:
+          form.values.delivery_type_at_destination,
+        reference: form.values.reference,
+        commodity_description: form.values.commodity_description,
+        gross_weight: form.values.gross_weight,
+        cargo_details: form.values.cargo_details,
+        shipper_name: form.values.shipper_name,
+        shipper_email: form.values.shipper_email,
+        consignee_name: form.values.consignee_name,
+        consignee_email: form.values.consignee_email,
+      });
+      if (Object.keys(maerskErrors).length > 0) {
+        form.setErrors(maerskErrors);
+        ToastNotification({
+          type: "error",
+          message:
+            Object.values(maerskErrors)[0] ||
+            "Please fill in all Maersk required fields before carrier integration.",
+        });
+        return;
+      }
+      // Maersk fields are filled — remind once to save so the API uses latest data.
+      if (!maerskSaveReminderShownRef.current) {
+        maerskSaveReminderShownRef.current = true;
+        ToastNotification({
+          type: "warning",
+          message:
+            "Please save the booking once, then click Make Carrier Integration again.",
+        });
+        return;
+      }
+    }
     try {
       setIsCarrierIntegrating(true);
       const response = (await postAPICall(
@@ -2018,14 +2062,14 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         {},
         API_HEADER,
       )) as {
-        status?: boolean | string;
+        success?: boolean | string;
         message?: string;
         data?: {
           carrier_booking_reference?: string | null;
           booking_status?: string | null;
         };
       };
-      const ok = response?.status === true || response?.status === "true";
+      const ok = response?.success === true || response?.success === "true";
       if (!ok) {
         ToastNotification({
           type: "error",
@@ -3187,40 +3231,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
         });
         setIsSubmitting(false);
         return;
-      }
-
-      if (
-        isMaerskCarrier(form.values.carrier_code, form.values.carrier_name)
-      ) {
-        const maerskErrors = getMaerskBookingRequiredErrors({
-          service: form.values.service,
-          service_type: "import",
-          origin_code: form.values.origin_code,
-          destination_code: form.values.destination_code,
-          etd: form.values.etd,
-          eta: form.values.eta,
-          receipt_type_at_origin: form.values.receipt_type_at_origin,
-          delivery_type_at_destination:
-            form.values.delivery_type_at_destination,
-          reference: form.values.reference,
-          commodity_description: form.values.commodity_description,
-          cargo_details: form.values.cargo_details,
-          shipper_name: form.values.shipper_name,
-          shipper_email: form.values.shipper_email,
-          consignee_name: form.values.consignee_name,
-          consignee_email: form.values.consignee_email,
-        });
-        if (Object.keys(maerskErrors).length > 0) {
-          form.setErrors(maerskErrors);
-          ToastNotification({
-            type: "error",
-            message:
-              Object.values(maerskErrors)[0] ||
-              "Please fill in all Maersk required fields before submitting.",
-          });
-          setIsSubmitting(false);
-          return;
-        }
       }
 
       if (!validateChargesRoe()) {
@@ -4507,10 +4517,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       )
                     }
                     error={form.errors.receipt_type_at_origin}
-                    withAsterisk={isMaerskCarrier(
-                      form.values.carrier_code,
-                      form.values.carrier_name,
-                    )}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -4527,10 +4533,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                       )
                     }
                     error={form.errors.delivery_type_at_destination}
-                    withAsterisk={isMaerskCarrier(
-                      form.values.carrier_code,
-                      form.values.carrier_name,
-                    )}
                   />
                 </Grid.Col>
                 <Grid.Col span={4}>
@@ -4538,10 +4540,6 @@ const OceanImportBookingStepper: React.FC<ImportShipmentStepperProps> = ({
                     label="Service Contract / Quotation"
                     placeholder="Enter service contract or quotation reference"
                     format="normal"
-                    withAsterisk={isMaerskCarrier(
-                      form.values.carrier_code,
-                      form.values.carrier_name,
-                    )}
                     {...form.getInputProps("reference")}
                   />
                 </Grid.Col>
