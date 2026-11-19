@@ -4,13 +4,12 @@ import {
   Button,
   Badge,
   Card,
-  Checkbox,
   Center,
   Flex,
   Grid,
   Group,
   Loader,
-  Modal,
+  Table,
   Text,
 } from "@mantine/core";
 import { IconSearch, IconTrash } from "@tabler/icons-react";
@@ -28,6 +27,7 @@ import {
   ToastNotification,
 } from "../../../components";
 import FormTextInput from "../../../components/FormTextInput";
+import OutstandingDocumentsSelectModal from "../../../components/OutstandingDocumentsSelectModal";
 import { ROE_DECIMAL_PLACES } from "../../../utils/exchangeRateRoe";
 import {
   bindMoneyWholeNumberMode,
@@ -239,14 +239,6 @@ const getAllocationApiErrorMessage = (
 ): string => getServerErrorMessage(error, fallback);
 
 type AllocationTotals = ReturnType<typeof computeAllocationTotals>;
-
-/** Exact leading column spans (same as table rows) so gutters align. */
-const MODAL_TOTALS_LEADING_SPANS = [
-  0.4, 0.8, 1.2, 0.9, 1.8, 1.1, 0.8, 0.7,
-];
-const MODAL_TOTALS_LABEL_SPAN = 1.1; // Document Amount (spacer)
-const MODAL_TOTALS_OUTSTANDING_SPAN = 1.1; // Label before local totals
-const MODAL_TOTALS_LOCAL_SPAN = 1.5; // Outstanding local amount
 
 const MAIN_TOTALS_LEADING_SPANS = [
   0.9, 0.8, 0.7, 1.7, 1.2, 0.9, 0.7,
@@ -721,9 +713,6 @@ export default function DocumentAllocation() {
     useState<CoaItem | null>(null);
   const [rows, setRows] = useState<DocumentAllocationRow[]>([]);
   const [fetchedRows, setFetchedRows] = useState<DocumentAllocationRow[]>([]);
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
@@ -959,34 +948,43 @@ export default function DocumentAllocation() {
     });
   };
 
-  const toggleRowSelection = (row: DocumentAllocationRow, checked: boolean) => {
-    const key = row.id != null ? String(row.id) : String(row.document_no ?? "");
-    if (!key) return;
-    setSelectedRowIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(key);
-      else next.delete(key);
-      return next;
-    });
-  };
+  const allocationListRowKey = useCallback((row: DocumentAllocationRow) => {
+    if (row.id != null) return `id:${row.id}`;
+    return `doc:${String(row.document_no ?? "").trim()}|${String(row.obj_sno ?? "").trim()}`;
+  }, []);
 
-  const applySelectedRows = () => {
-    const next = fetchedRows
-      .filter((r) => {
-        const key = r.id != null ? String(r.id) : String(r.document_no ?? "");
-        return key ? selectedRowIds.has(key) : false;
-      })
-      .map(normalizeAllocationLine);
-    setRows(next);
-    setSavedHeader(null);
-    setIsModalOpen(false);
-    if (next.length === 0) {
-      ToastNotification({
-        type: "info",
-        message: "No rows selected.",
+  const getInitialSelectedAllocationIndices = useCallback(
+    (list: DocumentAllocationRow[]) => {
+      const existingKeys = new Set(rows.map(allocationListRowKey));
+      const alreadySelected = new Set<number>();
+      list.forEach((row, idx) => {
+        if (existingKeys.has(allocationListRowKey(row))) {
+          alreadySelected.add(idx);
+        }
       });
-    }
-  };
+      return alreadySelected;
+    },
+    [rows, allocationListRowKey],
+  );
+
+  const closeSelectAllocationsModal = useCallback(() => {
+    setIsModalOpen(false);
+    setIsOpeningDocumentFromModal(false);
+  }, []);
+
+  const handleApplySelectedAllocations = useCallback(
+    (selectedIndices: number[], list: DocumentAllocationRow[]) => {
+      const next = selectedIndices
+        .map((idx) => list[idx])
+        .filter(Boolean)
+        .map(normalizeAllocationLine);
+      setRows(next);
+      setSavedHeader(null);
+      setIsModalOpen(false);
+      setIsOpeningDocumentFromModal(false);
+    },
+    [],
+  );
 
   const removeAllocationRow = (rowIndex: number) => {
     setRows((prev) => prev.filter((_, idx) => idx !== rowIndex));
@@ -1295,7 +1293,6 @@ export default function DocumentAllocation() {
         return;
       }
       setFetchedRows(list);
-      setSelectedRowIds(new Set());
       setIsModalOpen(true);
     } catch {
       ToastNotification({
@@ -1417,244 +1414,143 @@ export default function DocumentAllocation() {
         overflow: "hidden",
       }}
     >
-      <Modal
+      <OutstandingDocumentsSelectModal<DocumentAllocationRow>
         opened={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setIsOpeningDocumentFromModal(false);
-        }}
+        onClose={closeSelectAllocationsModal}
         title="Select Allocations"
+        loading={false}
+        documents={fetchedRows}
+        includeInvCrn={false}
+        searchPlaceholder="Search document no / amount"
+        emptyListMessage="No documents found for the selected account."
         size="100%"
-        centered
-        styles={{
-          content: { maxWidth: "95vw" },
-          body: { position: "relative" },
-        }}
-      >
-        {isOpeningDocumentFromModal && (
-          <Box
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundColor: "rgba(255,255,255,0.75)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 10,
-            }}
-          >
-            <Group gap="sm">
-              <Loader size="sm" color="#105476" />
-              <Text size="sm" c="#105476" fw={600}>
-                {openingDocumentLabel}
+        getInitialSelectedIndices={getInitialSelectedAllocationIndices}
+        onApply={handleApplySelectedAllocations}
+        overlay={
+          isOpeningDocumentFromModal ? (
+            <Box
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: "rgba(255,255,255,0.75)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+              }}
+            >
+              <Group gap="sm">
+                <Loader size="sm" color="#105476" />
+                <Text size="sm" c="#105476" fw={600}>
+                  {openingDocumentLabel}
+                </Text>
+              </Group>
+            </Box>
+          ) : null
+        }
+        footerPrefix={
+          fetchedRows.length > 0 ? (
+            <Group justify="flex-end" gap="xl" wrap="wrap">
+              <Text size="sm" c="dimmed">
+                Credit Total:{" "}
+                <Text span fw={700} c="#105476">
+                  {formatMoneyAmountForUi(fetchedAllocationTotals.credit)}
+                </Text>
+              </Text>
+              <Text size="sm" c="dimmed">
+                Debit Total:{" "}
+                <Text span fw={700} c="#105476">
+                  {formatMoneyAmountForUi(fetchedAllocationTotals.debit)}
+                </Text>
+              </Text>
+              <Text size="sm" c="dimmed">
+                Net Total:{" "}
+                <Text
+                  span
+                  fw={700}
+                  c={
+                    fetchedAllocationTotals.net > 0
+                      ? "#16a34a"
+                      : fetchedAllocationTotals.net < 0
+                        ? "#dc2626"
+                        : "#105476"
+                  }
+                >
+                  {formatMoneyAmountForUi(fetchedAllocationTotals.net)}
+                </Text>
               </Text>
             </Group>
-          </Box>
-        )}
-        <Box>
-          {/* Modal header */}
-          <Grid
-            w="100%"
-            gutter="xs"
-            py="sm"
-            style={{
-              fontWeight: 600,
-              color: "#105476",
-            }}
-          >
-            <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
-              Select
-            </Grid.Col>
-            <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
-              Branch
-            </Grid.Col>
-            <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
-              Daybook code
-            </Grid.Col>
-            <Grid.Col span={0.9} style={{ fontSize: "13px" }}>
-              Document Type
-            </Grid.Col>
-            <Grid.Col span={1.8} style={{ fontSize: "13px" }}>
-              Document Number
-            </Grid.Col>
-            <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
-              Document Date
-            </Grid.Col>
-            <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
-              Currency
-            </Grid.Col>
-            <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
-              ROE
-            </Grid.Col>
-            <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
-              Document Amount
-            </Grid.Col>
-            <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
-              Outstanding amount
-            </Grid.Col>
-            <Grid.Col span={1.5} style={{ fontSize: "13px" }}>
-              Outstanding local amount
-            </Grid.Col>
-            <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
-              Dr/Cr
-            </Grid.Col>
-          </Grid>
-
-          {fetchedRows.map((row, idx) => {
-            const key =
-              row.id != null ? String(row.id) : String(row.document_no ?? "");
-            const isChecked = key ? selectedRowIds.has(key) : false;
-            const daybookCode = row.day_book_code ?? row.day_book_name ?? "";
-            const docType =
-              row.document_type ?? row.day_book_document_type ?? "";
-            const outstandingAmt = row.outstanding_amount ?? row.amount ?? "";
-            const outstandingLocal =
-              row.outstanding_local_amount ?? row.amount_in_local ?? "";
-            const canOpenDocument = resolveFetchedDocumentOpenTarget(row) != null;
-            return (
-              <Grid
-                key={key || idx}
-                w="100%"
-                gutter="xs"
-                mt={idx !== 0 ? "sm" : 0}
-              >
-                <Grid.Col span={0.4}>
-                  <Checkbox
-                    checked={isChecked}
-                    onChange={(e) =>
-                      toggleRowSelection(row, e.currentTarget.checked)
-                    }
-                  />
-                </Grid.Col>
-                <Grid.Col span={0.8}>
-                  <FormTextInput
-                    value={row.branch_code ?? ""}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={1.2}>
-                  <FormTextInput
-                    value={daybookCode}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={0.9}>
-                  <FormTextInput
-                    value={docType}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={1.8}>
-                  <FormTextInput
-                    value={row.document_no ?? ""}
-                    readOnly
-                    title={
-                      canOpenDocument ? "Open document in a new tab" : undefined
-                    }
-                    onClick={() => {
-                      if (canOpenDocument) void openFetchedDocumentInNewTab(row);
+          ) : null
+        }
+        tableHeader={
+          <Table.Tr>
+            <Table.Th style={{ width: 40 }}></Table.Th>
+            <Table.Th>Branch</Table.Th>
+            <Table.Th>Daybook code</Table.Th>
+            <Table.Th>Document Type</Table.Th>
+            <Table.Th>Document Number</Table.Th>
+            <Table.Th>Document Date</Table.Th>
+            <Table.Th>Currency</Table.Th>
+            <Table.Th>ROE</Table.Th>
+            <Table.Th>Document Amount</Table.Th>
+            <Table.Th>Outstanding amount</Table.Th>
+            <Table.Th>Outstanding local amount</Table.Th>
+            <Table.Th>Dr/Cr</Table.Th>
+          </Table.Tr>
+        }
+        renderCells={(row) => {
+          const daybookCode = row.day_book_code ?? row.day_book_name ?? "";
+          const docType =
+            row.document_type ?? row.day_book_document_type ?? "";
+          const outstandingAmt = row.outstanding_amount ?? row.amount ?? "";
+          const outstandingLocal =
+            row.outstanding_local_amount ?? row.amount_in_local ?? "";
+          const canOpenDocument =
+            resolveFetchedDocumentOpenTarget(row) != null;
+          return (
+            <>
+              <Table.Td>{row.branch_code ?? "—"}</Table.Td>
+              <Table.Td>{daybookCode || "—"}</Table.Td>
+              <Table.Td>{docType || "—"}</Table.Td>
+              <Table.Td>
+                {canOpenDocument ? (
+                  <Text
+                    component="span"
+                    style={{
+                      color: "#105476",
+                      textDecoration: "underline",
+                      cursor: "pointer",
                     }}
-                    styles={
-                      canOpenDocument
-                        ? clickableAdjustmentDocumentNoStyles
-                        : { input: readOnlyInputStyles.input }
-                    }
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={1.1}>
-                  <FormTextInput
-                    value={formatDocumentDateDisplay(row.document_date, dateFormat)}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={0.8}>
-                  <FormTextInput
-                    value={row.currency_code ?? ""}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={0.7}>
-                  <FormTextInput
-                    value={row.roe ?? ""}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={1.1}>
-                  <FormTextInput
-                    value={formatTwoDecimalsFromString(row.document_amount)}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={1.1}>
-                  <FormTextInput
-                    value={formatTwoDecimalsFromString(outstandingAmt)}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={1.5}>
-                  <FormTextInput
-                    value={formatTwoDecimalsFromString(outstandingLocal)}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-                <Grid.Col span={0.4}>
-                  <FormTextInput
-                    value={resolveRowDrCr(row)}
-                    readOnly
-                    styles={{ input: readOnlyInputStyles.input }}
-                    format="normal"
-                  />
-                </Grid.Col>
-              </Grid>
-            );
-          })}
-
-          {fetchedRows.length > 0 ? (
-            <AllocationTotalsSummary
-              totals={fetchedAllocationTotals}
-              leadingSpans={MODAL_TOTALS_LEADING_SPANS}
-              labelSpan={MODAL_TOTALS_LABEL_SPAN}
-              outstandingSpan={MODAL_TOTALS_OUTSTANDING_SPAN}
-              localSpan={MODAL_TOTALS_LOCAL_SPAN}
-            />
-          ) : null}
-
-          <Group justify="flex-end" mt="md">
-            <Button
-              variant="outline"
-              color="gray"
-              onClick={() => setIsModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              style={{ backgroundColor: "#105476" }}
-              onClick={applySelectedRows}
-            >
-              Select
-            </Button>
-          </Group>
-        </Box>
-      </Modal>
+                    onClick={() => {
+                      void openFetchedDocumentInNewTab(row);
+                    }}
+                    title="Open document in a new tab"
+                  >
+                    {row.document_no ?? "—"}
+                  </Text>
+                ) : (
+                  <Text component="span">{row.document_no ?? "—"}</Text>
+                )}
+              </Table.Td>
+              <Table.Td>
+                {formatDocumentDateDisplay(row.document_date, dateFormat)}
+              </Table.Td>
+              <Table.Td>{row.currency_code ?? "—"}</Table.Td>
+              <Table.Td>{row.roe ?? "—"}</Table.Td>
+              <Table.Td>
+                {formatTwoDecimalsFromString(row.document_amount)}
+              </Table.Td>
+              <Table.Td>
+                {formatTwoDecimalsFromString(outstandingAmt)}
+              </Table.Td>
+              <Table.Td>
+                {formatTwoDecimalsFromString(outstandingLocal)}
+              </Table.Td>
+              <Table.Td>{resolveRowDrCr(row) || "—"}</Table.Td>
+            </>
+          );
+        }}
+      />
 
       {(isFetching || isHydrating) && (
         <Center

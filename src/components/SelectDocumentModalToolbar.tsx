@@ -1,7 +1,6 @@
-import { Group, TextInput } from "@mantine/core";
-import { IconSearch, IconX } from "@tabler/icons-react";
-// import { Button, FileButton, Text } from "@mantine/core";
-// import { IconUpload } from "@tabler/icons-react";
+import { Button, FileButton, Group, Text, TextInput } from "@mantine/core";
+import { IconDownload, IconSearch, IconUpload, IconX } from "@tabler/icons-react";
+import { downloadSelectDocumentSampleXlsx } from "../utils/selectDocumentModalSearch";
 
 type SelectDocumentModalToolbarProps = {
   searchValue: string;
@@ -21,13 +20,13 @@ export default function SelectDocumentModalToolbar({
   searchValue,
   onSearchChange,
   searchPlaceholder,
-  // selectedFile,
-  // onFileChange,
-  // onSelectDocuments,
-  // selectDocumentsLoading = false,
+  selectedFile,
+  onFileChange,
+  onSelectDocuments,
+  selectDocumentsLoading = false,
 }: SelectDocumentModalToolbarProps) {
-  // const canSelectDocuments =
-  //   Boolean(searchValue.trim()) || selectedFile != null;
+  const canSelectDocuments =
+    Boolean(searchValue.trim()) || selectedFile != null;
 
   return (
     <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
@@ -47,15 +46,22 @@ export default function SelectDocumentModalToolbar({
           ) : null
         }
         style={{ flex: 1, minWidth: 220 }}
-        // onKeyDown={(e) => {
-        //   if (e.key === "Enter" && canSelectDocuments) {
-        //     e.preventDefault();
-        //     onSelectDocuments();
-        //   }
-        // }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && canSelectDocuments) {
+            e.preventDefault();
+            onSelectDocuments();
+          }
+        }}
       />
-      {/* Upload + Select documents — temporarily hidden
       <Group gap="xs" align="flex-end">
+        <Button
+          variant="subtle"
+          color="#105476"
+          leftSection={<IconDownload size={16} />}
+          onClick={downloadSelectDocumentSampleXlsx}
+        >
+          Sample
+        </Button>
         <FileButton
           onChange={onFileChange}
           accept=".xlsx,.xls,.csv,.txt,text/plain,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -95,7 +101,6 @@ export default function SelectDocumentModalToolbar({
           </Button>
         </Group>
       ) : null}
-      */}
     </Group>
   );
 }
