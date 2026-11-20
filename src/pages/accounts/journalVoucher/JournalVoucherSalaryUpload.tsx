@@ -7,9 +7,9 @@ import {
   Text,
   UnstyledButton,
 } from "@mantine/core";
-import { IconDownload, IconUpload } from "@tabler/icons-react";
+import { IconDownload, IconExternalLink, IconUpload } from "@tabler/icons-react";
 import { useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { URL } from "../../../api/serverUrls";
 import { apiCallProtected } from "../../../api/axios";
 import { ToastNotification } from "../../../components";
@@ -83,6 +83,10 @@ function JournalVoucherSalaryUploadContent() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [createdJv, setCreatedJv] = useState<{
+    id: number;
+    journal_no?: string;
+  } | null>(null);
 
   const handleDownloadTemplate = async () => {
     setIsDownloading(true);
@@ -138,6 +142,7 @@ function JournalVoucherSalaryUploadContent() {
       return;
     }
     setIsUploading(true);
+    setCreatedJv(null);
     try {
       const fd = new FormData();
       fd.append("file", selectedFile);
@@ -176,6 +181,10 @@ function JournalVoucherSalaryUploadContent() {
 
       const jv = payload?.data?.journal_voucher;
       if (payload?.status && jv?.id) {
+        setCreatedJv({
+          id: jv.id,
+          journal_no: jv.journal_no,
+        });
         ToastNotification({
           type: "success",
           message:
@@ -240,8 +249,11 @@ function JournalVoucherSalaryUploadContent() {
       </Group>
 
       <Text size="sm" c="dimmed" mb="md">
-        Upload the salary CSV to create one UNPOSTED journal voucher. If any
-        row fails, the whole upload is blocked and the error is shown in a toast.
+        Upload the salary CSV to create one UNPOSTED journal voucher. Only
+        Employee Code, Total Gross, and Net Take Home are mandatory; other
+        amount columns are optional. Gross must be greater than zero and Net
+        Take Home must equal Debit − Credit per employee. If any row fails, the
+        whole upload is blocked and the error is shown in a toast.
       </Text>
 
       <Box
@@ -296,6 +308,38 @@ function JournalVoucherSalaryUploadContent() {
           Upload
         </Button>
       </Group>
+
+      {createdJv && (
+        <Box
+          mt="md"
+          p="md"
+          style={{
+            border: "1px solid #C5D7E8",
+            borderRadius: 8,
+            backgroundColor: "#F5F9FC",
+          }}
+        >
+          <Group justify="space-between" wrap="wrap" gap="sm">
+            <Text size="sm" c="#105476">
+              Journal voucher{" "}
+              <Text span fw={700}>
+                {createdJv.journal_no || createdJv.id}
+              </Text>{" "}
+              created as UNPOSTED.
+            </Text>
+            <Button
+              component={Link}
+              to={`/journal-voucher/edit/${createdJv.id}`}
+              variant="light"
+              color="#105476"
+              size="sm"
+              rightSection={<IconExternalLink size={14} />}
+            >
+              Open journal voucher
+            </Button>
+          </Group>
+        </Box>
+      )}
     </Box>
   );
 }

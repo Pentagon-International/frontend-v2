@@ -1672,7 +1672,7 @@ export default function DocumentAllocation() {
                   <Grid gutter="sm" align="flex-end">
                     <Grid.Col span={3.5}>
                       <SearchableSelect
-                        label="Account Name"
+                        label="Debtor Account Name"
                         placeholder="Search by account name"
                         apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
                         postBody={(query) => ({
@@ -1745,7 +1745,7 @@ export default function DocumentAllocation() {
 
                     <Grid.Col span={3.5}>
                       <SearchableSelect
-                        label="Account Name"
+                        label="Creditor Account Name"
                         placeholder="Search by account name"
                         apiEndpoint={`${URL.chartOfAccountsFilter}?index=0&limit=50`}
                         postBody={(query) => ({
