@@ -622,7 +622,6 @@ function ChartOfAccountsCreate() {
                             disabled={!hasGlHead}
                             data={groupNameData}
                             value={groupPairValue}
-                            searchValue={groupSearch}
                             onSearchChange={setGroupSearch}
                             onChange={handleGroupChange}
                             onBlur={tryCreateGroupFromSearch}
@@ -739,7 +738,6 @@ function ChartOfAccountsCreate() {
                             disabled={!hasGroup}
                             data={subgroupNameData}
                             value={subgroupPairValue}
-                            searchValue={subgroupSearch}
                             onSearchChange={setSubgroupSearch}
                             onChange={handleSubgroupChange}
                             onBlur={tryCreateSubgroupFromSearch}
