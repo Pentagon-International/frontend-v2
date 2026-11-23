@@ -66,7 +66,7 @@ type ChartOfAccountsFilters = {
 };
 
 const glHeadOptions = [
-  { value: "ASSET", label: "ASSET" },
+  { value: "ASSETS", label: "ASSETS" },
   { value: "LIABILITY", label: "LIABILITY" },
   { value: "INCOME", label: "INCOME" },
   { value: "EXPENDITURE", label: "EXPENDITURE" },

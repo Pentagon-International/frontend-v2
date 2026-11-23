@@ -9,16 +9,18 @@ import {
   Text,
   TextInput,
   Center,
+  CloseButton,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { IconCheck } from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
-import { ToastNotification } from "../../../components";
+import { FormTextInput, ToastNotification } from "../../../components";
 import MasterAuditHeadingRow from "../../../components/MasterAuditHeadingRow";
 import { useMasterEditAuditRefresh } from "../../../hooks/useMasterEditAuditRefresh";
+import { getAPICall } from "../../../service/getApiCall";
 import { postAPICall } from "../../../service/postApiCall";
 import { putAPICall } from "../../../service/putApiCall";
 import { URL } from "../../../api/serverUrls";
@@ -36,8 +38,41 @@ type ChartOfAccountsData = {
   sl_code: string;
 };
 
+type GroupOption = { group_name: string; group_code: string };
+type SubgroupOption = { subgroup_name: string; subgroup_code: string };
+
+const PAIR_SEP = "|||";
+
+const toPairValue = (name: string, code: string) =>
+  `${name}${PAIR_SEP}${code}`;
+
+const parsePairValue = (value: string | null) => {
+  if (!value) return { name: "", code: "" };
+  const idx = value.indexOf(PAIR_SEP);
+  if (idx < 0) return { name: value, code: "" };
+  return {
+    name: value.slice(0, idx),
+    code: value.slice(idx + PAIR_SEP.length),
+  };
+};
+
+const selectStyles = {
+  label: {
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "#495057",
+    marginBottom: "6px",
+    fontFamily: "Inter",
+  },
+  input: {
+    fontSize: "13px",
+    height: "36px",
+    fontFamily: "Inter",
+  },
+};
+
 const glHeadOptions = [
-  { value: "ASSET", label: "ASSET" },
+  { value: "ASSETS", label: "ASSETS" },
   { value: "LIABILITY", label: "LIABILITY" },
   { value: "INCOME", label: "INCOME" },
   { value: "EXPENDITURE", label: "EXPENDITURE" },
@@ -60,6 +95,14 @@ function ChartOfAccountsCreate() {
   const editFormData = location.state as ChartOfAccountsData | undefined;
   const isEditMode = !!editFormData?.id;
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [subgroupOptions, setSubgroupOptions] = useState<SubgroupOption[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [loadingSubgroups, setLoadingSubgroups] = useState(false);
+  const [groupIsCustom, setGroupIsCustom] = useState(false);
+  const [subgroupIsCustom, setSubgroupIsCustom] = useState(false);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [subgroupSearch, setSubgroupSearch] = useState("");
   const { auditSource, applyAuditFromResponse, refreshAuditFromDetail } =
     useMasterEditAuditRefresh(
       isEditMode ? (editFormData as Record<string, unknown>) : null,
@@ -86,11 +129,252 @@ function ChartOfAccountsCreate() {
     validate: yupResolver(schema),
   });
 
+  useEffect(() => {
+    const glHead = form.values.gl_head;
+    if (!glHead) {
+      setGroupOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setLoadingGroups(true);
+      try {
+        const response = (await getAPICall(
+          `${URL.chartOfAccountsDistinctGroups}?gl_head=${encodeURIComponent(glHead)}`,
+          API_HEADER,
+        )) as { data?: GroupOption[] };
+        if (!cancelled) {
+          setGroupOptions(Array.isArray(response?.data) ? response.data : []);
+        }
+      } catch {
+        if (!cancelled) setGroupOptions([]);
+      } finally {
+        if (!cancelled) setLoadingGroups(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.values.gl_head]);
+
+  useEffect(() => {
+    const { gl_head, group_name, group_code } = form.values;
+    if (!gl_head || !group_name || !group_code) {
+      setSubgroupOptions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setLoadingSubgroups(true);
+      try {
+        const params = new URLSearchParams({
+          gl_head,
+          group_name,
+          group_code,
+        });
+        const response = (await getAPICall(
+          `${URL.chartOfAccountsDistinctSubgroups}?${params.toString()}`,
+          API_HEADER,
+        )) as { data?: SubgroupOption[] };
+        if (!cancelled) {
+          setSubgroupOptions(
+            Array.isArray(response?.data) ? response.data : [],
+          );
+        }
+      } catch {
+        if (!cancelled) setSubgroupOptions([]);
+      } finally {
+        if (!cancelled) setLoadingSubgroups(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.values.gl_head, form.values.group_name, form.values.group_code]);
+
+  // Edit/load: if saved pair is not in options, switch to custom inputs
+  useEffect(() => {
+    if (groupIsCustom || !form.values.group_name || loadingGroups) return;
+    const match = groupOptions.some(
+      (g) =>
+        g.group_name === form.values.group_name &&
+        g.group_code === form.values.group_code,
+    );
+    if (!match) setGroupIsCustom(true);
+  }, [
+    groupOptions,
+    loadingGroups,
+    groupIsCustom,
+    form.values.group_name,
+    form.values.group_code,
+  ]);
+
+  useEffect(() => {
+    if (
+      subgroupIsCustom ||
+      !form.values.subgroup_name ||
+      loadingSubgroups ||
+      !form.values.group_name ||
+      !form.values.group_code
+    ) {
+      return;
+    }
+    const match = subgroupOptions.some(
+      (s) =>
+        s.subgroup_name === form.values.subgroup_name &&
+        s.subgroup_code === form.values.subgroup_code,
+    );
+    if (!match) setSubgroupIsCustom(true);
+  }, [
+    subgroupOptions,
+    loadingSubgroups,
+    subgroupIsCustom,
+    form.values.subgroup_name,
+    form.values.subgroup_code,
+    form.values.group_name,
+    form.values.group_code,
+  ]);
+
+  const groupNameData = groupOptions.map((g) => ({
+    value: toPairValue(g.group_name, g.group_code),
+    label: g.group_name,
+  }));
+
+  const subgroupNameData = subgroupOptions.map((s) => ({
+    value: toPairValue(s.subgroup_name, s.subgroup_code),
+    label: `${s.subgroup_name} (${s.subgroup_code})`,
+  }));
+
+  const groupPairValue =
+    !groupIsCustom && form.values.group_name && form.values.group_code
+      ? toPairValue(form.values.group_name, form.values.group_code)
+      : null;
+
+  const subgroupPairValue =
+    !subgroupIsCustom &&
+    form.values.subgroup_name &&
+    form.values.subgroup_code
+      ? toPairValue(form.values.subgroup_name, form.values.subgroup_code)
+      : null;
+
+  const isGroupSearchMatch = (query: string) =>
+    groupOptions.some(
+      (g) => g.group_name.toLowerCase() === query.toLowerCase(),
+    );
+
+  const isSubgroupSearchMatch = (query: string) =>
+    subgroupOptions.some((s) => {
+      const label = `${s.subgroup_name} (${s.subgroup_code})`;
+      return (
+        s.subgroup_name.toLowerCase() === query.toLowerCase() ||
+        label.toLowerCase() === query.toLowerCase()
+      );
+    });
+
+  const enterGroupCustom = (name: string) => {
+    setGroupIsCustom(true);
+    setSubgroupIsCustom(false);
+    setGroupSearch("");
+    setSubgroupSearch("");
+    form.setValues({
+      ...form.values,
+      group_name: name,
+      group_code: "",
+      subgroup_name: "",
+      subgroup_code: "",
+    });
+  };
+
+  const enterSubgroupCustom = (name: string) => {
+    setSubgroupIsCustom(true);
+    setSubgroupSearch("");
+    form.setFieldValue("subgroup_name", name);
+    form.setFieldValue("subgroup_code", "");
+  };
+
+  const handleGlHeadChange = (value: string | null) => {
+    setGroupIsCustom(false);
+    setSubgroupIsCustom(false);
+    setGroupSearch("");
+    setSubgroupSearch("");
+    form.setValues({
+      ...form.values,
+      gl_head: value || "",
+      group_name: "",
+      group_code: "",
+      subgroup_name: "",
+      subgroup_code: "",
+    });
+    setSubgroupOptions([]);
+  };
+
+  const handleGroupChange = (value: string | null) => {
+    setGroupIsCustom(false);
+    setSubgroupIsCustom(false);
+    setGroupSearch("");
+    setSubgroupSearch("");
+    const { name, code } = parsePairValue(value);
+    form.setValues({
+      ...form.values,
+      group_name: name,
+      group_code: code,
+      subgroup_name: "",
+      subgroup_code: "",
+    });
+  };
+
+  const handleSubgroupChange = (value: string | null) => {
+    setSubgroupIsCustom(false);
+    setSubgroupSearch("");
+    const { name, code } = parsePairValue(value);
+    form.setFieldValue("subgroup_name", name);
+    form.setFieldValue("subgroup_code", code);
+  };
+
+  const tryCreateGroupFromSearch = () => {
+    const q = groupSearch.trim();
+    if (!q) return;
+    if (isGroupSearchMatch(q)) {
+      const match = groupOptions.find(
+        (g) => g.group_name.toLowerCase() === q.toLowerCase(),
+      );
+      if (match) {
+        handleGroupChange(toPairValue(match.group_name, match.group_code));
+      }
+      return;
+    }
+    enterGroupCustom(q);
+  };
+
+  const tryCreateSubgroupFromSearch = () => {
+    const q = subgroupSearch.trim();
+    if (!q) return;
+    if (isSubgroupSearchMatch(q)) {
+      const match = subgroupOptions.find((s) => {
+        const label = `${s.subgroup_name} (${s.subgroup_code})`;
+        return (
+          s.subgroup_name.toLowerCase() === q.toLowerCase() ||
+          label.toLowerCase() === q.toLowerCase()
+        );
+      });
+      if (match) {
+        handleSubgroupChange(
+          toPairValue(match.subgroup_name, match.subgroup_code),
+        );
+      }
+      return;
+    }
+    enterSubgroupCustom(q);
+  };
+
   const handleSubmit = async (values: ChartOfAccountsData): Promise<void> => {
     setIsSubmitting(true);
     try {
       if (isEditMode) {
-        // Edit mode: Use PUT request
         const response = await putAPICall(
           URL.chartOfAccounts,
           values,
@@ -104,12 +388,7 @@ function ChartOfAccountsCreate() {
         });
         navigate("/master/chart-of-accounts", { state: { refreshData: true } });
       } else {
-        // Create mode: Use POST request
-        const response = await postAPICall(
-          URL.chartOfAccounts,
-          values,
-          API_HEADER,
-        );
+        await postAPICall(URL.chartOfAccounts, values, API_HEADER);
         ToastNotification({
           type: "success",
           message: "Chart of Accounts created successfully",
@@ -125,6 +404,12 @@ function ChartOfAccountsCreate() {
       setIsSubmitting(false);
     }
   };
+
+  const hasGlHead = !!form.values.gl_head;
+  const hasGroup =
+    !!form.values.gl_head &&
+    !!form.values.group_name &&
+    !!form.values.group_code;
 
   return (
     <Box
@@ -202,18 +487,6 @@ function ChartOfAccountsCreate() {
                     : "Create Chart of Accounts"}
                 </Text>
               </MasterAuditHeadingRow>
-              {/* <Text
-                size="sm"
-                fw={500}
-                style={{
-                  fontFamily: "Inter",
-                  fontStyle: "medium",
-                  color: "#444953",
-                  textAlign: "center",
-                }}
-              >
-                {isEditMode ? "Update account details" : "Fill in account details to create a new chart of accounts entry"}
-              </Text> */}
             </Box>
           </Box>
 
@@ -242,9 +515,6 @@ function ChartOfAccountsCreate() {
                 {/* Account Information Section */}
                 <Grid.Col span={12}>
                   <Box mb="md">
-                    {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
-                      Account Information
-                    </Text> */}
                     <Grid>
                       <Grid.Col span={6}>
                         <Select
@@ -253,21 +523,10 @@ function ChartOfAccountsCreate() {
                           withAsterisk
                           searchable
                           data={glHeadOptions}
-                          {...form.getInputProps("gl_head")}
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
+                          value={form.values.gl_head || null}
+                          onChange={handleGlHeadChange}
+                          error={form.errors.gl_head}
+                          styles={selectStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={6}>
@@ -276,20 +535,7 @@ function ChartOfAccountsCreate() {
                           placeholder="Enter Account Name"
                           {...form.getInputProps("account_name")}
                           withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
+                          styles={selectStyles}
                         />
                       </Grid.Col>
                       <Grid.Col span={6}>
@@ -298,20 +544,7 @@ function ChartOfAccountsCreate() {
                           placeholder="Enter GL Account Code"
                           {...form.getInputProps("gl_account_code")}
                           withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
+                          styles={selectStyles}
                         />
                       </Grid.Col>
 
@@ -321,20 +554,7 @@ function ChartOfAccountsCreate() {
                           placeholder="Enter SL Code"
                           {...form.getInputProps("sl_code")}
                           withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
+                          styles={selectStyles}
                         />
                       </Grid.Col>
                     </Grid>
@@ -344,53 +564,125 @@ function ChartOfAccountsCreate() {
                 {/* Group Information Section */}
                 <Grid.Col span={12} py={0}>
                   <Box mb="md">
-                    {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
-                      Group Information
-                    </Text> */}
                     <Grid>
                       <Grid.Col span={6}>
-                        <TextInput
-                          label="Group Name"
-                          placeholder="Enter Group Name"
-                          {...form.getInputProps("group_name")}
-                          withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
-                        />
+                        {groupIsCustom ? (
+                          <FormTextInput
+                            label="Group Name"
+                            placeholder="Enter new Group Name"
+                            withAsterisk
+                            format="normal"
+                            disabled={!hasGlHead}
+                            value={form.values.group_name}
+                            error={form.errors.group_name}
+                            rightSectionPointerEvents="all"
+                            rightSection={
+                              form.values.group_name ? (
+                                <CloseButton
+                                  size="sm"
+                                  aria-label="Clear group name"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    setGroupIsCustom(false);
+                                    setSubgroupIsCustom(false);
+                                    setGroupSearch("");
+                                    setSubgroupSearch("");
+                                    form.setValues({
+                                      ...form.values,
+                                      group_name: "",
+                                      group_code: "",
+                                      subgroup_name: "",
+                                      subgroup_code: "",
+                                    });
+                                  }}
+                                />
+                              ) : null
+                            }
+                            onChange={(e) => {
+                              form.setValues({
+                                ...form.values,
+                                group_name: e.currentTarget.value,
+                                subgroup_name: "",
+                                subgroup_code: "",
+                              });
+                              setSubgroupIsCustom(false);
+                            }}
+                          />
+                        ) : (
+                          <Select
+                            label="Group Name"
+                            placeholder={
+                              hasGlHead
+                                ? "Select or type new Group Name"
+                                : "Select GL Head first"
+                            }
+                            withAsterisk
+                            searchable
+                            clearable
+                            disabled={!hasGlHead}
+                            data={groupNameData}
+                            value={groupPairValue}
+                            searchValue={groupSearch}
+                            onSearchChange={setGroupSearch}
+                            onChange={handleGroupChange}
+                            onBlur={tryCreateGroupFromSearch}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              const q = groupSearch.trim();
+                              if (q && !isGroupSearchMatch(q)) {
+                                e.preventDefault();
+                                enterGroupCustom(q);
+                              }
+                            }}
+                            nothingFoundMessage={
+                              groupSearch.trim()
+                                ? `No match — press Enter or leave field to create "${groupSearch.trim()}"`
+                                : "No groups found"
+                            }
+                            error={form.errors.group_name}
+                            rightSection={
+                              loadingGroups ? <Loader size={14} /> : undefined
+                            }
+                            styles={selectStyles}
+                          />
+                        )}
                       </Grid.Col>
                       <Grid.Col span={6}>
-                        <TextInput
-                          label="Group Code"
-                          placeholder="Enter Group Code"
-                          {...form.getInputProps("group_code")}
-                          withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
-                        />
+                        {groupIsCustom ? (
+                          <FormTextInput
+                            label="Group Code"
+                            placeholder="Enter new Group Code"
+                            withAsterisk
+                            format="normal"
+                            disabled={!hasGlHead}
+                            value={form.values.group_code}
+                            error={form.errors.group_code}
+                            onChange={(e) => {
+                              form.setValues({
+                                ...form.values,
+                                group_code: e.currentTarget.value,
+                                subgroup_name: "",
+                                subgroup_code: "",
+                              });
+                              setSubgroupIsCustom(false);
+                            }}
+                          />
+                        ) : (
+                          <TextInput
+                            label="Group Code"
+                            placeholder={
+                              hasGlHead
+                                ? "Auto-selected from Group Name"
+                                : "Select GL Head first"
+                            }
+                            withAsterisk
+                            readOnly
+                            disabled={!hasGlHead}
+                            value={form.values.group_code}
+                            error={form.errors.group_code}
+                            styles={selectStyles}
+                          />
+                        )}
                       </Grid.Col>
                     </Grid>
                   </Box>
@@ -399,53 +691,114 @@ function ChartOfAccountsCreate() {
                 {/* Subgroup Information Section */}
                 <Grid.Col span={12} py={0}>
                   <Box mb="md">
-                    {/* <Text size="md" fw={600} c="#105476" mb="md" style={{ borderBottom: "2px solid #105476", paddingBottom: "8px", fontFamily: "Inter" }}>
-                      Subgroup Information
-                    </Text> */}
                     <Grid>
                       <Grid.Col span={6}>
-                        <TextInput
-                          label="Subgroup Name"
-                          placeholder="Enter Subgroup Name"
-                          {...form.getInputProps("subgroup_name")}
-                          withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
-                        />
+                        {subgroupIsCustom ? (
+                          <FormTextInput
+                            label="Subgroup Name"
+                            placeholder="Enter new Subgroup Name"
+                            withAsterisk
+                            format="normal"
+                            disabled={!hasGroup}
+                            value={form.values.subgroup_name}
+                            error={form.errors.subgroup_name}
+                            rightSectionPointerEvents="all"
+                            rightSection={
+                              form.values.subgroup_name ? (
+                                <CloseButton
+                                  size="sm"
+                                  aria-label="Clear subgroup name"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    setSubgroupIsCustom(false);
+                                    setSubgroupSearch("");
+                                    form.setFieldValue("subgroup_name", "");
+                                    form.setFieldValue("subgroup_code", "");
+                                  }}
+                                />
+                              ) : null
+                            }
+                            onChange={(e) =>
+                              form.setFieldValue(
+                                "subgroup_name",
+                                e.currentTarget.value,
+                              )
+                            }
+                          />
+                        ) : (
+                          <Select
+                            label="Subgroup Name"
+                            placeholder={
+                              hasGroup
+                                ? "Select or type new Subgroup Name"
+                                : "Select Group first"
+                            }
+                            withAsterisk
+                            searchable
+                            clearable
+                            disabled={!hasGroup}
+                            data={subgroupNameData}
+                            value={subgroupPairValue}
+                            searchValue={subgroupSearch}
+                            onSearchChange={setSubgroupSearch}
+                            onChange={handleSubgroupChange}
+                            onBlur={tryCreateSubgroupFromSearch}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              const q = subgroupSearch.trim();
+                              if (q && !isSubgroupSearchMatch(q)) {
+                                e.preventDefault();
+                                enterSubgroupCustom(q);
+                              }
+                            }}
+                            nothingFoundMessage={
+                              subgroupSearch.trim()
+                                ? `No match — press Enter or leave field to create "${subgroupSearch.trim()}"`
+                                : "No subgroups found"
+                            }
+                            error={form.errors.subgroup_name}
+                            rightSection={
+                              loadingSubgroups ? (
+                                <Loader size={14} />
+                              ) : undefined
+                            }
+                            styles={selectStyles}
+                          />
+                        )}
                       </Grid.Col>
                       <Grid.Col span={6}>
-                        <TextInput
-                          label="Subgroup Code"
-                          placeholder="Enter Subgroup Code"
-                          {...form.getInputProps("subgroup_code")}
-                          withAsterisk
-                          styles={{
-                            label: {
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#495057",
-                              marginBottom: "6px",
-                              fontFamily: "Inter",
-                            },
-                            input: {
-                              fontSize: "13px",
-                              height: "36px",
-                              fontFamily: "Inter",
-                            },
-                          }}
-                        />
+                        {subgroupIsCustom ? (
+                          <FormTextInput
+                            label="Subgroup Code"
+                            placeholder="Enter new Subgroup Code"
+                            withAsterisk
+                            format="normal"
+                            disabled={!hasGroup}
+                            value={form.values.subgroup_code}
+                            error={form.errors.subgroup_code}
+                            onChange={(e) =>
+                              form.setFieldValue(
+                                "subgroup_code",
+                                e.currentTarget.value,
+                              )
+                            }
+                          />
+                        ) : (
+                          <TextInput
+                            label="Subgroup Code"
+                            placeholder={
+                              hasGroup
+                                ? "Auto-selected from Subgroup Name"
+                                : "Select Group first"
+                            }
+                            withAsterisk
+                            readOnly
+                            disabled={!hasGroup}
+                            value={form.values.subgroup_code}
+                            error={form.errors.subgroup_code}
+                            styles={selectStyles}
+                          />
+                        )}
                       </Grid.Col>
                     </Grid>
                   </Box>

@@ -153,6 +153,8 @@ export const URL = {
   chartOfAccounts: "chart-of-accounts/",
   chartOfAccountsFilter: "filter/chart-of-accounts/",
   chartOfAccountsSlCode0: "chart-of-accounts/sl-code-0/",
+  chartOfAccountsDistinctGroups: "chart-of-accounts/distinct-groups/",
+  chartOfAccountsDistinctSubgroups: "chart-of-accounts/distinct-subgroups/",
   subledgerEnquiryMaster: "subledger-enquiry-master/",
   subledgerEnquiryMasterFilter: "filter/subledger-enquiry-master/",
   glChargeMapping: "gl-charge-mapping/",
