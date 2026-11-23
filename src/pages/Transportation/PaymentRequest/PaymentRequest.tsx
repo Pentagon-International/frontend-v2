@@ -2784,46 +2784,62 @@ function PaymentRequest() {
         ? gstBreakupResponse.sac_wise_totals
         : [];
       if (sacWiseTotals.length > 0) {
-        const gstCharges: ChargeItem[] = sacWiseTotals.map((item) => {
-          const totalAmountRaw = item.total_amount;
-          const totalAmount =
-            totalAmountRaw !== undefined &&
-            totalAmountRaw !== null &&
-            String(totalAmountRaw).trim() !== ""
-              ? Number(totalAmountRaw)
-              : null;
-          const roeRaw = item.roe;
-          const roeValue =
-            roeRaw !== undefined &&
-            roeRaw !== null &&
-            String(roeRaw).trim() !== ""
-              ? Number(roeRaw)
-              : 1;
-          const currencyCode = String(item.currency_code ?? "").trim();
-          const currencyId =
-            item.currency_id !== undefined && item.currency_id !== null
-              ? String(item.currency_id)
-              : "";
-          return {
-            ...emptyCharge(),
-            charge_id:
-              item.charge_id !== undefined && item.charge_id !== null
-                ? Number(item.charge_id)
-                : null,
-            charge_code: String(item.charge_code ?? ""),
-            charge_name: String(item.charge_name ?? ""),
-            job_no: String(item.job_id ?? ""),
-            cn_r: String(item.Dr_Cr ?? ""),
-            Dr_Cr: normalizeChargeDrCr(item.Dr_Cr),
-            currency: currencyCode,
-            currency_id: currencyId,
-            roe: roeValue,
-            amount: totalAmount,
-            amount_in_local:
-              totalAmount != null ? totalAmount * roeValue : null,
-            is_tax_row: true,
-          };
-        });
+        // Skip zero-value GST rows — do not append 0% / 0.00 tax lines.
+        const gstCharges: ChargeItem[] = sacWiseTotals
+          .filter((item) => {
+            const name = String(item.charge_name ?? "")
+              .trim()
+              .toUpperCase();
+            const rate = Number(item.rate ?? 0);
+            const amount = Math.abs(Number(item.total_amount ?? 0));
+            if (amount === 0) return false;
+            if (
+              (name === "IGST" || name === "CGST" || name === "SGST") &&
+              rate <= 0
+            )
+              return false;
+            return true;
+          })
+          .map((item) => {
+            const totalAmountRaw = item.total_amount;
+            const totalAmount =
+              totalAmountRaw !== undefined &&
+              totalAmountRaw !== null &&
+              String(totalAmountRaw).trim() !== ""
+                ? Number(totalAmountRaw)
+                : null;
+            const roeRaw = item.roe;
+            const roeValue =
+              roeRaw !== undefined &&
+              roeRaw !== null &&
+              String(roeRaw).trim() !== ""
+                ? Number(roeRaw)
+                : 1;
+            const currencyCode = String(item.currency_code ?? "").trim();
+            const currencyId =
+              item.currency_id !== undefined && item.currency_id !== null
+                ? String(item.currency_id)
+                : "";
+            return {
+              ...emptyCharge(),
+              charge_id:
+                item.charge_id !== undefined && item.charge_id !== null
+                  ? Number(item.charge_id)
+                  : null,
+              charge_code: String(item.charge_code ?? ""),
+              charge_name: String(item.charge_name ?? ""),
+              job_no: String(item.job_id ?? ""),
+              cn_r: String(item.Dr_Cr ?? ""),
+              Dr_Cr: normalizeChargeDrCr(item.Dr_Cr),
+              currency: currencyCode,
+              currency_id: currencyId,
+              roe: roeValue,
+              amount: totalAmount,
+              amount_in_local:
+                totalAmount != null ? totalAmount * roeValue : null,
+              is_tax_row: true,
+            };
+          });
         const chargesWithoutTax = form.values.charges.filter(
           (c) => !isChargeTaxRow(c),
         );

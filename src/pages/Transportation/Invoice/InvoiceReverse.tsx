@@ -63,6 +63,7 @@ import {
   parseInvoiceMutationResponse,
   readIrnNoFromInvoiceData,
 } from "../../../utils/parseInvoiceMutationResponse";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import {
   isIndianOutstandingBranch,
   isIndianUserCountry,
@@ -2892,9 +2893,7 @@ function InvoiceReverse() {
     } catch (error: unknown) {
       console.error("Error posting reverse invoice:", error);
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          "Failed to post reverse invoice",
+        message: getServerErrorMessage(error, "Failed to post reverse invoice"),
         type: "error",
       });
     } finally {
@@ -3267,9 +3266,7 @@ function InvoiceReverse() {
     } catch (error: unknown) {
       console.error("Error saving reverse invoice:", error);
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          "Failed to save reverse invoice",
+        message: getServerErrorMessage(error, "Failed to save reverse invoice"),
         type: "error",
       });
       return false;

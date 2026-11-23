@@ -2385,11 +2385,12 @@ export default function SupplierInvoiceCreate({
         error,
       );
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          (saveResponse?.id != null
+        message: getServerErrorMessage(
+          error,
+          saveResponse?.id != null
             ? "Failed to update supplier invoice"
-            : "Failed to create supplier invoice"),
+            : "Failed to create supplier invoice",
+        ),
         type: "error",
       });
       return null;
@@ -2461,9 +2462,7 @@ export default function SupplierInvoiceCreate({
     } catch (error: unknown) {
       console.error("Error posting supplier invoice:", error);
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ??
-          "Failed to post supplier invoice",
+        message: getServerErrorMessage(error, "Failed to post supplier invoice"),
         type: "error",
       });
     } finally {
@@ -3325,7 +3324,26 @@ export default function SupplierInvoiceCreate({
                             sacWiseTotals.length
                           ) {
                             const existing = form.values.charges_data;
+                            // Skip zero-value GST rows — do not append 0% / 0.00 tax lines.
                             const newRows: ChargeRow[] = sacWiseTotals
+                              .filter((t) => {
+                                const name = String(t.charge_name ?? "")
+                                  .trim()
+                                  .toUpperCase();
+                                const rate = Number(t.rate ?? 0);
+                                const amount = Math.abs(
+                                  Number(t.total_amount ?? 0),
+                                );
+                                if (amount === 0) return false;
+                                if (
+                                  (name === "IGST" ||
+                                    name === "CGST" ||
+                                    name === "SGST") &&
+                                  rate <= 0
+                                )
+                                  return false;
+                                return true;
+                              })
                               .map((t): ChargeRow | null => {
                                 const chargeId = Number(t.charge_id);
                                 if (!Number.isFinite(chargeId)) return null;

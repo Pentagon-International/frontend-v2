@@ -43,6 +43,7 @@ import { navigateFinanceReturn } from "../invoices/financeDocumentNavigation";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import FormTextInput from "../../../components/FormTextInput";
 import ToastNotification from "../../../components/ToastNotification";
+import { getServerErrorMessage } from "../../../utils/apiErrorMessage";
 import { commonSearchAPI } from "../../../service/searchApi";
 import {
   findJobCreateDropdownRow,
@@ -808,6 +809,7 @@ export function DebitCreditNoteCreateBase({
     type SacWiseTotal = {
       sac_code?: string;
       total_amount?: number | string;
+      rate?: number | string;
       narration?: string;
       account_code?: string | null;
       account_name?: string | null;
@@ -843,7 +845,22 @@ export function DebitCreditNoteCreateBase({
 
       const currentLines = form.getValues().lines;
       const headerRoe = form.getValues().roe;
+      // Skip zero-value GST rows — do not append 0% / 0.00 tax lines.
       const generatedLines: LineItem[] = sacWiseTotals
+        .filter((t) => {
+          const name = String(t.charge_name ?? "")
+            .trim()
+            .toUpperCase();
+          const rate = Number(t.rate ?? 0);
+          const amount = Math.abs(Number(t.total_amount ?? 0));
+          if (amount === 0) return false;
+          if (
+            (name === "IGST" || name === "CGST" || name === "SGST") &&
+            rate <= 0
+          )
+            return false;
+          return true;
+        })
         .map((t, i): LineItem | null => {
           const chargeId = Number(t.charge_id);
           if (!Number.isFinite(chargeId)) return null;
@@ -1567,7 +1584,10 @@ export function DebitCreditNoteCreateBase({
       ToastNotification({ type: "success", message: "Created successfully" });
     } catch (err) {
       console.error("Failed to create debit/credit note", err);
-      ToastNotification({ type: "error", message: "Failed to create" });
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(err, "Failed to create"),
+      });
     } finally {
       setIsSubmitting(false);
       setLoadingText("");
@@ -1593,7 +1613,10 @@ export function DebitCreditNoteCreateBase({
       return true;
     } catch (err) {
       console.error("Failed to update debit/credit note", err);
-      ToastNotification({ type: "error", message: "Failed to update" });
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(err, "Failed to update"),
+      });
       return false;
     } finally {
       setIsSubmitting(false);
@@ -1837,7 +1860,10 @@ export function DebitCreditNoteCreateBase({
       ToastNotification({ type: "success", message: "Posted successfully" });
     } catch (e) {
       console.error("Failed to post debit/credit note", e);
-      ToastNotification({ type: "error", message: "Failed to post" });
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(e, "Failed to post"),
+      });
     } finally {
       setIsSubmitting(false);
       setLoadingText("");

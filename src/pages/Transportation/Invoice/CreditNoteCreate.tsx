@@ -4602,7 +4602,7 @@ function CreditNoteCreate() {
         return;
       }
       ToastNotification({
-        message: error?.message || "Failed to create invoice",
+        message: getServerErrorMessage(error, "Failed to create invoice"),
         type: "error",
       });
     } finally {
@@ -5286,8 +5286,7 @@ function CreditNoteCreate() {
     } catch (error: unknown) {
       console.error("Error posting invoice:", error);
       ToastNotification({
-        message:
-          (error as { message?: string })?.message ?? "Failed to post invoice",
+        message: getServerErrorMessage(error, "Failed to post invoice"),
         type: "error",
       });
     } finally {

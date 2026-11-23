@@ -4768,7 +4768,24 @@ export default function SupplierInvoiceCreate({
             breakupData = await fetchSupplierTaxBreakup(idPayload);
             setTaxBreakup(breakupData);
           }
+          // Skip zero-value GST (same as Invoice/Credit Note post) — do not append 0% / 0.00 rows.
           const gstRows: ChargeRow[] = (breakupData?.sac_wise_totals ?? [])
+            .filter((t) => {
+              const name = String(t.charge_name ?? "")
+                .trim()
+                .toUpperCase();
+              const rate = Number(t.rate ?? 0);
+              const amount = Math.abs(
+                Number(t.total_amount ?? t.amount_in_local ?? 0),
+              );
+              if (amount === 0) return false;
+              if (
+                (name === "IGST" || name === "CGST" || name === "SGST") &&
+                rate <= 0
+              )
+                return false;
+              return true;
+            })
             .map((t): ChargeRow | null => {
               const chargeId = Number(t.charge_id);
               if (!Number.isFinite(chargeId)) return null;
