@@ -105,6 +105,7 @@ import {
   getPartyGstFromPrimaryAddress,
   isPartyGstUnregistered,
   isPrqGstChargeName,
+  isPrqTdsChargeRow,
   resolvePartyTdsSectionCode,
   resolveStateCodeFromPartyAddress,
   splitPrqChargesForSupplierInvoiceAgentInv,
@@ -808,6 +809,25 @@ function isSupplierGstChargeRow(row: {
     accountFilled &&
     String(row.CRN ?? "").trim().toLowerCase() === "neutral"
   );
+}
+
+/** TDS ledger rows: no charge_id, account filled, not GST (PRQ/SI parity). */
+function isSupplierTdsChargeRow(row: {
+  charge_id?: number | null;
+  charge_name?: string;
+  account_code?: string;
+  is_gst_breakup?: boolean;
+  CRN?: string;
+  shipment_no?: string;
+  account_name?: string;
+  charge_code?: string;
+}): boolean {
+  if (isSupplierGstChargeRow(row)) return false;
+  return isPrqTdsChargeRow({
+    charge_id: row.charge_id,
+    account_code: row.account_code,
+    charge_name: row.charge_name,
+  });
 }
 
 /** GST/VAT breakup rows keep API/breakup locals; all other rows sync from amount × ROE. */
@@ -3084,6 +3104,95 @@ export default function SupplierInvoiceCreate({
     shouldSkipAmountAutoCalc,
   ]);
 
+  /**
+   * India: sync Agent INV taxable + header GST from charges.
+   * Unposted (native CRJ parity): prefer same-row GST so edits update Inv/diff.
+   * GST ChargeMaster rows are left intact until Post rebuilds them.
+   */
+  const agentInvGstSyncKey = form.values.charges_data
+    .map(
+      (c) =>
+        `${c.charge_id ?? ""}|${c.amount_in_local}|${c.cgst}|${c.sgst}|${c.igst}|${c.charge_name ?? ""}|${c.account_code ?? ""}`,
+    )
+    .join(";");
+  useEffect(() => {
+    if (!showGstTax || isJobPrefillCreate) return;
+    if (shouldSkipAmountAutoCalc()) return;
+
+    const charges = form.values.charges_data ?? [];
+    let taxableSum = 0;
+    let sameCgst = 0;
+    let sameSgst = 0;
+    let sameIgst = 0;
+    let rowCgst = 0;
+    let rowSgst = 0;
+    let rowIgst = 0;
+    let hasGstBreakupRows = false;
+
+    for (const row of charges) {
+      if (isSupplierVatBreakupRow(row)) continue;
+      if (isSupplierGstChargeRow(row)) {
+        hasGstBreakupRows = true;
+        const kind = resolveSupplierGstKind(row.charge_name);
+        const amt = parseNum(row.amount_in_local) ?? 0;
+        if (kind === "CGST") rowCgst += amt;
+        else if (kind === "SGST") rowSgst += amt;
+        else if (kind === "IGST") rowIgst += amt;
+        continue;
+      }
+      if (isSupplierTdsChargeRow(row)) continue;
+      taxableSum += parseNum(row.amount_in_local) ?? 0;
+      sameCgst += parseNum(row.cgst) ?? 0;
+      sameSgst += parseNum(row.sgst) ?? 0;
+      sameIgst += parseNum(row.igst) ?? 0;
+    }
+
+    const hasSameRowGst =
+      sameCgst !== 0 || sameSgst !== 0 || sameIgst !== 0;
+    // Only drive header from charges when GST is present (rows or same-row).
+    if (!hasGstBreakupRows && !hasSameRowGst) return;
+
+    const nextTaxable = clampLocalAmount(taxableSum);
+    // Live same-row first (charge edits); else SAC-wise GST ChargeMaster rows.
+    const nextCgst = clampLocalAmount(
+      hasSameRowGst ? sameCgst : rowCgst,
+    );
+    const nextSgst = clampLocalAmount(
+      hasSameRowGst ? sameSgst : rowSgst,
+    );
+    const nextIgst = clampLocalAmount(
+      hasSameRowGst ? sameIgst : rowIgst,
+    );
+
+    if (nextTaxable !== (form.values.taxable_amount ?? null)) {
+      form.setFieldValue("taxable_amount", nextTaxable);
+    }
+    if (form.values.non_taxable_amount != null) {
+      form.setFieldValue("non_taxable_amount", null);
+    }
+    if (headerShowCgstSgst) {
+      if (nextCgst !== (form.values.cgst_amount ?? null)) {
+        form.setFieldValue("cgst_amount", nextCgst);
+      }
+      if (nextSgst !== (form.values.sgst_amount ?? null)) {
+        form.setFieldValue("sgst_amount", nextSgst);
+      }
+    }
+    if (headerShowIgst) {
+      if (nextIgst !== (form.values.igst_amount ?? null)) {
+        form.setFieldValue("igst_amount", nextIgst);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    agentInvGstSyncKey,
+    showGstTax,
+    isJobPrefillCreate,
+    shouldSkipAmountAutoCalc,
+    headerShowCgstSgst,
+    headerShowIgst,
+  ]);
+
   // Inv/Crn Amount = (taxable + non-taxable) × Agent INV/CRN ROE + GST/VAT (GST/VAT are not ROE-converted)
   const invCrnCalcKey = [
     form.values.taxable_amount,
@@ -3115,8 +3224,8 @@ export default function SupplierInvoiceCreate({
 
   // Auto-calc Approved Amount = |sum(Dr) − sum(Cr)| of (local amount + GST/VAT).
   // Difference Amount = Inv/Crn Amount − Approved Amount.
-  // India: include same-row CGST/SGST/IGST until GST breakup rows exist (then
-  // those rows' locals already carry tax — do not double-count).
+  // India unposted: prefer same-row GST (native CRJ / PRQ→CRJ charge edits).
+  // When same-row is used, skip GST ChargeMaster locals to avoid double-count.
   // Overseas: include charge VAT unless VAT ChargeMaster rows already appended.
   const chargesNetKey = form.values.charges_data
     .map(
@@ -3134,12 +3243,33 @@ export default function SupplierInvoiceCreate({
       (row) =>
         isSupplierGstChargeRow(row) && !isSupplierVatBreakupRow(row),
     );
+    const hasSameRowGst = charges.some(
+      (row) =>
+        !isSupplierGstChargeRow(row) &&
+        !isSupplierVatBreakupRow(row) &&
+        ((parseNum(row.cgst) ?? 0) !== 0 ||
+          (parseNum(row.sgst) ?? 0) !== 0 ||
+          (parseNum(row.igst) ?? 0) !== 0),
+    );
+    // Unposted live calc: same-row like native CRJ before Post.
+    const useLiveSameRowGst = showGstTax && hasSameRowGst;
     const netLocal = round2(
       charges.reduce((acc, row) => {
+        if (
+          useLiveSameRowGst &&
+          isSupplierGstChargeRow(row) &&
+          !isSupplierVatBreakupRow(row)
+        ) {
+          return acc;
+        }
         const amt = parseNum(row.amount_in_local) ?? 0;
         let tax = 0;
         if (isIndiaUser) {
-          if (!hasGstBreakupRows && !isSupplierGstChargeRow(row) && showGstTax) {
+          if (
+            showGstTax &&
+            !isSupplierGstChargeRow(row) &&
+            (useLiveSameRowGst || !hasGstBreakupRows)
+          ) {
             tax =
               (parseNum(row.cgst) ?? 0) +
               (parseNum(row.sgst) ?? 0) +
@@ -3198,6 +3328,10 @@ export default function SupplierInvoiceCreate({
     let vat = 0;
     let hasGstRows = false;
     let hasChargeVat = false;
+    let breakupLocal = 0;
+    let breakupIgst = 0;
+    let breakupCgst = 0;
+    let breakupSgst = 0;
 
     for (const row of charges) {
       const signed = signedByDrCr(
@@ -3205,16 +3339,18 @@ export default function SupplierInvoiceCreate({
         row.Dr_Cr,
         netDirection,
       );
-      local += signed;
 
       const gstKind = resolveSupplierGstKind(row.charge_name);
-      if (gstKind) {
+      if (gstKind || (isSupplierGstChargeRow(row) && !isSupplierVatBreakupRow(row))) {
         hasGstRows = true;
-        if (gstKind === "IGST") igst += signed;
-        else if (gstKind === "CGST") cgst += signed;
-        else sgst += signed;
+        breakupLocal += signed;
+        if (gstKind === "IGST") breakupIgst += signed;
+        else if (gstKind === "CGST") breakupCgst += signed;
+        else if (gstKind === "SGST") breakupSgst += signed;
         continue;
       }
+
+      local += signed;
 
       // VAT ChargeMaster rows (appended on post): count local amount as VAT total.
       if (isSupplierVatBreakupRow(row)) {
@@ -3232,38 +3368,48 @@ export default function SupplierInvoiceCreate({
       }
     }
 
-    if (showGstTax && !hasGstRows) {
-      // Invoice parity: prefer same-row GST on operational charges; else header.
-      let rowIgst = 0;
-      let rowCgst = 0;
-      let rowSgst = 0;
-      let hasSameRowGst = false;
+    // Same-row GST on ops (live unposted / native CRJ before Post).
+    let sameIgst = 0;
+    let sameCgst = 0;
+    let sameSgst = 0;
+    let hasSameRowGst = false;
+    if (showGstTax) {
       for (const row of charges) {
-        if (isSupplierGstChargeRow(row)) continue;
+        if (isSupplierGstChargeRow(row) || isSupplierVatBreakupRow(row)) {
+          continue;
+        }
         const iAmt = parseNum(row.igst) ?? 0;
         const cAmt = parseNum(row.cgst) ?? 0;
         const sAmt = parseNum(row.sgst) ?? 0;
         if (iAmt || cAmt || sAmt) hasSameRowGst = true;
-        rowIgst += signedByDrCr(iAmt, row.Dr_Cr, netDirection);
-        rowCgst += signedByDrCr(cAmt, row.Dr_Cr, netDirection);
-        rowSgst += signedByDrCr(sAmt, row.Dr_Cr, netDirection);
+        sameIgst += signedByDrCr(iAmt, row.Dr_Cr, netDirection);
+        sameCgst += signedByDrCr(cAmt, row.Dr_Cr, netDirection);
+        sameSgst += signedByDrCr(sAmt, row.Dr_Cr, netDirection);
       }
-      if (hasSameRowGst) {
-        igst = rowIgst;
-        cgst = rowCgst;
-        sgst = rowSgst;
-      } else {
-        igst = parseNum(form.values.igst_amount) ?? 0;
-        cgst = parseNum(form.values.cgst_amount) ?? 0;
-        sgst = parseNum(form.values.sgst_amount) ?? 0;
-        // INV reversal copies positive header GST; flip the sign so it follows
-        // the reversed charge direction. CRN already uses the inverted net, so
-        // its header GST stays positive like INV.
-        if (isReversal && !isCrnType) {
-          igst = -igst;
-          cgst = -cgst;
-          sgst = -sgst;
-        }
+    }
+
+    if (showGstTax && hasSameRowGst) {
+      // Prefer same-row so charge edits update footer (PRQ→CRJ parity with native).
+      igst = sameIgst;
+      cgst = sameCgst;
+      sgst = sameSgst;
+      local += igst + cgst + sgst;
+    } else if (showGstTax && hasGstRows) {
+      igst = breakupIgst;
+      cgst = breakupCgst;
+      sgst = breakupSgst;
+      local += breakupLocal;
+    } else if (showGstTax) {
+      igst = parseNum(form.values.igst_amount) ?? 0;
+      cgst = parseNum(form.values.cgst_amount) ?? 0;
+      sgst = parseNum(form.values.sgst_amount) ?? 0;
+      // INV reversal copies positive header GST; flip the sign so it follows
+      // the reversed charge direction. CRN already uses the inverted net, so
+      // its header GST stays positive like INV.
+      if (isReversal && !isCrnType) {
+        igst = -igst;
+        cgst = -cgst;
+        sgst = -sgst;
       }
       local += igst + cgst + sgst;
     }
@@ -4095,31 +4241,52 @@ export default function SupplierInvoiceCreate({
   /** Sum same-row / breakup GST on charges for header↔charges validation. */
   const sumChargesGstTotals = useCallback(
     (charges: ChargeRow[]) => {
-      let cgst = 0;
-      let sgst = 0;
-      let igst = 0;
-      const hasGstBreakupRows = charges.some(
-        (row) =>
-          isSupplierGstChargeRow(row) && !isSupplierVatBreakupRow(row),
-      );
+      let sameCgst = 0;
+      let sameSgst = 0;
+      let sameIgst = 0;
+      let rowCgst = 0;
+      let rowSgst = 0;
+      let rowIgst = 0;
+      let hasGstBreakupRows = false;
+      let hasSameRowGst = false;
       for (const row of charges) {
-        if (hasGstBreakupRows) {
+        if (isSupplierVatBreakupRow(row)) continue;
+        if (isSupplierGstChargeRow(row)) {
+          hasGstBreakupRows = true;
           const kind = resolveSupplierGstKind(row.charge_name);
           const amt = parseNum(row.amount_in_local) ?? 0;
-          if (kind === "CGST") cgst += amt;
-          else if (kind === "SGST") sgst += amt;
-          else if (kind === "IGST") igst += amt;
+          if (kind === "CGST") rowCgst += amt;
+          else if (kind === "SGST") rowSgst += amt;
+          else if (kind === "IGST") rowIgst += amt;
           continue;
         }
-        if (isSupplierGstChargeRow(row)) continue;
-        cgst += parseNum(row.cgst) ?? 0;
-        sgst += parseNum(row.sgst) ?? 0;
-        igst += parseNum(row.igst) ?? 0;
+        const c = parseNum(row.cgst) ?? 0;
+        const s = parseNum(row.sgst) ?? 0;
+        const i = parseNum(row.igst) ?? 0;
+        if (c || s || i) hasSameRowGst = true;
+        sameCgst += c;
+        sameSgst += s;
+        sameIgst += i;
+      }
+      // Prefer same-row when present (matches unposted live header sync).
+      if (hasSameRowGst) {
+        return {
+          cgst: round2(sameCgst),
+          sgst: round2(sameSgst),
+          igst: round2(sameIgst),
+        };
+      }
+      if (hasGstBreakupRows) {
+        return {
+          cgst: round2(rowCgst),
+          sgst: round2(rowSgst),
+          igst: round2(rowIgst),
+        };
       }
       return {
-        cgst: round2(cgst),
-        sgst: round2(sgst),
-        igst: round2(igst),
+        cgst: round2(sameCgst),
+        sgst: round2(sameSgst),
+        igst: round2(sameIgst),
       };
     },
     [],
@@ -4603,33 +4770,15 @@ export default function SupplierInvoiceCreate({
         })
         .filter((x): x is ChargeRow => x !== null);
 
-      const deduped = tdsChargeRows.filter((nr) => {
-        return !existing.some(
-          (er) =>
-            String(er.account_code ?? "") === String(nr.account_code ?? "") &&
-            String(er.subledger_code ?? "") ===
-              String(nr.subledger_code ?? "") &&
-            Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
-            er.Dr_Cr === nr.Dr_Cr &&
-            String(er.account_name ?? "") === String(nr.account_name ?? ""),
-        );
+      // Replace TDS rows (never append duplicates on recalculation).
+      const withoutTds = existing.filter((c) => !isSupplierTdsChargeRow(c));
+      const mergedCharges = [...withoutTds, ...tdsChargeRows];
+      form.setFieldValue("charges_data", mergedCharges);
+      await handleSubmit({
+        ...form.values,
+        ...valuesOverride,
+        charges_data: mergedCharges,
       });
-
-      const mergedCharges =
-        deduped.length > 0 ? [...existing, ...deduped] : existing;
-      if (deduped.length > 0) {
-        form.setFieldValue("charges_data", mergedCharges);
-        await handleSubmit({
-          ...form.values,
-          ...valuesOverride,
-          charges_data: mergedCharges,
-        });
-      } else {
-        ToastNotification({
-          type: "success",
-          message: "TDS calculated successfully",
-        });
-      }
     } catch (e: unknown) {
       ToastNotification({
         type: "error",
@@ -4748,99 +4897,70 @@ export default function SupplierInvoiceCreate({
           }
         }
       } else if (showGstTax) {
-        // India: append CGST/SGST/IGST ChargeMaster rows on POST only.
-        const alreadyHasGstRows = existingCharges.some(
+        // India: always rebuild CGST/SGST/IGST ChargeMaster rows on POST from
+        // current charges (native CRJ + PRQ→CRJ after charge edits).
+        const stateId = form.values.state_id
+          ? Number(form.values.state_id)
+          : null;
+        const withoutGstRows = existingCharges.filter(
           (row) =>
-            isSupplierGstChargeRow(row) && !isSupplierVatBreakupRow(row),
+            isSupplierVatBreakupRow(row) || !isSupplierGstChargeRow(row),
         );
-        let workingCharges = existingCharges;
-        if (!alreadyHasGstRows) {
-          const stateId = form.values.state_id
-            ? Number(form.values.state_id)
-            : null;
-          workingCharges = await enrichChargesWithSameRowGst(
-            existingCharges,
-            stateId,
-            { hasSez },
-          );
-          let breakupData = taxBreakup;
-          if (!breakupData?.sac_wise_totals?.length) {
-            breakupData = await fetchSupplierTaxBreakup(idPayload);
-            setTaxBreakup(breakupData);
-          }
-          // Skip zero-value GST (same as Invoice/Credit Note post) — do not append 0% / 0.00 rows.
-          const gstRows: ChargeRow[] = (breakupData?.sac_wise_totals ?? [])
-            .filter((t) => {
-              const name = String(t.charge_name ?? "")
-                .trim()
-                .toUpperCase();
-              const rate = Number(t.rate ?? 0);
-              const amount = Math.abs(
-                Number(t.total_amount ?? t.amount_in_local ?? 0),
-              );
-              if (amount === 0) return false;
-              if (
-                (name === "IGST" || name === "CGST" || name === "SGST") &&
-                rate <= 0
-              )
-                return false;
-              return true;
-            })
-            .map((t): ChargeRow | null => {
-              const chargeId = Number(t.charge_id);
-              if (!Number.isFinite(chargeId)) return null;
-              const amount = parseNum(t.total_amount ?? t.amount_in_local);
-              const currencyId = parseNum(t.currency_id);
-              const roe = parseNum(t.roe);
-              return {
-                account_code: String(t.account_code ?? ""),
-                account_name: String(t.account_name ?? ""),
-                subledger_code: String(t.subledger_code ?? ""),
-                CRN: "Neutral",
-                narration: String(t.narration ?? ""),
-                shipment_no: String(t.shipment_no ?? defaultTaxShipmentNo),
-                charge_id: chargeId,
-                charge_name: String(t.charge_name ?? ""),
-                is_gst_breakup: true,
-                currency_id:
-                  currencyId != null ? Number(currencyId) : null,
-                roe: parseRoeForPayload(roe),
-                amount: amount != null ? Number(amount) : null,
-                amount_in_local:
-                  amount != null ? clampLocalAmount(Number(amount)) : null,
-                tax_code: "",
-                ...EMPTY_SAME_ROW_GST,
-                Dr_Cr: normalizeDrCr(t.Dr_Cr ?? taxRowDrCr),
-              };
-            })
-            .filter((x): x is ChargeRow => x !== null);
+        let workingCharges = await enrichChargesWithSameRowGst(
+          withoutGstRows,
+          stateId,
+          { hasSez },
+        );
+        // Fresh breakup for current ops (ignore stale taxBreakup from older charges).
+        const breakupData = await fetchSupplierTaxBreakup(idPayload);
+        setTaxBreakup(breakupData);
+        // Skip zero-value GST (same as Invoice/Credit Note post) — do not append 0% / 0.00 rows.
+        const gstRows: ChargeRow[] = (breakupData?.sac_wise_totals ?? [])
+          .filter((t) => {
+            const name = String(t.charge_name ?? "")
+              .trim()
+              .toUpperCase();
+            const rate = Number(t.rate ?? 0);
+            const amount = Math.abs(
+              Number(t.total_amount ?? t.amount_in_local ?? 0),
+            );
+            if (amount === 0) return false;
+            if (
+              (name === "IGST" || name === "CGST" || name === "SGST") &&
+              rate <= 0
+            )
+              return false;
+            return true;
+          })
+          .map((t): ChargeRow | null => {
+            const chargeId = Number(t.charge_id);
+            if (!Number.isFinite(chargeId)) return null;
+            const amount = parseNum(t.total_amount ?? t.amount_in_local);
+            const currencyId = parseNum(t.currency_id);
+            const roe = parseNum(t.roe);
+            return {
+              account_code: String(t.account_code ?? ""),
+              account_name: String(t.account_name ?? ""),
+              subledger_code: String(t.subledger_code ?? ""),
+              CRN: "Neutral",
+              narration: String(t.narration ?? ""),
+              shipment_no: String(t.shipment_no ?? defaultTaxShipmentNo),
+              charge_id: chargeId,
+              charge_name: String(t.charge_name ?? ""),
+              is_gst_breakup: true,
+              currency_id: currencyId != null ? Number(currencyId) : null,
+              roe: parseRoeForPayload(roe),
+              amount: amount != null ? Number(amount) : null,
+              amount_in_local:
+                amount != null ? clampLocalAmount(Number(amount)) : null,
+              tax_code: "",
+              ...EMPTY_SAME_ROW_GST,
+              Dr_Cr: normalizeDrCr(t.Dr_Cr ?? taxRowDrCr),
+            };
+          })
+          .filter((x): x is ChargeRow => x !== null);
 
-          const dedupedGstRows = gstRows.filter(
-            (nr) =>
-              !workingCharges.some(
-                (er) =>
-                  Number(er.charge_id) === Number(nr.charge_id) &&
-                  String(er.account_code ?? "") ===
-                    String(nr.account_code ?? "") &&
-                  String(er.subledger_code ?? "") ===
-                    String(nr.subledger_code ?? "") &&
-                  Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
-                  er.Dr_Cr === nr.Dr_Cr,
-              ),
-          );
-          if (dedupedGstRows.length > 0) {
-            workingCharges = [...workingCharges, ...dedupedGstRows];
-          }
-        } else {
-          const stateId = form.values.state_id
-            ? Number(form.values.state_id)
-            : null;
-          workingCharges = await enrichChargesWithSameRowGst(
-            existingCharges,
-            stateId,
-            { hasSez },
-          );
-        }
+        workingCharges = [...workingCharges, ...gstRows];
         valuesForPost = { ...form.values, charges_data: workingCharges };
         form.setFieldValue("charges_data", workingCharges);
       }
