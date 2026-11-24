@@ -164,11 +164,8 @@ export default function OutstandingDocumentsSelectModal<
     setTableTick((t) => t + 1);
   }, [opened, loading, documents]);
 
-  const { visibleRows, noSearchMatches, searchOpts } = useSelectDocumentModalList(
-    documents,
-    search,
-    includeInvCrn,
-  );
+  const { visibleRows, noSearchMatches, searchOpts } =
+    useSelectDocumentModalList(documents, search, includeInvCrn);
 
   const handleSelectDocumentsFromSearchOrFile = useCallback(async () => {
     try {
@@ -322,7 +319,9 @@ export default function OutstandingDocumentsSelectModal<
           footer={footer}
         >
           <DocumentsTable
-            visibleRows={visibleRows as { inv: SelectableModalDocument; idx: number }[]}
+            visibleRows={
+              visibleRows as { inv: SelectableModalDocument; idx: number }[]
+            }
             selectedRef={selectedRef}
             onCountChange={onCountChange}
             tableTick={tableTick}

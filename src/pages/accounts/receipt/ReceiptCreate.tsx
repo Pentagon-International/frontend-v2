@@ -1553,18 +1553,34 @@ export default function ReceiptCreate({
 
   const removeAdjustmentRow = (idx: number) => {
     if (form.values.adjustments.length <= 1) return;
-    const nextAdjustments = form.values.adjustments.filter((_, i) => i !== idx);
-    form.setFieldValue(
-      "adjustments",
+    const prevAdjustments = form.values.adjustments;
+    const nextAdjustments = prevAdjustments.filter((_, i) => i !== idx);
+    const adjustmentsToSet =
       nextAdjustments.length > 0
         ? nextAdjustments
-        : [getDefaultAdjustmentRow(localCurrency)],
-    );
-    syncPartyDetailsFromAllocations(
-      nextAdjustments.length > 0
-        ? nextAdjustments
-        : [getDefaultAdjustmentRow(localCurrency)],
-    );
+        : [getDefaultAdjustmentRow(localCurrency)];
+    form.setFieldValue("adjustments", adjustmentsToSet);
+    if (_isReversal) return;
+    form.values.details.forEach((row, detailIdx) => {
+      if (isDetailTdsRow(row)) return;
+      if (!isPrimaryPartyRowForAllocations(form.values.details, detailIdx))
+        return;
+      const before = getMatchingAllocations(row, prevAdjustments);
+      const after = getMatchingAllocations(row, adjustmentsToSet);
+      if (after.length > 0) {
+        applyAdjLocalToPartyDetail(detailIdx, row, after);
+        return;
+      }
+      if (before.length > 0) {
+        skipPartyLocalFromAmountRef.current = true;
+        if (form.values.details[detailIdx].amount !== 0) {
+          form.setFieldValue(`details.${detailIdx}.amount`, 0);
+        }
+        if (form.values.details[detailIdx].local_amount !== 0) {
+          form.setFieldValue(`details.${detailIdx}.local_amount`, 0);
+        }
+      }
+    });
   };
 
   const openInvoiceModal = (detailRowIndex: number) => {
@@ -2272,13 +2288,20 @@ export default function ReceiptCreate({
     }
 
     if (!_isReversal && hasAdjustments) {
-      const partyLocalTotal = sumDetailLocalAmounts(syncedDetails);
-      const adjLocalTotal = sumAdjustmentLocalAmounts(adjustments);
-      if (partyLocalTotal < adjLocalTotal) {
+      const partyLocalTotal =
+        clampLocalAmount(sumDetailLocalAmounts(syncedDetails)) ?? 0;
+      const adjLocalTotal =
+        clampLocalAmount(sumAdjustmentLocalAmounts(adjustments)) ?? 0;
+      const difference =
+        clampLocalAmount(adjLocalTotal - partyLocalTotal) ?? 0;
+      if (difference > 0) {
         ToastNotification({
           type: "error",
           message:
-            "The total Local Amount of Receipt cannot be less than the total Local Amount of Invoice.",
+            `The total Local Amount of Receipt cannot be less than the total Local Amount of Invoice. ` +
+            `Receipt local amount (${formatMoneyAmountForUi(partyLocalTotal)}) is less than ` +
+            `invoice Local Amount (${formatMoneyAmountForUi(adjLocalTotal)}) by ` +
+            `${formatMoneyAmountForUi(difference)}.`,
         });
         return;
       }

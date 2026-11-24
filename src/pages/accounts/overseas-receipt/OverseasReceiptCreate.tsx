@@ -368,13 +368,11 @@ function computeOverseasReceiptHeaderAmountsFromDetails(
 }
 
 function sumReceiptAllocationNetCurr(adjustments: AdjustmentRow[]): number {
-  return adjustments.reduce((s, a) => {
-    const amt =
-      a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-        ? a.adj_curr_amount
-        : 0;
+  const sum = adjustments.reduce((s, a) => {
+    const amt = clampAmount(a.adj_curr_amount) ?? 0;
     return s + receiptAllocationNetSign(resolveAllocationDrCr(a)) * amt;
   }, 0);
+  return clampAmount(sum) ?? 0;
 }
 
 function isDetailTdsRow(row: {
@@ -1400,7 +1398,49 @@ export default function OverseasReceiptCreate({
 
   const removeAdjustmentRow = (idx: number) => {
     if (form.values.adjustments.length <= 1) return;
-    form.removeListItem("adjustments", idx);
+    const prevAdjustments = form.values.adjustments;
+    const nextAdjustments = prevAdjustments.filter((_, i) => i !== idx);
+    const adjustmentsToSet =
+      nextAdjustments.length > 0
+        ? nextAdjustments
+        : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
+    form.setFieldValue("adjustments", adjustmentsToSet);
+    if (_isReversal) return;
+    form.values.details.forEach((row, detailIdx) => {
+      if (isDetailTdsRow(row)) return;
+      if (!isPrimaryPartyRowForAllocations(form.values.details, detailIdx))
+        return;
+      const before = getMatchingAllocationsForParty(row, prevAdjustments);
+      const after = getMatchingAllocationsForParty(row, adjustmentsToSet);
+      if (after.length > 0) {
+        const synced = computeSyncedOverseasReceiptDetailRow(
+          row,
+          after,
+          form.values.details,
+          detailIdx,
+        );
+        if (form.values.details[detailIdx].amount !== synced.amount) {
+          form.setFieldValue(`details.${detailIdx}.amount`, synced.amount);
+        }
+        if (
+          form.values.details[detailIdx].local_amount !== synced.local_amount
+        ) {
+          form.setFieldValue(
+            `details.${detailIdx}.local_amount`,
+            synced.local_amount,
+          );
+        }
+        return;
+      }
+      if (before.length > 0) {
+        if (form.values.details[detailIdx].amount !== 0) {
+          form.setFieldValue(`details.${detailIdx}.amount`, 0);
+        }
+        if (form.values.details[detailIdx].local_amount !== 0) {
+          form.setFieldValue(`details.${detailIdx}.local_amount`, 0);
+        }
+      }
+    });
   };
 
   const openInvoiceModal = (detailRowIndex: number) => {
@@ -1634,7 +1674,7 @@ export default function OverseasReceiptCreate({
         doc_date: docDate,
         currency: inv.currency_code ?? OVERSEAS_DEFAULT_CURRENCY,
         roe: invRoe,
-        adj_curr_amount: totalNum,
+        adj_curr_amount: clampAmount(totalNum),
         adj_local_amount:
           localTotalNum != null
             ? localTotalNum
@@ -2069,20 +2109,25 @@ export default function OverseasReceiptCreate({
     // Reversal skips this — the same receipt is reversed and Dr/Cr is handled by the backend.
     if (!_isReversal && hasAdjustments) {
       const partyAmountTotal =
-        (values.details ?? []).reduce(
-          (sum, d) =>
-            sum +
-            (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
-          0,
+        clampAmount(
+          (values.details ?? []).reduce(
+            (sum, d) => sum + (clampAmount(d.amount) ?? 0),
+            0,
+          ),
         ) ?? 0;
       const adjAmountTotal = sumReceiptAllocationNetCurr(
         values.adjustments ?? [],
       );
-      if (partyAmountTotal < adjAmountTotal) {
+      const difference =
+        clampAmount(adjAmountTotal - partyAmountTotal) ?? 0;
+      if (difference > 0) {
         ToastNotification({
           type: "error",
           message:
-            "The total Amount of Receipt cannot be less than the total Amount of Invoice.",
+            `The total Amount of Receipt cannot be less than the total Amount of Invoice. ` +
+            `Receipt amount (${formatMoneyAmountForUi(partyAmountTotal)}) is less than ` +
+            `invoice Amount (${formatMoneyAmountForUi(adjAmountTotal)}) by ` +
+            `${formatMoneyAmountForUi(difference)}.`,
         });
         return;
       }

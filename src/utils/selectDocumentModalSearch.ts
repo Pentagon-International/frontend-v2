@@ -20,7 +20,7 @@ const normalizeText = (value: unknown): string =>
 
 /** Normalize header labels for case/spacing/punctuation-insensitive matching. */
 const normalizeHeaderKey = (value: unknown): string =>
-  normalizeText(value).replace(/[^a-z0-9]/g, "");
+  normalizeText(value).replace(/[^a-z0-9]+/g, "");
 
 /** Columns we accept from uploaded spreadsheets (after normalizeHeaderKey). */
 const DOC_NO_HEADERS = new Set([
@@ -121,6 +121,7 @@ const addCellTokens = (tokens: Set<string>, cell: unknown) => {
 /**
  * Prefer recognized columns (Doc No / Document Number / Inv-Crn No).
  * If none are present, fall back to every cell (simple one-column lists).
+ * Amount columns in the sheet are ignored for selection.
  */
 function extractTokensFromSpreadsheetRows(
   rows: (string | number | null | undefined)[][],

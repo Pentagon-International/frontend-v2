@@ -31,7 +31,15 @@ import {
   IconDotsVertical,
   IconListDetails,
 } from "@tabler/icons-react";
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import {
+  memo,
+  startTransition,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { useDisclosure } from "@mantine/hooks";
 import { Dropzone } from "@mantine/dropzone";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -247,9 +255,7 @@ type InvoiceCombinedItem = {
   [key: string]: unknown;
 };
 
-function normalizeAllocationDrCr(
-  value: unknown,
-): "Cr" | "Dr" | null {
+function normalizeAllocationDrCr(value: unknown): "Cr" | "Dr" | null {
   const v = String(value ?? "")
     .trim()
     .toUpperCase();
@@ -273,13 +279,38 @@ function paymentAllocationNetSign(
 }
 
 function sumPaymentAllocationNetCurr(adjustments: AdjustmentRow[]): number {
-  return adjustments.reduce((s, a) => {
-    const amt =
-      a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-        ? a.adj_curr_amount
-        : 0;
+  // Clamp each line and the total to 2dp so float noise never enters comparisons/sync.
+  const sum = adjustments.reduce((s, a) => {
+    const amt = clampAmount(a.adj_curr_amount) ?? 0;
     return s + paymentAllocationNetSign(resolveAllocationDrCr(a)) * amt;
   }, 0);
+  return clampAmount(sum) ?? 0;
+}
+
+function adjustmentMatchesParty(
+  a: AdjustmentRow,
+  partyCode: string,
+  partyDisplay: string,
+): boolean {
+  return (
+    (partyCode !== "" &&
+      (a.subledger ?? "").toString().trim() === partyCode) ||
+    (partyDisplay !== "" &&
+      (a.subledger_display ?? "").toString().trim() === partyDisplay)
+  );
+}
+
+function isActiveAllocationRow(a: AdjustmentRow): boolean {
+  const hasDocument = (a.document_no ?? "").toString().trim() !== "";
+  const hasLocal =
+    a.adj_local_amount != null &&
+    Number.isFinite(a.adj_local_amount) &&
+    a.adj_local_amount !== 0;
+  const hasCurr =
+    a.adj_curr_amount != null &&
+    Number.isFinite(a.adj_curr_amount) &&
+    a.adj_curr_amount !== 0;
+  return hasDocument || hasLocal || hasCurr;
 }
 
 function getMatchingAllocationsForParty(
@@ -288,23 +319,68 @@ function getMatchingAllocationsForParty(
 ): AdjustmentRow[] {
   const partyCode = (row.customer_code ?? "").toString().trim();
   const partyDisplay = (row.customer_display ?? "").toString().trim();
-  return adjustments.filter((a) => {
-    const matchesParty =
-      (partyCode && (a.subledger ?? "").toString().trim() === partyCode) ||
-      (partyDisplay &&
-        (a.subledger_display ?? "").toString().trim() === partyDisplay);
-    if (!matchesParty) return false;
-    const hasDocument = (a.document_no ?? "").toString().trim() !== "";
-    const hasLocal =
-      a.adj_local_amount != null &&
-      Number.isFinite(a.adj_local_amount) &&
-      a.adj_local_amount !== 0;
-    const hasCurr =
-      a.adj_curr_amount != null &&
-      Number.isFinite(a.adj_curr_amount) &&
-      a.adj_curr_amount !== 0;
-    return hasDocument || hasLocal || hasCurr;
+  return adjustments.filter(
+    (a) =>
+      adjustmentMatchesParty(a, partyCode, partyDisplay) &&
+      isActiveAllocationRow(a),
+  );
+}
+
+function findDetailIndexForAdjustment(
+  details: DetailRow[],
+  adjustment: AdjustmentRow,
+): number {
+  const partyCode = (adjustment.subledger ?? "").toString().trim();
+  const partyDisplay = (adjustment.subledger_display ?? "").toString().trim();
+  if (!partyCode && !partyDisplay) return -1;
+  return details.findIndex((row) => {
+    const code = (row.customer_code ?? "").toString().trim();
+    const display = (row.customer_display ?? "").toString().trim();
+    return (
+      (partyCode !== "" && code === partyCode) ||
+      (partyDisplay !== "" && display === partyDisplay)
+    );
   });
+}
+
+function computePartyAmountLocalFromAllocations(
+  row: DetailRow,
+  allocationRows: AdjustmentRow[],
+): { amount: number | null; local_amount: number | null } {
+  if (allocationRows.length === 0) {
+    return { amount: 0, local_amount: 0 };
+  }
+  const amount = clampAmount(sumPaymentAllocationNetCurr(allocationRows));
+  const roeVal =
+    row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
+  const local =
+    amount != null && Number.isFinite(amount)
+      ? clampLocalAmount(amount * roeVal)
+      : null;
+  return { amount, local_amount: local };
+}
+
+function computePaymentHeaderFromDetails(
+  details: DetailRow[],
+  headerRoe: number | null | undefined,
+): { amount: number | null; local_amount: number | null } {
+  const netLocal = details.reduce((s, d) => {
+    const local =
+      d.local_amount != null && Number.isFinite(d.local_amount)
+        ? d.local_amount
+        : 0;
+    return s + paymentPartyHeaderNetSign(d.dr_cr, false) * local;
+  }, 0);
+  const local_amount = clampLocalAmount(netLocal);
+  const amount =
+    local_amount != null &&
+    Number.isFinite(local_amount) &&
+    headerRoe != null &&
+    Number.isFinite(headerRoe) &&
+    headerRoe !== 0
+      ? clampAmount(local_amount / headerRoe)
+      : null;
+  return { amount, local_amount };
 }
 
 function normalizeObjSno(value: unknown): string {
@@ -649,6 +725,214 @@ function firstNonEmptyString(
   return "";
 }
 
+type PaymentAdjustmentRowViewProps = {
+  idx: number;
+  location: string;
+  daybookId: string;
+  type: string;
+  subledgerLabel: string;
+  documentNo: string;
+  docDate: Date | null;
+  currency: string;
+  adjCurrAmount: number | null;
+  adjLocalAmount: number | null;
+  drCr: string;
+  daybookOptions: { value: string; label: string }[];
+  currencyOptions: { value: string; label: string }[];
+  currencyAmountDecimalScale: number;
+  localAmountDecimalScale: number;
+  isReadOnly: boolean;
+  isReversal: boolean;
+  canRemove: boolean;
+  adjustmentFieldStyles: typeof reversalNonEditableStyles;
+  editableAmountStyles: typeof fieldStyles | typeof reversalNonEditableStyles;
+  onAdjCurrChange: (idx: number, value: string | number) => void;
+  onRemove: (idx: number) => void;
+  onAdd: () => void;
+  onDocumentNoClick: (documentNo: string) => void;
+};
+
+/** Memoized so editing one of ~100 rows does not rebuild every adjustment input. */
+const PaymentAdjustmentRowView = memo(function PaymentAdjustmentRowView({
+  idx,
+  location,
+  daybookId,
+  type,
+  subledgerLabel,
+  documentNo,
+  docDate,
+  currency,
+  adjCurrAmount,
+  adjLocalAmount,
+  drCr,
+  daybookOptions,
+  currencyOptions,
+  currencyAmountDecimalScale,
+  localAmountDecimalScale,
+  isReadOnly,
+  isReversal,
+  canRemove,
+  adjustmentFieldStyles,
+  editableAmountStyles,
+  onAdjCurrChange,
+  onRemove,
+  onAdd,
+  onDocumentNoClick,
+}: PaymentAdjustmentRowViewProps) {
+  const docNoTrimmed = documentNo.trim();
+  // Local draft while focused — avoids rewriting the full adjustments array per keystroke.
+  const [draftCurr, setDraftCurr] = useState<number | null | undefined>(
+    undefined,
+  );
+  const isEditingCurr = draftCurr !== undefined;
+
+  return (
+    <Grid w="100%" gutter="sm" mt="sm">
+      <Grid.Col span={0.9}>
+        <TextInput
+          placeholder="Location"
+          readOnly
+          value={location}
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={1.4}>
+        <Dropdown
+          placeholder="Daybook"
+          data={daybookOptions}
+          value={daybookId || null}
+          disabled={false}
+          readOnly
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={0.8}>
+        <TextInput
+          placeholder="Type"
+          readOnly
+          value={type}
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={1.4}>
+        <TextInput
+          placeholder="Account Name"
+          readOnly
+          value={subledgerLabel}
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={1.4}>
+        <TextInput
+          placeholder="Document no"
+          readOnly
+          value={documentNo}
+          title={docNoTrimmed ? "Open document" : undefined}
+          onClick={() => {
+            if (docNoTrimmed) onDocumentNoClick(docNoTrimmed);
+          }}
+          styles={
+            docNoTrimmed
+              ? clickableAdjustmentDocumentNoStyles
+              : adjustmentFieldStyles
+          }
+        />
+      </Grid.Col>
+      <Grid.Col span={1.3}>
+        <SingleDateInput
+          placeholder="Document date"
+          value={normalizeDate(docDate)}
+          onChange={() => {}}
+          disabled
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={0.8}>
+        <Dropdown
+          placeholder="Currency"
+          data={currencyOptions}
+          value={currency || null}
+          disabled={false}
+          readOnly
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={0.9}>
+        <NumberInput
+          placeholder="Adj Curr Amount"
+          min={0}
+          hideControls
+          value={
+            isEditingCurr ? (draftCurr ?? undefined) : (adjCurrAmount ?? undefined)
+          }
+          onFocus={() => setDraftCurr(adjCurrAmount)}
+          onChange={(v) => {
+            const next =
+              clampAmount(typeof v === "string" ? parseFloat(v) : v) ?? null;
+            setDraftCurr(next);
+          }}
+          onBlur={() => {
+            if (draftCurr !== undefined) {
+              onAdjCurrChange(idx, draftCurr ?? "");
+            }
+            setDraftCurr(undefined);
+          }}
+          decimalScale={currencyAmountDecimalScale}
+          max={AMOUNT_MAX}
+          styles={editableAmountStyles}
+          disabled={isReadOnly || isReversal}
+        />
+      </Grid.Col>
+      <Grid.Col span={1}>
+        <NumberInput
+          placeholder="Adj local amount"
+          min={0}
+          hideControls
+          readOnly
+          value={adjLocalAmount ?? undefined}
+          decimalScale={localAmountDecimalScale}
+          {...getAmountNumberInputFormatProps()}
+          max={AMOUNT_MAX}
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={0.7}>
+        <TextInput
+          placeholder="Dr/Cr"
+          readOnly
+          value={drCr}
+          styles={adjustmentFieldStyles}
+        />
+      </Grid.Col>
+      <Grid.Col span={1.4}>
+        <Group gap={4} wrap="nowrap">
+          <Button
+            type="button"
+            variant="subtle"
+            size="sm"
+            onClick={onAdd}
+            title="Add row"
+            disabled={isReadOnly || isReversal}
+          >
+            <IconPlus size={18} />
+          </Button>
+          <Button
+            type="button"
+            variant="subtle"
+            size="sm"
+            color="red"
+            onClick={() => onRemove(idx)}
+            disabled={isReadOnly || !canRemove}
+            title="Remove row"
+          >
+            <IconTrash size={18} />
+          </Button>
+        </Group>
+      </Grid.Col>
+    </Grid>
+  );
+});
+
 type PaymentCreateProps = {
   titleOverride?: string;
   backPath?: string;
@@ -932,7 +1216,7 @@ export default function PaymentCreate({
     const utrNo = String(paymentFromState.utr_no ?? "").trim();
     setUtrLocked(Boolean(utrNo));
     const roeVal = parseNum(paymentFromState.roe);
-    const amountVal = parseNum(paymentFromState.amount);
+    const amountVal = clampAmount(parseNum(paymentFromState.amount));
     const localAmountVal = toLocalAmount(paymentFromState.local_amount);
 
     // Map list response parties: subledger_code, subledger_name (list) -> customer_code, customer_display (form)
@@ -970,7 +1254,7 @@ export default function PaymentCreate({
               narration: String(pAny.narration ?? "").trim(),
               currency: (pAny.currency_code ?? localCurrency).toString().trim(),
               roe: parseNum(pAny.roe) ?? 1,
-              amount: parseNum(pAny.amount),
+              amount: clampAmount(parseNum(pAny.amount)),
               local_amount: toLocalAmount(pAny.local_amount),
               dr_cr: mapPaymentPartyDrCr(pAny.dr_cr, isReversalCreate),
             };
@@ -1038,7 +1322,7 @@ export default function PaymentCreate({
               doc_date: parseDocumentDate(aAny.document_date),
               currency: (aAny.currency_code ?? localCurrency).toString().trim(),
               roe: parseAllocationDocumentRoe(roeFromApi),
-              adj_curr_amount: parseNum(aAny.adj_curr_amount),
+              adj_curr_amount: clampAmount(parseNum(aAny.adj_curr_amount)),
               adj_local_amount: toLocalAmount(aAny.adj_local_amount),
               dr_cr: allocationDrCr,
             };
@@ -1078,7 +1362,8 @@ export default function PaymentCreate({
       details: detailsForForm,
       adjustments,
     });
-    if (detailsForForm.length > 0) form.setFieldValue("details", detailsForForm);
+    if (detailsForForm.length > 0)
+      form.setFieldValue("details", detailsForForm);
 
     const docNo = (
       paymentFromState.payment_no ??
@@ -1229,11 +1514,20 @@ export default function PaymentCreate({
   const headerRoeKey = `${form.values.roe ?? ""}`;
   const prevPartyLocalRef = useRef(partyLocalAmountsSnapshot);
   const prevHeaderRoeRef = useRef(headerRoeKey);
+  /** When adjustments batch-update header, skip the follow-up header effect. */
+  const skipHeaderSyncFromPartyRef = useRef(false);
 
   useEffect(() => {
     const partyLocalChanged =
       prevPartyLocalRef.current !== partyLocalAmountsSnapshot;
     const headerRoeChanged = prevHeaderRoeRef.current !== headerRoeKey;
+
+    if (skipHeaderSyncFromPartyRef.current) {
+      skipHeaderSyncFromPartyRef.current = false;
+      prevPartyLocalRef.current = partyLocalAmountsSnapshot;
+      prevHeaderRoeRef.current = headerRoeKey;
+      return;
+    }
 
     // Reversal keeps the reversed payment header; backend handles Dr/Cr.
     if (_isReversal) {
@@ -1286,26 +1580,96 @@ export default function PaymentCreate({
     adjustments: AdjustmentRow[],
   ) => getMatchingAllocationsForParty(row, adjustments);
 
+  /**
+   * One setValues for adjustments + affected party + header.
+   * Avoids N× setFieldValue re-renders when editing/deleting among many rows.
+   */
+  const commitAdjustmentsAndSyncParty = (
+    nextAdjustments: AdjustmentRow[],
+    affectedAdjustment: AdjustmentRow | null | undefined,
+    options?: { clearPartyIfEmpty?: boolean; adjustmentsAlreadySet?: boolean },
+  ) => {
+    if (_isReversal) {
+      if (!options?.adjustmentsAlreadySet) {
+        form.setFieldValue("adjustments", nextAdjustments);
+      }
+      return;
+    }
+
+    const details = form.values.details ?? [];
+    let nextDetails = details;
+    const partyIdx =
+      affectedAdjustment != null
+        ? findDetailIndexForAdjustment(details, affectedAdjustment)
+        : -1;
+
+    if (partyIdx >= 0) {
+      const row = details[partyIdx];
+      const matching = getMatchingAllocations(row, nextAdjustments);
+      if (matching.length > 0 || options?.clearPartyIfEmpty) {
+        const synced = computePartyAmountLocalFromAllocations(row, matching);
+        if (
+          row.amount !== synced.amount ||
+          row.local_amount !== synced.local_amount
+        ) {
+          nextDetails = details.map((d, i) =>
+            i === partyIdx
+              ? {
+                  ...d,
+                  amount: synced.amount,
+                  local_amount: synced.local_amount,
+                }
+              : d,
+          );
+        }
+      }
+    }
+
+    const header =
+      nextDetails !== details
+        ? computePaymentHeaderFromDetails(nextDetails, form.values.roe)
+        : null;
+
+    skipPartyLocalFromAmountRef.current = true;
+    if (header) {
+      skipHeaderSyncFromPartyRef.current = true;
+      if (options?.adjustmentsAlreadySet) {
+        form.setValues({
+          details: nextDetails,
+          amount: header.amount,
+          local_amount: header.local_amount,
+        });
+      } else {
+        form.setValues({
+          adjustments: nextAdjustments,
+          details: nextDetails,
+          amount: header.amount,
+          local_amount: header.local_amount,
+        });
+      }
+      prevPartyLocalRef.current = nextDetails
+        .map((d) => `${d.dr_cr}|${d.local_amount ?? ""}`)
+        .join(";");
+      prevHeaderRoeRef.current = `${form.values.roe ?? ""}`;
+    } else if (!options?.adjustmentsAlreadySet) {
+      form.setFieldValue("adjustments", nextAdjustments);
+    }
+  };
+
+
   const applyAdjLocalToPartyDetail = (
     idx: number,
     row: DetailRow,
     allocationRows: AdjustmentRow[],
   ) => {
     if (allocationRows.length === 0) return;
-    // Party amount from allocations (Cr − Dr of adj curr); local = amount × party ROE.
-    const amount = clampAmount(sumPaymentAllocationNetCurr(allocationRows));
-    const roeVal =
-      row.roe != null && Number.isFinite(row.roe) && row.roe !== 0 ? row.roe : 1;
-    const local =
-      amount != null && Number.isFinite(amount)
-        ? clampLocalAmount(amount * roeVal)
-        : null;
+    const synced = computePartyAmountLocalFromAllocations(row, allocationRows);
     skipPartyLocalFromAmountRef.current = true;
-    if (form.values.details[idx].amount !== amount) {
-      form.setFieldValue(`details.${idx}.amount`, amount);
+    if (form.values.details[idx].amount !== synced.amount) {
+      form.setFieldValue(`details.${idx}.amount`, synced.amount);
     }
-    if (form.values.details[idx].local_amount !== local) {
-      form.setFieldValue(`details.${idx}.local_amount`, local);
+    if (form.values.details[idx].local_amount !== synced.local_amount) {
+      form.setFieldValue(`details.${idx}.local_amount`, synced.local_amount);
     }
   };
 
@@ -1327,7 +1691,11 @@ export default function PaymentCreate({
         options?.detailIndex === idx &&
         (options.allocationsForDetail?.length ?? 0) > 0
       ) {
-        applyAdjLocalToPartyDetail(idx, row, options.allocationsForDetail ?? []);
+        applyAdjLocalToPartyDetail(
+          idx,
+          row,
+          options.allocationsForDetail ?? [],
+        );
       }
     });
   };
@@ -1377,14 +1745,79 @@ export default function PaymentCreate({
     form.removeListItem("details", idx);
   };
 
-  const addAdjustmentRow = () => {
-    form.insertListItem("adjustments", getDefaultAdjustmentRow(localCurrency));
-  };
+  const adjustmentsRef = useRef(form.values.adjustments);
+  adjustmentsRef.current = form.values.adjustments;
+  const commitAdjustmentsRef = useRef(commitAdjustmentsAndSyncParty);
+  commitAdjustmentsRef.current = commitAdjustmentsAndSyncParty;
 
-  const removeAdjustmentRow = (idx: number) => {
-    if (form.values.adjustments.length <= 1) return;
-    form.removeListItem("adjustments", idx);
-  };
+  const addAdjustmentRow = useCallback(() => {
+    form.insertListItem("adjustments", getDefaultAdjustmentRow(localCurrency));
+  }, [form, localCurrency]);
+
+  const removeAdjustmentRow = useCallback(
+    (idx: number) => {
+      const current = adjustmentsRef.current;
+      if (current.length <= 1) return;
+      const removed = current[idx];
+      const nextAdjustments = current.filter((_, i) => i !== idx);
+      const adjustmentsToSet =
+        nextAdjustments.length > 0
+          ? nextAdjustments
+          : [getDefaultAdjustmentRow(localCurrency)];
+      startTransition(() => {
+        commitAdjustmentsRef.current(adjustmentsToSet, removed, {
+          clearPartyIfEmpty: true,
+        });
+      });
+    },
+    [localCurrency],
+  );
+
+  const handleAdjCurrAmountChange = useCallback(
+    (idx: number, v: string | number) => {
+      const newCurr =
+        clampAmount(typeof v === "string" ? parseFloat(String(v)) : v) ?? null;
+      const current = adjustmentsRef.current;
+      const adjustment = current[idx];
+      if (!adjustment) return;
+      if (
+        (clampAmount(adjustment.adj_curr_amount) ?? null) === newCurr &&
+        adjustment.adj_local_amount != null
+      ) {
+        return;
+      }
+      const documentRoe = resolveAdjustmentDocumentRoe(
+        adjustment,
+        allocationRoeByDocumentRef.current,
+      );
+      const newLocal = calcAdjLocalFromCurr(newCurr, documentRoe);
+      const effectiveAdjustments = current.map((a, i) =>
+        i === idx
+          ? {
+              ...a,
+              roe: documentRoe ?? a.roe,
+              adj_curr_amount: newCurr,
+              adj_local_amount: newLocal,
+            }
+          : a,
+      );
+      // Called on blur from the row draft — one batched commit is enough.
+      startTransition(() => {
+        commitAdjustmentsRef.current(
+          effectiveAdjustments,
+          effectiveAdjustments[idx] ?? adjustment,
+        );
+      });
+    },
+    [],
+  );
+
+  const handleAdjustmentDocumentNoClick = useCallback(
+    (documentNo: string) => {
+      void onDocumentNoClick(documentNo);
+    },
+    [onDocumentNoClick],
+  );
 
   const openInvoiceModal = (detailRowIndex: number) => {
     const row = form.values.details[detailRowIndex];
@@ -1597,7 +2030,7 @@ export default function PaymentCreate({
         doc_date: docDate,
         currency: (inv.currency_code ?? localCurrency).toString().trim(),
         roe: invRoe,
-        adj_curr_amount: totalNum,
+        adj_curr_amount: clampAmount(totalNum),
         adj_local_amount:
           localTotalNum != null
             ? toLocalAmount(localTotalNum)
@@ -1666,7 +2099,7 @@ export default function PaymentCreate({
       type: (values.type ?? "CASH").toString().toUpperCase(),
       currency_id: currencyId,
       roe: parseRoeForPayload(values.roe) ?? 0,
-      amount: values.amount ?? 0,
+      amount: clampAmount(values.amount) ?? 0,
       local_amount: clampLocalAmount(values.local_amount) ?? 0,
       narration: values.narration ?? "",
       bank: values.bank ?? "",
@@ -1683,7 +2116,7 @@ export default function PaymentCreate({
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: parseRoeForPayload(d.roe) ?? 0,
-        amount: d.amount ?? 0,
+        amount: clampAmount(d.amount) ?? 0,
         local_amount: clampLocalAmount(d.local_amount) ?? 0,
         dr_cr: (d.dr_cr ?? "Dr").toString(),
       })),
@@ -1698,7 +2131,7 @@ export default function PaymentCreate({
         obj_sno: a.obj_sno ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        adj_curr_amount: a.adj_curr_amount ?? 0,
+        adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
         dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
@@ -1752,7 +2185,7 @@ export default function PaymentCreate({
       roe: parseRoeForPayload(values.roe) ?? 0,
       account_code: (source?.account_code ?? "").toString(),
       received_from: (source?.received_from ?? "").toString(),
-      amount: values.amount ?? 0,
+      amount: clampAmount(values.amount) ?? 0,
       local_amount: clampLocalAmount(values.local_amount) ?? 0,
       narration: values.narration ?? "",
       note: (source?.note ?? "").toString(),
@@ -1769,7 +2202,7 @@ export default function PaymentCreate({
         narration: d.narration ?? "",
         currency_id: currencyIdByCode[d.currency?.trim().toUpperCase()] ?? 0,
         roe: parseRoeForPayload(d.roe) ?? 0,
-        amount: d.amount ?? 0,
+        amount: clampAmount(d.amount) ?? 0,
         local_amount: clampLocalAmount(d.local_amount) ?? 0,
         dr_cr: (d.dr_cr ?? "Cr").toString(),
       })),
@@ -1783,7 +2216,7 @@ export default function PaymentCreate({
         obj_sno: a.obj_sno ?? "",
         document_date: formatDateDDMMYYYY(a.doc_date),
         currency_id: currencyIdByCode[a.currency?.trim().toUpperCase()] ?? 0,
-        adj_curr_amount: a.adj_curr_amount ?? 0,
+        adj_curr_amount: clampAmount(a.adj_curr_amount) ?? 0,
         adj_local_amount: clampLocalAmount(a.adj_local_amount) ?? 0,
         dr_cr: resolveAllocationDrCr(a) ?? "",
       })),
@@ -2013,20 +2446,26 @@ export default function PaymentCreate({
       const hasDocument = (a.document_no ?? "").trim() !== "";
       return hasAmounts || hasDocument;
     });
+    // Exact 2dp money totals (sums already clamp line + total).
     const partyAmountTotal =
-      (values.details ?? []).reduce(
-        (sum, d) =>
-          sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
-        0,
+      clampAmount(
+        (values.details ?? []).reduce(
+          (sum, d) => sum + (clampAmount(d.amount) ?? 0),
+          0,
+        ),
       ) ?? 0;
     const adjCurrTotal = sumPaymentAllocationNetCurr(values.adjustments ?? []);
     // Match currency Amount (not local): invoice ROE and payment ROE can differ.
     // Reversal skips this — the same payment is reversed and Dr/Cr is handled by the backend.
-    if (!_isReversal && hasAdjustments && partyAmountTotal < adjCurrTotal) {
+    const difference = clampAmount(adjCurrTotal - partyAmountTotal) ?? 0;
+    if (!_isReversal && hasAdjustments && difference > 0) {
       ToastNotification({
         type: "error",
         message:
-          "The total Amount of Payment cannot be less than the total Curr Amount of Invoice.",
+          `The total Amount of Payment cannot be less than the total Curr Amount of Invoice. ` +
+          `Payment amount (${formatMoneyAmountForUi(partyAmountTotal)}) is less than ` +
+          `invoice Curr Amount (${formatMoneyAmountForUi(adjCurrTotal)}) by ` +
+          `${formatMoneyAmountForUi(difference)}.`,
       });
       return;
     }
@@ -2691,9 +3130,8 @@ export default function PaymentCreate({
                                     reverse_payment_no?: string;
                                   }
                                 )?.reverse_payment_no ??
-                                (
-                                  paymentFromState as { payment_no?: string }
-                                )?.payment_no ??
+                                (paymentFromState as { payment_no?: string })
+                                  ?.payment_no ??
                                 "",
                             )
                           : String(
@@ -3374,212 +3812,52 @@ export default function PaymentCreate({
                     </Grid.Col>
                   </Grid>
 
-                  {form.values.adjustments.map((_, idx) => (
-                    <Grid key={idx} w="100%" gutter="sm" mt="sm">
-                      <Grid.Col span={0.9}>
-                        <TextInput
-                          placeholder="Location"
-                          readOnly
-                          {...form.getInputProps(`adjustments.${idx}.location`)}
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1.4}>
-                        <Dropdown
-                          placeholder="Daybook"
-                          data={daybookAdjustmentOptions}
-                          value={
-                            form.values.adjustments[idx].daybook_id || null
-                          }
-                          disabled={false}
-                          readOnly
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.8}>
-                        <TextInput
-                          placeholder="Type"
-                          readOnly
-                          {...form.getInputProps(`adjustments.${idx}.type`)}
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1.4}>
-                        <TextInput
-                          placeholder="Account Name"
-                          readOnly
-                          value={
-                            form.values.adjustments[idx].subledger_display ||
-                            form.values.adjustments[idx].subledger
-                          }
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1.4}>
-                        <TextInput
-                          placeholder="Document no"
-                          readOnly
-                          value={form.values.adjustments[idx].document_no}
-                          title={
-                            form.values.adjustments[idx].document_no?.trim()
-                              ? "Open document"
-                              : undefined
-                          }
-                          onClick={() => {
-                            const documentNo =
-                              form.values.adjustments[idx].document_no?.trim() ??
-                              "";
-                            if (documentNo) void onDocumentNoClick(documentNo);
-                          }}
-                          styles={
-                            form.values.adjustments[idx].document_no?.trim()
-                              ? clickableAdjustmentDocumentNoStyles
-                              : adjustmentFieldStyles
-                          }
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1.3}>
-                        <SingleDateInput
-                          placeholder="Document date"
-                          value={normalizeDate(
-                            form.values.adjustments[idx].doc_date,
-                          )}
-                          onChange={() => {}}
-                          disabled
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.8}>
-                        <Dropdown
-                          placeholder="Currency"
-                          data={currencyOptions}
-                          value={form.values.adjustments[idx].currency || null}
-                          disabled={false}
-                          readOnly
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.9}>
-                        <NumberInput
-                          placeholder="Adj Curr Amount"
-                          min={0}
-                          hideControls
-                          value={
-                            form.values.adjustments[idx].adj_curr_amount ??
-                            undefined
-                          }
-                          onChange={(v) => {
-                            const newCurr =
-                              clampAmount(
-                                typeof v === "string" ? parseFloat(v) : v,
-                              ) ?? null;
-                            const adjustment = form.values.adjustments[idx];
-                            const documentRoe = resolveAdjustmentDocumentRoe(
-                              adjustment,
-                              allocationRoeByDocumentRef.current,
-                            );
-                            if (
-                              documentRoe != null &&
-                              adjustment.roe !== documentRoe
-                            ) {
-                              form.setFieldValue(
-                                `adjustments.${idx}.roe`,
-                                documentRoe,
-                              );
-                            }
-                            const newLocal = calcAdjLocalFromCurr(
-                              newCurr,
-                              documentRoe,
-                            );
-                            form.setFieldValue(
-                              `adjustments.${idx}.adj_curr_amount`,
-                              newCurr,
-                            );
-                            form.setFieldValue(
-                              `adjustments.${idx}.adj_local_amount`,
-                              newLocal,
-                            );
-                            const effectiveAdjustments =
-                              form.values.adjustments.map((a, i) =>
-                                i === idx
-                                  ? {
-                                      ...a,
-                                      roe: documentRoe ?? a.roe,
-                                      adj_curr_amount: newCurr,
-                                      adj_local_amount: newLocal,
-                                    }
-                                  : a,
-                              );
-                            syncPartyDetailsFromAllocations(
-                              effectiveAdjustments,
-                            );
-                          }}
-                          decimalScale={currencyAmountDecimalScale}
-                          max={AMOUNT_MAX}
-                          styles={
-                            isReadOnly || _isReversal
-                              ? adjustmentFieldStyles
-                              : fieldStyles
-                          }
-                          disabled={isReadOnly || _isReversal}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1}>
-                        <NumberInput
-                          placeholder="Adj local amount"
-                          min={0}
-                          hideControls
-                          readOnly
-                          value={
-                            form.values.adjustments[idx].adj_local_amount ??
-                            undefined
-                          }
-                          decimalScale={localAmountDecimalScale}
-                          {...getAmountNumberInputFormatProps()}
-                          max={AMOUNT_MAX}
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={0.7}>
-                        <TextInput
-                          placeholder="Dr/Cr"
-                          readOnly
-                          value={
-                            resolveAllocationDrCr(
-                              form.values.adjustments[idx],
-                            ) ?? ""
-                          }
-                          styles={adjustmentFieldStyles}
-                        />
-                      </Grid.Col>
-                      <Grid.Col span={1.4}>
-                        <Group gap={4} wrap="nowrap">
-                          <Button
-                            type="button"
-                            variant="subtle"
-                            size="sm"
-                            onClick={addAdjustmentRow}
-                            title="Add row"
-                            disabled={isReadOnly || _isReversal}
-                          >
-                            <IconPlus size={18} />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="subtle"
-                            size="sm"
-                            color="red"
-                            onClick={() => removeAdjustmentRow(idx)}
-                            disabled={
-                              isReadOnly || form.values.adjustments.length <= 1
-                            }
-                            title="Remove row"
-                          >
-                            <IconTrash size={18} />
-                          </Button>
-                        </Group>
-                      </Grid.Col>
-                    </Grid>
+                  {form.values.adjustments.map((adjustment, idx) => (
+                    <PaymentAdjustmentRowView
+                      key={
+                        allocationDocumentKey(
+                          adjustment.document_no,
+                          adjustment.obj_sno,
+                        ) !== "|"
+                          ? allocationDocumentKey(
+                              adjustment.document_no,
+                              adjustment.obj_sno,
+                            )
+                          : `adj-${idx}`
+                      }
+                      idx={idx}
+                      location={adjustment.location ?? ""}
+                      daybookId={adjustment.daybook_id ?? ""}
+                      type={adjustment.type ?? ""}
+                      subledgerLabel={
+                        adjustment.subledger_display ||
+                        adjustment.subledger ||
+                        ""
+                      }
+                      documentNo={adjustment.document_no ?? ""}
+                      docDate={adjustment.doc_date}
+                      currency={adjustment.currency ?? ""}
+                      adjCurrAmount={adjustment.adj_curr_amount}
+                      adjLocalAmount={adjustment.adj_local_amount}
+                      drCr={resolveAllocationDrCr(adjustment) ?? ""}
+                      daybookOptions={daybookAdjustmentOptions}
+                      currencyOptions={currencyOptions}
+                      currencyAmountDecimalScale={currencyAmountDecimalScale}
+                      localAmountDecimalScale={localAmountDecimalScale}
+                      isReadOnly={isReadOnly}
+                      isReversal={_isReversal}
+                      canRemove={form.values.adjustments.length > 1}
+                      adjustmentFieldStyles={adjustmentFieldStyles}
+                      editableAmountStyles={
+                        isReadOnly || _isReversal
+                          ? adjustmentFieldStyles
+                          : fieldStyles
+                      }
+                      onAdjCurrChange={handleAdjCurrAmountChange}
+                      onRemove={removeAdjustmentRow}
+                      onAdd={addAdjustmentRow}
+                      onDocumentNoClick={handleAdjustmentDocumentNoClick}
+                    />
                   ))}
                 </Box>
               </Card>
@@ -3634,9 +3912,7 @@ export default function PaymentCreate({
             renderCells={(inv) => (
               <>
                 <Table.Td>
-                  {String(
-                    inv.day_book_document_type ?? inv.day_book_type ?? "",
-                  )
+                  {String(inv.day_book_document_type ?? inv.day_book_type ?? "")
                     .trim()
                     .toUpperCase() === "CRJ" ? (
                     <Text

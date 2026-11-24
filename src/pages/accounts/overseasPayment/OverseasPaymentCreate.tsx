@@ -272,13 +272,11 @@ function paymentAllocationNetSign(
 }
 
 function sumPaymentAllocationNetCurr(adjustments: AdjustmentRow[]): number {
-  return adjustments.reduce((s, a) => {
-    const amt =
-      a.adj_curr_amount != null && Number.isFinite(a.adj_curr_amount)
-        ? a.adj_curr_amount
-        : 0;
+  const sum = adjustments.reduce((s, a) => {
+    const amt = clampAmount(a.adj_curr_amount) ?? 0;
     return s + paymentAllocationNetSign(resolveAllocationDrCr(a)) * amt;
   }, 0);
+  return clampAmount(sum) ?? 0;
 }
 
 function normalizeObjSno(value: unknown): string {
@@ -1521,7 +1519,39 @@ export default function OverseasPaymentCreate({
   const removeAdjustmentRow = (idx: number) => {
     if (form.values.adjustments.length <= 1) return;
     enableAutoCalculations();
-    form.removeListItem("adjustments", idx);
+    const prevAdjustments = form.values.adjustments;
+    const nextAdjustments = prevAdjustments.filter((_, i) => i !== idx);
+    const adjustmentsToSet =
+      nextAdjustments.length > 0
+        ? nextAdjustments
+        : [getDefaultAdjustmentRow(OVERSEAS_DEFAULT_CURRENCY)];
+    form.setFieldValue("adjustments", adjustmentsToSet);
+    if (_isReversal) return;
+    form.values.details.forEach((row, detailIdx) => {
+      const before = getMatchingAllocationsForParty(row, prevAdjustments);
+      const after = getMatchingAllocationsForParty(row, adjustmentsToSet);
+      if (after.length > 0) {
+        const synced = computeSyncedOverseasDetailRow(row, after);
+        if (form.values.details[detailIdx].amount !== synced.amount) {
+          form.setFieldValue(`details.${detailIdx}.amount`, synced.amount);
+        }
+        if (form.values.details[detailIdx].local_amount !== synced.local_amount) {
+          form.setFieldValue(
+            `details.${detailIdx}.local_amount`,
+            synced.local_amount,
+          );
+        }
+        return;
+      }
+      if (before.length > 0) {
+        if (form.values.details[detailIdx].amount !== 0) {
+          form.setFieldValue(`details.${detailIdx}.amount`, 0);
+        }
+        if (form.values.details[detailIdx].local_amount !== 0) {
+          form.setFieldValue(`details.${detailIdx}.local_amount`, 0);
+        }
+      }
+    });
   };
 
   const resolvePartyAccountCode = (row: DetailRow | undefined): string => {
@@ -1765,7 +1795,7 @@ export default function OverseasPaymentCreate({
           .toString()
           .trim(),
         roe: invRoe,
-        adj_curr_amount: totalNum,
+        adj_curr_amount: clampAmount(totalNum),
         adj_local_amount:
           localTotalNum != null
             ? toLocalAmount(localTotalNum)
@@ -2197,18 +2227,23 @@ export default function OverseasPaymentCreate({
       return hasAmounts || hasDocument;
     });
     const partyAmountTotal =
-      (values.details ?? []).reduce(
-        (sum, d) =>
-          sum + (d.amount != null && Number.isFinite(d.amount) ? d.amount : 0),
-        0,
+      clampAmount(
+        (values.details ?? []).reduce(
+          (sum, d) => sum + (clampAmount(d.amount) ?? 0),
+          0,
+        ),
       ) ?? 0;
     const adjCurrTotal = sumPaymentAllocationNetCurr(values.adjustments ?? []);
+    const difference = clampAmount(adjCurrTotal - partyAmountTotal) ?? 0;
     // Reversal skips this — the same payment is reversed and Dr/Cr is handled by the backend.
-    if (!_isReversal && hasAdjustments && partyAmountTotal < adjCurrTotal) {
+    if (!_isReversal && hasAdjustments && difference > 0) {
       ToastNotification({
         type: "error",
         message:
-          "The total Amount of Payment cannot be less than the total Curr Amount of Invoice.",
+          `The total Amount of Payment cannot be less than the total Curr Amount of Invoice. ` +
+          `Payment amount (${formatMoneyAmountForUi(partyAmountTotal)}) is less than ` +
+          `invoice Curr Amount (${formatMoneyAmountForUi(adjCurrTotal)}) by ` +
+          `${formatMoneyAmountForUi(difference)}.`,
       });
       return;
     }
