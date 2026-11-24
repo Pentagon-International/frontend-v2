@@ -419,6 +419,106 @@ export function isPrqGstChargeName(chargeName: unknown): boolean {
   );
 }
 
+/** Same-row GST cleared state (India operational charges). */
+export const PRQ_EMPTY_SAME_ROW_GST = {
+  igst_rate: null as number | null,
+  igst: null as number | null,
+  cgst_rate: null as number | null,
+  cgst: null as number | null,
+  sgst_rate: null as number | null,
+  sgst: null as number | null,
+};
+
+export type PrqGstRates = {
+  igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
+  same_state: boolean;
+};
+
+/** Parse gst-rates-by-state-sac response (Supplier Invoice parity). */
+export function parsePrqGstRatesPayload(res: unknown): PrqGstRates | null {
+  const resObj = res as {
+    data?: { data?: Record<string, unknown>; [k: string]: unknown };
+    [k: string]: unknown;
+  };
+  const payload = resObj?.data?.data ?? resObj?.data ?? res;
+  const data = payload as Record<string, unknown> | null | undefined;
+  if (!data || typeof data !== "object") return null;
+  const igstRaw = data.igst_percent;
+  const cgstRaw = data.cgst_percent;
+  const sgstRaw = data.sgst_percent;
+  const igst = igstRaw == null || igstRaw === "" ? null : Number(igstRaw);
+  const cgst = cgstRaw == null || cgstRaw === "" ? null : Number(cgstRaw);
+  const sgst = sgstRaw == null || sgstRaw === "" ? null : Number(sgstRaw);
+  const rawSame = data.same_state;
+  let same_state = false;
+  if (rawSame === true || rawSame === "true" || rawSame === "True") {
+    same_state = true;
+  } else if (rawSame === false || rawSame === "false" || rawSame === "False") {
+    same_state = false;
+  } else if ((cgst ?? 0) > 0 || (sgst ?? 0) > 0) {
+    same_state = true;
+  } else if ((igst ?? 0) > 0) {
+    same_state = false;
+  }
+  return {
+    igst: Number.isFinite(igst as number) ? igst : null,
+    cgst: Number.isFinite(cgst as number) ? cgst : null,
+    sgst: Number.isFinite(sgst as number) ? sgst : null,
+    same_state,
+  };
+}
+
+/** local × rate / 100 onto the same operational charge (SI parity). */
+export function computePrqSameRowGstAmounts(
+  localAmount: number,
+  rates: PrqGstRates | null,
+): {
+  igst_rate: number;
+  cgst_rate: number;
+  sgst_rate: number;
+  igst: number | null;
+  cgst: number | null;
+  sgst: number | null;
+} {
+  if (!rates) {
+    return {
+      igst_rate: 0,
+      cgst_rate: 0,
+      sgst_rate: 0,
+      igst: 0,
+      cgst: 0,
+      sgst: 0,
+    };
+  }
+  const igstRate = rates.igst ?? 0;
+  const cgstRate = rates.cgst ?? 0;
+  const sgstRate = rates.sgst ?? 0;
+  const sameState = rates.same_state;
+  const taxBase = clampPrqAmount(localAmount) ?? 0;
+  const igstAmt =
+    sameState || igstRate <= 0
+      ? 0
+      : clampPrqAmount((taxBase * Number(igstRate)) / 100);
+  const cgstAmt =
+    !sameState || cgstRate <= 0
+      ? 0
+      : clampPrqAmount((taxBase * Number(cgstRate)) / 100);
+  const sgstAmt =
+    !sameState || sgstRate <= 0
+      ? 0
+      : clampPrqAmount((taxBase * Number(sgstRate)) / 100);
+  return {
+    igst_rate: sameState ? 0 : igstRate,
+    cgst_rate: sameState ? cgstRate : 0,
+    sgst_rate: sameState ? sgstRate : 0,
+    igst: igstAmt,
+    cgst: cgstAmt,
+    sgst: sgstAmt,
+  };
+}
+
 export function isPrqTdsChargeRow(charge: Record<string, unknown>): boolean {
   return (
     (charge.charge_id == null || charge.charge_id === "") &&
@@ -473,6 +573,11 @@ export function splitPrqChargesForSupplierInvoiceAgentInv(
   let actualSum = 0;
   let hasActualRow = false;
 
+  let sameRowCgst = 0;
+  let sameRowSgst = 0;
+  let sameRowIgst = 0;
+  let hasSameRowGst = false;
+
   for (const raw of rows) {
     if (!raw || typeof raw !== "object") continue;
     const charge = raw as Record<string, unknown>;
@@ -503,6 +608,23 @@ export function splitPrqChargesForSupplierInvoiceAgentInv(
 
     if (isPrqTdsChargeRow(charge)) continue;
 
+    // Defensive: when GST ChargeMaster rows are absent, use same-row GST.
+    const rowCgst = parsePrqChargeAmount(charge.cgst);
+    const rowSgst = parsePrqChargeAmount(charge.sgst);
+    const rowIgst = parsePrqChargeAmount(charge.igst);
+    if (rowCgst != null && rowCgst !== 0) {
+      sameRowCgst += rowCgst;
+      hasSameRowGst = true;
+    }
+    if (rowSgst != null && rowSgst !== 0) {
+      sameRowSgst += rowSgst;
+      hasSameRowGst = true;
+    }
+    if (rowIgst != null && rowIgst !== 0) {
+      sameRowIgst += rowIgst;
+      hasSameRowGst = true;
+    }
+
     if (localAmount != null) {
       actualSum += localAmount;
       hasActualRow = true;
@@ -513,16 +635,27 @@ export function splitPrqChargesForSupplierInvoiceAgentInv(
   cgst_amount = clampPrqAmount(cgst_amount);
   sgst_amount = clampPrqAmount(sgst_amount);
   igst_amount = clampPrqAmount(igst_amount);
-  const hasGst =
+  const hasGstRows =
     cgst_amount != null || sgst_amount != null || igst_amount != null;
 
-  if (hasGst) {
+  if (hasGstRows) {
     return {
       taxable_amount: actualTotal,
       non_taxable_amount: null,
       cgst_amount,
       sgst_amount,
       igst_amount,
+      charges: carriedCharges,
+    };
+  }
+
+  if (hasSameRowGst) {
+    return {
+      taxable_amount: actualTotal,
+      non_taxable_amount: null,
+      cgst_amount: clampPrqAmount(sameRowCgst),
+      sgst_amount: clampPrqAmount(sameRowSgst),
+      igst_amount: clampPrqAmount(sameRowIgst),
       charges: carriedCharges,
     };
   }

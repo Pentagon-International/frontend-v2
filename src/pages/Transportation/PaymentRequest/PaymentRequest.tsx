@@ -60,6 +60,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import { postAPICall } from "../../../service/postApiCall";
 import { commonSearchAPI } from "../../../service/searchApi";
 import {
+  findJobCreateDropdownRow,
   jobCreateDropdownDisplayFormat,
   mapJobCreateDropdownOptions,
 } from "../../../utils/jobCreateDropdown";
@@ -110,9 +111,14 @@ import {
   findPrimaryPartyAddress,
   getPartyGstForStateId,
   getPartyGstFromPrimaryAddress,
+  computePrqSameRowGstAmounts,
   getPrqChargeRowCompletenessErrors,
+  isPartyGstUnregistered,
   isPrqTdsChargeRow,
+  parsePrqGstRatesPayload,
+  PRQ_EMPTY_SAME_ROW_GST,
   type PartyAddressLike,
+  type PrqGstRates,
   chargeMatchesSelectedParty,
   prefillChargesRequirePartySelection,
   recalculatePrqChargeAmounts,
@@ -179,6 +185,19 @@ function clampAmount(value: number | null | undefined): number | null {
   const maxVal = 99999999.99;
   if (Math.abs(rounded) > maxVal) return rounded > 0 ? maxVal : -maxVal;
   return rounded;
+}
+
+function parseOptionalGstNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+async function fetchPrqGstRatesByStateSac(payload: {
+  state_id: number;
+  sac_code: string;
+}) {
+  return postAPICall("invoice/gst-rates-by-state-sac/", payload, API_HEADER);
 }
 
 function formatPaymentRequestPayloadAmount(
@@ -708,6 +727,13 @@ type ChargeItem = {
   amount_in_local: number | null;
   tax_code: string;
   tax: string;
+  /** Same-row GST (India) — Supplier Invoice parity. */
+  igst_rate: number | null;
+  igst: number | null;
+  cgst_rate: number | null;
+  cgst: number | null;
+  sgst_rate: number | null;
+  sgst: number | null;
   Dr_Cr: "Dr" | "Cr";
   is_tds_row?: boolean;
   is_tax_row?: boolean;
@@ -831,6 +857,12 @@ type PaymentRequestFromApi = {
     amount?: number | string;
     local_amount?: number | string;
     sac_code?: string;
+    igst?: number | string | null;
+    cgst?: number | string | null;
+    sgst?: number | string | null;
+    igst_rate?: number | string | null;
+    cgst_rate?: number | string | null;
+    sgst_rate?: number | string | null;
     tax?: boolean | string;
     Dr_Cr?: string;
     is_tds_calcualted_record?: boolean;
@@ -1077,8 +1109,46 @@ const emptyCharge = (): ChargeItem => ({
   amount_in_local: null,
   tax_code: "",
   tax: "",
+  ...PRQ_EMPTY_SAME_ROW_GST,
   Dr_Cr: "Dr",
 });
+
+/** India: fetch GST rates by state+SAC and write onto operational charge rows. */
+async function enrichPrqChargesWithSameRowGst(
+  charges: ChargeItem[],
+  stateId: number | null,
+): Promise<ChargeItem[]> {
+  if (stateId == null || !Number.isFinite(stateId) || stateId <= 0) {
+    return charges;
+  }
+  const cache = new Map<string, PrqGstRates | null>();
+  return Promise.all(
+    charges.map(async (c) => {
+      if (isChargeTaxRow(c) || isChargeTdsRow(c)) {
+        return { ...c, ...PRQ_EMPTY_SAME_ROW_GST };
+      }
+      const sac = String(c.tax_code ?? "").trim();
+      if (!sac || c.charge_id == null) {
+        return { ...c, ...PRQ_EMPTY_SAME_ROW_GST };
+      }
+      const local = clampAmount(c.amount_in_local ?? 0) ?? 0;
+      let rates = cache.get(sac);
+      if (rates === undefined) {
+        try {
+          const res = await fetchPrqGstRatesByStateSac({
+            state_id: stateId,
+            sac_code: sac,
+          });
+          rates = parsePrqGstRatesPayload(res);
+        } catch {
+          rates = null;
+        }
+        cache.set(sac, rates);
+      }
+      return { ...c, ...computePrqSameRowGstAmounts(local, rates) };
+    }),
+  );
+}
 
 function resolvePaymentRequestJobReference(options: {
   locationState: unknown;
@@ -1151,6 +1221,12 @@ function mapPaymentRequestChargeToPayload(
     amount: formatPaymentRequestPayloadAmount(c.amount),
     local_amount: formatPaymentRequestPayloadAmount(c.amount_in_local),
     sac_code: c.tax_code ?? "",
+    igst: formatPaymentRequestPayloadAmount(c.igst),
+    cgst: formatPaymentRequestPayloadAmount(c.cgst),
+    sgst: formatPaymentRequestPayloadAmount(c.sgst),
+    igst_rate: formatPaymentRequestPayloadAmount(c.igst_rate),
+    cgst_rate: formatPaymentRequestPayloadAmount(c.cgst_rate),
+    sgst_rate: formatPaymentRequestPayloadAmount(c.sgst_rate),
   };
 }
 
@@ -1190,6 +1266,12 @@ function mapApiChargeToChargeItem(
       c.local_amount != null ? clampAmount(Number(c.local_amount)) : null,
     tax_code: c.sac_code ?? "",
     tax: c.tax === true || c.tax === "true" ? "true" : "false",
+    igst_rate: parseOptionalGstNumber(c.igst_rate),
+    igst: parseOptionalGstNumber(c.igst),
+    cgst_rate: parseOptionalGstNumber(c.cgst_rate),
+    cgst: parseOptionalGstNumber(c.cgst),
+    sgst_rate: parseOptionalGstNumber(c.sgst_rate),
+    sgst: parseOptionalGstNumber(c.sgst),
     Dr_Cr: drCr,
     is_tax_row: isChargeTaxRow({
       is_tax_row: (c as { is_tax_row?: boolean }).is_tax_row,
@@ -1345,7 +1427,6 @@ function PaymentRequest() {
    * one-time update), they cannot be changed again (supplier-invoice fapiao style).
    */
   const [actualInvAlreadySet, setActualInvAlreadySet] = useState(false);
-  const showTaxTab = isIndiaUser;
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const [fileErrors, setFileErrors] = useState<{ [key: number]: string }>({});
@@ -1388,6 +1469,15 @@ function PaymentRequest() {
     null,
   );
   const [partyAddresses, setPartyAddresses] = useState<PartyAddressLike[]>([]);
+
+  /** Explicit Unregistered only; blank status keeps GST (CRJ parity). */
+  const vendorGstUnregistered = useMemo(
+    () => isIndiaUser && isPartyGstUnregistered(partyAddresses),
+    [isIndiaUser, partyAddresses],
+  );
+  /** India GST calc / charge cols / tax tab — off for Unregistered. */
+  const showGstTax = isIndiaUser && !vendorGstUnregistered;
+  const showTaxTab = showGstTax;
 
   // isUpdate: driven by saveResponse.id OR requestId in URL
   const isUpdate =
@@ -1682,6 +1772,80 @@ function PaymentRequest() {
     !!String(form.values.account_id ?? "").trim() ||
     !!String(accountNameDisplay ?? "").trim();
 
+  /** Cache service_id by job/shipment id for get-effective-sac (SI parity). */
+  const jobServiceIdCacheRef = useRef<Record<string, number | null>>({});
+
+  const getServiceIdByJobNoAsync = useCallback(
+    async (jobNo: string | null | undefined): Promise<number | null> => {
+      const key = String(jobNo ?? "").trim();
+      const fallback =
+        jobServiceId != null && Number(jobServiceId) > 0
+          ? Number(jobServiceId)
+          : null;
+      if (!key) return fallback;
+
+      if (key in jobServiceIdCacheRef.current) {
+        return jobServiceIdCacheRef.current[key] ?? fallback;
+      }
+
+      try {
+        const results = await commonSearchAPI({
+          endpoint: URL.filterJobCreate,
+          query: key,
+        });
+        const arr = Array.isArray(results)
+          ? (results as Array<Record<string, unknown>>)
+          : [];
+        const match = findJobCreateDropdownRow(arr, key);
+        const serviceIdRaw =
+          match?.service_id ??
+          (match as { serviceId?: unknown } | undefined)?.serviceId ??
+          null;
+        const serviceId =
+          serviceIdRaw != null && Number.isFinite(Number(serviceIdRaw))
+            ? Number(serviceIdRaw)
+            : null;
+        jobServiceIdCacheRef.current[key] = serviceId;
+        return serviceId ?? fallback;
+      } catch {
+        jobServiceIdCacheRef.current[key] = null;
+        return fallback;
+      }
+    },
+    [jobServiceId],
+  );
+
+  /** India: resolve service_id from Job Id → get-effective-sac → set tax_code. */
+  const fetchSacForChargeRow = useCallback(
+    (index: number, chargeId: number | null, jobNo: string) => {
+      if (!isIndiaUser || chargeId == null) return;
+      void (async () => {
+        setSacCodeLoadingByIndex((prev) => ({ ...prev, [index]: true }));
+        try {
+          const serviceId = await getServiceIdByJobNoAsync(
+            String(jobNo ?? "").trim() || null,
+          );
+          if (serviceId == null || serviceId <= 0) return;
+          const data = await fetchGetEffectiveSac([
+            { charge_id: chargeId, service_id: serviceId },
+          ]);
+          const item =
+            data.find(
+              (x) =>
+                Number(x.charge_id) === Number(chargeId) &&
+                Number(x.service_id) === Number(serviceId),
+            ) ?? data[0];
+          if (item?.sac_code != null && item.sac_code !== "") {
+            form.setFieldValue(`charges.${index}.tax_code`, item.sac_code);
+          }
+        } finally {
+          setSacCodeLoadingByIndex((prev) => ({ ...prev, [index]: false }));
+        }
+      })();
+    },
+    [getServiceIdByJobNoAsync, form, isIndiaUser],
+  );
+
   const partyGstOptions = useMemo(
     () => collectPartyGstOptions(partyAddresses),
     [partyAddresses],
@@ -1945,6 +2109,81 @@ function PaymentRequest() {
     [form.values.charges],
   );
 
+  /** Invoice/SI parity: same-state → CGST+SGST columns; inter-state → IGST. */
+  const indiaGstSameState = useMemo((): boolean | undefined => {
+    if (!isIndiaUser) return undefined;
+    const ops = (form.values.charges ?? []).filter(
+      (c) => !isChargeTaxRow(c) && !isChargeTdsRow(c),
+    );
+    if (ops.some((c) => (c.cgst ?? 0) > 0 || (c.sgst ?? 0) > 0)) return true;
+    if (ops.some((c) => (c.igst ?? 0) > 0)) return false;
+    if (ops.some((c) => (c.cgst_rate ?? 0) > 0 || (c.sgst_rate ?? 0) > 0)) {
+      return true;
+    }
+    if (ops.some((c) => (c.igst_rate ?? 0) > 0)) return false;
+    return undefined;
+  }, [isIndiaUser, form.values.charges]);
+
+  const headerShowCgstSgst = showGstTax && indiaGstSameState !== false;
+  const headerShowIgst = showGstTax && indiaGstSameState === false;
+
+  /** Spans always total 12 so the charges grid fills full width. */
+  const chargeColSpans = useMemo(() => {
+    const showCgst = headerShowCgstSgst;
+    const showIgst = headerShowIgst;
+    const actions = formFieldsReadOnly ? 0 : 0.7;
+    const cols =
+      !isIndiaUser || (!showCgst && !showIgst)
+        ? {
+            sno: 0.4,
+            jobId: formFieldsReadOnly ? 1.8 : 1.5,
+            charge: 1.2,
+            account: 1.1,
+            subledger: 0.75,
+            currency: 0.7,
+            roe: 0.6,
+            unit: 0.7,
+            noOfUnit: 0.8,
+            amtUnit: 0.8,
+            amount: 0.85,
+            localAmt: 0.85,
+            sac: 1,
+            cgst: 0,
+            sgst: 0,
+            igst: 0,
+            actions,
+          }
+        : {
+            sno: 0.35,
+            jobId: formFieldsReadOnly ? 1.35 : 1.15,
+            charge: 1.0,
+            account: 0.95,
+            subledger: 0.65,
+            currency: 0.6,
+            roe: 0.5,
+            unit: 0.6,
+            noOfUnit: 0.65,
+            amtUnit: 0.65,
+            amount: 0.7,
+            localAmt: 0.7,
+            sac: 0.7,
+            cgst: showCgst ? 0.55 : 0,
+            sgst: showCgst ? 0.55 : 0,
+            igst: showIgst ? 0.7 : 0,
+            actions,
+          };
+    // Absorb leftover into Charge so nowrap rows use the full 12-col width.
+    const used = Object.values(cols).reduce((sum, n) => sum + n, 0);
+    if (used < 12) cols.charge += 12 - used;
+    return cols;
+  }, [
+    formFieldsReadOnly,
+    headerShowCgstSgst,
+    headerShowIgst,
+    isIndiaUser,
+    showGstTax,
+  ]);
+
   const gstBreakupTotals = useMemo(
     () => ({
       igst_total: parseGstBreakupAmount(gstBreakup?.igst_total),
@@ -2036,29 +2275,24 @@ function PaymentRequest() {
         .filter(({ charge }) => charge.charge_id != null);
       if (chargesWithIds.length === 0) return;
 
-      fetchGetEffectiveSac(
-        chargesWithIds.map(({ charge }) => ({
-          charge_id: charge.charge_id!,
-          service_id: jobServiceId as number,
-        })),
-      ).then((data) => {
-        if (partyChargeApplySeqRef.current !== seq) return;
-        data.forEach((item, responseIdx) => {
-          const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
-          if (
-            originalIdx !== undefined &&
-            item?.sac_code != null &&
-            item.sac_code !== ""
-          ) {
-            form.setFieldValue(
-              `charges.${originalIdx}.tax_code`,
-              item.sac_code,
-            );
-          }
-        });
-      });
+      // Resolve service_id per Job Id (SI parity) — not only nav jobServiceId.
+      void (async () => {
+        for (const { charge, originalIdx } of chargesWithIds) {
+          if (partyChargeApplySeqRef.current !== seq) return;
+          fetchSacForChargeRow(
+            originalIdx,
+            charge.charge_id,
+            String(charge.job_no ?? ""),
+          );
+        }
+      })();
     },
-    [deferChargesUntilParty, form, jobServiceId, prefillChargeSources],
+    [
+      deferChargesUntilParty,
+      fetchSacForChargeRow,
+      form,
+      prefillChargeSources,
+    ],
   );
 
   // ─── Prefill Paid To from Air Export Job Supplier ──────────────────────
@@ -2258,7 +2492,7 @@ function PaymentRequest() {
   const chargesAmountCalcKey = form.values.charges
     .map(
       (c) =>
-        `${c.no_of_unit}|${c.amount_per_unit}|${c.roe}|${c.amount}|${c.is_tds_row ? 1 : 0}|${c.currency}|${c.currency_id}`,
+        `${c.no_of_unit}|${c.amount_per_unit}|${c.roe}|${c.amount}|${c.is_tds_row ? 1 : 0}|${c.currency}|${c.currency_id}|${c.igst_rate}|${c.cgst_rate}|${c.sgst_rate}`,
     )
     .join(",");
   /** Currency-only key so clearing ROE does not re-trigger master fetch (invoice-style clearable ROE). */
@@ -2283,18 +2517,187 @@ function PaymentRequest() {
         changed = true;
       }
       const { amount, amount_in_local } = recalculatePrqChargeRowAmounts(next);
+      let row: ChargeItem = next;
       if (amount !== next.amount || amount_in_local !== next.amount_in_local) {
         changed = true;
-        return { ...next, amount, amount_in_local };
+        row = { ...next, amount, amount_in_local };
       }
-      return next;
+      // India: recompute same-row GST from rates already on the charge.
+      if (
+        showGstTax &&
+        !isChargeTaxRow(row) &&
+        !isChargeTdsRow(row)
+      ) {
+        const sac = String(row.tax_code ?? "").trim();
+        if (!sac) {
+          if (
+            row.igst_rate != null ||
+            row.cgst_rate != null ||
+            row.sgst_rate != null ||
+            row.igst != null ||
+            row.cgst != null ||
+            row.sgst != null
+          ) {
+            changed = true;
+            return { ...row, ...PRQ_EMPTY_SAME_ROW_GST };
+          }
+          return row;
+        }
+        const hasRates =
+          row.igst_rate != null ||
+          row.cgst_rate != null ||
+          row.sgst_rate != null;
+        if (!hasRates) return row;
+        const rates: PrqGstRates = {
+          igst: row.igst_rate,
+          cgst: row.cgst_rate,
+          sgst: row.sgst_rate,
+          same_state:
+            (row.cgst_rate ?? 0) > 0 || (row.sgst_rate ?? 0) > 0
+              ? true
+              : (row.igst_rate ?? 0) > 0
+                ? false
+                : (row.cgst ?? 0) > 0 || (row.sgst ?? 0) > 0,
+        };
+        const computed = computePrqSameRowGstAmounts(
+          row.amount_in_local ?? 0,
+          rates,
+        );
+        if (
+          computed.igst !== (row.igst ?? null) ||
+          computed.cgst !== (row.cgst ?? null) ||
+          computed.sgst !== (row.sgst ?? null)
+        ) {
+          changed = true;
+          return { ...row, ...computed };
+        }
+      }
+      return row;
     });
 
     if (changed) {
       form.setFieldValue("charges", nextCharges);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chargesAmountCalcKey, formFieldsReadOnly, currencyData]);
+  }, [chargesAmountCalcKey, formFieldsReadOnly, currencyData, showGstTax]);
+
+  // India: fetch GST rates when state / SAC changes (SI parity).
+  const sameRowGstFetchKey = `${form.values.state_code_1}|${showGstTax ? 1 : 0}|${(form.values.charges ?? [])
+    .map((c) => `${c.charge_id ?? ""}:${String(c.tax_code ?? "").trim()}`)
+    .join(";")}`;
+  useEffect(() => {
+    if (!showGstTax || formFieldsReadOnly || isViewMode) return;
+    if (prqStatusUpper === "POSTED" || prqStatusUpper === "APPROVED") return;
+    const stateIdNum = Number(form.values.state_code_1);
+    const stateId =
+      Number.isFinite(stateIdNum) && stateIdNum > 0 ? stateIdNum : null;
+    const chargesSnapshot = form.values.charges;
+    let cancelled = false;
+    void (async () => {
+      const enriched = await enrichPrqChargesWithSameRowGst(
+        chargesSnapshot,
+        stateId,
+      );
+      if (cancelled) return;
+      // Merge onto latest rows so a slow GST response cannot wipe newer amounts.
+      const latest = form.values.charges;
+      let changed = false;
+      const merged = latest.map((live, i) => {
+        const e = enriched[i];
+        if (!e) return live;
+        if (isChargeTaxRow(live) || isChargeTdsRow(live)) {
+          if (
+            live.igst != null ||
+            live.cgst != null ||
+            live.sgst != null ||
+            live.igst_rate != null ||
+            live.cgst_rate != null ||
+            live.sgst_rate != null
+          ) {
+            changed = true;
+            return { ...live, ...PRQ_EMPTY_SAME_ROW_GST };
+          }
+          return live;
+        }
+        const liveSac = String(live.tax_code ?? "").trim();
+        if (!liveSac || live.charge_id == null) {
+          if (
+            live.igst != null ||
+            live.cgst != null ||
+            live.sgst != null ||
+            live.igst_rate != null ||
+            live.cgst_rate != null ||
+            live.sgst_rate != null
+          ) {
+            changed = true;
+            return { ...live, ...PRQ_EMPTY_SAME_ROW_GST };
+          }
+          return live;
+        }
+        const next = {
+          ...live,
+          ...computePrqSameRowGstAmounts(live.amount_in_local ?? 0, {
+            igst: e.igst_rate,
+            cgst: e.cgst_rate,
+            sgst: e.sgst_rate,
+            same_state:
+              (e.cgst_rate ?? 0) > 0 || (e.sgst_rate ?? 0) > 0
+                ? true
+                : (e.igst_rate ?? 0) > 0
+                  ? false
+                  : (e.cgst ?? 0) > 0 || (e.sgst ?? 0) > 0,
+          }),
+        };
+        if (
+          next.igst !== live.igst ||
+          next.cgst !== live.cgst ||
+          next.sgst !== live.sgst ||
+          next.igst_rate !== live.igst_rate ||
+          next.cgst_rate !== live.cgst_rate ||
+          next.sgst_rate !== live.sgst_rate
+        ) {
+          changed = true;
+        }
+        return next;
+      });
+      if (changed) form.setFieldValue("charges", merged);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sameRowGstFetchKey, formFieldsReadOnly, isViewMode, showGstTax]);
+
+  // Unregistered: clear same-row GST + GST ChargeMaster rows (CRJ parity).
+  useEffect(() => {
+    if (!isIndiaUser || showGstTax || formFieldsReadOnly) return;
+    let changed = false;
+    const next = (form.values.charges ?? [])
+      .filter((c) => {
+        if (isChargeTaxRow(c)) {
+          changed = true;
+          return false;
+        }
+        return true;
+      })
+      .map((c) => {
+        if (
+          c.igst != null ||
+          c.cgst != null ||
+          c.sgst != null ||
+          c.igst_rate != null ||
+          c.cgst_rate != null ||
+          c.sgst_rate != null
+        ) {
+          changed = true;
+          return { ...c, ...PRQ_EMPTY_SAME_ROW_GST };
+        }
+        return c;
+      });
+    if (changed) form.setFieldValue("charges", next);
+    if (gstBreakup != null) setGstBreakup(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGstTax, isIndiaUser, formFieldsReadOnly]);
 
   // Fetch ROE from exchange-rate master when charge currency is set/changed only.
   // Do not re-fetch when the user clears ROE to type a new value.
@@ -2376,22 +2779,13 @@ function PaymentRequest() {
       .filter(({ charge }) => charge.charge_id != null);
     if (chargesWithIds.length === 0) return;
 
-    const items = chargesWithIds.map(({ charge }) => ({
-      charge_id: charge.charge_id!,
-      service_id: jobServiceId as number,
-    }));
-
-    fetchGetEffectiveSac(items).then((data) => {
-      data.forEach((item, responseIdx) => {
-        const originalIdx = chargesWithIds[responseIdx]?.originalIdx;
-        if (
-          originalIdx !== undefined &&
-          item?.sac_code != null &&
-          item.sac_code !== ""
-        ) {
-          form.setFieldValue(`charges.${originalIdx}.tax_code`, item.sac_code);
-        }
-      });
+    // Resolve service_id from each row's Job Id (SI parity).
+    chargesWithIds.forEach(({ charge, originalIdx }) => {
+      fetchSacForChargeRow(
+        originalIdx,
+        charge.charge_id,
+        String(charge.job_no ?? ""),
+      );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2606,6 +3000,13 @@ function PaymentRequest() {
   };
 
   const handleCalculateGst = async () => {
+    if (vendorGstUnregistered) {
+      ToastNotification({
+        type: "error",
+        message: "Party is GST Unregistered. GST cannot be calculated.",
+      });
+      return;
+    }
     const validation = form.validate();
     if (validation.hasErrors) return;
     if (!hasBillablePaymentRequestCharge(form.values.charges)) {
@@ -2843,7 +3244,47 @@ function PaymentRequest() {
         const chargesWithoutTax = form.values.charges.filter(
           (c) => !isChargeTaxRow(c),
         );
-        form.setFieldValue("charges", [...chargesWithoutTax, ...gstCharges]);
+        // Enrich ops rows with same-row GST before persisting GST ChargeMaster rows.
+        const stateForEnrich = Number(values.state_code_1);
+        const enrichedOps = await enrichPrqChargesWithSameRowGst(
+          chargesWithoutTax,
+          Number.isFinite(stateForEnrich) && stateForEnrich > 0
+            ? stateForEnrich
+            : null,
+        );
+        const nextCharges = [...enrichedOps, ...gstCharges];
+        form.setFieldValue("charges", nextCharges);
+
+        // Persist GST rows + same-row GST so Approval → CRJ gets complete charges.
+        const persistPayload: Record<string, unknown> = {
+          ...payload,
+          id: paymentRequestId,
+          charges_data: nextCharges.map(mapPaymentRequestChargeToPayload),
+        };
+        const persistRaw = await apiCallProtected.put(
+          `${(URL as any).paymentRequest}${paymentRequestId}/`,
+          buildPaymentRequestFormData(
+            persistPayload,
+            supportingDocuments,
+          ),
+          {
+            headers: {
+              ...FORM_DATA_HEADERS,
+              ...API_HEADER.headers,
+            },
+          },
+        );
+        const persistData: PaymentRequestFromApi =
+          (persistRaw as { data?: { data?: PaymentRequestFromApi } })?.data
+            ?.data ??
+          (persistRaw as { data?: PaymentRequestFromApi })?.data ??
+          (persistRaw as PaymentRequestFromApi);
+        if (Array.isArray(persistData?.charges) && persistData.charges.length) {
+          form.setFieldValue(
+            "charges",
+            persistData.charges.map(mapApiChargeToChargeItem),
+          );
+        }
       }
 
       setGstBreakup(gstBreakupResponse);
@@ -3127,21 +3568,37 @@ function PaymentRequest() {
         })
         .filter((x): x is ChargeItem => x !== null);
 
-      const deduped = tdsCharges.filter((nr) => {
-        return !existing.some(
-          (er) =>
-            String(er.account_code ?? "") === String(nr.account_code ?? "") &&
-            String(er.subledger_code ?? "") ===
-              String(nr.subledger_code ?? "") &&
-            String(er.account_name ?? "") === String(nr.account_name ?? "") &&
-            Number(er.amount ?? 0) === Number(nr.amount ?? 0) &&
-            String(er.cn_r ?? "") === String(nr.cn_r ?? "") &&
-            String(er.currency_id ?? "") === String(nr.currency_id ?? ""),
-        );
-      });
+      // Replace TDS rows (GST Calculate pattern) — never append duplicates.
+      const withoutTds = existing.filter((c) => !isChargeTdsRow(c));
+      const nextCharges = [...withoutTds, ...tdsCharges];
+      form.setFieldValue("charges", nextCharges);
 
-      if (deduped.length > 0) {
-        form.setFieldValue("charges", [...existing, ...deduped]);
+      // Persist replaced TDS rows so Approval → CRJ gets complete charges.
+      const persistPayload: Record<string, unknown> = {
+        ...payload,
+        id: paymentRequestId,
+        charges_data: nextCharges.map(mapPaymentRequestChargeToPayload),
+      };
+      const persistRaw = await apiCallProtected.put(
+        `${(URL as any).paymentRequest}${paymentRequestId}/`,
+        buildPaymentRequestFormData(persistPayload, supportingDocuments),
+        {
+          headers: {
+            ...FORM_DATA_HEADERS,
+            ...API_HEADER.headers,
+          },
+        },
+      );
+      const persistData: PaymentRequestFromApi =
+        (persistRaw as { data?: { data?: PaymentRequestFromApi } })?.data
+          ?.data ??
+        (persistRaw as { data?: PaymentRequestFromApi })?.data ??
+        (persistRaw as PaymentRequestFromApi);
+      if (Array.isArray(persistData?.charges) && persistData.charges.length) {
+        form.setFieldValue(
+          "charges",
+          persistData.charges.map(mapApiChargeToChargeItem),
+        );
       }
 
       ToastNotification({
@@ -4615,7 +5072,7 @@ function PaymentRequest() {
                 size="sm"
                 onClick={handleCalculateGst}
                 loading={isSubmitting}
-                disabled={formFieldsReadOnly}
+                disabled={formFieldsReadOnly || vendorGstUnregistered}
               >
                 Calculate GST
               </Button>
@@ -4670,14 +5127,17 @@ function PaymentRequest() {
                       color: "#105476",
                     }}
                   >
-                    <Grid.Col span={0.4} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.sno}
+                      style={{ fontSize: "13px" }}
+                    >
                       SNo
                     </Grid.Col>
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Seg
               </Grid.Col> */}
                     <Grid.Col
-                      span={formFieldsReadOnly ? 1.76 : 1.48}
+                      span={chargeColSpans.jobId}
                       style={{ fontSize: "13px" }}
                     >
                       Job Id
@@ -4688,45 +5148,102 @@ function PaymentRequest() {
               <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
                 C/N/R
               </Grid.Col> */}
-                    <Grid.Col span={1.2} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.charge}
+                      style={{ fontSize: "13px" }}
+                    >
                       Charge
                     </Grid.Col>
-                    <Grid.Col span={1.1} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.account}
+                      style={{ fontSize: "13px" }}
+                    >
                       Account Name
                     </Grid.Col>
-                    <Grid.Col span={0.75} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.subledger}
+                      style={{ fontSize: "13px" }}
+                    >
                       Subledger
                     </Grid.Col>
-                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.currency}
+                      style={{ fontSize: "13px" }}
+                    >
                       Currency
                     </Grid.Col>
-                    <Grid.Col span={0.6} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.roe}
+                      style={{ fontSize: "13px" }}
+                    >
                       ROE
                     </Grid.Col>
-                    <Grid.Col span={0.7} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.unit}
+                      style={{ fontSize: "13px" }}
+                    >
                       Unit
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.noOfUnit}
+                      style={{ fontSize: "13px" }}
+                    >
                       No of Unit
                     </Grid.Col>
-                    <Grid.Col span={0.8} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.amtUnit}
+                      style={{ fontSize: "13px" }}
+                    >
                       Amt/Unit
                     </Grid.Col>
-                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.amount}
+                      style={{ fontSize: "13px" }}
+                    >
                       Amount
                     </Grid.Col>
-                    <Grid.Col span={0.85} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.localAmt}
+                      style={{ fontSize: "13px" }}
+                    >
                       Local Amt
                     </Grid.Col>
-                    <Grid.Col span={1} style={{ fontSize: "13px" }}>
+                    <Grid.Col
+                      span={chargeColSpans.sac}
+                      style={{ fontSize: "13px" }}
+                    >
                       SAC Code
                     </Grid.Col>
+                    {chargeColSpans.cgst > 0 ? (
+                      <Grid.Col
+                        span={chargeColSpans.cgst}
+                        style={{ fontSize: "13px" }}
+                      >
+                        CGST
+                      </Grid.Col>
+                    ) : null}
+                    {chargeColSpans.sgst > 0 ? (
+                      <Grid.Col
+                        span={chargeColSpans.sgst}
+                        style={{ fontSize: "13px" }}
+                      >
+                        SGST
+                      </Grid.Col>
+                    ) : null}
+                    {chargeColSpans.igst > 0 ? (
+                      <Grid.Col
+                        span={chargeColSpans.igst}
+                        style={{ fontSize: "13px" }}
+                      >
+                        IGST
+                      </Grid.Col>
+                    ) : null}
                     {/* <Grid.Col span={0.5} style={{ fontSize: "13px" }}>
                 Tax
               </Grid.Col> */}
                     {!formFieldsReadOnly && (
                       <Grid.Col
-                        span={0.77}
+                        span={chargeColSpans.actions}
                         style={{
                           fontSize: "13px",
                           display: "flex",
@@ -4750,7 +5267,7 @@ function PaymentRequest() {
                       style={{ flexWrap: "nowrap" }}
                     >
                       {/* SNo */}
-                      <Grid.Col span={0.4}>
+                      <Grid.Col span={chargeColSpans.sno}>
                         <TextInput
                           value={String(index + 1)}
                           readOnly
@@ -4789,7 +5306,7 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Job No */}
-                      <Grid.Col span={formFieldsReadOnly ? 1.76 : 1.48}>
+                      <Grid.Col span={chargeColSpans.jobId}>
                         {isJobChargesPrefillFlow ? (
                           <Dropdown
                             placeholder="Select job id"
@@ -4820,11 +5337,20 @@ function PaymentRequest() {
                                     chargeOriginalByIndexRef.current[index],
                                     form.setFieldValue,
                                   );
+                                  fetchSacForChargeRow(
+                                    index,
+                                    charge.charge_id,
+                                    nextJob,
+                                  );
                                 }
                               } else if (charge.charge_id != null) {
                                 clearChargeRowAccountFields(
                                   index,
                                   form.setFieldValue,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.tax_code`,
+                                  "",
                                 );
                                 setChargeErrors((prev) => ({
                                   ...prev,
@@ -4895,11 +5421,20 @@ function PaymentRequest() {
                                     chargeOriginalByIndexRef.current[index],
                                     form.setFieldValue,
                                   );
+                                  fetchSacForChargeRow(
+                                    index,
+                                    charge.charge_id,
+                                    nextJob,
+                                  );
                                 }
                               } else if (charge.charge_id != null) {
                                 clearChargeRowAccountFields(
                                   index,
                                   form.setFieldValue,
+                                );
+                                form.setFieldValue(
+                                  `charges.${index}.tax_code`,
+                                  "",
                                 );
                                 setChargeErrors((prev) => ({
                                   ...prev,
@@ -4967,7 +5502,7 @@ function PaymentRequest() {
                 </Grid.Col> */}
 
                       {/* Charge */}
-                      <Grid.Col span={1.2}>
+                      <Grid.Col span={chargeColSpans.charge}>
                         <SearchableSelect
                           placeholder="Search charge"
                           apiEndpoint={(URL as any).chargeMaster}
@@ -5086,36 +5621,9 @@ function PaymentRequest() {
                               }
                             }
 
-                            // Auto-fetch SAC code whenever a charge is selected/changed
+                            // Auto-fetch SAC from Job Id → service_id (SI parity)
                             if (chargeId != null) {
-                              setSacCodeLoadingByIndex((prev) => ({
-                                ...prev,
-                                [index]: true,
-                              }));
-                              fetchGetEffectiveSac([
-                                {
-                                  charge_id: chargeId,
-                                  service_id: jobServiceId ?? 0,
-                                },
-                              ])
-                                .then((data) => {
-                                  const item = data[0];
-                                  if (
-                                    item?.sac_code != null &&
-                                    item.sac_code !== ""
-                                  ) {
-                                    form.setFieldValue(
-                                      `charges.${index}.tax_code`,
-                                      item.sac_code,
-                                    );
-                                  }
-                                })
-                                .finally(() => {
-                                  setSacCodeLoadingByIndex((prev) => ({
-                                    ...prev,
-                                    [index]: false,
-                                  }));
-                                });
+                              fetchSacForChargeRow(index, chargeId, jobNo);
                             }
                           }}
                           withAsterisk
@@ -5140,7 +5648,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Account Name */}
-                      <Grid.Col span={1.1}>
+                      <Grid.Col span={chargeColSpans.account}>
                         <SearchableSelect
                           placeholder="Search by account name"
                           apiEndpoint={URL.chartOfAccounts}
@@ -5257,7 +5765,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Subledger */}
-                      <Grid.Col span={0.75}>
+                      <Grid.Col span={chargeColSpans.subledger}>
                         <TextInput
                           placeholder="Subledger"
                           value={charge.subledger_code ?? ""}
@@ -5278,7 +5786,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Currency */}
-                      <Grid.Col span={0.7}>
+                      <Grid.Col span={chargeColSpans.currency}>
                         <Dropdown
                           placeholder="Curr."
                           searchable
@@ -5411,7 +5919,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* ROE — clearable so user can re-type full value (invoice-style) */}
-                      <Grid.Col span={0.6}>
+                      <Grid.Col span={chargeColSpans.roe}>
                         <NumberInput
                           placeholder="ROE"
                           min={0}
@@ -5545,7 +6053,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Unit */}
-                      <Grid.Col span={0.7}>
+                      <Grid.Col span={chargeColSpans.unit}>
                         <Dropdown
                           placeholder="Unit"
                           searchable
@@ -5573,7 +6081,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* No of Unit */}
-                      <Grid.Col span={0.8}>
+                      <Grid.Col span={chargeColSpans.noOfUnit}>
                         <NumberInput
                           placeholder="Units"
                           min={0}
@@ -5623,7 +6131,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Amount per Unit — editable driver for amount */}
-                      <Grid.Col span={0.8}>
+                      <Grid.Col span={chargeColSpans.amtUnit}>
                         <NumberInput
                           placeholder="Amt/Unit"
                           min={0}
@@ -5674,7 +6182,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Amount — calculated (qty × amt/unit), readonly */}
-                      <Grid.Col span={0.85}>
+                      <Grid.Col span={chargeColSpans.amount}>
                         <NumberInput
                           placeholder="Amount"
                           min={0}
@@ -5694,7 +6202,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* Local Amount — calculated (amount × ROE), readonly */}
-                      <Grid.Col span={0.85}>
+                      <Grid.Col span={chargeColSpans.localAmt}>
                         <NumberInput
                           placeholder="Local Amt"
                           hideControls
@@ -5715,7 +6223,7 @@ function PaymentRequest() {
                       </Grid.Col>
 
                       {/* SAC Code */}
-                      <Grid.Col span={1}>
+                      <Grid.Col span={chargeColSpans.sac}>
                         <Dropdown
                           searchable
                           clearable
@@ -5739,6 +6247,80 @@ function PaymentRequest() {
                           }}
                         />
                       </Grid.Col>
+
+                      {/* Same-row GST amounts (India) — readonly like Supplier Invoice */}
+                      {chargeColSpans.cgst > 0 ? (
+                        <Grid.Col span={chargeColSpans.cgst}>
+                          <NumberInput
+                            placeholder="CGST"
+                            hideControls
+                            decimalScale={amountDecimalScale}
+                            {...getAmountNumberInputFormatProps()}
+                            readOnly
+                            value={
+                              isChargeTaxRow(charge) || isChargeTdsRow(charge)
+                                ? undefined
+                                : (charge.cgst ?? undefined)
+                            }
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                      ) : null}
+                      {chargeColSpans.sgst > 0 ? (
+                        <Grid.Col span={chargeColSpans.sgst}>
+                          <NumberInput
+                            placeholder="SGST"
+                            hideControls
+                            decimalScale={amountDecimalScale}
+                            {...getAmountNumberInputFormatProps()}
+                            readOnly
+                            value={
+                              isChargeTaxRow(charge) || isChargeTdsRow(charge)
+                                ? undefined
+                                : (charge.sgst ?? undefined)
+                            }
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                      ) : null}
+                      {chargeColSpans.igst > 0 ? (
+                        <Grid.Col span={chargeColSpans.igst}>
+                          <NumberInput
+                            placeholder="IGST"
+                            hideControls
+                            decimalScale={amountDecimalScale}
+                            {...getAmountNumberInputFormatProps()}
+                            readOnly
+                            value={
+                              isChargeTaxRow(charge) || isChargeTdsRow(charge)
+                                ? undefined
+                                : (charge.igst ?? undefined)
+                            }
+                            styles={{
+                              input: {
+                                fontSize: "13px",
+                                fontFamily: "Inter",
+                                height: "36px",
+                                backgroundColor: "var(--mantine-color-gray-0)",
+                              },
+                            }}
+                          />
+                        </Grid.Col>
+                      ) : null}
 
                       {/* Tax */}
                       {/* <Grid.Col span={0.5} style={{ justifyContent: "center", marginLeft: "10px", }}>
@@ -5771,7 +6353,7 @@ function PaymentRequest() {
                       {/* Actions */}
                       {!formFieldsReadOnly && (
                         <Grid.Col
-                          span={0.77}
+                          span={chargeColSpans.actions}
                           style={{
                             display: "flex",
                             alignItems: "center",

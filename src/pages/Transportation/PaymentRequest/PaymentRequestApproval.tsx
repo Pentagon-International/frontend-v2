@@ -112,6 +112,12 @@ type PaymentRequestCharge = {
   amount?: string | number;
   local_amount?: string | number;
   sac_code?: string;
+  igst?: string | number | null;
+  cgst?: string | number | null;
+  sgst?: string | number | null;
+  igst_rate?: string | number | null;
+  cgst_rate?: string | number | null;
+  sgst_rate?: string | number | null;
 };
 
 type PaymentRequestRecord = {
