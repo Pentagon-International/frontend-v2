@@ -1334,7 +1334,8 @@ function reverseChargeIdPayload(
 }
 
 /** Map a reverse-form charge to API payload (user + tax charge rows).
- * GST: compute igst/cgst/sgst rates and amounts from SAC lookup (same as Invoice). */
+ * Same as InvoiceCreate: India (incl. SEZ) always sends tax_code; GST amounts are
+ * zeroed when hasSez. Do not gate tax_code on showGstTax (SEZ hides GST UI only). */
 function resolveGstSameStateForPayload(
   rates: GstRates | null,
   charge: ChargeItem,
@@ -2635,7 +2636,8 @@ function InvoiceReverse() {
           currencyData: currencyDataArr,
           unitData: unitDataArr,
           isVat: isVatPost,
-          isGst: showGstTax,
+          // Match InvoiceCreate: send tax_code for India/SEZ; GST amounts zeroed via hasSez.
+          isGst: needsEffectiveSac,
           hasSez,
           gstRates:
             sourceIdx >= 0 ? (gstRatesForCharges[sourceIdx] ?? null) : null,
@@ -3111,7 +3113,8 @@ function InvoiceReverse() {
           currencyData: currencyDataArr,
           unitData: unitDataArr,
           isVat: isVatSave,
-          isGst: showGstTax,
+          // Match InvoiceCreate: send tax_code for India/SEZ; GST amounts zeroed via hasSez.
+          isGst: needsEffectiveSac,
           hasSez,
           gstRates: gstRatesForCharges[idx] ?? null,
           defaultDrCr: chargeDefaultDrCr,
