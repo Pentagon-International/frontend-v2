@@ -3124,6 +3124,7 @@ export default function SupplierInvoiceCreate({
 
     const charges = form.values.charges_data ?? [];
     let taxableSum = 0;
+    let nonTaxableSum = 0;
     let sameCgst = 0;
     let sameSgst = 0;
     let sameIgst = 0;
@@ -3144,7 +3145,14 @@ export default function SupplierInvoiceCreate({
         continue;
       }
       if (isSupplierTdsChargeRow(row)) continue;
-      taxableSum += parseNum(row.amount_in_local) ?? 0;
+      const local = parseNum(row.amount_in_local) ?? 0;
+      const rowHasGst =
+        (parseNum(row.cgst) ?? 0) !== 0 ||
+        (parseNum(row.sgst) ?? 0) !== 0 ||
+        (parseNum(row.igst) ?? 0) !== 0;
+      // GST-bearing ops → taxable; zero-GST ops → non-taxable (keep Inv/diff balanced).
+      if (rowHasGst) taxableSum += local;
+      else nonTaxableSum += local;
       sameCgst += parseNum(row.cgst) ?? 0;
       sameSgst += parseNum(row.sgst) ?? 0;
       sameIgst += parseNum(row.igst) ?? 0;
@@ -3156,6 +3164,7 @@ export default function SupplierInvoiceCreate({
     if (!hasGstBreakupRows && !hasSameRowGst) return;
 
     const nextTaxable = clampLocalAmount(taxableSum);
+    const nextNonTaxable = clampLocalAmount(nonTaxableSum);
     // Live same-row first (charge edits); else SAC-wise GST ChargeMaster rows.
     const nextCgst = clampLocalAmount(
       hasSameRowGst ? sameCgst : rowCgst,
@@ -3170,8 +3179,8 @@ export default function SupplierInvoiceCreate({
     if (nextTaxable !== (form.values.taxable_amount ?? null)) {
       form.setFieldValue("taxable_amount", nextTaxable);
     }
-    if (form.values.non_taxable_amount != null) {
-      form.setFieldValue("non_taxable_amount", null);
+    if (nextNonTaxable !== (form.values.non_taxable_amount ?? null)) {
+      form.setFieldValue("non_taxable_amount", nextNonTaxable);
     }
     if (headerShowCgstSgst) {
       if (nextCgst !== (form.values.cgst_amount ?? null)) {
@@ -3186,12 +3195,14 @@ export default function SupplierInvoiceCreate({
         form.setFieldValue("igst_amount", nextIgst);
       }
     }
+    // Deps omit shouldSkipAmountAutoCalc on purpose: it closes over taxable /
+    // non_taxable, so listing it re-fires this effect on every keystroke and
+    // overwrites manual Non Taxable / Taxable input. Charge key covers sync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     agentInvGstSyncKey,
     showGstTax,
     isJobPrefillCreate,
-    shouldSkipAmountAutoCalc,
     headerShowCgstSgst,
     headerShowIgst,
   ]);
