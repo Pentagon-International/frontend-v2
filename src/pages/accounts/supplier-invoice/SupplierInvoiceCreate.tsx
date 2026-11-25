@@ -821,8 +821,11 @@ function isSupplierTdsChargeRow(row: {
   shipment_no?: string;
   account_name?: string;
   charge_code?: string;
+  tax_code?: string;
 }): boolean {
   if (isSupplierGstChargeRow(row)) return false;
+  // Account + SAC operational rows are taxable (same-row GST), not TDS ledger.
+  if (String(row.tax_code ?? "").trim() !== "") return false;
   return isPrqTdsChargeRow({
     charge_id: row.charge_id,
     account_code: row.account_code,
@@ -883,9 +886,9 @@ async function enrichChargesWithSameRowGst(
       // Always derive local from amount × ROE so async GST enrich cannot
       // re-apply a stale amount_in_local=0 snapshot over a corrected row.
       const synced = withSyncedChargeLocalAmount(c);
-      // No SAC (or TDS / non-charge ledger): clear same-row GST columns.
+      // No SAC → clear same-row GST (account + SAC rows fetch like charge rows).
       const sac = String(c.tax_code ?? "").trim();
-      if (!sac || c.charge_id == null) {
+      if (!sac) {
         return { ...synced, ...EMPTY_SAME_ROW_GST };
       }
       const local = clampLocalAmount(synced.amount_in_local ?? 0) ?? 0;
