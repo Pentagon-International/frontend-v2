@@ -10,6 +10,7 @@ import RootRouter from "./Routes/RootRouter";
 import { defaultTheme } from "./theme/brandThemeDefault";
 import useAuthStore from "./store/authStore";
 import { setGlobalQueryClient } from "./utils/queryClient";
+import { setupAuthCrossTabSync } from "./utils/authCrossTabSync";
 import { bindAmountDisplayFromUser } from "./utils/amountDisplayFormat";
 
 function BindAmountDisplayFormat() {
@@ -38,7 +39,10 @@ function App() {
 
   useEffect(() => {
     useAuthStore.getState().persistAuthFromStorage();
+    // Keep other browser tabs in sync when active branch / user is updated
+    const teardownCrossTabSync = setupAuthCrossTabSync();
     return () => {
+      teardownCrossTabSync();
       // Clean up interceptors if needed
       // Note: requestInterceptor and responseInterceptor are functions, not interceptor IDs
       // The cleanup is handled automatically by axios

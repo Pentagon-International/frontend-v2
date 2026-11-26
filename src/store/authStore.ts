@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invalidateBranchRelatedQueries } from "../utils/queryClient";
+import { broadcastAuthUserUpdated } from "../utils/authSyncConstants";
 import { URL } from "../api/serverUrls";
 import { resetOperationsChatSession } from "../pages/Workflow/operationsChatSessionStore";
 import { resetPipelineReportCurrency } from "./pipelineReportCurrencyStore";
@@ -319,6 +320,10 @@ const useAuthStore = create<AuthStore>((set) => ({
 
       // Update localStorage
       localStorage.setItem("user", JSON.stringify(updatedUser));
+      broadcastAuthUserUpdated({
+        type: "BRANCH_CHANGED",
+        branchId: newDefaultBranchId,
+      });
 
       // Invalidate branch-related queries to refetch data
       invalidateBranchRelatedQueries();
@@ -348,6 +353,7 @@ const useAuthStore = create<AuthStore>((set) => ({
       };
 
       localStorage.setItem("user", JSON.stringify(updatedUser));
+      broadcastAuthUserUpdated({ type: "USER_UPDATED" });
       console.log("updatedUser :", updatedUser);
       invalidateBranchRelatedQueries();
 
@@ -376,6 +382,7 @@ const useAuthStore = create<AuthStore>((set) => ({
       };
 
       localStorage.setItem("user", JSON.stringify(updatedUser));
+      broadcastAuthUserUpdated({ type: "USER_UPDATED" });
       console.log("updatedUser :", updatedUser);
       invalidateBranchRelatedQueries();
 
@@ -435,6 +442,10 @@ const useAuthStore = create<AuthStore>((set) => ({
       };
 
       localStorage.setItem("user", JSON.stringify(updatedUser));
+      broadcastAuthUserUpdated({
+        type: shouldSwitchDefault ? "BRANCH_CHANGED" : "USER_UPDATED",
+        branchId: data.branchId,
+      });
 
       invalidateBranchRelatedQueries();
 
