@@ -759,10 +759,37 @@ function resolveBookingRowCostFx(row: Record<string, unknown>): {
   };
 }
 
+/** Skip blank booking rate rows so create does not seed empty house/estimate charges. */
+function isMeaningfulBookingRateRow(row: Record<string, unknown>): boolean {
+  const chargeId = row.charge_id;
+  if (
+    chargeId != null &&
+    String(chargeId).trim() !== "" &&
+    Number(chargeId) !== 0 &&
+    !Number.isNaN(Number(chargeId))
+  ) {
+    return true;
+  }
+  if (String(row.charge_name ?? row.charge_code ?? "").trim()) return true;
+  const amountKeys = [
+    "sell_per_unit",
+    "min_sell",
+    "total_sell",
+    "sell_amount_total",
+    "cost_per_unit",
+    "total_cost",
+  ] as const;
+  for (const key of amountKeys) {
+    const n = Number(row[key]);
+    if (!Number.isNaN(n) && n !== 0) return true;
+  }
+  return false;
+}
+
 /** Map booking quotation/rate lines to job master-level estimates (FCL Export). */
 function mapBookingRateDetailsToEstimates(booking: Record<string, unknown>) {
   const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
-  return rates.map((c) => {
+  return rates.filter((c) => isMeaningfulBookingRateRow(c as Record<string, unknown>)).map((c) => {
     const row = c as Record<string, unknown>;
     const chargeId = row.charge_id != null ? Number(row.charge_id) : null;
     const { unit_id, unit_code } = resolveJobUnitFromBookingRow(row);
@@ -832,7 +859,9 @@ function shouldMapBookingChargesToEstimates(
 
 function hasBookingRateDetails(booking: Record<string, unknown>): boolean {
   const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
-  return rates.length > 0;
+  return rates.some((c) =>
+    isMeaningfulBookingRateRow(c as Record<string, unknown>),
+  );
 }
 
 /**
@@ -851,7 +880,7 @@ function mapHouseChargesFromBooking(
   includeCost: boolean,
 ) {
   const rates = Array.isArray(booking.rate_details) ? booking.rate_details : [];
-  return rates.map((c) => {
+  return rates.filter((c) => isMeaningfulBookingRateRow(c as Record<string, unknown>)).map((c) => {
     const row = c as Record<string, unknown>;
     const noOfUnit = row.no_of_units || row.no_of_unit || "";
     const qty = toNumberOrNull(noOfUnit);

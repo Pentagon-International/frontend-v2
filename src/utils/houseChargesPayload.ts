@@ -28,10 +28,22 @@ const hasNumericChargeValue = (value: unknown): boolean => {
   return !Number.isNaN(n) && n !== 0;
 };
 
+/**
+ * Master charge FK only. Never fall back to the charge-row PK (`id`) —
+ * that incorrectly sent row ids like 1000001784 as charge_id on update.
+ */
+export function resolveHouseChargeMasterId(
+  chargeId: unknown,
+): number | null {
+  if (chargeId == null || chargeId === "") return null;
+  const n = Number(chargeId);
+  return Number.isFinite(n) && n !== 0 ? n : null;
+}
+
 /** True when the row has user-entered charge data beyond UI defaults (Collect, currency, roe). */
 export function hasMeaningfulHouseChargeData(charge: HouseChargeLike): boolean {
   if (String(charge.charge_name ?? "").trim()) return true;
-  if (charge.charge_id != null && charge.charge_id !== 0) return true;
+  if (resolveHouseChargeMasterId(charge.charge_id) != null) return true;
 
   if (hasNumericChargeValue(charge.amount)) return true;
   if (hasNumericChargeValue(charge.amount_per_unit)) return true;
@@ -43,12 +55,8 @@ export function hasMeaningfulHouseChargeData(charge: HouseChargeLike): boolean {
   if (String(charge.supplier_code ?? "").trim()) return true;
   if (String(charge.supplier_name ?? "").trim()) return true;
 
-  // const unitId = charge.unit_id;
-  // if (unitId != null && String(unitId).trim() !== "") return true;
-
-  if (charge.no_of_unit != null && String(charge.no_of_unit).trim() !== "") {
-    return true;
-  }
+  // no_of_unit: 0 (or blank) alone is not meaningful — empty placeholder rows.
+  if (hasNumericChargeValue(charge.no_of_unit)) return true;
 
   return false;
 }

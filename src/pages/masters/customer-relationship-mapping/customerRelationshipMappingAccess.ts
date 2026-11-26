@@ -23,3 +23,10 @@ export function canEditCustomerRelationshipMapping(
 ): boolean {
   return Boolean(user?.is_staff) || isAccountsUser(user);
 }
+
+/** Admin (is_staff) and Accounts users may change job date on job create/update. */
+export function canEditJobDate(
+  user: RelationshipMappingAccessUser,
+): boolean {
+  return Boolean(user?.is_staff) || isAccountsUser(user);
+}

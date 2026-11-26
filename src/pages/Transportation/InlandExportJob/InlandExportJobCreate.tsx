@@ -96,11 +96,13 @@ import useAuthStore from "../../../store/authStore";
 import { DubaiBoeNumberField } from "../chaJob/DubaiBoeNumberField";
 import {
   dubaiBoeNumberPayload,
+  formatChaJobDateForPayload,
   isDubaiBranchUser,
   readBoeNumber,
   readStoredBoeNumber,
 } from "../chaJob/chaJobCustomsFields";
 import { validateHouseListForJobPersist } from "../jobValidation/jobRequiredFields";
+import { canEditJobDate } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import { toTitleCase } from "../../../utils/textFormatter";
@@ -119,7 +121,10 @@ import {
   roundLocalMoneyToDecimals,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
-import { getMeaningfulHouseCharges } from "../../../utils/houseChargesPayload";
+import {
+  getMeaningfulHouseCharges,
+  resolveHouseChargeMasterId,
+} from "../../../utils/houseChargesPayload";
 import {
   resolveSupplierInvoiceEstimateCostAmount,
   resolveSupplierInvoiceHouseCostAmount,
@@ -636,6 +641,7 @@ function InlandExportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const canEditJobDateField = !isReadOnly && canEditJobDate(user);
   const showDubaiBoeNumber = isDubaiBranchUser(user);
   // Closed jobs keep forms locked via isReadOnly but can still attach docs.
   const documentsReadOnly = isViewOnly && !isClosedJob;
@@ -1518,12 +1524,7 @@ function InlandExportJobCreate() {
                           ? charge.currency
                           : ""),
                     ).trim();
-                    const chargeId =
-                      charge.charge_id != null
-                        ? Number(charge.charge_id)
-                        : charge.id != null
-                          ? Number(charge.id)
-                          : null;
+                    const chargeId = resolveHouseChargeMasterId(charge.charge_id);
                     const unitId =
                       charge.unit_id != null
                         ? String(charge.unit_id)
@@ -2816,11 +2817,7 @@ function InlandExportJobCreate() {
         eta: formatLocalDateTime(mawbDetailsForm.values.eta),
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
-        job_date: mawbDetailsForm.values.etd
-          ? dayjs(mawbDetailsForm.values.etd).isValid()
-            ? dayjs(mawbDetailsForm.values.etd).format("YYYY-MM-DD")
-            : null
-          : null,
+        job_date: formatChaJobDateForPayload(mawbDetailsForm.values.job_date),
         carrier_code: carrierDetailsForm.values.carrier_code,
         voyage_number: carrierDetailsForm.values.flight_number || null,
         mbl_date: carrierDetailsForm.values.mawb_date
@@ -3738,12 +3735,17 @@ function InlandExportJobCreate() {
                   value={mawbDetailsForm.values.etd}
                   onChange={(value: Date | null) => {
                     mawbDetailsForm.setFieldValue("etd", value);
-                    mawbDetailsForm.setFieldValue(
-                      "job_date",
-                      value && dayjs(value).isValid()
-                        ? dayjs(value).startOf("day").toDate()
-                        : null,
-                    );
+                    // Seed job_date once from ETD on create; never overwrite later.
+                    if (
+                      !mawbDetailsForm.values.job_date &&
+                      value &&
+                      dayjs(value).isValid()
+                    ) {
+                      mawbDetailsForm.setFieldValue(
+                        "job_date",
+                        dayjs(value).startOf("day").toDate(),
+                      );
+                    }
                   }}
                   error={mawbDetailsForm.errors.etd as string}
                   size="sm"
@@ -3793,9 +3795,14 @@ function InlandExportJobCreate() {
               <Grid.Col span={3}>
                 <SingleDateInput
                   label="Job Date"
+                  withAsterisk
                   placeholder="YYYY-MM-DD"
-                  readOnly
+                  readOnly={!canEditJobDateField}
                   value={mawbDetailsForm.values.job_date}
+                  onChange={(value: Date | null) => {
+                    if (!canEditJobDateField) return;
+                    mawbDetailsForm.setFieldValue("job_date", value);
+                  }}
                   error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />

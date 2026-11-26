@@ -92,6 +92,7 @@ import {
 } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
+  resolveHouseChargeMasterId,
   resolveHouseChargesSource,
   validateMeaningfulHouseCharges,
   type HouseChargeLike,
@@ -1289,12 +1290,7 @@ function HouseCreate() {
             const n = parseFloat(String(v));
             return Number.isNaN(n) ? null : n;
           };
-          const chargeId =
-            charge.charge_id != null
-              ? Number(charge.charge_id)
-              : charge.id != null
-                ? Number(charge.id)
-                : null;
+          const chargeId = resolveHouseChargeMasterId(charge.charge_id);
           const unitIdFromApi =
             charge.unit_id != null
               ? String(charge.unit_id)

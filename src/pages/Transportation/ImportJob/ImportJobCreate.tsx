@@ -128,6 +128,7 @@ import { usePackageTypeOptions } from "../../../hooks/usePackageTypeOptions";
 import {
   getMeaningfulHouseCharges,
   hasMeaningfulHouseChargeData,
+  resolveHouseChargeMasterId,
   resolveHouseChargesSource,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
@@ -234,6 +235,7 @@ import {
   resolveChaJobDate,
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
+import { canEditJobDate } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -904,6 +906,7 @@ function ImportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const canEditJobDateField = !isReadOnly && canEditJobDate(user);
   const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
   // Closed jobs keep forms locked via isReadOnly but can still attach docs.
   const documentsReadOnly = isViewOnly && !isClosedJob;
@@ -1777,12 +1780,7 @@ function ImportJobCreate() {
                           ? charge.id
                           : Number(charge.id)
                         : undefined,
-                      charge_id:
-                        charge.charge_id != null
-                          ? Number(charge.charge_id)
-                          : charge.id != null
-                            ? Number(charge.id)
-                            : null,
+                      charge_id: resolveHouseChargeMasterId(charge.charge_id),
                       charge_name: charge.charge_name
                         ? String(charge.charge_name)
                         : "",
@@ -1974,12 +1972,7 @@ function ImportJobCreate() {
                                 ? charge.id
                                 : Number(charge.id)
                               : undefined,
-                            charge_id:
-                              charge.charge_id != null
-                                ? Number(charge.charge_id)
-                                : charge.id != null
-                                  ? Number(charge.id)
-                                  : null,
+                            charge_id: resolveHouseChargeMasterId(charge.charge_id),
                             charge_name: charge.charge_name
                               ? String(charge.charge_name)
                               : "",
@@ -4361,13 +4354,7 @@ function ImportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
-        job_date: isChaMode
-          ? formatChaJobDateForPayload(mblDetailsForm.values.job_date)
-          : mblDetailsForm.values.eta
-            ? dayjs(mblDetailsForm.values.eta).isValid()
-              ? dayjs(mblDetailsForm.values.eta).format("YYYY-MM-DD")
-              : null
-            : null,
+        job_date: formatChaJobDateForPayload(mblDetailsForm.values.job_date),
         ...(isChaMode && chaConfig
           ? pickChaMasterCustomsPayload(
               mblDetailsForm.values,
@@ -5498,8 +5485,17 @@ function ImportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("eta", value);
-                        if (!isChaMode) {
-                          mblDetailsForm.setFieldValue("job_date", value);
+                        // Seed job_date once from ETA on create; never overwrite later.
+                        if (
+                          !isChaMode &&
+                          !mblDetailsForm.values.job_date &&
+                          value &&
+                          dayjs(value).isValid()
+                        ) {
+                          mblDetailsForm.setFieldValue(
+                            "job_date",
+                            dayjs(value).startOf("day").toDate(),
+                          );
                         }
                       },
                     };
@@ -5547,9 +5543,14 @@ function ImportJobCreate() {
               <Grid.Col span={3}>
                 <SingleDateInput
                   label="Job Date"
+                  withAsterisk
                   placeholder="YYYY-MM-DD"
-                  readOnly
+                  readOnly={!canEditJobDateField}
                   value={mblDetailsForm.values.job_date}
+                  onChange={(value: Date | null) => {
+                    if (!canEditJobDateField) return;
+                    mblDetailsForm.setFieldValue("job_date", value);
+                  }}
                   error={mblDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />

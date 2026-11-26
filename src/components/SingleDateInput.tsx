@@ -80,6 +80,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
 
   // Handle date selection with deselection capability
   const handleDateChange = (date: Date | null) => {
+    if (disabled || readOnly) return;
     if (allowDeselection) {
       // Allow deselection if clicking the same date
       if (
@@ -95,6 +96,8 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
     }
     onChange(date);
   };
+
+  const isLocked = disabled || readOnly;
 
   // Function to get styles for calendar days
   const getDateStyles = () => {
@@ -185,7 +188,7 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       size={size}
       nextIcon={<IconChevronRight size={16} />}
       previousIcon={<IconChevronLeft size={16} />}
-      clearable
+      clearable={!isLocked}
       hideOutsideDates
       disabled={disabled}
       readOnly={readOnly}
@@ -195,7 +198,11 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
       withAsterisk={withAsterisk}
       title={title}
       classNames={classNames}
-      popoverProps={popoverProps}
+      popoverProps={{
+        ...popoverProps,
+        // Mantine readOnly still opens the calendar; keep it closed when locked.
+        ...(isLocked ? { opened: false } : {}),
+      }}
       getDayProps={(date) => {
         const isSelected = isDateSelected(date, dateValue);
         return {
@@ -312,7 +319,13 @@ const SingleDateInput: React.FC<SingleDateInputProps> = ({
         return {
           ...base,
           ...stylesOverride,
-          input: { ...base.input, ...stylesOverride?.input },
+          input: {
+            ...base.input,
+            ...stylesOverride?.input,
+            ...(readOnly && !disabled
+              ? { cursor: "default", caretColor: "transparent" }
+              : {}),
+          },
           label: { ...base.label, ...stylesOverride?.label },
         };
       })()}

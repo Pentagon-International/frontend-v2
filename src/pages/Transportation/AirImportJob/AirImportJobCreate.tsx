@@ -117,6 +117,7 @@ import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
   getMeaningfulHouseCharges,
   hasMeaningfulHouseChargeData,
+  resolveHouseChargeMasterId,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
 import {
@@ -218,6 +219,7 @@ import {
 } from "../chaJob/chaJobCustomsFields";
 import { pickChaHouseBlPayloadFields } from "../chaJob/chaHouseBlFields";
 import { validateHouseListForJobPersist } from "../jobValidation/jobRequiredFields";
+import { canEditJobDate } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 
 // Type definitions
 type MAWBDetailsForm = {
@@ -720,6 +722,7 @@ function AirImportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const canEditJobDateField = !isReadOnly && canEditJobDate(user);
   const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
 
   useChaJobEditHydration(
@@ -1451,12 +1454,7 @@ function AirImportJobCreate() {
                 const currency = String(
                   currencyDetails?.currency_code ?? charge.currency_code ?? "",
                 ).trim();
-                const chargeId =
-                  charge.charge_id != null
-                    ? Number(charge.charge_id)
-                    : charge.id != null
-                      ? Number(charge.id)
-                      : null;
+                const chargeId = resolveHouseChargeMasterId(charge.charge_id);
                 const unitId =
                   charge.unit_id != null
                     ? String(charge.unit_id)
@@ -3982,13 +3980,7 @@ function AirImportJobCreate() {
         eta: formatLocalDateTime(mawbDetailsForm.values.eta),
         atd: formatLocalDateTime(mawbDetailsForm.values.atd),
         ata: formatLocalDateTime(mawbDetailsForm.values.ata),
-        job_date: isChaMode
-          ? formatChaJobDateForPayload(mawbDetailsForm.values.job_date)
-          : mawbDetailsForm.values.eta
-            ? dayjs(mawbDetailsForm.values.eta).isValid()
-              ? dayjs(mawbDetailsForm.values.eta).format("YYYY-MM-DD")
-              : null
-            : null,
+        job_date: formatChaJobDateForPayload(mawbDetailsForm.values.job_date),
         ...(isChaMode && chaConfig
           ? pickChaMasterCustomsPayload(
               mawbDetailsForm.values,
@@ -5000,12 +4992,16 @@ function AirImportJobCreate() {
                   value={mawbDetailsForm.values.eta}
                   onChange={(value: Date | null) => {
                     mawbDetailsForm.setFieldValue("eta", value);
-                    if (!isChaMode) {
+                    // Seed job_date once from ETA on create; never overwrite later.
+                    if (
+                      !isChaMode &&
+                      !mawbDetailsForm.values.job_date &&
+                      value &&
+                      dayjs(value).isValid()
+                    ) {
                       mawbDetailsForm.setFieldValue(
                         "job_date",
-                        value && dayjs(value).isValid()
-                          ? dayjs(value).startOf("day").toDate()
-                          : null,
+                        dayjs(value).startOf("day").toDate(),
                       );
                     }
                   }}
@@ -5043,9 +5039,14 @@ function AirImportJobCreate() {
               <Grid.Col span={3}>
                 <SingleDateInput
                   label="Job Date"
+                  withAsterisk
                   placeholder="YYYY-MM-DD"
-                  readOnly
+                  readOnly={!canEditJobDateField}
                   value={mawbDetailsForm.values.job_date}
+                  onChange={(value: Date | null) => {
+                    if (!canEditJobDateField) return;
+                    mawbDetailsForm.setFieldValue("job_date", value);
+                  }}
                   error={mawbDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />

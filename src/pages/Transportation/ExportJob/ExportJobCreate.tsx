@@ -108,6 +108,7 @@ import {
 import { roundRoeForPayload } from "../../../utils/exchangeRateRoe";
 import {
   hasMeaningfulHouseChargeData,
+  resolveHouseChargeMasterId,
   resolveHouseChargesSource,
   type HouseChargeLike,
 } from "../../../utils/houseChargesPayload";
@@ -209,6 +210,7 @@ import {
   resolveChaJobDate,
   type ChaMasterCustomsFormValues,
 } from "../chaJob/chaJobCustomsFields";
+import { canEditJobDate } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 
 // Type definitions
 type MBLDetailsForm = {
@@ -667,12 +669,7 @@ function mapExportJobHouseChargeRow(charge: Record<string, unknown>) {
           ? charge.id
           : Number(charge.id)
         : undefined,
-    charge_id:
-      charge.charge_id != null
-        ? Number(charge.charge_id)
-        : charge.id != null
-          ? Number(charge.id)
-          : null,
+    charge_id: resolveHouseChargeMasterId(charge.charge_id),
     charge_name: charge.charge_name ? String(charge.charge_name) : "",
     pp_cc: charge.pp_cc ? String(charge.pp_cc) : "",
     unit_id: unitIdFromApi,
@@ -874,6 +871,7 @@ function ExportJobCreate() {
     (jobData as { status?: string | null } | undefined)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const canEditJobDateField = !isReadOnly && canEditJobDate(user);
   const showDubaiBoeNumber = isDubaiBranchUser(user) && !isChaMode;
 
   useChaJobEditHydration(
@@ -3717,13 +3715,7 @@ function ExportJobCreate() {
             ? dayjs(mblDetailsForm.values.ata).format("YYYY-MM-DD")
             : null
           : null,
-        job_date: isChaMode
-          ? formatChaJobDateForPayload(mblDetailsForm.values.job_date)
-          : mblDetailsForm.values.etd
-            ? dayjs(mblDetailsForm.values.etd).isValid()
-              ? dayjs(mblDetailsForm.values.etd).format("YYYY-MM-DD")
-              : null
-            : null,
+        job_date: formatChaJobDateForPayload(mblDetailsForm.values.job_date),
         ...(isChaMode && chaConfig
           ? pickChaMasterCustomsPayload(
               mblDetailsForm.values,
@@ -4787,8 +4779,17 @@ function ExportJobCreate() {
                       error: inputProps.error as string | undefined,
                       onChange: (value: Date | null) => {
                         mblDetailsForm.setFieldValue("etd", value);
-                        if (!isChaMode) {
-                          mblDetailsForm.setFieldValue("job_date", value);
+                        // Seed job_date once from ETD on create; never overwrite later.
+                        if (
+                          !isChaMode &&
+                          !mblDetailsForm.values.job_date &&
+                          value &&
+                          dayjs(value).isValid()
+                        ) {
+                          mblDetailsForm.setFieldValue(
+                            "job_date",
+                            dayjs(value).startOf("day").toDate(),
+                          );
                         }
                       },
                     };
@@ -4855,9 +4856,14 @@ function ExportJobCreate() {
               <Grid.Col span={3}>
                 <SingleDateInput
                   label="Job Date"
+                  withAsterisk
                   placeholder="YYYY-MM-DD"
-                  readOnly
+                  readOnly={!canEditJobDateField}
                   value={mblDetailsForm.values.job_date}
+                  onChange={(value: Date | null) => {
+                    if (!canEditJobDateField) return;
+                    mblDetailsForm.setFieldValue("job_date", value);
+                  }}
                   error={mblDetailsForm.errors.job_date as string | undefined}
                   size="sm"
                 />

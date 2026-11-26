@@ -15,6 +15,7 @@ import { collectLinkedBookingIds } from "./bookingCreateJob";
 import { parseNoOfUnitForPayload } from "./houseCargoChargeableWeight";
 import {
   hasMeaningfulHouseChargeData,
+  resolveHouseChargeMasterId,
   type HouseChargeLike,
 } from "./houseChargesPayload";
 import { roundRoeForPayload } from "./exchangeRateRoe";
@@ -343,7 +344,7 @@ function mapHouseChargeForPayload(
 
   return {
     ...(id != null ? { id } : {}),
-    charge_id: toPk(charge.charge_id),
+    charge_id: resolveHouseChargeMasterId(charge.charge_id),
     supplier_code:
       charge.supplier_code != null ? String(charge.supplier_code) : null,
     pp_cc: String(charge.pp_cc ?? ""),
@@ -512,10 +513,11 @@ export function buildFullJobUpdatePayloadFromHouseNav(
 
   const etdSrc = mbl.etd ?? job.etd;
   const etaSrc = mbl.eta ?? job.eta;
+  // Prefer stored/form job_date; only fall back to ETA/ETD when never set.
   const jobDateSrc = firstFilled(
     mbl.job_date,
-    isImport ? etaSrc : etdSrc,
     job.job_date,
+    isImport ? etaSrc : etdSrc,
   );
 
   const bookingIds = collectLinkedBookingIds(

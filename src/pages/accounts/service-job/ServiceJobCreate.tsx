@@ -88,6 +88,7 @@ import { useExchangeRateRoe } from "../../../hooks/useExchangeRateRoe";
 import { useJobAccountInvoices } from "../../../hooks/useJobAccountInvoices";
 import { readJobFormActiveTabFromLocation } from "../../../utils/jobFinanceDocuments";
 import useAuthStore from "../../../store/authStore";
+import { canEditJobDate } from "../../masters/customer-relationship-mapping/customerRelationshipMappingAccess";
 import {
   ROE_DECIMAL_PLACES,
   roundRoeForPayload,
@@ -107,6 +108,7 @@ import {
   resolveAutoUnitForNewCharge,
 } from "../../../utils/chargeCalculationTypeUnit";
 import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
+import { resolveHouseChargeMasterId } from "../../../utils/houseChargesPayload";
 import dayjs from "dayjs";
 import {
   formatLocalDateTime,
@@ -470,12 +472,7 @@ function mapChargeFromApi(
     const n = parseFloat(String(v));
     return Number.isNaN(n) ? null : n;
   };
-  const chargeId =
-    charge.charge_id != null
-      ? Number(charge.charge_id)
-      : charge.id != null
-        ? Number(charge.id)
-        : null;
+  const chargeId = resolveHouseChargeMasterId(charge.charge_id);
 
   return {
     id: charge.id != null ? Number(charge.id) : undefined,
@@ -1423,6 +1420,7 @@ export default function ServiceJobCreate() {
     (jobData as { status?: string | null } | null)?.status,
   );
   const isReadOnly = isViewOnly || isClosedJob;
+  const canEditJobDateField = !isReadOnly && canEditJobDate(user);
   const isServiceLocked = Boolean(routeId || jobData?.id);
   // Closed jobs keep forms locked via isReadOnly but can still attach docs.
   const documentsReadOnly = isViewOnly && !isClosedJob;
@@ -1592,7 +1590,10 @@ export default function ServiceJobCreate() {
   const isSeaJob = Boolean(transportMode) && !isAirTransportMode(transportMode);
   const documentLabels = getServiceJobDocumentLabels(transportMode);
 
+  // Create only: keep job_date in sync with ETD (export) / ETA (import) until save.
+  // Edit/view: leave stored job_date alone when ETD/ETA change.
   useEffect(() => {
+    if (mode !== "create" || isServiceLocked) return;
     const next = resolveServiceJobDate(
       selectedService?.import_export,
       form.values.etd,
@@ -1608,6 +1609,8 @@ export default function ServiceJobCreate() {
       form.setFieldValue("job_date", next);
     }
   }, [
+    mode,
+    isServiceLocked,
     selectedService?.import_export,
     form.values.etd,
     form.values.eta,
@@ -3018,9 +3021,15 @@ export default function ServiceJobCreate() {
               <Grid.Col span={4}>
                 <SingleDateInput
                   label="Job Date"
+                  withAsterisk
                   placeholder="YYYY-MM-DD"
-                  readOnly
+                  readOnly={!canEditJobDateField}
                   value={form.values.job_date}
+                  onChange={(value: Date | null) => {
+                    if (!canEditJobDateField) return;
+                    form.setFieldValue("job_date", value);
+                  }}
+                  error={form.errors.job_date as string | undefined}
                   size="sm"
                 />
               </Grid.Col>
