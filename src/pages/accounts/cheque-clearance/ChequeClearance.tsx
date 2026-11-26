@@ -18,6 +18,7 @@ import {
   IconFilter,
   IconInfoCircle,
   IconRefresh,
+  IconSearch,
   IconTable,
   IconX,
 } from "@tabler/icons-react";
@@ -28,6 +29,7 @@ import {
   type MRT_PaginationState,
 } from "mantine-react-table";
 import { useForm } from "@mantine/form";
+import { useDebouncedValue } from "@mantine/hooks";
 import * as yup from "yup";
 import { yupResolver } from "mantine-form-yup-resolver";
 import dayjs from "dayjs";
@@ -331,6 +333,9 @@ export default function ChequeClearance() {
   const [fetchError, setFetchError] = useState("");
   const [showFilters, setShowFilters] = useState(true);
   const [appliedFilters, setAppliedFilters] = useState<AppliedFilters | null>(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, 500);
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
     pageSize: 25,
@@ -402,11 +407,12 @@ export default function ChequeClearance() {
     [visibleColumns],
   );
 
-  const fetchRows = useCallback(async (filters: AppliedFilters) => {
+  const fetchRows = useCallback(async (filters: AppliedFilters, searchValue = "") => {
     setShowFilters(false);
     setFetchError("");
     setIsFetchingRows(true);
     try {
+      const searchTerm = searchValue.trim();
       const response = (await postAPICall(
         URL.chequeClearanceFilter,
         {
@@ -417,6 +423,7 @@ export default function ChequeClearance() {
             subledger: filters.subledger || "0",
             cheque_status: filters.cheque_status,
             ...(filters.cheque_no ? { cheque_no: filters.cheque_no } : {}),
+            ...(searchTerm ? { search: searchTerm } : {}),
           },
         },
         API_HEADER,
@@ -444,6 +451,31 @@ export default function ChequeClearance() {
     }
   }, []);
 
+  const refetchActiveQuery = useCallback(async () => {
+    if (!appliedFilters) return;
+    await fetchRows(appliedFilters, appliedSearch);
+  }, [appliedFilters, appliedSearch, fetchRows]);
+
+  useEffect(() => {
+    if (!appliedFilters) return;
+    if (search !== debouncedSearch) return;
+    const term = debouncedSearch.trim();
+    if (term === appliedSearch) return;
+    setAppliedSearch(term);
+    void fetchRows(appliedFilters, term);
+  }, [appliedFilters, appliedSearch, debouncedSearch, fetchRows, search]);
+
+  const clearSearchResults = () => {
+    setSearch("");
+    if (!appliedFilters) {
+      setAppliedSearch("");
+      return;
+    }
+    if (!appliedSearch) return;
+    setAppliedSearch("");
+    void fetchRows(appliedFilters, "");
+  };
+
   const runSearch = form.onSubmit((values) => {
     const next: AppliedFilters = {
       date_from: formatDateYYYYMMDD(values.fromDate),
@@ -454,8 +486,10 @@ export default function ChequeClearance() {
       cheque_no: (values.chequeNo || "").trim(),
       cheque_status: values.chequeStatus === "UNCLEARED" ? "UNCLEARED" : "CLEARED",
     };
+    setSearch("");
+    setAppliedSearch("");
     setAppliedFilters(next);
-    void fetchRows(next);
+    void fetchRows(next, "");
   });
 
   const clearFilters = () => {
@@ -472,6 +506,8 @@ export default function ChequeClearance() {
     setSelectedAccount(null);
     setShowFilters(true);
     setAppliedFilters(null);
+    setSearch("");
+    setAppliedSearch("");
     setRows([]);
     setResultTotal(null);
     setDraftDates({});
@@ -491,9 +527,7 @@ export default function ChequeClearance() {
           type: "success",
           message: "Cheque clearance updated.",
         });
-        if (appliedFilters) {
-          await fetchRows(appliedFilters);
-        }
+        await refetchActiveQuery();
       } catch (error) {
         ToastNotification({
           type: "error",
@@ -503,7 +537,7 @@ export default function ChequeClearance() {
         setSavingKey(null);
       }
     },
-    [appliedFilters, draftDates, draftUtrs, fetchRows, isBulkSaving],
+    [draftDates, draftUtrs, isBulkSaving, refetchActiveQuery],
   );
 
   const dirtyRows = useMemo(
@@ -581,7 +615,7 @@ export default function ChequeClearance() {
         type: "success",
         message: "Cheque clearance updated.",
       });
-      if (appliedFilters) await fetchRows(appliedFilters);
+      await refetchActiveQuery();
     } else if (savedKeys.size > 0 || failed > 0) {
       ToastNotification({
         type: "error",
@@ -592,7 +626,7 @@ export default function ChequeClearance() {
       });
     }
     setIsBulkSaving(false);
-  }, [appliedFilters, dirtyRows, draftDates, draftUtrs, fetchRows, isBulkSaving, savingKey]);
+  }, [dirtyRows, draftDates, draftUtrs, isBulkSaving, refetchActiveQuery, savingKey]);
 
   const columns = useMemo<MRT_ColumnDef<ChequeClearanceRow>[]>(() => {
     return COLUMNS.filter((col) => visibleColumns[col.key] !== false).map((col) => ({
@@ -825,8 +859,11 @@ export default function ChequeClearance() {
     if (appliedFilters.cheque_no) {
       items.splice(3, 0, { key: "Cheque No", value: appliedFilters.cheque_no });
     }
+    if (appliedSearch) {
+      items.push({ key: "Search", value: appliedSearch });
+    }
     return items;
-  }, [appliedFilters]);
+  }, [appliedFilters, appliedSearch]);
 
   return (
     <MantineProvider theme={pageTheme}>
@@ -867,6 +904,38 @@ export default function ChequeClearance() {
             ),
             actions: (
               <>
+                {appliedFilters ? (
+                  <TextInput
+                    placeholder="Search"
+                    leftSection={<IconSearch size={16} />}
+                    rightSection={
+                      search ? (
+                        <ActionIcon
+                          variant="transparent"
+                          size="sm"
+                          aria-label="Clear search"
+                          onClick={clearSearchResults}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
+                    w={260}
+                    size="xs"
+                    value={search}
+                    onChange={(e) => setSearch(e.currentTarget.value)}
+                    classNames={{ input: ERP_LIST_GEIST_ROOT_CLASS }}
+                    styles={{
+                      input: {
+                        fontFamily: erpTheme.fontSans,
+                        fontSize: 12,
+                        height: 32,
+                        borderColor: border,
+                      },
+                    }}
+                  />
+                ) : null}
                 <ERPListColumnToggleMenu
                   theme={erpTheme}
                   items={columnToggleItems}
@@ -878,7 +947,7 @@ export default function ChequeClearance() {
                   styles={erpToolbarOutlineButtonStyles(erpTheme)}
                   leftSection={<IconRefresh size={14} />}
                   onClick={() => {
-                    if (appliedFilters) void fetchRows(appliedFilters);
+                    void refetchActiveQuery();
                   }}
                   loading={isFetchingRows}
                   disabled={!appliedFilters || isFetchingRows}
