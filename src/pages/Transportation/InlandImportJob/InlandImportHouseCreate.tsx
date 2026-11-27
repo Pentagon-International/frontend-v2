@@ -2910,8 +2910,8 @@ function HouseCreate() {
           ) as ChargeDetail[];
           if (meaningfulCharges.length === 0) return [];
           return meaningfulCharges.map((charge) => ({
-            ...(charge.id != null &&
-              charge.id !== undefined && { id: Number(charge.id) }),
+            ...(isEditMode &&
+              charge.id != null && { id: Number(charge.id) }),
             charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
             pp_cc: charge.pp_cc || "",
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,

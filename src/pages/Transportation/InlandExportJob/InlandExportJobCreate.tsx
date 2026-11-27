@@ -3003,8 +3003,8 @@ function InlandExportJobCreate() {
             const meaningful = getMeaningfulHouseCharges(hawb.charges ?? []);
             if (meaningful.length === 0) return [];
             return meaningful.map((charge) => ({
-              ...(charge.id != null &&
-                charge.id !== undefined && { id: Number(charge.id) }),
+              ...(mode === "edit" &&
+                charge.id != null && { id: Number(charge.id) }),
               charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
               supplier_code:
                 charge.supplier_code != null
