@@ -1237,10 +1237,14 @@ function mapApiChargesToRows(charges: ApiCharge[]): ChargeRow[] {
         ? parseFloat(c.amount) || null
         : (c.amount ?? null);
     const apiLocal = toLocalAmount(c.amount_in_local);
-    // Operational rows: prefer amount × ROE so a bad/zero API local cannot stick.
+    // Prefer stored API local when present so reverse/view/posted mirror the
+    // invoice exactly (amount × ROE can differ by FX rounding, e.g. 3591.86 vs
+    // 3592.35). Fall back to amount × ROE only when API omitted local.
     const amount_in_local = isBreakup
       ? apiLocal
-      : computeChargeLocalAmount(amount, roe);
+      : apiLocal != null
+        ? apiLocal
+        : computeChargeLocalAmount(amount, roe);
     return {
     id: c.id,
     account_id: c.account_id != null ? Number(c.account_id) : null,
@@ -4002,10 +4006,14 @@ export default function SupplierInvoiceCreate({
     const isCreate = savedId == null;
     const chargesPayload = values.charges_data.map((c) => {
       const taxCode = String(c.tax_code ?? "").trim();
-      // Last-line defense: never submit a stale zero local when amount × ROE is non-zero.
-      const syncedLocal = shouldPreserveChargeLocalAmount(c)
-        ? c.amount_in_local
-        : computeChargeLocalAmount(c.amount, c.roe);
+      // Reverse must mirror source invoice locals/GST — never recompute from
+      // amount × ROE (FX rounding can drift, e.g. 3591.86 → 3592.35).
+      // Last-line defense for normal create/edit: never submit a stale zero
+      // local when amount × ROE is non-zero.
+      const syncedLocal =
+        isReversal || shouldPreserveChargeLocalAmount(c)
+          ? c.amount_in_local
+          : computeChargeLocalAmount(c.amount, c.roe);
       const isBreakup = shouldPreserveChargeLocalAmount(c);
       // India operational rows without SAC: omit same-row GST fields entirely.
       const includeIndiaSameRowGst = isIndiaUser && (isBreakup || taxCode !== "");
@@ -4448,6 +4456,7 @@ export default function SupplierInvoiceCreate({
       }
 
       // Sync locals from amount × ROE before persist (closes stale-zero loophole).
+      // Reversal: keep mirrored source amounts — do not sync or re-enrich GST.
       const syncedCharges = isReversal
         ? (values.charges_data ?? [])
         : (values.charges_data ?? []).map(withSyncedChargeLocalAmount);
@@ -4460,7 +4469,8 @@ export default function SupplierInvoiceCreate({
       }
 
       // India: compute same-row cgst/sgst/igst like Invoice before persist.
-      if (isIndiaUser) {
+      // Skip on reverse — GST must stay identical to the source invoice.
+      if (isIndiaUser && !isReversal) {
         const stateId = valuesToSave.state_id
           ? Number(valuesToSave.state_id)
           : null;
@@ -4915,9 +4925,10 @@ export default function SupplierInvoiceCreate({
             form.setFieldValue("charges_data", mergedCharges);
           }
         }
-      } else if (showGstTax) {
+      } else if (showGstTax && !isReversal) {
         // India: always rebuild CGST/SGST/IGST ChargeMaster rows on POST from
         // current charges (native CRJ + PRQ→CRJ after charge edits).
+        // Reverse: keep mirrored source locals/GST — do not re-enrich or rebuild.
         const stateId = form.values.state_id
           ? Number(form.values.state_id)
           : null;
