@@ -38,7 +38,7 @@ import { DateInput } from "@mantine/dates";
 import { IconChevronLeft as IconChevronLeftDate, IconChevronRight as IconChevronRightDate, IconCalendar } from "@tabler/icons-react";
 import useDateFormat from "../../../hooks/useDateFormat";
 import dayjs from "dayjs";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type CoordinatorReassignationData = {
   id: number;
@@ -75,7 +75,7 @@ type FilterState = {
 };
 
 function CoordinatorReassignationMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -573,7 +573,7 @@ function CoordinatorReassignationMaster() {
           >
             Filters
           </Button>
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             variant="filled"
             leftSection={<IconPlus size={14} />}

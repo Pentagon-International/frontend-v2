@@ -35,7 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type Service = {
   service_code: string;
@@ -47,7 +47,7 @@ type Service = {
 };
 
 export default function ServiceMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState<Service[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -245,7 +245,7 @@ export default function ServiceMaster() {
           <Button variant="outline" leftSection={<IconUpload size={16} />} size="xs" color="#105476">
             Bulk Upload
           </Button>
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             color="#105476"
             leftSection={<IconPlus size={16} />}

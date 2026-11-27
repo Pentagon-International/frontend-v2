@@ -43,7 +43,7 @@ import { Dropdown, SearchableSelect } from "../../../components";
 import { getAPICall } from "../../../service/getApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "GL_CHARGE_MAPPING_MASTER";
 
@@ -117,7 +117,7 @@ type ServiceData = {
 };
 
 export default function GLChargeMappingMasterList() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -676,7 +676,7 @@ export default function GLChargeMappingMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
+            {canCreateMaster && (
 <Button
               leftSection={<IconPlus size={16} />}
               size="sm"

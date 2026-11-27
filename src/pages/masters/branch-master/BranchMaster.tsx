@@ -37,7 +37,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type Branch = {
   id: number;
@@ -64,7 +64,7 @@ type BranchApiResponse = {
 };
 
 export default function BranchMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -381,7 +381,7 @@ export default function BranchMaster() {
         <Text size="md" fw={600}>
           Branch Master List
         </Text>
-        {isAdmin && (
+        {canCreateMaster && (
           <Button
             color="#105476"
             leftSection={<IconPlus size={16} />}

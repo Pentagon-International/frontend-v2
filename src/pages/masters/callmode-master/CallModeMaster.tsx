@@ -35,7 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type CallMode = {
   call_mode_code: string;
@@ -55,7 +55,7 @@ function fetchData() {
 }
 
 export default function CallModeMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -267,7 +267,7 @@ export default function CallModeMaster() {
           <Button variant="outline" leftSection={<IconUpload size={16} />} size="xs" color="#105476">
             Bulk Upload
           </Button>
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             color="#105476"
             leftSection={<IconPlus size={16} />}

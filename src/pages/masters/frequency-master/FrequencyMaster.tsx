@@ -34,7 +34,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type FrequencyMasterType = {
   id: number;
@@ -43,7 +43,7 @@ type FrequencyMasterType = {
 };
 
 export default function FrequencyMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState<FrequencyMasterType[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -247,7 +247,7 @@ export default function FrequencyMaster() {
             Bulk Upload
           </Button>
 
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             color="#105476"
             leftSection={<IconPlus size={16} />}

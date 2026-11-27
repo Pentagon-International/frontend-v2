@@ -35,7 +35,7 @@ import { apiCallProtected } from "../../../api/axios";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 import { ERPListColumnHeaderFilter } from "../../../components";
 import type { ErpListTheme } from "../../../components";
 
@@ -69,7 +69,7 @@ const DEFAULT_FILTERS: SubledgerMasterFilters = {
 };
 
 export default function SubledgerMasterList() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -637,7 +637,7 @@ export default function SubledgerMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
+            {canCreateMaster && (
               <Button
                 leftSection={<IconPlus size={16} />}
                 size="sm"

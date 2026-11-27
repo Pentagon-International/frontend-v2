@@ -37,7 +37,7 @@ import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useDebouncedValue } from "@mantine/hooks";
 import { Dropdown, SearchableSelect } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import { isIndianUserFromProfile } from "../../../utils/userNumberFormat";
 
@@ -61,7 +61,7 @@ type VatMasterFilters = {
 };
 
 export default function VatMasterList() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
@@ -486,7 +486,7 @@ export default function VatMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
+            {canCreateMaster && (
               <Button
                 leftSection={<IconPlus size={16} />}
                 size="sm"

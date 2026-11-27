@@ -35,7 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type FollowUp = {
   id: number;
@@ -46,7 +46,7 @@ type FollowUp = {
 };
 
 export default function FollowUpMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -224,7 +224,7 @@ export default function FollowUpMaster() {
           >
             Bulk Upload
           </Button>
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             size="xs"
             color="#105476"

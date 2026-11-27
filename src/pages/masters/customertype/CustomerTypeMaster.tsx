@@ -39,7 +39,7 @@ import { API_HEADER } from "../../../store/storeKeys";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { Dropdown } from "../../../components";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 import FormTextInput from "../../../components/FormTextInput";
 
 const LIST_KEY = "CUSTOMER_TYPE_MASTER";
@@ -86,7 +86,7 @@ const formatCategoryLabel = (value?: string) => {
 };
 
 export default function CustomerTypeMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const [pagination, setPagination] = useState<MRT_PaginationState>({
@@ -567,7 +567,7 @@ export default function CustomerTypeMaster() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
+            {canCreateMaster && (
               <Button
                 leftSection={<IconPlus size={16} />}
                 size="sm"

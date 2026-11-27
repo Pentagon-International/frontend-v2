@@ -35,7 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { URL } from "../../../api/serverUrls";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type TermsOfShipment = {
   code: string;
@@ -57,7 +57,7 @@ function fetchData() {
 }
 
 export default function TermsOfShipmentList() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState<TermsOfShipment[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -303,7 +303,7 @@ export default function TermsOfShipmentList() {
             Bulk Upload
           </Button>
 
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             color="#105476"
             leftSection={<IconPlus size={16} />}

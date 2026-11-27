@@ -38,7 +38,7 @@ import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiCallProtected } from "../../../api/axios";
 import { useForm } from "@mantine/form";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import {
   canEditCustomerRelationshipMapping,
@@ -85,7 +85,7 @@ type FilterState = {
 };
 
 function CustomerRelationshipMappingMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const location = useLocation();
@@ -672,7 +672,7 @@ function CustomerRelationshipMappingMaster() {
             >
               Filters
             </Button>
-            {isAdmin && (
+            {canCreateMaster && (
 <Button
               variant="filled"
               leftSection={<IconPlus size={14} />}

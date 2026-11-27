@@ -50,7 +50,7 @@ import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 import FormTextInput from "../../../components/FormTextInput";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 
@@ -119,7 +119,7 @@ function formatCountryLabel(name: string, code: string): string {
 }
 
 export default function PortMasterList() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -884,7 +884,7 @@ export default function PortMasterList() {
           >
             Bulk Upload
           </Button> */}
-          {isAdmin && (
+          {canCreateMaster && (
             <Button
               variant="filled"
               leftSection={<IconPlus size={14} />}

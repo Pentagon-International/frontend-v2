@@ -38,7 +38,7 @@ import { Dropdown, SearchableSelect } from "../../../components";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
 import FormTextInput from "../../../components/FormTextInput";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 const LIST_KEY = "CFS_MASTER";
 
@@ -76,7 +76,7 @@ type CFSFilters = {
 };
 
 export default function CFSMasterList() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -502,7 +502,7 @@ export default function CFSMasterList() {
             >
               <IconFilter size={18} />
             </ActionIcon>
-            {isAdmin && (
+            {canCreateMaster && (
 <Button
               leftSection={<IconPlus size={16} />}
               size="sm"

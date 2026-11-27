@@ -35,7 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
 import { URL } from "../../../api/serverUrls";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type ContainerType = {
   code: string;
@@ -47,7 +47,7 @@ type ContainerType = {
 };
 
 export default function ContainerType() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState<ContainerType[]>([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -266,7 +266,7 @@ export default function ContainerType() {
           >
             Bulk Upload
           </Button>
-          {isAdmin && (
+          {canCreateMaster && (
 <Button
             color="#105476"
             leftSection={<IconPlus size={16} />}

@@ -39,7 +39,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type CompanyData = {
   id: number;
@@ -52,7 +52,7 @@ type CompanyData = {
 };
 
 function Company() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState<CompanyData[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [pageIndex, setPageIndex] = useState(0);
@@ -429,7 +429,7 @@ function Company() {
               Bulk Upload
             </Button>
 
-            {isAdmin && (
+            {canCreateMaster && (
 <Button
               //   variant="filled"
               color={"#105476"}

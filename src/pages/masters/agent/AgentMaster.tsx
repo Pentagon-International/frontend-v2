@@ -44,7 +44,7 @@ import dayjs from "dayjs";
 import CustomerDataDrawer from "../../../components/CustomerDataDrawer/CustomerDataDrawer";
 import PaginationBar from "../../../components/PaginationBar/PaginationBar";
 import { useListFilterStore } from "../../../store/listFilterStore";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 import useAuthStore from "../../../store/authStore";
 import {
   canEditPartyMaster,
@@ -323,11 +323,11 @@ function buildAgentFilterPayload(
 }
 
 export default function AgentMaster() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const user = useAuthStore((state) => state.user);
   const pulseId = user?.pulse_id;
-  // Create New is admin-only, plus P2CCI users
-  const showCreateButton = isAdmin || pulseId === "P2CCI";
+  // Create New: admin, accounts team, plus P2CCI users
+  const showCreateButton = canCreateMaster || pulseId === "P2CCI";
   // India-only: Accounts (and staff) may edit; others can view only
   const canEditMaster = canEditPartyMaster(user);
   const navigate = useNavigate();

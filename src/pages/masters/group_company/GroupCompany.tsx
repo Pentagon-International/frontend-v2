@@ -35,7 +35,7 @@ import { getAPICall } from "../../../service/getApiCall";
 import { URL } from "../../../api/serverUrls";
 import { deleteApiCall } from "../../../service/deleteApiCall";
 import { API_HEADER } from "../../../store/storeKeys";
-import { useIsAdminUser } from "../../../hooks/useIsAdminUser";
+import { useCanCreateMaster } from "../../../hooks/useIsAdminUser";
 
 type GroupCompany = {
   groupCode: string;
@@ -44,7 +44,7 @@ type GroupCompany = {
 };
 
 export default function GroupCompany() {
-  const isAdmin = useIsAdminUser();
+  const canCreateMaster = useCanCreateMaster();
   const [data, setData] = useState([]);
   const navigate = useNavigate();
   const location = useLocation();
@@ -355,7 +355,7 @@ export default function GroupCompany() {
               Bulk Upload
             </Button>
 
-            {isAdmin && (
+            {canCreateMaster && (
 <Button
               //   variant="filled"
               color={"#105476"}
