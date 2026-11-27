@@ -811,7 +811,7 @@ function isSupplierGstChargeRow(row: {
   );
 }
 
-/** TDS ledger rows: no charge_id, account filled, not GST (PRQ/SI parity). */
+/** TDS ledger rows: no charge_id, account filled, empty CRN, not GST (PRQ/SI parity). */
 function isSupplierTdsChargeRow(row: {
   charge_id?: number | null;
   charge_name?: string;
@@ -826,6 +826,11 @@ function isSupplierTdsChargeRow(row: {
   if (isSupplierGstChargeRow(row)) return false;
   // Account + SAC operational rows are taxable (same-row GST), not TDS ledger.
   if (String(row.tax_code ?? "").trim() !== "") return false;
+  // Direct-account operational rows keep CRN Cost/Revenue/Neutral.
+  // TDS calc rows intentionally leave CRN empty — do not treat account-only
+  // operational charges as TDS or Calculate TDS will drop them on merge.
+  const crn = String(row.CRN ?? "").trim().toLowerCase();
+  if (crn === "cost" || crn === "revenue" || crn === "neutral") return false;
   return isPrqTdsChargeRow({
     charge_id: row.charge_id,
     account_code: row.account_code,
