@@ -108,7 +108,10 @@ import {
   resolveAutoUnitForNewCharge,
 } from "../../../utils/chargeCalculationTypeUnit";
 import { resolveSupplierInvoiceHouseCostAmount } from "../../../utils/houseChargeAmounts";
-import { resolveHouseChargeMasterId } from "../../../utils/houseChargesPayload";
+import {
+  getMeaningfulHouseCharges,
+  resolveHouseChargeMasterId,
+} from "../../../utils/houseChargesPayload";
 import dayjs from "dayjs";
 import {
   formatLocalDateTime,
@@ -436,9 +439,12 @@ function mapChargesForPayload(
   charges: ServiceJobChargeDetail[],
   mode: "create" | "edit",
 ) {
-  return charges.map((charge) => ({
+  const meaningful = getMeaningfulHouseCharges(charges);
+  if (meaningful.length === 0) return [];
+  return meaningful.map((charge) => ({
+    // Row PK only on edit — never use it as charge_id
     ...(mode === "edit" && charge.id != null && { id: Number(charge.id) }),
-    charge_id: charge.charge_id ?? null,
+    charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
     supplier_code:
       charge.supplier_code != null ? String(charge.supplier_code) : null,
     pp_cc: charge.pp_cc || "",
@@ -472,7 +478,7 @@ function mapChargeFromApi(
     const n = parseFloat(String(v));
     return Number.isNaN(n) ? null : n;
   };
-  const chargeId = resolveHouseChargeMasterId(charge.charge_id);
+  const chargeId = resolveHouseChargeMasterId(charge.charge_id, charge.id);
 
   return {
     id: charge.id != null ? Number(charge.id) : undefined,
@@ -2218,7 +2224,7 @@ export default function ServiceJobCreate() {
       const charges = (chargesForm.values.charges ?? [])
         .map((e) => ({
           shipment_no: jobId,
-          charge_id: e.charge_id ?? null,
+          charge_id: resolveHouseChargeMasterId(e.charge_id, e.id),
           charge_name: e.charge_name ?? "",
           currency_id: e.currency_id || null,
           roe: e.roe ?? null,

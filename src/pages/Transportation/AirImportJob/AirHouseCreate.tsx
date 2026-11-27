@@ -1432,7 +1432,7 @@ function HouseCreate() {
                 )
               : "";
         return {
-          charge_id: r.charge_id != null ? Number(r.charge_id) : null,
+          charge_id: resolveHouseChargeMasterId(r.charge_id, r.id),
           charge_name: String(r.charge_name || ""),
           pp_cc: String(r.pp_cc || ""),
           unit_id: unitId,
@@ -1878,7 +1878,7 @@ function HouseCreate() {
             return Number.isNaN(n) ? null : n;
           };
 
-          const chargeId = resolveHouseChargeMasterId(charge.charge_id);
+          const chargeId = resolveHouseChargeMasterId(charge.charge_id, charge.id);
           // API may return unit (number) and currency (number); or unit_id/currency_id; or unit_details.unit_id / currency_details.currency_id
           const unitIdFromApi =
             charge.unit_id != null
@@ -3328,7 +3328,7 @@ function HouseCreate() {
           return meaningfulCharges.map((charge) => ({
             ...(charge.id != null &&
               charge.id !== undefined && { id: Number(charge.id) }),
-            charge_id: charge.charge_id ?? null,
+            charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
             pp_cc: charge.pp_cc || "",
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,

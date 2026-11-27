@@ -1099,7 +1099,7 @@ function HouseCreate() {
               return Number.isNaN(n) ? null : n;
             };
 
-            const chargeId = resolveHouseChargeMasterId(charge.charge_id);
+            const chargeId = resolveHouseChargeMasterId(charge.charge_id, charge.id);
             const unitIdFromApi =
               charge.unit_id != null
                 ? String(charge.unit_id)
@@ -2045,7 +2045,7 @@ function HouseCreate() {
                 )
               : "";
         return {
-          charge_id: r.charge_id != null ? Number(r.charge_id) : null,
+          charge_id: resolveHouseChargeMasterId(r.charge_id, r.id),
           charge_name: String(r.charge_name || ""),
           pp_cc: normalizePpCc((r as { pp_cc?: unknown }).pp_cc),
           unit_id: unitId,
@@ -3025,7 +3025,7 @@ function HouseCreate() {
                 id:
                   typeof charge.id === "number" ? charge.id : Number(charge.id),
               }),
-            ...(charge.charge_id != null && { charge_id: charge.charge_id }),
+            charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
             charge_name: charge.charge_name,
             pp_cc: charge.pp_cc,
             unit_id: charge.unit_id || undefined,
@@ -3640,7 +3640,7 @@ function HouseCreate() {
           return meaningfulCharges.map((charge) => ({
             ...(charge.id != null &&
               charge.id !== undefined && { id: Number(charge.id) }),
-            charge_id: charge.charge_id ?? null,
+            charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
             charge_name: charge.charge_name,
             pp_cc: charge.pp_cc,
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
@@ -3893,7 +3893,7 @@ function HouseCreate() {
           return meaningfulCharges.map((charge) => ({
             ...(charge.id != null &&
               charge.id !== undefined && { id: Number(charge.id) }),
-            charge_id: charge.charge_id ?? null,
+            charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
             charge_name: charge.charge_name,
             pp_cc: charge.pp_cc,
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
