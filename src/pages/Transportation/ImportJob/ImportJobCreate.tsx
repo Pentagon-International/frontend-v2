@@ -1780,7 +1780,7 @@ function ImportJobCreate() {
                           ? charge.id
                           : Number(charge.id)
                         : undefined,
-                      charge_id: resolveHouseChargeMasterId(charge.charge_id),
+                      charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
                       charge_name: charge.charge_name
                         ? String(charge.charge_name)
                         : "",
@@ -1972,7 +1972,7 @@ function ImportJobCreate() {
                                 ? charge.id
                                 : Number(charge.id)
                               : undefined,
-                            charge_id: resolveHouseChargeMasterId(charge.charge_id),
+                            charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
                             charge_name: charge.charge_name
                               ? String(charge.charge_name)
                               : "",
@@ -2289,7 +2289,7 @@ function ImportJobCreate() {
               id: e.id != null ? Number(e.id) : undefined,
               supplier_code: supplierCode,
               supplier_name: String(e.supplier_name ?? ""),
-              charge_id: e.charge_id != null ? Number(e.charge_id) : null,
+              charge_id: resolveHouseChargeMasterId(e.charge_id, e.id),
               charge_name: String(e.charge_name ?? e.charge_code ?? ""),
               pp_cc: normalizePpCc(e.pp_cc),
               unit_id: e.unit_id != null ? String(e.unit_id) : "",
@@ -2312,7 +2312,7 @@ function ImportJobCreate() {
             id: row.id,
             supplier_code: row.supplier_code ?? "",
             supplier_name: row.supplier_name ?? "",
-            charge_id: row.charge_id ?? null,
+            charge_id: resolveHouseChargeMasterId(row.charge_id, row.id),
             charge_name: row.charge_name ?? "",
             pp_cc: row.pp_cc ?? "",
             unit_id: row.unit_id ?? "",
@@ -4596,8 +4596,7 @@ function ImportJobCreate() {
                       ? charge.id
                       : Number(charge.id),
                 }),
-              charge_id:
-                charge.charge_id != null ? Number(charge.charge_id) : null,
+              charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
               supplier_code:
                 charge.supplier_code != null
                   ? String(charge.supplier_code)
@@ -4707,7 +4706,7 @@ function ImportJobCreate() {
                 id: typeof e.id === "number" ? e.id : Number(e.id),
               }),
             supplier_code: e.supplier_code || null,
-            charge_id: e.charge_id,
+            charge_id: resolveHouseChargeMasterId(e.charge_id, e.id),
             pp_cc: e.pp_cc || "",
             unit_id: e.unit_id ? Number(e.unit_id) : null,
             no_of_unit: parseNoOfUnitForPayload(e.no_of_unit),
@@ -7174,7 +7173,7 @@ function ImportJobCreate() {
                       const estimateCharges = estimates
                         .map((e) => ({
                           shipment_no: jobId,
-                          charge_id: e.charge_id ?? null,
+                          charge_id: resolveHouseChargeMasterId(e.charge_id, e.id),
                           charge_name: e.charge_name ?? "",
                           currency_id: e.currency_id ?? null,
                           roe: e.roe ?? null,
@@ -7206,10 +7205,7 @@ function ImportJobCreate() {
                               const cr = c as Record<string, unknown>;
                               return {
                                 shipment_no: shipmentNo,
-                                charge_id:
-                                  cr.charge_id != null
-                                    ? Number(cr.charge_id)
-                                    : null,
+                                charge_id: resolveHouseChargeMasterId(cr.charge_id, cr.id),
                                 charge_name: toStr(cr.charge_name),
                                 currency_id:
                                   (cr as any).cost_currency_id ?? null,
@@ -7275,7 +7271,7 @@ function ImportJobCreate() {
                       const estimateCharges = estimates
                         .map((e) => ({
                           shipment_no: jobId,
-                          charge_id: e.charge_id ?? null,
+                          charge_id: resolveHouseChargeMasterId(e.charge_id, e.id),
                           charge_name: e.charge_name ?? "",
                           currency_id: e.currency_id ?? null,
                           roe: e.roe ?? null,
@@ -7307,10 +7303,7 @@ function ImportJobCreate() {
                               const cr = c as Record<string, unknown>;
                               return {
                                 shipment_no: shipmentNo,
-                                charge_id:
-                                  cr.charge_id != null
-                                    ? Number(cr.charge_id)
-                                    : null,
+                                charge_id: resolveHouseChargeMasterId(cr.charge_id, cr.id),
                                 charge_name: toStr(cr.charge_name),
                                 currency_id:
                                   (cr as any).cost_currency_id ?? null,

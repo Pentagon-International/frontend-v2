@@ -109,6 +109,7 @@ import {
   isVietnamBranchFromUser,
 } from "../../../utils/nonDecimalMoneyAmount";
 import { resolveAgentInvoiceCollectCharges } from "../../../utils/collectAgentInvoiceCharges";
+import { resolveHouseChargeMasterId } from "../../../utils/houseChargesPayload";
 
 // Fetch functions
 
@@ -1114,9 +1115,7 @@ function resolveAmountPerUnitForCalc(
 }
 
 /** Empty no-of-unit is treated as 0 for charge amount calculations. */
-function resolveNoOfUnitForCalc(
-  noOfUnit: number | null | undefined,
-): number {
+function resolveNoOfUnitForCalc(noOfUnit: number | null | undefined): number {
   if (noOfUnit == null || !Number.isFinite(Number(noOfUnit))) return 0;
   return Number(noOfUnit);
 }
@@ -1152,10 +1151,8 @@ function calcChargeAmountsFromUnits(
       ? overrides.no_of_unit
       : charge.no_of_unit,
   );
-  const amount =
-    clampCurrencyAmount(noOfUnit * amountPerUnit) ?? 0;
-  const roe =
-    overrides && "roe" in overrides ? overrides.roe : charge.roe;
+  const amount = clampCurrencyAmount(noOfUnit * amountPerUnit) ?? 0;
+  const roe = overrides && "roe" in overrides ? overrides.roe : charge.roe;
   const amount_in_local =
     roe != null && roe > 0 ? (clampLocalAmount(amount * roe) ?? 0) : 0;
   const header_amount =
@@ -3087,10 +3084,10 @@ function CreditNoteCreate() {
                 }
 
                 return {
-                  charge_id:
-                    (charge.charge_id ?? charge.id) != null
-                      ? Number(charge.charge_id ?? charge.id)
-                      : null,
+                  charge_id: resolveHouseChargeMasterId(
+                    charge.charge_id,
+                    charge.id,
+                  ),
                   charge_name: charge.charge_name
                     ? String(charge.charge_name)
                     : "",
@@ -3883,10 +3880,7 @@ function CreditNoteCreate() {
         headerBillingCurrency,
         headerRoe,
       );
-      if (
-        clampedHeader !== null &&
-        clampedHeader !== charge.header_amount
-      ) {
+      if (clampedHeader !== null && clampedHeader !== charge.header_amount) {
         return {
           ...charge,
           header_amount: clampedHeader,
@@ -4587,10 +4581,7 @@ function CreditNoteCreate() {
       }
     } catch (error: any) {
       console.error("Error creating invoice:", error);
-      if (
-        createPayloadForConfirm &&
-        isApiRequiresConfirmationResponse(error)
-      ) {
+      if (createPayloadForConfirm && isApiRequiresConfirmationResponse(error)) {
         setPendingCreatePayload(createPayloadForConfirm);
         setDuplicateConfirmMessage(
           getApiResponseMessage(
@@ -7860,7 +7851,12 @@ function CreditNoteCreate() {
         padding="lg"
       >
         <Stack gap="lg">
-          <Text size="sm" c="#0f172a" lh={1.6} style={{ whiteSpace: "pre-wrap" }}>
+          <Text
+            size="sm"
+            c="#0f172a"
+            lh={1.6}
+            style={{ whiteSpace: "pre-wrap" }}
+          >
             {duplicateConfirmMessage}
           </Text>
 

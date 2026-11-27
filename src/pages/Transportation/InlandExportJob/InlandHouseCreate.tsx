@@ -1290,7 +1290,7 @@ function HouseCreate() {
             const n = parseFloat(String(v));
             return Number.isNaN(n) ? null : n;
           };
-          const chargeId = resolveHouseChargeMasterId(charge.charge_id);
+          const chargeId = resolveHouseChargeMasterId(charge.charge_id, charge.id);
           const unitIdFromApi =
             charge.unit_id != null
               ? String(charge.unit_id)
@@ -2944,9 +2944,9 @@ function HouseCreate() {
           ) as ChargeDetail[];
           if (meaningfulCharges.length === 0) return [];
           return meaningfulCharges.map((charge) => ({
-            ...(charge.id != null &&
-              charge.id !== undefined && { id: Number(charge.id) }),
-            charge_id: charge.charge_id ?? null,
+            ...(isEditMode &&
+              charge.id != null && { id: Number(charge.id) }),
+            charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
             pp_cc: charge.pp_cc || "",
             unit_id: charge.unit_id ? Number(charge.unit_id) : null,
             currency_id: charge.currency_id ? Number(charge.currency_id) : null,

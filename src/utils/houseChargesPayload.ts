@@ -1,5 +1,5 @@
 export type HouseChargeLike = {
-  id?: number | string;
+  id?: number | string | null;
   charge_id?: number | null;
   charge_name?: string;
   pp_cc?: string;
@@ -31,9 +31,12 @@ const hasNumericChargeValue = (value: unknown): boolean => {
 /**
  * Master charge FK only. Never fall back to the charge-row PK (`id`) —
  * that incorrectly sent row ids like 1000001784 as charge_id on update.
+ * If a real master charge_id happens to equal the row PK, both are valid and must be kept.
+ * Optional second arg is ignored (kept for call-site compatibility).
  */
 export function resolveHouseChargeMasterId(
   chargeId: unknown,
+  _rowId?: unknown,
 ): number | null {
   if (chargeId == null || chargeId === "") return null;
   const n = Number(chargeId);
@@ -135,7 +138,7 @@ export function validateMeaningfulHouseCharges(
 
     if (
       (!charge.charge_name || charge.charge_name.trim() === "") &&
-      (charge.charge_id == null || charge.charge_id === 0)
+      resolveHouseChargeMasterId(charge.charge_id) == null
     ) {
       chargeError.charge_name = "Charge Name is required";
       hasErrors = true;

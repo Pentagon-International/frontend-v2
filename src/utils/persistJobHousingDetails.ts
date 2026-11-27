@@ -344,7 +344,7 @@ function mapHouseChargeForPayload(
 
   return {
     ...(id != null ? { id } : {}),
-    charge_id: resolveHouseChargeMasterId(charge.charge_id),
+    charge_id: resolveHouseChargeMasterId(charge.charge_id, charge.id),
     supplier_code:
       charge.supplier_code != null ? String(charge.supplier_code) : null,
     pp_cc: String(charge.pp_cc ?? ""),
