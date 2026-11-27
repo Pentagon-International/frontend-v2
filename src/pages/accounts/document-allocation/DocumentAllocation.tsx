@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
+  ActionIcon,
   Box,
   Button,
   Badge,
@@ -9,10 +10,16 @@ import {
   Grid,
   Group,
   Loader,
+  Menu,
   Table,
   Text,
 } from "@mantine/core";
-import { IconSearch, IconTrash } from "@tabler/icons-react";
+import {
+  IconDotsVertical,
+  IconDownload,
+  IconSearch,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import EditPageHeadingRow from "../../../components/EditPageHeadingRow";
 import { mergeEditPageAuditSources, appendEditPageAuditPatch } from "../../../utils/editPageAuditInfo";
@@ -721,6 +728,7 @@ export default function DocumentAllocation() {
     useState<AllocationDocumentsHeader | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [isDownloadingSetoffPdf, setIsDownloadingSetoffPdf] = useState(false);
   const [auditPatch, setAuditPatch] = useState<Record<string, unknown> | null>(
     null,
   );
@@ -1216,6 +1224,59 @@ export default function DocumentAllocation() {
     }
   };
 
+  const handleDownloadSetoffDetails = async () => {
+    const allocationId = savedHeader?.id;
+    if (allocationId == null) {
+      ToastNotification({
+        type: "error",
+        message: "Save the allocation first before downloading setoff details.",
+      });
+      return;
+    }
+
+    setIsDownloadingSetoffPdf(true);
+    try {
+      const token = useAuthStore.getState().accessToken;
+      const response = await fetch(
+        `${URL.base}${URL.outstandingAllocationDocuments}${allocationId}/pdf/`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error("Empty PDF response");
+      }
+
+      const allocationNo =
+        savedHeader?.allocation_no ||
+        `ALC-${String(allocationId).padStart(6, "0")}`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Setoff-Details-${allocationNo}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Setoff details PDF download error:", error);
+      ToastNotification({
+        type: "error",
+        message: getServerErrorMessage(
+          error,
+          "Failed to download setoff details PDF.",
+        ),
+      });
+    } finally {
+      setIsDownloadingSetoffPdf(false);
+    }
+  };
+
   const handleGet = async () => {
     if (!selectedAccount || !selectedGlAccountCode) {
       ToastNotification({
@@ -1663,6 +1724,35 @@ export default function DocumentAllocation() {
                               "—"}
                           </Badge>
                         </Group>
+
+                        <Menu
+                          withinPortal
+                          position="bottom-end"
+                          shadow="sm"
+                          radius="md"
+                          width={220}
+                        >
+                          <Menu.Target>
+                            <ActionIcon
+                              variant="light"
+                              color="#105476"
+                              size="lg"
+                              aria-label="More options"
+                              loading={isDownloadingSetoffPdf}
+                            >
+                              <IconDotsVertical size={18} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              leftSection={<IconDownload size={16} />}
+                              disabled={isDownloadingSetoffPdf}
+                              onClick={() => void handleDownloadSetoffDetails()}
+                            >
+                              Download Setoff Details
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
                       </Group>
                     ) : null}
                   </Group>
